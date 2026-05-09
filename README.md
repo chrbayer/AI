@@ -20,9 +20,11 @@ pip install flask requests
 ./run.sh start <name>                 # Start server + proxy (foreground)
 ./run.sh stop                         # Stop all processes
 ./run.sh status                       # Show running state
-./run.sh bench [--fast] <model|all>   # Run benchmark
+./run.sh bench [--full] <model|all>   # Run benchmark (default: default ROCm + Vulkan)
+./run.sh bench --full all             # Full test: all 8 ROCm combos + Vulkan
 source ./run.sh env <name>            # Set Claude Code env vars
 source ./run.sh clear                 # Clear env vars
+./run.sh download <model>             # Download model(s)
 ```
 
 ## Models
