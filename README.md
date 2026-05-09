@@ -16,7 +16,7 @@ pip install flask requests
 ## Usage
 
 ```bash
-./run.sh list                        # Show available models
+./run.sh list                         # Show available models
 ./run.sh start <name>                 # Start server + proxy (foreground)
 ./run.sh stop                         # Stop all processes
 ./run.sh status                       # Show running state
