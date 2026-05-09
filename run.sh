@@ -351,7 +351,7 @@ bench_model() {
     local m_name="$1"
     local m_model="$2"
     local m_label="$3"
-    local fast_mode="${4:-}"
+    local full_mode="${4:-}"
 
     local model_path="${m_model//\~/$HOME}"
     if [[ ! -f "$model_path" ]]; then
@@ -360,14 +360,8 @@ bench_model() {
     fi
 
     echo "  $m_label"
-    if [[ "$fast_mode" == "fast" ]]; then
-        # Only test default ROCm env + Vulkan
-        local default_rocm_env="ROC_ENABLE_PREFETCH=1;HSA_ENABLE_COMPRESSION=1;HSA_ENABLE_SDMA=0"
-        echo "    ROCM (default):"
-        run_bench "$_rocm_bin" "$model_path" "$default_rocm_env" "rocm" "$m_name"
-        echo "    Vulkan:"
-        run_bench "$_vulkan_bin" "$model_path" "" "vulkan" "$m_name"
-    else
+    if [[ "$full_mode" == "full" ]]; then
+        # Full test: all 8 ROCm env combos + Vulkan
         echo "    ROCM:"
         while IFS= read -r combo; do
             [[ -z "$combo" ]] && continue
@@ -376,15 +370,22 @@ bench_model() {
 
         echo "    Vulkan:"
         run_bench "$_vulkan_bin" "$model_path" "" "vulkan" "$m_name"
+    else
+        # Default: only test default ROCm env + Vulkan
+        local default_rocm_env="ROC_ENABLE_PREFETCH=1;HSA_ENABLE_COMPRESSION=1;HSA_ENABLE_SDMA=0"
+        echo "    ROCM (default):"
+        run_bench "$_rocm_bin" "$model_path" "$default_rocm_env" "rocm" "$m_name"
+        echo "    Vulkan:"
+        run_bench "$_vulkan_bin" "$model_path" "" "vulkan" "$m_name"
     fi
 }
 
 cmd_benchmark() {
     local target="${1:-}"
-    local fast=""
+    local full=""
 
-    while [[ "$1" == "--fast" || "$1" == "-f" ]]; do
-        fast="fast"
+    while [[ "$1" == "--full" ]]; do
+        full="full"
         shift
     done
     target="${1:-}"
@@ -396,7 +397,7 @@ cmd_benchmark() {
         echo "  all          run benchmark for all models"
         echo ""
         echo "  Options:"
-        echo "    --fast, -f  only test default ROCm env + Vulkan (skip all 8 combos)"
+        echo "    --full      test all 8 ROCm env combos + Vulkan (default: only default ROCm)"
         echo ""
         echo "  Available models:"
         for entry in "${_MODELS[@]}"; do
@@ -404,7 +405,7 @@ cmd_benchmark() {
             echo "    $m_name"
         done
         echo ""
-        echo "  Result file: benchmark-<model>-<timestamp>.jsonl"
+        echo "  Result file: benchmarks/benchmark-<model>-<timestamp>.jsonl"
         return
     fi
 
@@ -416,7 +417,7 @@ cmd_benchmark() {
         for entry in "${_MODELS[@]}"; do
             IFS='|' read -r m_name m_binary m_model _ _ m_label _ _ <<< "$entry"
             echo "=== $m_label ==="
-            bench_model "$m_name" "$m_model" "$m_label" "$fast"
+            bench_model "$m_name" "$m_model" "$m_label" "$full"
             echo ""
         done
     else
@@ -426,7 +427,7 @@ cmd_benchmark() {
             if [[ "$m_name" == "$target" ]]; then
                 found=1
                 echo "=== $m_label ==="
-                bench_model "$m_name" "$m_model" "$m_label" "$fast"
+                bench_model "$m_name" "$m_model" "$m_label" "$full"
                 break
             fi
         done
