@@ -31,8 +31,8 @@ source ./run.sh clear                 # Clear env vars
 
 - **qwen-moe** — Qwen3.6-35B-A3B MoE (ROCm)
 - **qwen** — Qwen3.6-27B (ROCm)
-- **gemma4** — Gemma-4-31B-it (ROCm)
-- **gemma4-moe** — Gemma-4-26B-A4B-it MoE (Vulkan)
+- **gemma** — Gemma-4-31B-it (ROCm)
+- **gemma-moe** — Gemma-4-26B-A4B-it MoE (Vulkan)
 - **minimax** — MiniMax-M2.7 (Vulkan)
 - **llama3.3** — Llama-3.3-70B (ROCm)
 - **sauerkraut** — SauerkrautLM-104B (Vulkan)

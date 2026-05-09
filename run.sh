@@ -409,7 +409,8 @@ cmd_benchmark() {
         return
     fi
 
-    _result_file="$SCRIPT_DIR/../Benchmarks/benchmark-${target}-$(date +%Y%m%d-%H%M%S).jsonl"
+    _result_file="$SCRIPT_DIR/Benchmarks/benchmark-${target}-$(date +%Y%m%d-%H%M%S).jsonl"
+    mkdir -p "$(dirname "$_result_file")"
     echo "Results → $_result_file"
     echo ""
 
@@ -532,12 +533,12 @@ cmd_download() {
             model_path="~/AI/Models/Qwen3.6-27B-GGUF"
             includes="*mmproj-F16* *UD-Q8_K_XL*"
             ;;
-        gemma4)
+        gemma)
             repo="unsloth/gemma-4-31B-it-GGUF"
             model_path="~/AI/Models/gemma-4-31B-it-GGUF"
             includes="*mmproj-F16* *UD-Q8_K_XL*"
             ;;
-        gemma4-moe)
+        gemma-moe)
             repo="unsloth/gemma-4-26B-A4B-it-GGUF"
             model_path="~/AI/Models/gemma-4-26B-A4B-it-GGUF"
             includes="*mmproj-F16* *UD-Q8_K_XL*"
