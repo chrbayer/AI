@@ -15,7 +15,7 @@ __pycache__/
 .claude*/
 
 # Benchmarks
-benchmark-*.jsonl
+benchmarks/
 
 # IDE
 .vscode/

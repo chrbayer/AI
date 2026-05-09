@@ -408,7 +408,7 @@ cmd_benchmark() {
         return
     fi
 
-    _result_file="$SCRIPT_DIR/benchmark-${target}-$(date +%Y%m%d-%H%M%S).jsonl"
+    _result_file="$SCRIPT_DIR/../benchmarks/benchmark-${target}-$(date +%Y%m%d-%H%M%S).jsonl"
     echo "Results → $_result_file"
     echo ""
 
