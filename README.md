@@ -50,9 +50,9 @@ claude
 
 ## Models
 
-- **qwen-moe** — Qwen3.6-35B-A3B MoE (ROCm)
-- **qwen-vl** — Qwen3-VL-8B vision-language (ROCm)
-- **qwen** — Qwen3.6-27B (ROCm)
+- **qwen-moe** — Qwen3.6-35B-A3B MoE uncensored (ROCm)
+- **qwen-vl** — Qwen3-VL-8B vision-language uncensored (ROCm)
+- **qwen** — Qwen3.6-27B uncensored (ROCm)
 - **gemma** — Gemma-4-31B-it (ROCm)
 - **gemma-unc** — Gemma-4-31B-it uncensored (ROCm)
 - **gemma-moe** — Gemma-4-26B-A4B-it MoE (Vulkan)
