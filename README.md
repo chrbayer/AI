@@ -58,7 +58,8 @@ claude
 - **gemma-moe** — Gemma-4-26B-A4B-it MoE (Vulkan)
 - **gemma-moe-unc** — Gemma-4-26B-A4B-it uncensored MoE (Vulkan)
 - **minimax** — MiniMax-M2.7 (Vulkan)
-- **llama3.3** — Llama-3.3-70B (ROCm)
+- **r1-unc** — DeepSeek-R1-Distill-Llama-70B-Uncensored-v2 Q8_0 (ROCm)
+- **r1-reason** — DeepSeek-R1-Distill-Llama-70B Unbiased Reasoner i1-Q6K (ROCm)
 - **mistral** — Mistral-Medium-3.5-128B (Vulkan)
 
 ## Architecture
