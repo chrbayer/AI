@@ -57,7 +57,6 @@ claude
 - **gemma-moe** — Gemma-4-26B-A4B-it MoE (Vulkan)
 - **minimax** — MiniMax-M2.7 (Vulkan)
 - **llama3.3** — Llama-3.3-70B (ROCm)
-- **sauerkraut** — SauerkrautLM-104B (Vulkan)
 - **mistral** — Mistral-Medium-3.5-128B (Vulkan)
 
 ## Architecture
