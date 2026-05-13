@@ -43,7 +43,7 @@ source "$SCRIPT_DIR/models.conf"
 _resolve_model() {
     local name="$1"
     for entry in "${_MODELS[@]}"; do
-        IFS='|' read -r m_name m_binary m_model m_mmproj m_alias m_label m_args m_client m_rocm_env m_hf_repo m_hf_includes <<< "$entry"
+        IFS='|' read -r m_name m_binary m_model m_mmproj m_alias m_label m_args m_client m_rocm_env m_hf_repo m_hf_includes m_hf_dir <<< "$entry"
         if [[ "$m_name" == "$name" ]]; then
             _r_name="$m_name"
             _r_binary="$m_binary"
@@ -56,6 +56,7 @@ _resolve_model() {
             _r_rocm_env="${m_rocm_env:-}"
             _r_hf_repo="${m_hf_repo:-}"
             _r_hf_includes="${m_hf_includes:-}"
+            _r_hf_dir="${m_hf_dir:-}"
             return 0
         fi
     done
@@ -81,7 +82,7 @@ cmd_list() {
     printf "  %-14s %-32s %-40s %s\n" "NAME" "LABEL" "BINARY" "ROCm ENV"
     printf "  %-14s %-32s %-40s %s\n" "----" "-----" "------" "---------"
     for entry in "${_MODELS[@]}"; do
-        IFS='|' read -r m_name m_binary m_model m_mmproj m_alias m_label m_args m_client m_rocm_env _ _ <<< "$entry"
+        IFS='|' read -r m_name m_binary m_model m_mmproj m_alias m_label m_args m_client m_rocm_env _ _ _ <<< "$entry"
         printf "  \033[36m%-14s\033[0m %-32s %-40s %s\n" "$m_name" "$m_label" "$m_binary" "${m_rocm_env:-—}"
     done
     echo ""
@@ -490,7 +491,7 @@ cmd_benchmark() {
 
     if [[ "$target" == "all" ]]; then
         for entry in "${_MODELS[@]}"; do
-            IFS='|' read -r m_name _ m_model _ _ m_label _ _ _ _ _ <<< "$entry"
+            IFS='|' read -r m_name _ m_model _ _ m_label _ _ _ _ _ _ <<< "$entry"
             echo "=== $m_label ==="
             bench_model "$m_name" "$m_model" "$m_label" "$full" "$result_file"
             echo ""
@@ -498,7 +499,7 @@ cmd_benchmark() {
     else
         local found=0
         for entry in "${_MODELS[@]}"; do
-            IFS='|' read -r m_name _ m_model _ _ m_label _ _ _ _ _ <<< "$entry"
+            IFS='|' read -r m_name _ m_model _ _ m_label _ _ _ _ _ _ <<< "$entry"
             if [[ "$m_name" == "$target" ]]; then
                 found=1
                 echo "=== $m_label ==="
@@ -588,13 +589,17 @@ cmd_download() {
     if [[ "$target" == "all" ]]; then
         echo "Downloading all models..."
         for entry in "${_MODELS[@]}"; do
-            IFS='|' read -r m_name _ m_model _ _ m_label _ _ _ m_hf_repo m_hf_includes <<< "$entry"
+            IFS='|' read -r m_name _ m_model _ _ m_label _ _ _ m_hf_repo m_hf_includes m_hf_dir <<< "$entry"
             if [[ -z "$m_hf_repo" ]]; then
                 echo "  Skipping $m_label: no download info configured"
                 continue
             fi
             local model_dir
-            model_dir="$(dirname "${m_model//\~/$HOME}")"
+            if [[ -n "$m_hf_dir" ]]; then
+                model_dir="${m_hf_dir//\~/$HOME}"
+            else
+                model_dir="$(dirname "${m_model//\~/$HOME}")"
+            fi
             echo "=== $m_label ==="
             _download_model "$m_hf_repo" "$model_dir" "$m_hf_includes" "$force"
         done
@@ -609,7 +614,11 @@ cmd_download() {
     fi
 
     local model_dir
-    model_dir="$(dirname "${_r_model//\~/$HOME}")"
+    if [[ -n "$_r_hf_dir" ]]; then
+        model_dir="${_r_hf_dir//\~/$HOME}"
+    else
+        model_dir="$(dirname "${_r_model//\~/$HOME}")"
+    fi
     _download_model "$_r_hf_repo" "$model_dir" "$_r_hf_includes" "$force"
 }
 
