@@ -1,5 +1,6 @@
 # Logs
 *.log
+logs/
 
 # Models (track directory structure via .gitkeep)
 Models/

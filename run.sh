@@ -21,6 +21,7 @@ PROXY_SCRIPT="$SCRIPT_DIR/proxy.py"
 PORT_SERVER=8001
 PORT_PROXY=8081
 PID_DIR="$SCRIPT_DIR/.pids"
+LOG_DIR="$SCRIPT_DIR/logs"
 
 # Detect sourcing:
 # - bash: BASH_SOURCE[0] != $0 when sourced
@@ -110,9 +111,13 @@ cmd_start() {
     [[ -n "$mmproj_path" ]] && cmd+=(--mmproj "$mmproj_path")
     cmd+=(--alias "$_r_alias" "${_r_args[@]}")
 
+    mkdir -p "$LOG_DIR"
+    local proxy_log="$LOG_DIR/proxy.log"
+    local server_log="$LOG_DIR/server.log"
+
     # Start proxy and poll until it listens on the port (max 10s)
     echo "Starting proxy on port $PORT_PROXY..."
-    python3 "$PROXY_SCRIPT" > "$SCRIPT_DIR/proxy.log" 2>&1 &
+    python3 "$PROXY_SCRIPT" > "$proxy_log" 2>&1 &
     local proxy_pid=$!
     echo "$proxy_pid" > "$PID_DIR/proxy.pid"
 
@@ -120,44 +125,38 @@ cmd_start() {
     for (( i=0; i<max_wait; i++ )); do
         sleep 1
         if ! ps -p "$proxy_pid" > /dev/null 2>&1; then
-            echo "Error: Proxy failed to start. See proxy.log"
+            echo "Error: Proxy failed to start. See $proxy_log"
             exit 1
         fi
         if ss -tlnp 2>/dev/null | grep -q ":${PORT_PROXY} "; then
-            echo "Proxy running (PID: $proxy_pid). Logs in proxy.log"
+            echo "Proxy running (PID: $proxy_pid)"
             break
         fi
         if (( i == max_wait - 1 )); then
-            echo "Error: Proxy did not listen on port $PORT_PROXY within ${max_wait}s. See proxy.log"
+            echo "Error: Proxy did not listen on port $PORT_PROXY within ${max_wait}s. See $proxy_log"
             exit 1
         fi
     done
 
-    cleanup() {
-        echo ""
-        local server_pid
-        server_pid=$(_pid_on_port "$PORT_SERVER")
-        if [[ -n "$server_pid" ]]; then
-            kill "$server_pid" 2>/dev/null
-            echo "llama-server (PID: $server_pid) stopped."
-        fi
-        echo "Stopping proxy (PID: $proxy_pid)..."
-        kill "$proxy_pid" 2>/dev/null
-        rm -rf "$PID_DIR"
-    }
-    trap cleanup SIGINT SIGTERM
-
+    # Start llama-server in background
     echo "Starting llama.cpp server on port $PORT_SERVER..."
     echo "Model: $_r_label ($_r_alias)"
     echo "ROCm env: ${_r_rocm_env:-—}"
-    echo "----------------------------------------------------"
 
     # _r_rocm_env is intentionally unquoted — word-splits space-separated KEY=VAL pairs for env
     if [[ -n "$_r_rocm_env" ]]; then
-        env $_r_rocm_env "${cmd[@]}"
+        env $_r_rocm_env "${cmd[@]}" > "$server_log" 2>&1 &
     else
-        "${cmd[@]}"
+        "${cmd[@]}" > "$server_log" 2>&1 &
     fi
+    local server_pid=$!
+    echo "$server_pid" > "$PID_DIR/server.pid"
+
+    echo "Server running (PID: $server_pid)"
+    echo ""
+    echo "  Logs:  tail -f $server_log"
+    echo "         tail -f $proxy_log"
+    echo "  Stop:  $0 stop"
 }
 
 # Find a PID listening on a given port (uses ss or lsof).
@@ -173,9 +172,14 @@ _pid_on_port() {
 cmd_stop() {
     local stopped=0
 
-    # Stop server
-    local server_pid
-    server_pid=$(_pid_on_port "$PORT_SERVER")
+    # Stop server — prefer stored PID, fall back to port scan
+    local server_pid=""
+    if [[ -f "$PID_DIR/server.pid" ]]; then
+        server_pid=$(cat "$PID_DIR/server.pid")
+    fi
+    if [[ -z "$server_pid" ]] || ! ps -p "$server_pid" > /dev/null 2>&1; then
+        server_pid=$(_pid_on_port "$PORT_SERVER")
+    fi
     if [[ -n "$server_pid" ]] && ps -p "$server_pid" > /dev/null 2>&1; then
         kill "$server_pid" 2>/dev/null
         echo "llama-server (PID: $server_pid) stopped."
@@ -223,9 +227,15 @@ cmd_status() {
     fi
 
     local server_pid=""
-    server_pid=$(_pid_on_port "$PORT_SERVER")
+    if [[ -f "$PID_DIR/server.pid" ]]; then
+        server_pid=$(cat "$PID_DIR/server.pid")
+    fi
+    if [[ -z "$server_pid" ]] || ! ps -p "$server_pid" > /dev/null 2>&1; then
+        server_pid=$(_pid_on_port "$PORT_SERVER")
+    fi
     if [[ -n "$server_pid" ]] && ps -p "$server_pid" > /dev/null 2>&1; then
         echo "llama-server running (PID: $server_pid) on port $PORT_SERVER"
+        echo "  Log: tail -f $LOG_DIR/server.log"
     else
         echo "llama-server not running."
     fi
