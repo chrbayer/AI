@@ -39,7 +39,7 @@ source "$SCRIPT_DIR/models.conf"
 _resolve_model() {
     local name="$1"
     for entry in "${_MODELS[@]}"; do
-        IFS='|' read -r m_name m_binary m_model m_mmproj m_alias m_label m_args m_client m_rocm_env <<< "$entry"
+        IFS='|' read -r m_name m_binary m_model m_mmproj m_alias m_label m_args m_client m_rocm_env m_hf_repo m_hf_includes <<< "$entry"
         if [[ "$m_name" == "$name" ]]; then
             _r_name="$m_name"
             _r_binary="$m_binary"
@@ -50,10 +50,24 @@ _resolve_model() {
             _r_args=($m_args)
             _r_client="${m_client:-$m_alias}"
             _r_rocm_env="${m_rocm_env:-}"
+            _r_hf_repo="${m_hf_repo:-}"
+            _r_hf_includes="${m_hf_includes:-}"
             return 0
         fi
     done
     return 1
+}
+
+# Check that required commands exist; prints error and returns 1 if any are missing.
+_check_deps() {
+    local missing=()
+    for cmd in "$@"; do
+        command -v "$cmd" > /dev/null 2>&1 || missing+=("$cmd")
+    done
+    if (( ${#missing[@]} > 0 )); then
+        echo "Error: missing dependencies: ${missing[*]}"
+        return 1
+    fi
 }
 
 # ── Commands ────────────────────────────────────────────────
@@ -63,7 +77,7 @@ cmd_list() {
     printf "  %-14s %-32s %-40s %s\n" "NAME" "LABEL" "BINARY" "ROCm ENV"
     printf "  %-14s %-32s %-40s %s\n" "----" "-----" "------" "---------"
     for entry in "${_MODELS[@]}"; do
-        IFS='|' read -r m_name m_binary m_model m_mmproj m_alias m_label m_args m_client m_rocm_env <<< "$entry"
+        IFS='|' read -r m_name m_binary m_model m_mmproj m_alias m_label m_args m_client m_rocm_env _ _ <<< "$entry"
         printf "  \033[36m%-14s\033[0m %-32s %-40s %s\n" "$m_name" "$m_label" "$m_binary" "${m_rocm_env:-—}"
     done
     echo ""
@@ -77,6 +91,7 @@ cmd_start() {
     [[ -z "$name" ]] && { echo "Usage: $0 start <model-name>"; exit 1; }
 
     _resolve_model "$name" || { echo "Unknown model: $name"; cmd_list; exit 1; }
+    _check_deps python3 || exit 1
 
     mkdir -p "$PID_DIR"
 
@@ -95,26 +110,33 @@ cmd_start() {
     [[ -n "$mmproj_path" ]] && cmd+=(--mmproj "$mmproj_path")
     cmd+=(--alias "$_r_alias" "${_r_args[@]}")
 
-    # Start proxy
+    # Start proxy and poll until it listens on the port (max 10s)
     echo "Starting proxy on port $PORT_PROXY..."
     python3 "$PROXY_SCRIPT" > "$SCRIPT_DIR/proxy.log" 2>&1 &
     local proxy_pid=$!
     echo "$proxy_pid" > "$PID_DIR/proxy.pid"
-    sleep 2
 
-    if ps -p "$proxy_pid" > /dev/null; then
-        echo "Proxy running (PID: $proxy_pid). Logs in proxy.log"
-    else
-        echo "Error: Proxy failed to start."
-        exit 1
-    fi
-
-    echo "" > "$PID_DIR/server.pid"
+    local max_wait=10
+    for (( i=0; i<max_wait; i++ )); do
+        sleep 1
+        if ! ps -p "$proxy_pid" > /dev/null 2>&1; then
+            echo "Error: Proxy failed to start. See proxy.log"
+            exit 1
+        fi
+        if ss -tlnp 2>/dev/null | grep -q ":${PORT_PROXY} "; then
+            echo "Proxy running (PID: $proxy_pid). Logs in proxy.log"
+            break
+        fi
+        if (( i == max_wait - 1 )); then
+            echo "Error: Proxy did not listen on port $PORT_PROXY within ${max_wait}s. See proxy.log"
+            exit 1
+        fi
+    done
 
     cleanup() {
         echo ""
-        # Kill server if still running
-        local server_pid=$(_pid_on_port "$PORT_SERVER")
+        local server_pid
+        server_pid=$(_pid_on_port "$PORT_SERVER")
         if [[ -n "$server_pid" ]]; then
             kill "$server_pid" 2>/dev/null
             echo "llama-server (PID: $server_pid) stopped."
@@ -130,6 +152,7 @@ cmd_start() {
     echo "ROCm env: ${_r_rocm_env:-—}"
     echo "----------------------------------------------------"
 
+    # _r_rocm_env is intentionally unquoted — word-splits space-separated KEY=VAL pairs for env
     if [[ -n "$_r_rocm_env" ]]; then
         env $_r_rocm_env "${cmd[@]}"
     else
@@ -151,7 +174,8 @@ cmd_stop() {
     local stopped=0
 
     # Stop server
-    local server_pid=$(_pid_on_port "$PORT_SERVER")
+    local server_pid
+    server_pid=$(_pid_on_port "$PORT_SERVER")
     if [[ -n "$server_pid" ]] && ps -p "$server_pid" > /dev/null 2>&1; then
         kill "$server_pid" 2>/dev/null
         echo "llama-server (PID: $server_pid) stopped."
@@ -234,7 +258,11 @@ cmd_env() {
 }
 
 cmd_clear() {
-    # Unset all Claude Code env vars
+    if [[ "$_IS_SOURCED" != true ]]; then
+        echo "This command must be sourced:  source $0 clear"
+        return 1
+    fi
+
     unset CLAUDE_CONFIG_DIR
     unset ANTHROPIC_BASE_URL
     unset ANTHROPIC_AUTH_TOKEN
@@ -270,7 +298,7 @@ _roc_env_combos() {
 
 _rocm_bin="/opt/llama.cpp-rocm/llama-bench"
 _vulkan_bin="llama-bench"
-_bench_common_args="-ngl 999 -t 16 --mmap 0 -fa 1"
+_bench_common_args=(-ngl 999 -t 16 --mmap 0 -fa 1)
 
 run_bench() {
     local binary="$1"
@@ -278,15 +306,18 @@ run_bench() {
     local env_combo="$3"
     local backend_type="$4"
     local model_name="$5"
+    local result_file="$6"
 
     local env_display="${env_combo:-<none>}"
-    local timestamp_ms=$(date +%s%3N)
+    local timestamp_ms
+    timestamp_ms=$(date +%s%3N)
     local tmp_out
     tmp_out=$(mktemp)
 
     printf "%s" "  $env_display ... "
 
-    env $env_combo "$binary" $_bench_common_args -m "$model" > "$tmp_out" 2>&1
+    # env_combo uses ';' as separator; convert to spaces so env receives separate KEY=VAL args
+    env ${env_combo//;/ } "$binary" "${_bench_common_args[@]}" -m "$model" > "$tmp_out" 2>&1
     local exit_code=$?
 
     if [[ "$exit_code" -eq 0 ]]; then
@@ -308,11 +339,10 @@ run_bench() {
     fi
 
     local stdout_raw
-    stdout_raw=$(cat "$tmp_out" | jq -Rs 'split("\n") | map(select(length>0)) | join("\n")')
+    stdout_raw=$(jq -Rs 'split("\n") | map(select(length>0)) | join("\n")' "$tmp_out")
     rm -f "$tmp_out"
 
-    local status_val
-    local exit_code_val
+    local status_val exit_code_val
     if [[ "$exit_code" -eq 0 ]]; then
         status_val='"ok"'
         exit_code_val="null"
@@ -344,7 +374,7 @@ run_bench() {
             stdout: $stdout
         }'
     )
-    echo "$entry_json" >> "$_result_file"
+    echo "$entry_json" >> "$result_file"
 }
 
 bench_model() {
@@ -352,6 +382,7 @@ bench_model() {
     local m_model="$2"
     local m_label="$3"
     local full_mode="${4:-}"
+    local result_file="$5"
 
     local model_path="${m_model//\~/$HOME}"
     if [[ ! -f "$model_path" ]]; then
@@ -365,23 +396,23 @@ bench_model() {
         echo "    ROCM:"
         while IFS= read -r combo; do
             [[ -z "$combo" ]] && continue
-            run_bench "$_rocm_bin" "$model_path" "$combo" "rocm" "$m_name"
+            run_bench "$_rocm_bin" "$model_path" "$combo" "rocm" "$m_name" "$result_file"
         done < <(_roc_env_combos)
 
         echo "    Vulkan:"
-        run_bench "$_vulkan_bin" "$model_path" "" "vulkan" "$m_name"
+        run_bench "$_vulkan_bin" "$model_path" "" "vulkan" "$m_name" "$result_file"
     else
         # Default: only test default ROCm env + Vulkan
         local default_rocm_env="ROC_ENABLE_PREFETCH=1;HSA_ENABLE_COMPRESSION=1;HSA_ENABLE_SDMA=0"
         echo "    ROCM (default):"
-        run_bench "$_rocm_bin" "$model_path" "$default_rocm_env" "rocm" "$m_name"
+        run_bench "$_rocm_bin" "$model_path" "$default_rocm_env" "rocm" "$m_name" "$result_file"
         echo "    Vulkan:"
-        run_bench "$_vulkan_bin" "$model_path" "" "vulkan" "$m_name"
+        run_bench "$_vulkan_bin" "$model_path" "" "vulkan" "$m_name" "$result_file"
     fi
 }
 
 cmd_benchmark() {
-    local target="${1:-}"
+    local target=""
     local full=""
 
     while [[ "$1" == "--full" ]]; do
@@ -401,34 +432,36 @@ cmd_benchmark() {
         echo ""
         echo "  Available models:"
         for entry in "${_MODELS[@]}"; do
-            IFS='|' read -r m_name _ _ _ _ m_label _ _ <<< "$entry"
+            IFS='|' read -r m_name _ _ _ _ m_label _ _ _ _ _ <<< "$entry"
             echo "    $m_name"
         done
         echo ""
-        echo "  Result file: benchmarks/benchmark-<model>-<timestamp>.jsonl"
+        echo "  Result file: Benchmarks/benchmark-<model>-<timestamp>.jsonl"
         return
     fi
 
-    _result_file="$SCRIPT_DIR/Benchmarks/benchmark-${target}-$(date +%Y%m%d-%H%M%S).jsonl"
-    mkdir -p "$(dirname "$_result_file")"
-    echo "Results → $_result_file"
+    _check_deps jq || return 1
+
+    local result_file="$SCRIPT_DIR/Benchmarks/benchmark-${target}-$(date +%Y%m%d-%H%M%S).jsonl"
+    mkdir -p "$(dirname "$result_file")"
+    echo "Results → $result_file"
     echo ""
 
     if [[ "$target" == "all" ]]; then
         for entry in "${_MODELS[@]}"; do
-            IFS='|' read -r m_name m_binary m_model _ _ m_label _ _ <<< "$entry"
+            IFS='|' read -r m_name _ m_model _ _ m_label _ _ _ _ _ <<< "$entry"
             echo "=== $m_label ==="
-            bench_model "$m_name" "$m_model" "$m_label" "$full"
+            bench_model "$m_name" "$m_model" "$m_label" "$full" "$result_file"
             echo ""
         done
     else
         local found=0
         for entry in "${_MODELS[@]}"; do
-            IFS='|' read -r m_name m_binary m_model _ _ m_label _ _ <<< "$entry"
+            IFS='|' read -r m_name _ m_model _ _ m_label _ _ _ _ _ <<< "$entry"
             if [[ "$m_name" == "$target" ]]; then
                 found=1
                 echo "=== $m_label ==="
-                bench_model "$m_name" "$m_model" "$m_label" "$full"
+                bench_model "$m_name" "$m_model" "$m_label" "$full" "$result_file"
                 break
             fi
         done
@@ -440,21 +473,21 @@ cmd_benchmark() {
     fi
 
     echo ""
-    echo "Done. $(wc -l < "$_result_file") entries written."
+    echo "Done. $(wc -l < "$result_file") entries written."
 }
 
 cmd_help() {
     echo ""
     printf "\033[1m$(basename "$0")\033[0m — LLM server manager\n"
     echo ""
-    printf "  %-14s %s\n" "start <name>"   "start server + proxy"
-    printf "  %-14s %s\n" "stop"           "stop all processes"
-    printf "  %-14s %s\n" "status"         "show running state"
+    printf "  %-14s %s\n" "start <name>"      "start server + proxy"
+    printf "  %-14s %s\n" "stop"              "stop all processes"
+    printf "  %-14s %s\n" "status"            "show running state"
     printf "  %-14s %s\n" "bench [opts] <m>"  "run benchmark (model or 'all')"
-    printf "  %-14s %s\n" "list"           "show available models"
-    printf "  %-14s %s\n" "env <name>"     "set Claude Code env vars (source!)"
-    printf "  %-14s %s\n" "clear"          "clear env vars (source!)"
-    printf "  %-14s %s\n" "download <m>"   "download model(s) (or 'all')"
+    printf "  %-14s %s\n" "list"              "show available models"
+    printf "  %-14s %s\n" "env <name>"        "set Claude Code env vars (source!)"
+    printf "  %-14s %s\n" "clear"             "clear env vars (source!)"
+    printf "  %-14s %s\n" "download <m>"      "download model(s) (or 'all')"
     echo ""
 }
 
@@ -466,25 +499,31 @@ _download_model() {
     local includes="$3"
     local force="${4:-}"
 
-    if [[ -n "$force" ]]; then
-        export HF_FORCE_DOWNLOAD=1
-    fi
-
     echo "  Downloading $repo ..."
     mkdir -p "$model_path"
-    hf download "$repo" \
-        --local-dir "$model_path" \
-        --include "$includes"
+
+    local -a include_args=()
+    read -ra include_pats <<< "$includes"
+    for pat in "${include_pats[@]}"; do
+        include_args+=(--include "$pat")
+    done
+
+    if [[ -n "$force" ]]; then
+        HF_FORCE_DOWNLOAD=1 hf download "$repo" --local-dir "$model_path" "${include_args[@]}"
+    else
+        hf download "$repo" --local-dir "$model_path" "${include_args[@]}"
+    fi
 }
 
 cmd_download() {
-    local target="${1:-}"
+    local target=""
     local force=""
 
     while [[ "$1" == "--force" || "$1" == "-f" ]]; do
         force="1"
         shift
     done
+    target="${1:-}"
 
     if [[ -z "$target" ]]; then
         echo "Usage: $0 download [--force] <model-name|all>"
@@ -494,84 +533,40 @@ cmd_download() {
         echo ""
         echo "  Available models:"
         for entry in "${_MODELS[@]}"; do
-            IFS='|' read -r m_name _ _ _ _ m_label _ _ <<< "$entry"
+            IFS='|' read -r m_name _ _ _ _ m_label _ _ _ _ _ <<< "$entry"
             echo "    $m_name"
         done
         return
     fi
 
-    local download_script="$SCRIPT_DIR/../Models/download.sh"
+    _check_deps hf || return 1
 
     if [[ "$target" == "all" ]]; then
         echo "Downloading all models..."
-        if [[ -f "$download_script" ]]; then
-            if [[ -n "$force" ]]; then
-                HF_FORCE_DOWNLOAD=1 bash "$download_script"
-            else
-                bash "$download_script"
+        for entry in "${_MODELS[@]}"; do
+            IFS='|' read -r m_name _ m_model _ _ m_label _ _ _ m_hf_repo m_hf_includes <<< "$entry"
+            if [[ -z "$m_hf_repo" ]]; then
+                echo "  Skipping $m_label: no download info configured"
+                continue
             fi
-        else
-            echo "Error: download.sh not found at $download_script"
-            return 1
-        fi
+            local model_dir
+            model_dir="$(dirname "${m_model//\~/$HOME}")"
+            echo "=== $m_label ==="
+            _download_model "$m_hf_repo" "$model_dir" "$m_hf_includes" "$force"
+        done
         return
     fi
 
-    local found=0
-    local model_path=""
-    local repo=""
-    local includes=""
+    _resolve_model "$target" || { echo "Unknown model: $target"; echo "Run '$0 download' to see available models."; return 1; }
 
-    case "$target" in
-        qwen-moe)
-            repo="unsloth/Qwen3.6-35B-A3B-GGUF"
-            model_path="~/AI/Models/Qwen3.6-35B-A3B-GGUF"
-            includes="*mmproj-F16* *UD-Q8_K_XL*"
-            ;;
-        qwen)
-            repo="unsloth/Qwen3.6-27B-GGUF"
-            model_path="~/AI/Models/Qwen3.6-27B-GGUF"
-            includes="*mmproj-F16* *UD-Q8_K_XL*"
-            ;;
-        gemma)
-            repo="unsloth/gemma-4-31B-it-GGUF"
-            model_path="~/AI/Models/gemma-4-31B-it-GGUF"
-            includes="*mmproj-F16* *UD-Q8_K_XL*"
-            ;;
-        gemma-moe)
-            repo="unsloth/gemma-4-26B-A4B-it-GGUF"
-            model_path="~/AI/Models/gemma-4-26B-A4B-it-GGUF"
-            includes="*mmproj-F16* *UD-Q8_K_XL*"
-            ;;
-        minimax)
-            repo="unsloth/MiniMax-M2.7-GGUF"
-            model_path="~/AI/Models/MiniMax-M2.7-GGUF"
-            includes="*mmproj-F16* *UD-IQ3_S*"
-            ;;
-        llama3.3)
-            repo="mradermacher/Llama-3.3-70B-Instruct-abliterated-GGUF"
-            model_path="~/AI/Models/Llama-3.3-70B-Instruct-abliterated-GGUF"
-            includes="*Q8_0*"
-            ;;
-        sauerkraut)
-            repo="unsloth/Llama-3.1-SauerkrautLM-Abliterated-Franken-104B-GGUF"
-            model_path="~/AI/Models/Llama-3.1-SauerkrautLM-Abliterated-Franken-104B-GGUF"
-            includes="*Q5_K_M*"
-            ;;
-        mistral)
-            repo="unsloth/Mistral-Medium-3.5-128B-GGUF"
-            model_path="~/AI/Models/Mistral-Medium-3.5-128B-GGUF"
-            includes="*mmproj-F16* *UD-Q5_K_XL*"
-            ;;
-        *)
-            echo "Unknown model: $target"
-            echo "Run '$0 download' to see available models."
-            return 1
-            ;;
-    esac
+    if [[ -z "$_r_hf_repo" ]]; then
+        echo "No download info configured for model: $target"
+        return 1
+    fi
 
-    model_path="${model_path//\~/$HOME}"
-    _download_model "$repo" "$model_path" "$includes" "$force"
+    local model_dir
+    model_dir="$(dirname "${_r_model//\~/$HOME}")"
+    _download_model "$_r_hf_repo" "$model_dir" "$_r_hf_includes" "$force"
 }
 
 # ── Dispatch ────────────────────────────────────────────────
