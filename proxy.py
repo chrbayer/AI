@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import requests
 from flask import Flask, request, Response
 import re
@@ -8,7 +9,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger(__name__)
 
 app = Flask(__name__)
-TARGET_URL = "http://localhost:8001"
+TARGET_URL = os.environ.get('LLM_BACKEND_URL', 'http://localhost:8001')
+PROXY_PORT  = int(os.environ.get('LLM_PROXY_PORT', '8081'))
 REQUEST_TIMEOUT = 300
 
 _HOP_BY_HOP = frozenset([
@@ -63,10 +65,10 @@ def proxy(path):
         return Response(json.dumps({"error": str(e)}), status=500, content_type="application/json")
 
 if __name__ == '__main__':
+    log.info("Backend: %s  Proxy port: %d", TARGET_URL, PROXY_PORT)
     try:
         from waitress import serve
-        log.info("Starting on port 8081 (waitress)")
-        serve(app, host='127.0.0.1', port=8081)
+        serve(app, host='127.0.0.1', port=PROXY_PORT)
     except ImportError:
         log.warning("waitress not installed, falling back to Flask dev server")
-        app.run(port=8081, host='127.0.0.1')
+        app.run(port=PROXY_PORT, host='127.0.0.1')

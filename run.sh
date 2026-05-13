@@ -1,11 +1,14 @@
 #!/bin/bash
 # Unified LLM server manager for Claude Code.
 # Usage:
-#   ./run.sh                 list available models
-#   ./run.sh start <name>    start server + proxy (foreground)
-#   ./run.sh stop            stop the proxy
-#   ./run.sh status          show running state
-#   source ./run.sh env <n>  export Claude Code env vars in this shell
+#   ./run.sh                        list available models
+#   ./run.sh start <name> [slot]    start server + proxy in background (slot 1 or 2, default 1)
+#   ./run.sh stop [slot]            stop slot (or all if omitted)
+#   ./run.sh status                 show running state
+#   source ./run.sh env <name> [slot]  export Claude Code env vars in this shell
+#
+# Ports:  slot 1 → server :8001  proxy :8081
+#         slot 2 → server :8002  proxy :8082
 
 # Resolve script directory
 if [[ -n "${BASH_SOURCE[0]:-}" ]]; then
@@ -18,8 +21,8 @@ else
 fi
 
 PROXY_SCRIPT="$SCRIPT_DIR/proxy.py"
-PORT_SERVER=8001
-PORT_PROXY=8081
+PORT_BASE_SERVER=8000  # slot N → port 8000+N
+PORT_BASE_PROXY=8080   # slot N → port 8080+N
 PID_DIR="$SCRIPT_DIR/.pids"
 LOG_DIR="$SCRIPT_DIR/logs"
 
@@ -82,19 +85,33 @@ cmd_list() {
         printf "  \033[36m%-14s\033[0m %-32s %-40s %s\n" "$m_name" "$m_label" "$m_binary" "${m_rocm_env:-—}"
     done
     echo ""
-    echo "  ./run.sh start <name>    start server + proxy"
-    echo "  source ./run.sh env <name> set Claude Code env vars in this shell"
+    echo "  ./run.sh start <name> [slot]     start server + proxy (slot 1 or 2)"
+    echo "  source ./run.sh env <name> [slot]  set Claude Code env vars in this shell"
     echo ""
 }
 
 cmd_start() {
     local name="${1:-}"
-    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name>"; exit 1; }
+    local slot="${2:-1}"
+    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot]"; exit 1; }
+    [[ "$slot" != "1" && "$slot" != "2" ]] && { echo "Error: slot must be 1 or 2"; exit 1; }
+
+    local port_server=$(( PORT_BASE_SERVER + slot ))
+    local port_proxy=$(( PORT_BASE_PROXY + slot ))
 
     _resolve_model "$name" || { echo "Unknown model: $name"; cmd_list; exit 1; }
     _check_deps python3 || exit 1
 
-    mkdir -p "$PID_DIR"
+    # Guard: abort if ports are already in use
+    if ss -tlnp 2>/dev/null | grep -q ":${port_server} "; then
+        echo "Error: Port $port_server already in use. Is slot $slot already running?"
+        exit 1
+    fi
+
+    mkdir -p "$PID_DIR" "$LOG_DIR"
+
+    local proxy_log="$LOG_DIR/proxy-${slot}.log"
+    local server_log="$LOG_DIR/server-${slot}.log"
 
     # Expand tilde in model paths
     local model_path="${_r_model//\~/$HOME}"
@@ -106,20 +123,18 @@ cmd_start() {
     # Build llama-server command
     local -a cmd=("${_r_binary}" \
         --model "$model_path" \
-        --port "$PORT_SERVER")
+        --port "$port_server")
 
     [[ -n "$mmproj_path" ]] && cmd+=(--mmproj "$mmproj_path")
     cmd+=(--alias "$_r_alias" "${_r_args[@]}")
 
-    mkdir -p "$LOG_DIR"
-    local proxy_log="$LOG_DIR/proxy.log"
-    local server_log="$LOG_DIR/server.log"
-
     # Start proxy and poll until it listens on the port (max 10s)
-    echo "Starting proxy on port $PORT_PROXY..."
+    echo "Starting proxy [slot $slot] on port $port_proxy..."
+    LLM_BACKEND_URL="http://localhost:${port_server}" \
+    LLM_PROXY_PORT="${port_proxy}" \
     python3 "$PROXY_SCRIPT" > "$proxy_log" 2>&1 &
     local proxy_pid=$!
-    echo "$proxy_pid" > "$PID_DIR/proxy.pid"
+    echo "$proxy_pid" > "$PID_DIR/proxy-${slot}.pid"
 
     local max_wait=10
     for (( i=0; i<max_wait; i++ )); do
@@ -128,18 +143,18 @@ cmd_start() {
             echo "Error: Proxy failed to start. See $proxy_log"
             exit 1
         fi
-        if ss -tlnp 2>/dev/null | grep -q ":${PORT_PROXY} "; then
+        if ss -tlnp 2>/dev/null | grep -q ":${port_proxy} "; then
             echo "Proxy running (PID: $proxy_pid)"
             break
         fi
         if (( i == max_wait - 1 )); then
-            echo "Error: Proxy did not listen on port $PORT_PROXY within ${max_wait}s. See $proxy_log"
+            echo "Error: Proxy did not listen on port $port_proxy within ${max_wait}s. See $proxy_log"
             exit 1
         fi
     done
 
     # Start llama-server in background
-    echo "Starting llama.cpp server on port $PORT_SERVER..."
+    echo "Starting llama.cpp server [slot $slot] on port $port_server..."
     echo "Model: $_r_label ($_r_alias)"
     echo "ROCm env: ${_r_rocm_env:-—}"
 
@@ -150,13 +165,13 @@ cmd_start() {
         "${cmd[@]}" > "$server_log" 2>&1 &
     fi
     local server_pid=$!
-    echo "$server_pid" > "$PID_DIR/server.pid"
+    echo "$server_pid" > "$PID_DIR/server-${slot}.pid"
 
     echo "Server running (PID: $server_pid)"
     echo ""
     echo "  Logs:  tail -f $server_log"
     echo "         tail -f $proxy_log"
-    echo "  Stop:  $0 stop"
+    echo "  Stop:  $0 stop $slot"
 }
 
 # Find a PID listening on a given port (uses ss or lsof).
@@ -169,90 +184,106 @@ _pid_on_port() {
     fi
 }
 
-cmd_stop() {
+_stop_slot() {
+    local slot="$1"
+    local port_server=$(( PORT_BASE_SERVER + slot ))
+    local port_proxy=$(( PORT_BASE_PROXY + slot ))
     local stopped=0
 
     # Stop server — prefer stored PID, fall back to port scan
     local server_pid=""
-    if [[ -f "$PID_DIR/server.pid" ]]; then
-        server_pid=$(cat "$PID_DIR/server.pid")
-    fi
+    [[ -f "$PID_DIR/server-${slot}.pid" ]] && server_pid=$(cat "$PID_DIR/server-${slot}.pid")
     if [[ -z "$server_pid" ]] || ! ps -p "$server_pid" > /dev/null 2>&1; then
-        server_pid=$(_pid_on_port "$PORT_SERVER")
+        server_pid=$(_pid_on_port "$port_server")
     fi
     if [[ -n "$server_pid" ]] && ps -p "$server_pid" > /dev/null 2>&1; then
         kill "$server_pid" 2>/dev/null
-        echo "llama-server (PID: $server_pid) stopped."
-        stopped=$((stopped + 1))
+        echo "Slot $slot: llama-server (PID: $server_pid) stopped."
+        stopped=$(( stopped + 1 ))
+    fi
+
+    # Stop proxy — prefer stored PID, fall back to port scan
+    local proxy_pid=""
+    [[ -f "$PID_DIR/proxy-${slot}.pid" ]] && proxy_pid=$(cat "$PID_DIR/proxy-${slot}.pid")
+    if [[ -z "$proxy_pid" ]] || ! ps -p "$proxy_pid" > /dev/null 2>&1; then
+        proxy_pid=$(_pid_on_port "$port_proxy")
+    fi
+    if [[ -n "$proxy_pid" ]] && ps -p "$proxy_pid" > /dev/null 2>&1; then
+        kill "$proxy_pid" 2>/dev/null
+        echo "Slot $slot: proxy (PID: $proxy_pid) stopped."
+        stopped=$(( stopped + 1 ))
+    fi
+
+    rm -f "$PID_DIR/server-${slot}.pid" "$PID_DIR/proxy-${slot}.pid"
+    return $(( stopped == 0 ))
+}
+
+cmd_stop() {
+    local slot="${1:-}"
+
+    if [[ -n "$slot" ]]; then
+        [[ "$slot" != "1" && "$slot" != "2" ]] && { echo "Error: slot must be 1 or 2"; return 1; }
+        _stop_slot "$slot" || echo "Slot $slot: nothing was running."
     else
-        echo "llama-server not running."
+        local total=0
+        for s in 1 2; do
+            _stop_slot "$s" && total=$(( total + 1 ))
+        done
+        [[ "$total" -eq 0 ]] && echo "Nothing was running."
     fi
 
-    # Stop proxy
-    local pid=""
-    if [[ -f "$PID_DIR/proxy.pid" ]]; then
-        pid=$(cat "$PID_DIR/proxy.pid")
-    fi
-
-    if [[ -z "$pid" ]] || ! ps -p "$pid" > /dev/null 2>&1; then
-        pid=$(_pid_on_port "$PORT_PROXY")
-    fi
-
-    if [[ -n "$pid" ]] && ps -p "$pid" > /dev/null 2>&1; then
-        kill "$pid" 2>/dev/null
-        echo "Proxy (PID: $pid) stopped."
-        stopped=$((stopped + 1))
-    else
-        echo "Proxy not running."
-    fi
-
-    rm -rf "$PID_DIR"
+    rmdir "$PID_DIR" 2>/dev/null || true
 }
 
 cmd_status() {
-    local pid=""
-    if [[ -f "$PID_DIR/proxy.pid" ]]; then
-        pid=$(cat "$PID_DIR/proxy.pid")
-    fi
+    local found=0
+    for slot in 1 2; do
+        local port_server=$(( PORT_BASE_SERVER + slot ))
+        local port_proxy=$(( PORT_BASE_PROXY + slot ))
 
-    # Fallback: find the proxy by port if we have no PID file
-    if [[ -z "$pid" ]] || ! ps -p "$pid" > /dev/null 2>&1; then
-        pid=$(_pid_on_port "$PORT_PROXY")
-    fi
+        local server_pid=""
+        [[ -f "$PID_DIR/server-${slot}.pid" ]] && server_pid=$(cat "$PID_DIR/server-${slot}.pid")
+        if [[ -z "$server_pid" ]] || ! ps -p "$server_pid" > /dev/null 2>&1; then
+            server_pid=$(_pid_on_port "$port_server")
+        fi
 
-    if [[ -n "$pid" ]] && ps -p "$pid" > /dev/null 2>&1; then
-        echo "Proxy running (PID: $pid) on port $PORT_PROXY"
-    else
-        echo "Proxy not running."
-    fi
+        local proxy_pid=""
+        [[ -f "$PID_DIR/proxy-${slot}.pid" ]] && proxy_pid=$(cat "$PID_DIR/proxy-${slot}.pid")
+        if [[ -z "$proxy_pid" ]] || ! ps -p "$proxy_pid" > /dev/null 2>&1; then
+            proxy_pid=$(_pid_on_port "$port_proxy")
+        fi
 
-    local server_pid=""
-    if [[ -f "$PID_DIR/server.pid" ]]; then
-        server_pid=$(cat "$PID_DIR/server.pid")
-    fi
-    if [[ -z "$server_pid" ]] || ! ps -p "$server_pid" > /dev/null 2>&1; then
-        server_pid=$(_pid_on_port "$PORT_SERVER")
-    fi
-    if [[ -n "$server_pid" ]] && ps -p "$server_pid" > /dev/null 2>&1; then
-        echo "llama-server running (PID: $server_pid) on port $PORT_SERVER"
-        echo "  Log: tail -f $LOG_DIR/server.log"
-    else
-        echo "llama-server not running."
-    fi
+        local slot_active=0
+        if [[ -n "$server_pid" ]] && ps -p "$server_pid" > /dev/null 2>&1; then
+            echo "Slot $slot: llama-server (PID: $server_pid) on :$port_server"
+            echo "         Log: tail -f $LOG_DIR/server-${slot}.log"
+            slot_active=1; found=1
+        fi
+        if [[ -n "$proxy_pid" ]] && ps -p "$proxy_pid" > /dev/null 2>&1; then
+            echo "Slot $slot: proxy       (PID: $proxy_pid) on :$port_proxy"
+            slot_active=1; found=1
+        fi
+    done
+    [[ "$found" -eq 0 ]] && echo "Nothing running."
 }
 
 cmd_env() {
     local name="${1:-}"
-    [[ -z "$name" ]] && { echo "Usage: source $0 env <model-name>"; return 1; }
+    local slot="${2:-1}"
+    [[ -z "$name" ]] && { echo "Usage: source $0 env <model-name> [slot]"; return 1; }
+    [[ "$slot" != "1" && "$slot" != "2" ]] && { echo "Error: slot must be 1 or 2"; return 1; }
+
+    local port_proxy=$(( PORT_BASE_PROXY + slot ))
 
     _resolve_model "$name" || { echo "Unknown model: $name"; cmd_list; return 1; }
 
     local config_dir=".claude-${_r_name}"
+    [[ "$slot" -gt 1 ]] && config_dir=".claude-${_r_name}-${slot}"
 
     # When sourced, these exports take effect in the caller's shell.
     # When executed directly, they're printed for the user to see.
     export CLAUDE_CONFIG_DIR="$config_dir"
-    export ANTHROPIC_BASE_URL="http://localhost:$PORT_PROXY"
+    export ANTHROPIC_BASE_URL="http://localhost:$port_proxy"
     export ANTHROPIC_AUTH_TOKEN="sk-no-key-required"
     export ANTHROPIC_MODEL="$_r_client"
     export ANTHROPIC_SMALL_FAST_MODEL="$_r_client"
@@ -261,9 +292,9 @@ cmd_env() {
     export ANTHROPIC_DEFAULT_HAIKU_MODEL="$_r_client"
     export API_TIMEOUT_MS="3000000"
 
-    echo "Claude Code env set for $_r_label ($_r_client)"
+    echo "Claude Code env set for $_r_label ($_r_client) [slot $slot]"
     echo "  CLAUDE_CONFIG_DIR=$config_dir"
-    echo "  ANTHROPIC_BASE_URL=http://localhost:$PORT_PROXY"
+    echo "  ANTHROPIC_BASE_URL=http://localhost:$port_proxy"
     echo "  ANTHROPIC_MODEL=$_r_client"
 }
 
@@ -284,7 +315,7 @@ cmd_clear() {
     unset API_TIMEOUT_MS
 
     echo "Environment cleared."
-    echo "Run 'source $0 env <name>' to set up a model again."
+    echo "Run 'source $0 env <name> [slot]' to set up a model again."
 }
 
 # ── Benchmark ────────────────────────────────────────────────
@@ -490,14 +521,17 @@ cmd_help() {
     echo ""
     printf "\033[1m$(basename "$0")\033[0m — LLM server manager\n"
     echo ""
-    printf "  %-14s %s\n" "start <name>"      "start server + proxy"
-    printf "  %-14s %s\n" "stop"              "stop all processes"
-    printf "  %-14s %s\n" "status"            "show running state"
-    printf "  %-14s %s\n" "bench [opts] <m>"  "run benchmark (model or 'all')"
-    printf "  %-14s %s\n" "list"              "show available models"
-    printf "  %-14s %s\n" "env <name>"        "set Claude Code env vars (source!)"
-    printf "  %-14s %s\n" "clear"             "clear env vars (source!)"
-    printf "  %-14s %s\n" "download <m>"      "download model(s) (or 'all')"
+    printf "  %-20s %s\n" "start <name> [slot]"   "start server + proxy (slot 1 or 2, default 1)"
+    printf "  %-20s %s\n" "stop [slot]"            "stop slot (or all if omitted)"
+    printf "  %-20s %s\n" "status"                 "show running state"
+    printf "  %-20s %s\n" "bench [opts] <m>"       "run benchmark (model or 'all')"
+    printf "  %-20s %s\n" "list"                   "show available models"
+    printf "  %-20s %s\n" "env <name> [slot]"      "set Claude Code env vars (source!)"
+    printf "  %-20s %s\n" "clear"                  "clear env vars (source!)"
+    printf "  %-20s %s\n" "download <m>"           "download model(s) (or 'all')"
+    echo ""
+    echo "  Ports:  slot 1 → server :8001  proxy :8081"
+    echo "          slot 2 → server :8002  proxy :8082"
     echo ""
 }
 
@@ -591,12 +625,12 @@ if [[ "$_IS_SOURCED" == true ]]; then
 else
     case "${1:-}" in
         start)      shift; cmd_start "$@" ;;
-        stop)       cmd_stop ;;
+        stop)       shift; cmd_stop "$@" ;;
         status)     cmd_status ;;
         bench)      shift; cmd_benchmark "$@" ;;
         list)       cmd_list ;;
         help)       cmd_help ;;
-        env)        echo "This command must be sourced:  source $0 env <name>" ;;
+        env)        echo "This command must be sourced:  source $0 env <name> [slot]" ;;
         download)   shift; cmd_download "$@" ;;
         *)          cmd_help; cmd_list ;;
     esac
