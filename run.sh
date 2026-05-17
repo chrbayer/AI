@@ -52,7 +52,7 @@ _resolve_model() {
             _r_alias="$m_alias"
             _r_label="$m_label"
             _r_args=($m_args)
-            _r_client="${m_client:-$m_alias}"
+            _r_client="${m_client:-$m_name}"
             _r_rocm_env="${m_rocm_env:-}"
             _r_hf_repo="${m_hf_repo:-}"
             _r_hf_includes="${m_hf_includes:-}"
@@ -127,7 +127,7 @@ cmd_start() {
         --port "$port_server")
 
     [[ -n "$mmproj_path" ]] && cmd+=(--mmproj "$mmproj_path")
-    cmd+=(--alias "$_r_alias" "${_r_args[@]}")
+    cmd+=(--alias "$_r_client" "${_r_args[@]}")
 
     # Start proxy and poll until it listens on the port (max 10s)
     echo "Starting proxy [slot $slot] on port $port_proxy..."
