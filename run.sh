@@ -292,10 +292,13 @@ cmd_env() {
     export ANTHROPIC_DEFAULT_OPUS_MODEL="$_r_client"
     export ANTHROPIC_DEFAULT_HAIKU_MODEL="$_r_client"
     export API_TIMEOUT_MS="3000000"
+    export OPENAI_BASE_URL="http://localhost:$port_proxy/v1"
+    export OPENAI_API_KEY="sk-no-key-required"
 
     echo "Claude Code env set for $_r_label ($_r_client) [slot $slot]"
     echo "  CLAUDE_CONFIG_DIR=$config_dir"
     echo "  ANTHROPIC_BASE_URL=http://localhost:$port_proxy"
+    echo "  OPENAI_BASE_URL=http://localhost:$port_proxy/v1"
     echo "  ANTHROPIC_MODEL=$_r_client"
 }
 
@@ -314,6 +317,8 @@ cmd_clear() {
     unset ANTHROPIC_DEFAULT_OPUS_MODEL
     unset ANTHROPIC_DEFAULT_HAIKU_MODEL
     unset API_TIMEOUT_MS
+    unset OPENAI_BASE_URL
+    unset OPENAI_API_KEY
 
     echo "Environment cleared."
     echo "Run 'source $0 env <name> [slot]' to set up a model again."
