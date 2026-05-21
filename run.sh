@@ -1,14 +1,15 @@
 #!/bin/bash
 # Unified LLM server manager for Claude Code.
 # Usage:
-#   ./run.sh                        list available models
-#   ./run.sh start <name> [slot]    start server + proxy in background (slot 1 or 2, default 1)
-#   ./run.sh stop [slot]            stop slot (or all if omitted)
-#   ./run.sh status                 show running state
-#   source ./run.sh env <name> [slot]  export Claude Code env vars in this shell
+#   ./run.sh                                     list available models
+#   ./run.sh start <name> [slot] [--no-reasoning]  start server + proxy in background (slot 1-3, default 1)
+#   ./run.sh stop [slot]                         stop slot (or all if omitted)
+#   ./run.sh status                              show running state
+#   source ./run.sh env <name> [slot]            export Claude Code env vars in this shell
 #
 # Ports:  slot 1 → server :8001  proxy :8081
 #         slot 2 → server :8002  proxy :8082
+#         slot 3 → server :8003  proxy :8083
 
 # Resolve script directory
 if [[ -n "${BASH_SOURCE[0]:-}" ]]; then
@@ -43,7 +44,7 @@ source "$SCRIPT_DIR/models.conf"
 _resolve_model() {
     local name="$1"
     for entry in "${_MODELS[@]}"; do
-        IFS='|' read -r m_name m_binary m_model m_mmproj m_alias m_label m_args m_client m_rocm_env m_hf_repo m_hf_includes m_hf_dir <<< "$entry"
+        IFS='|' read -r m_name m_binary m_model m_mmproj m_alias m_label m_args m_client m_rocm_env m_hf_repo m_hf_includes m_hf_dir m_no_reasoning_args <<< "$entry"
         if [[ "$m_name" == "$name" ]]; then
             _r_name="$m_name"
             _r_binary="$m_binary"
@@ -57,6 +58,7 @@ _resolve_model() {
             _r_hf_repo="${m_hf_repo:-}"
             _r_hf_includes="${m_hf_includes:-}"
             _r_hf_dir="${m_hf_dir:-}"
+            _r_no_reasoning_args=($m_no_reasoning_args)
             return 0
         fi
     done
@@ -92,10 +94,20 @@ cmd_list() {
 }
 
 cmd_start() {
-    local name="${1:-}"
-    local slot="${2:-1}"
-    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot]"; exit 1; }
-    [[ "$slot" != "1" && "$slot" != "2" ]] && { echo "Error: slot must be 1 or 2"; exit 1; }
+    local name=""
+    local slot="1"
+    local no_reasoning=false
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --no-reasoning) no_reasoning=true; shift ;;
+            -*) echo "Unknown option: $1"; exit 1 ;;
+            *) if [[ -z "$name" ]]; then name="$1"; elif [[ "$slot" == "1" ]]; then slot="$1"; fi; shift ;;
+        esac
+    done
+
+    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--no-reasoning]"; exit 1; }
+    [[ "$slot" != "1" && "$slot" != "2" && "$slot" != "3" ]] && { echo "Error: slot must be 1, 2, or 3"; exit 1; }
 
     local port_server=$(( PORT_BASE_SERVER + slot ))
     local port_proxy=$(( PORT_BASE_PROXY + slot ))
@@ -128,6 +140,10 @@ cmd_start() {
 
     [[ -n "$mmproj_path" ]] && cmd+=(--mmproj "$mmproj_path")
     cmd+=(--alias "$_r_client" "${_r_args[@]}")
+    if [[ "$no_reasoning" == true ]]; then
+        [[ ${#_r_no_reasoning_args[@]} -gt 0 ]] && cmd+=("${_r_no_reasoning_args[@]}")
+        cmd+=(--reasoning off --reasoning-budget 0)
+    fi
 
     # Start proxy and poll until it listens on the port (max 10s)
     echo "Starting proxy [slot $slot] on port $port_proxy..."
@@ -158,6 +174,7 @@ cmd_start() {
     echo "Starting llama.cpp server [slot $slot] on port $port_server..."
     echo "Model: $_r_label ($_r_alias)"
     echo "ROCm env: ${_r_rocm_env:-—}"
+    [[ "$no_reasoning" == true ]] && echo "Reasoning: disabled (--reasoning off --reasoning-budget 0)"
 
     # _r_rocm_env is intentionally unquoted — word-splits space-separated KEY=VAL pairs for env
     if [[ -n "$_r_rocm_env" ]]; then
@@ -223,11 +240,11 @@ cmd_stop() {
     local slot="${1:-}"
 
     if [[ -n "$slot" ]]; then
-        [[ "$slot" != "1" && "$slot" != "2" ]] && { echo "Error: slot must be 1 or 2"; return 1; }
+        [[ "$slot" != "1" && "$slot" != "2" && "$slot" != "3" ]] && { echo "Error: slot must be 1, 2, or 3"; return 1; }
         _stop_slot "$slot" || echo "Slot $slot: nothing was running."
     else
         local total=0
-        for s in 1 2; do
+        for s in 1 2 3; do
             _stop_slot "$s" && total=$(( total + 1 ))
         done
         [[ "$total" -eq 0 ]] && echo "Nothing was running."
@@ -238,7 +255,7 @@ cmd_stop() {
 
 cmd_status() {
     local found=0
-    for slot in 1 2; do
+    for slot in 1 2 3; do
         local port_server=$(( PORT_BASE_SERVER + slot ))
         local port_proxy=$(( PORT_BASE_PROXY + slot ))
 
@@ -272,7 +289,7 @@ cmd_env() {
     local name="${1:-}"
     local slot="${2:-1}"
     [[ -z "$name" ]] && { echo "Usage: source $0 env <model-name> [slot]"; return 1; }
-    [[ "$slot" != "1" && "$slot" != "2" ]] && { echo "Error: slot must be 1 or 2"; return 1; }
+    [[ "$slot" != "1" && "$slot" != "2" && "$slot" != "3" ]] && { echo "Error: slot must be 1, 2, or 3"; return 1; }
 
     local port_proxy=$(( PORT_BASE_PROXY + slot ))
 
@@ -496,7 +513,7 @@ cmd_benchmark() {
 
     if [[ "$target" == "all" ]]; then
         for entry in "${_MODELS[@]}"; do
-            IFS='|' read -r m_name _ m_model _ _ m_label _ _ _ _ _ _ <<< "$entry"
+            IFS='|' read -r m_name _ m_model _ _ m_label _ _ _ _ _ _ _ <<< "$entry"
             echo "=== $m_label ==="
             bench_model "$m_name" "$m_model" "$m_label" "$full" "$result_file"
             echo ""
@@ -504,7 +521,7 @@ cmd_benchmark() {
     else
         local found=0
         for entry in "${_MODELS[@]}"; do
-            IFS='|' read -r m_name _ m_model _ _ m_label _ _ _ _ _ _ <<< "$entry"
+            IFS='|' read -r m_name _ m_model _ _ m_label _ _ _ _ _ _ _ <<< "$entry"
             if [[ "$m_name" == "$target" ]]; then
                 found=1
                 echo "=== $m_label ==="
@@ -527,7 +544,7 @@ cmd_help() {
     echo ""
     printf "\033[1m$(basename "$0")\033[0m — LLM server manager\n"
     echo ""
-    printf "  %-20s %s\n" "start <name> [slot]"   "start server + proxy (slot 1 or 2, default 1)"
+    printf "  %-20s %s\n" "start <name> [slot]"   "start server + proxy (slot 1-3, default 1); --no-reasoning disables reasoning"
     printf "  %-20s %s\n" "stop [slot]"            "stop slot (or all if omitted)"
     printf "  %-20s %s\n" "status"                 "show running state"
     printf "  %-20s %s\n" "bench [opts] <m>"       "run benchmark (model or 'all')"
@@ -538,6 +555,7 @@ cmd_help() {
     echo ""
     echo "  Ports:  slot 1 → server :8001  proxy :8081"
     echo "          slot 2 → server :8002  proxy :8082"
+    echo "          slot 3 → server :8003  proxy :8083"
     echo ""
 }
 
@@ -594,7 +612,7 @@ cmd_download() {
     if [[ "$target" == "all" ]]; then
         echo "Downloading all models..."
         for entry in "${_MODELS[@]}"; do
-            IFS='|' read -r m_name _ m_model _ _ m_label _ _ _ m_hf_repo m_hf_includes m_hf_dir <<< "$entry"
+            IFS='|' read -r m_name _ m_model _ _ m_label _ _ _ m_hf_repo m_hf_includes m_hf_dir _ <<< "$entry"
             if [[ -z "$m_hf_repo" ]]; then
                 echo "  Skipping $m_label: no download info configured"
                 continue
