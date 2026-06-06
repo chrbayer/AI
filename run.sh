@@ -97,16 +97,18 @@ cmd_start() {
     local name=""
     local slot="1"
     local no_reasoning=false
+    local mlock=false
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --no-reasoning) no_reasoning=true; shift ;;
+            --mlock) mlock=true; shift ;;
             -*) echo "Unknown option: $1"; exit 1 ;;
             *) if [[ -z "$name" ]]; then name="$1"; elif [[ "$slot" == "1" ]]; then slot="$1"; fi; shift ;;
         esac
     done
 
-    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--no-reasoning]"; exit 1; }
+    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--no-reasoning] [--mlock]"; exit 1; }
     [[ "$slot" != "1" && "$slot" != "2" && "$slot" != "3" ]] && { echo "Error: slot must be 1, 2, or 3"; exit 1; }
 
     local port_server=$(( PORT_BASE_SERVER + slot ))
@@ -140,6 +142,7 @@ cmd_start() {
 
     [[ -n "$mmproj_path" ]] && cmd+=(--mmproj "$mmproj_path")
     cmd+=(--alias "$_r_client" "${_r_args[@]}")
+    [[ "$mlock" == true ]] && cmd+=(--mlock)
     if [[ "$no_reasoning" == true ]]; then
         [[ ${#_r_no_reasoning_args[@]} -gt 0 ]] && cmd+=("${_r_no_reasoning_args[@]}")
         cmd+=(--reasoning off --reasoning-budget 0)
@@ -175,6 +178,7 @@ cmd_start() {
     echo "Model: $_r_label ($_r_alias)"
     echo "ROCm env: ${_r_rocm_env:-—}"
     [[ "$no_reasoning" == true ]] && echo "Reasoning: disabled (--reasoning off --reasoning-budget 0)"
+    [[ "$mlock" == true ]] && echo "mlock: enabled (--mlock)"
 
     # _r_rocm_env is intentionally unquoted — word-splits space-separated KEY=VAL pairs for env
     if [[ -n "$_r_rocm_env" ]]; then
