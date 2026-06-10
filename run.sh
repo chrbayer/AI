@@ -314,6 +314,7 @@ cmd_env() {
     export ANTHROPIC_DEFAULT_HAIKU_MODEL="$_r_client"
     export API_TIMEOUT_MS="3000000"
     export PI_STREAM_FIRST_EVENT_TIMEOUT_MS="600000"
+    export PI_OPENAI_STREAM_IDLE_TIMEOUT_MS="600000"
     export OPENAI_BASE_URL="http://localhost:$port_proxy/v1"
     export OPENAI_API_KEY="sk-no-key-required"
 
