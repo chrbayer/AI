@@ -44,7 +44,7 @@ source "$SCRIPT_DIR/models.conf"
 _resolve_model() {
     local name="$1"
     for entry in "${_MODELS[@]}"; do
-        IFS='|' read -r m_name m_binary m_model m_mmproj m_alias m_label m_args m_client m_rocm_env m_hf_repo m_hf_includes m_hf_dir m_no_reasoning_args <<< "$entry"
+        IFS='|' read -r m_name m_binary m_model m_mmproj m_alias m_label m_args m_client m_rocm_env m_hf_repo m_hf_includes m_hf_dir m_no_reasoning_args m_ctx <<< "$entry"
         if [[ "$m_name" == "$name" ]]; then
             _r_name="$m_name"
             _r_binary="$m_binary"
@@ -59,6 +59,7 @@ _resolve_model() {
             _r_hf_includes="${m_hf_includes:-}"
             _r_hf_dir="${m_hf_dir:-}"
             _r_no_reasoning_args=($m_no_reasoning_args)
+            _r_ctx="${m_ctx:-}"
             return 0
         fi
     done
@@ -142,6 +143,7 @@ cmd_start() {
 
     [[ -n "$mmproj_path" ]] && cmd+=(--mmproj "$mmproj_path")
     cmd+=(--alias "$_r_client" "${_r_args[@]}")
+    [[ -n "$_r_ctx" ]] && cmd+=(--ctx-size "$_r_ctx")
     [[ "$mlock" == true ]] && cmd+=(--mlock)
     if [[ "$no_reasoning" == true ]]; then
         [[ ${#_r_no_reasoning_args[@]} -gt 0 ]] && cmd+=("${_r_no_reasoning_args[@]}")
@@ -177,6 +179,7 @@ cmd_start() {
     echo "Starting llama.cpp server [slot $slot] on port $port_server..."
     echo "Model: $_r_label ($_r_alias)"
     echo "ROCm env: ${_r_rocm_env:-—}"
+    echo "Context:  ${_r_ctx:-default}"
     [[ "$no_reasoning" == true ]] && echo "Reasoning: disabled (--reasoning off --reasoning-budget 0)"
     [[ "$mlock" == true ]] && echo "mlock: enabled (--mlock)"
 
