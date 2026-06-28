@@ -147,11 +147,10 @@ cmd_start() {
         --port "$port_server")
 
     [[ -n "$mmproj_path" ]] && cmd+=(--mmproj "$mmproj_path")
-    cmd+=(--alias "$_r_client" "${_r_args[@]}")
+    # --parallel and --timeout are managed centrally here, not in models.conf.
+    cmd+=(--alias "$_r_client" "${_r_args[@]}" --parallel "${parallel:-1}" --timeout 600)
     [[ -n "$_r_ctx" ]] && cmd+=(--ctx-size "$_r_ctx")
     [[ "$mlock" == true ]] && cmd+=(--mlock)
-    # Appended after _r_args (which carries --parallel 1) so it overrides the default.
-    [[ -n "$parallel" ]] && cmd+=(--parallel "$parallel")
     if [[ "$no_reasoning" == true ]]; then
         [[ ${#_r_no_reasoning_args[@]} -gt 0 ]] && cmd+=("${_r_no_reasoning_args[@]}")
         cmd+=(--reasoning off --reasoning-budget 0)
@@ -187,7 +186,8 @@ cmd_start() {
     echo "Model: $_r_label ($_r_alias)"
     echo "ROCm env: ${_r_rocm_env:-—}"
     echo "Context:  ${_r_ctx:-default}"
-    echo "Parallel: ${parallel:-1 (default)}"
+    echo "Parallel: ${parallel:-1}"
+    echo "Timeout:  600s"
     [[ "$no_reasoning" == true ]] && echo "Reasoning: disabled (--reasoning off --reasoning-budget 0)"
     [[ "$mlock" == true ]] && echo "mlock: enabled (--mlock)"
 
