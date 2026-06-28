@@ -2,7 +2,7 @@
 # Unified LLM server manager for Claude Code.
 # Usage:
 #   ./run.sh                                     list available models
-#   ./run.sh start <name> [slot] [--no-reasoning]  start server + proxy in background (slot 1-3, default 1)
+#   ./run.sh start <name> [slot] [--no-reasoning] [--parallel N]  start server + proxy in background (slot 1-3, default 1)
 #   ./run.sh stop [slot]                         stop slot (or all if omitted)
 #   ./run.sh status                              show running state
 #   source ./run.sh env <name> [slot]            export Claude Code env vars in this shell
@@ -99,18 +99,23 @@ cmd_start() {
     local slot="1"
     local no_reasoning=false
     local mlock=false
+    local parallel=""
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --no-reasoning) no_reasoning=true; shift ;;
             --mlock) mlock=true; shift ;;
+            --parallel) parallel="$2"; shift 2 ;;
             -*) echo "Unknown option: $1"; exit 1 ;;
             *) if [[ -z "$name" ]]; then name="$1"; elif [[ "$slot" == "1" ]]; then slot="$1"; fi; shift ;;
         esac
     done
 
-    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--no-reasoning] [--mlock]"; exit 1; }
+    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--no-reasoning] [--mlock] [--parallel N]"; exit 1; }
     [[ "$slot" != "1" && "$slot" != "2" && "$slot" != "3" ]] && { echo "Error: slot must be 1, 2, or 3"; exit 1; }
+    if [[ -n "$parallel" && ! "$parallel" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Error: --parallel requires a positive integer (got '$parallel')"; exit 1
+    fi
 
     local port_server=$(( PORT_BASE_SERVER + slot ))
     local port_proxy=$(( PORT_BASE_PROXY + slot ))
@@ -145,6 +150,8 @@ cmd_start() {
     cmd+=(--alias "$_r_client" "${_r_args[@]}")
     [[ -n "$_r_ctx" ]] && cmd+=(--ctx-size "$_r_ctx")
     [[ "$mlock" == true ]] && cmd+=(--mlock)
+    # Appended after _r_args (which carries --parallel 1) so it overrides the default.
+    [[ -n "$parallel" ]] && cmd+=(--parallel "$parallel")
     if [[ "$no_reasoning" == true ]]; then
         [[ ${#_r_no_reasoning_args[@]} -gt 0 ]] && cmd+=("${_r_no_reasoning_args[@]}")
         cmd+=(--reasoning off --reasoning-budget 0)
@@ -180,6 +187,7 @@ cmd_start() {
     echo "Model: $_r_label ($_r_alias)"
     echo "ROCm env: ${_r_rocm_env:-—}"
     echo "Context:  ${_r_ctx:-default}"
+    echo "Parallel: ${parallel:-1 (default)}"
     [[ "$no_reasoning" == true ]] && echo "Reasoning: disabled (--reasoning off --reasoning-budget 0)"
     [[ "$mlock" == true ]] && echo "mlock: enabled (--mlock)"
 
@@ -553,7 +561,7 @@ cmd_help() {
     echo ""
     printf "\033[1m$(basename "$0")\033[0m — LLM server manager\n"
     echo ""
-    printf "  %-20s %s\n" "start <name> [slot]"   "start server + proxy (slot 1-3, default 1); --no-reasoning disables reasoning"
+    printf "  %-20s %s\n" "start <name> [slot]"   "start server + proxy (slot 1-3, default 1); --no-reasoning disables reasoning; --parallel N sets slots (default 1)"
     printf "  %-20s %s\n" "stop [slot]"            "stop slot (or all if omitted)"
     printf "  %-20s %s\n" "status"                 "show running state"
     printf "  %-20s %s\n" "bench [opts] <m>"       "run benchmark (model or 'all')"
