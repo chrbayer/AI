@@ -2,7 +2,7 @@
 # Unified LLM server manager for Claude Code.
 # Usage:
 #   ./run.sh                                     list available models
-#   ./run.sh start <name> [slot] [--no-reasoning] [--parallel N]  start server + proxy in background (slot 1-3, default 1)
+#   ./run.sh start <name> [slot] [--reasoning-budget N] [--no-reasoning] [--parallel N]  start server + proxy in background (slot 1-3, default 1)
 #   ./run.sh stop [slot]                         stop slot (or all if omitted)
 #   ./run.sh status                              show running state
 #   source ./run.sh env <name> [slot]            export Claude Code env vars in this shell
@@ -97,13 +97,14 @@ cmd_list() {
 cmd_start() {
     local name=""
     local slot="1"
-    local no_reasoning=false
+    local reasoning_budget=""   # "" = model default; 0 = off; N>0 = limited; -1 = unrestricted
     local mlock=false
     local parallel=""
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --no-reasoning) no_reasoning=true; shift ;;
+            --reasoning-budget) reasoning_budget="$2"; shift 2 ;;
+            --no-reasoning) reasoning_budget=0; shift ;;   # alias for --reasoning-budget 0
             --mlock) mlock=true; shift ;;
             --parallel) parallel="$2"; shift 2 ;;
             -*) echo "Unknown option: $1"; exit 1 ;;
@@ -111,10 +112,13 @@ cmd_start() {
         esac
     done
 
-    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--no-reasoning] [--mlock] [--parallel N]"; exit 1; }
+    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--reasoning-budget N] [--no-reasoning] [--mlock] [--parallel N]"; exit 1; }
     [[ "$slot" != "1" && "$slot" != "2" && "$slot" != "3" ]] && { echo "Error: slot must be 1, 2, or 3"; exit 1; }
     if [[ -n "$parallel" && ! "$parallel" =~ ^[1-9][0-9]*$ ]]; then
         echo "Error: --parallel requires a positive integer (got '$parallel')"; exit 1
+    fi
+    if [[ -n "$reasoning_budget" && ! "$reasoning_budget" =~ ^(-1|0|[1-9][0-9]*)$ ]]; then
+        echo "Error: --reasoning-budget requires -1 (unrestricted), 0 (off), or N>0 (token budget); got '$reasoning_budget'"; exit 1
     fi
 
     local port_server=$(( PORT_BASE_SERVER + slot ))
@@ -151,9 +155,15 @@ cmd_start() {
     cmd+=(--alias "$_r_client" "${_r_args[@]}" --parallel "${parallel:-1}" --timeout 600)
     [[ -n "$_r_ctx" ]] && cmd+=(--ctx-size "$_r_ctx")
     [[ "$mlock" == true ]] && cmd+=(--mlock)
-    if [[ "$no_reasoning" == true ]]; then
-        [[ ${#_r_no_reasoning_args[@]} -gt 0 ]] && cmd+=("${_r_no_reasoning_args[@]}")
-        cmd+=(--reasoning off --reasoning-budget 0)
+    if [[ -n "$reasoning_budget" ]]; then
+        if [[ "$reasoning_budget" == "0" ]]; then
+            # Off: apply the model's no-reasoning sampler tweaks and force thinking off.
+            [[ ${#_r_no_reasoning_args[@]} -gt 0 ]] && cmd+=("${_r_no_reasoning_args[@]}")
+            cmd+=(--reasoning off --reasoning-budget 0)
+        else
+            # Limited (N>0) or unrestricted (-1): keep thinking on, cap the token budget.
+            cmd+=(--reasoning on --reasoning-budget "$reasoning_budget")
+        fi
     fi
 
     # Start proxy and poll until it listens on the port (max 10s)
@@ -188,14 +198,23 @@ cmd_start() {
     echo "Context:  ${_r_ctx:-default}"
     echo "Parallel: ${parallel:-1}"
     echo "Timeout:  600s"
-    [[ "$no_reasoning" == true ]] && echo "Reasoning: disabled (--reasoning off --reasoning-budget 0)"
+    if [[ -n "$reasoning_budget" ]]; then
+        if [[ "$reasoning_budget" == "0" ]]; then
+            echo "Reasoning: disabled (--reasoning off --reasoning-budget 0)"
+        elif [[ "$reasoning_budget" == "-1" ]]; then
+            echo "Reasoning: unrestricted (--reasoning on --reasoning-budget -1)"
+        else
+            echo "Reasoning: limited to ${reasoning_budget} tokens (--reasoning on)"
+        fi
+    fi
     [[ "$mlock" == true ]] && echo "mlock: enabled (--mlock)"
 
+    # Preload jemalloc for the server (better allocation behaviour under load).
     # _r_rocm_env is intentionally unquoted — word-splits space-separated KEY=VAL pairs for env
     if [[ -n "$_r_rocm_env" ]]; then
-        env $_r_rocm_env "${cmd[@]}" > "$server_log" 2>&1 &
+        env LD_PRELOAD=/lib64/libjemalloc.so.2 $_r_rocm_env "${cmd[@]}" > "$server_log" 2>&1 &
     else
-        "${cmd[@]}" > "$server_log" 2>&1 &
+        env LD_PRELOAD=/lib64/libjemalloc.so.2 "${cmd[@]}" > "$server_log" 2>&1 &
     fi
     local server_pid=$!
     echo "$server_pid" > "$PID_DIR/server-${slot}.pid"
@@ -561,7 +580,9 @@ cmd_help() {
     echo ""
     printf "\033[1m$(basename "$0")\033[0m — LLM server manager\n"
     echo ""
-    printf "  %-20s %s\n" "start <name> [slot]"   "start server + proxy (slot 1-3, default 1); --no-reasoning disables reasoning; --parallel N sets slots (default 1)"
+    printf "  %-20s %s\n" "start <name> [slot]"   "start server + proxy (slot 1-3, default 1)"
+    printf "  %-20s %s\n" ""                      "  --reasoning-budget N: cap thinking tokens (0=off, N>0=limited, -1=unrestricted)"
+    printf "  %-20s %s\n" ""                      "  --no-reasoning: alias for --reasoning-budget 0; --parallel N: server slots (default 1)"
     printf "  %-20s %s\n" "stop [slot]"            "stop slot (or all if omitted)"
     printf "  %-20s %s\n" "status"                 "show running state"
     printf "  %-20s %s\n" "bench [opts] <m>"       "run benchmark (model or 'all')"
