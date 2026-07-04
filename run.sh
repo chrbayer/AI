@@ -175,9 +175,11 @@ cmd_start() {
 
     # Start proxy and poll until it listens on the port (max 10s)
     echo "Starting proxy [slot $slot] on port $port_proxy..."
+    # -u: unbuffered stdout/stderr so every log line lands in $proxy_log
+    # immediately (and nothing is lost when the proxy is killed on stop).
     LLM_BACKEND_URL="http://localhost:${port_server}" \
     LLM_PROXY_PORT="${port_proxy}" \
-    python3 "$PROXY_SCRIPT" > "$proxy_log" 2>&1 &
+    python3 -u "$PROXY_SCRIPT" > "$proxy_log" 2>&1 &
     local proxy_pid=$!
     echo "$proxy_pid" > "$PID_DIR/proxy-${slot}.pid"
 
@@ -217,11 +219,14 @@ cmd_start() {
     [[ "$mlock" == true ]] && echo "mlock: enabled (--mlock)"
 
     # Preload jemalloc for the server (better allocation behaviour under load).
+    # stdbuf -oL -eL line-buffers stdio so raw ggml/ROCm prints (llama.cpp only
+    # flushes its own LOG_* lines) also reach $server_log promptly; it appends
+    # libstdbuf to LD_PRELOAD, coexisting with the jemalloc preload.
     # _r_rocm_env is intentionally unquoted — word-splits space-separated KEY=VAL pairs for env
     if [[ -n "$_r_rocm_env" ]]; then
-        env LD_PRELOAD=/lib64/libjemalloc.so.2 $_r_rocm_env "${cmd[@]}" > "$server_log" 2>&1 &
+        env LD_PRELOAD=/lib64/libjemalloc.so.2 $_r_rocm_env stdbuf -oL -eL "${cmd[@]}" > "$server_log" 2>&1 &
     else
-        env LD_PRELOAD=/lib64/libjemalloc.so.2 "${cmd[@]}" > "$server_log" 2>&1 &
+        env LD_PRELOAD=/lib64/libjemalloc.so.2 stdbuf -oL -eL "${cmd[@]}" > "$server_log" 2>&1 &
     fi
     local server_pid=$!
     echo "$server_pid" > "$PID_DIR/server-${slot}.pid"
