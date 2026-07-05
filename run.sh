@@ -149,7 +149,6 @@ cmd_start() {
 
     local proxy_log="$LOG_DIR/proxy-${slot}.log"
     local server_log="$LOG_DIR/server-${slot}.log"
-    local stats_file="$LOG_DIR/cache-stats-${slot}.jsonl"
 
     # Expand tilde in model paths
     local model_path="${_r_model//\~/$HOME}"
@@ -194,7 +193,6 @@ cmd_start() {
     # immediately (and nothing is lost when the proxy is killed on stop).
     LLM_BACKEND_URL="http://localhost:${port_server}" \
     LLM_PROXY_PORT="${port_proxy}" \
-    LLM_STATS_FILE="$stats_file" \
     python3 -u "$PROXY_SCRIPT" > "$proxy_log" 2>&1 &
     local proxy_pid=$!
     echo "$proxy_pid" > "$PID_DIR/proxy-${slot}.pid"
