@@ -356,6 +356,39 @@ cmd_status() {
     [[ "$found" -eq 0 ]] && echo "Nothing running."
 }
 
+# Summarize prompt-cache effectiveness from the proxy's JSONL stats.
+# Usage: cache-stats [slot]  (default: all slots that have a stats file)
+cmd_cache_stats() {
+    local want_slot="${1:-}"
+    local found=0
+    for slot in 1 2 3; do
+        [[ -n "$want_slot" && "$slot" != "$want_slot" ]] && continue
+        local f="$LOG_DIR/cache-stats-${slot}.jsonl"
+        [[ -f "$f" ]] || continue
+        found=1
+        echo "Slot $slot: $f"
+        python3 - "$f" <<'PY'
+import json, sys
+n = p = c = 0
+for line in open(sys.argv[1]):
+    line = line.strip()
+    if not line:
+        continue
+    try:
+        d = json.loads(line)
+    except ValueError:
+        continue
+    n += 1; p += d.get("prompt", 0); c += d.get("cached", 0)
+if p:
+    print(f"  requests={n}  prompt_tokens={p}  cached_tokens={c}  "
+          f"reprocessed={p-c}  hit_rate={100*c/p:.1f}%")
+else:
+    print("  no completion requests recorded yet")
+PY
+    done
+    [[ "$found" -eq 0 ]] && echo "No cache-stats files yet (start a server; stats appear once completions are served)."
+}
+
 cmd_env() {
     local name="${1:-}"
     local slot="${2:-1}"
@@ -625,6 +658,7 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  --verbose: -lv 4, reveals ggml/backend + buffer-size startup logs (more runtime logging too)"
     printf "  %-20s %s\n" "stop [slot]"            "stop slot (or all if omitted)"
     printf "  %-20s %s\n" "status"                 "show running state"
+    printf "  %-20s %s\n" "cache-stats [slot]"     "show prompt-cache hit rate from proxy stats"
     printf "  %-20s %s\n" "bench [opts] <m>"       "run benchmark (model or 'all')"
     printf "  %-20s %s\n" "list"                   "show available models"
     printf "  %-20s %s\n" "env <name> [slot]"      "set Claude Code env vars (source!)"
@@ -737,6 +771,7 @@ else
         start)      shift; cmd_start "$@" ;;
         stop)       shift; cmd_stop "$@" ;;
         status)     cmd_status ;;
+        cache-stats) shift; cmd_cache_stats "$@" ;;
         bench)      shift; cmd_benchmark "$@" ;;
         list)       cmd_list ;;
         help)       cmd_help ;;
