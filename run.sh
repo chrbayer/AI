@@ -2,7 +2,7 @@
 # Unified LLM server manager for Claude Code.
 # Usage:
 #   ./run.sh                                     list available models
-#   ./run.sh start <name> [slot] [--reasoning-budget N] [--no-reasoning] [--parallel N] [--ctx N]  start server + proxy in background (slot 1-3, default 1)
+#   ./run.sh start <name> [slot] [--reasoning-budget N] [--no-reasoning] [--parallel N] [--ctx N] [--cache-ram N]  start server + proxy in background (slot 1-3, default 1)
 #   ./run.sh stop [slot]                         stop slot (or all if omitted)
 #   ./run.sh status                              show running state
 #   source ./run.sh env <name> [slot]            export Claude Code env vars in this shell
@@ -101,6 +101,7 @@ cmd_start() {
     local mlock=false
     local parallel=""
     local ctx=""                # "" = model default; N>0 = override context size
+    local cache_ram=""          # "" = server default (8192 MiB); 0 = disable prompt cache; -1 = no limit; N>0 = MiB cap
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -109,18 +110,22 @@ cmd_start() {
             --mlock) mlock=true; shift ;;
             --parallel) parallel="$2"; shift 2 ;;
             --ctx) ctx="$2"; shift 2 ;;
+            --cache-ram) cache_ram="$2"; shift 2 ;;
             -*) echo "Unknown option: $1"; exit 1 ;;
             *) if [[ -z "$name" ]]; then name="$1"; elif [[ "$slot" == "1" ]]; then slot="$1"; fi; shift ;;
         esac
     done
 
-    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--reasoning-budget N] [--no-reasoning] [--mlock] [--parallel N] [--ctx N]"; exit 1; }
+    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--reasoning-budget N] [--no-reasoning] [--mlock] [--parallel N] [--ctx N] [--cache-ram N]"; exit 1; }
     [[ "$slot" != "1" && "$slot" != "2" && "$slot" != "3" ]] && { echo "Error: slot must be 1, 2, or 3"; exit 1; }
     if [[ -n "$parallel" && ! "$parallel" =~ ^[1-9][0-9]*$ ]]; then
         echo "Error: --parallel requires a positive integer (got '$parallel')"; exit 1
     fi
     if [[ -n "$ctx" && ! "$ctx" =~ ^[1-9][0-9]*$ ]]; then
         echo "Error: --ctx requires a positive integer (got '$ctx')"; exit 1
+    fi
+    if [[ -n "$cache_ram" && ! "$cache_ram" =~ ^(-1|0|[1-9][0-9]*)$ ]]; then
+        echo "Error: --cache-ram requires -1 (no limit), 0 (disable prompt cache), or N>0 (MiB cap); got '$cache_ram'"; exit 1
     fi
     if [[ -n "$reasoning_budget" && ! "$reasoning_budget" =~ ^(-1|0|[1-9][0-9]*)$ ]]; then
         echo "Error: --reasoning-budget requires -1 (unrestricted), 0 (off), or N>0 (token budget); got '$reasoning_budget'"; exit 1
@@ -161,6 +166,9 @@ cmd_start() {
     # --ctx overrides the model's default context size when given.
     [[ -n "$ctx" ]] && _r_ctx="$ctx"
     [[ -n "$_r_ctx" ]] && cmd+=(--ctx-size "$_r_ctx")
+    # --cache-ram overrides the server's default prompt-cache size (8192 MiB).
+    # 0 disables the host-RAM prompt cache (keeps system RAM flat during use).
+    [[ -n "$cache_ram" ]] && cmd+=(--cache-ram "$cache_ram")
     [[ "$mlock" == true ]] && cmd+=(--mlock)
     if [[ -n "$reasoning_budget" ]]; then
         if [[ "$reasoning_budget" == "0" ]]; then
@@ -207,6 +215,15 @@ cmd_start() {
     echo "Context:  ${_r_ctx:-default}"
     echo "Parallel: ${parallel:-1}"
     echo "Timeout:  600s"
+    if [[ -n "$cache_ram" ]]; then
+        case "$cache_ram" in
+            0)  echo "PromptCache: disabled (--cache-ram 0)" ;;
+            -1) echo "PromptCache: no limit (--cache-ram -1)" ;;
+            *)  echo "PromptCache: ${cache_ram} MiB (--cache-ram ${cache_ram})" ;;
+        esac
+    else
+        echo "PromptCache: 8192 MiB (server default)"
+    fi
     if [[ -n "$reasoning_budget" ]]; then
         if [[ "$reasoning_budget" == "0" ]]; then
             echo "Reasoning: disabled (--reasoning off --reasoning-budget 0)"
@@ -596,6 +613,7 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  --reasoning-budget N: cap thinking tokens (0=off, N>0=limited, -1=unrestricted)"
     printf "  %-20s %s\n" ""                      "  --no-reasoning: alias for --reasoning-budget 0; --parallel N: server slots (default 1)"
     printf "  %-20s %s\n" ""                      "  --ctx N: override the model's default context size"
+    printf "  %-20s %s\n" ""                      "  --cache-ram N: prompt-cache host-RAM cap in MiB (0=disable, -1=no limit; default 8192)"
     printf "  %-20s %s\n" "stop [slot]"            "stop slot (or all if omitted)"
     printf "  %-20s %s\n" "status"                 "show running state"
     printf "  %-20s %s\n" "bench [opts] <m>"       "run benchmark (model or 'all')"
