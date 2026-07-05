@@ -356,37 +356,49 @@ cmd_status() {
     [[ "$found" -eq 0 ]] && echo "Nothing running."
 }
 
-# Summarize prompt-cache effectiveness from the proxy's JSONL stats.
-# Usage: cache-stats [slot]  (default: all slots that have a stats file)
+# Summarize prompt-cache effectiveness from the server log (works whether or
+# not clients go through the proxy). Per finished task the INFO log carries
+# processed prompt tokens ("prompt eval time = .. / N"), generated tokens
+# ("eval time = .. / M") and the final context size ("stop processing:
+# n_tokens = T"); prompt_total = T - M and cached = prompt_total - N, which
+# equals llama-server's own n_prompt_tokens_cache. The log is truncated on
+# each start, so this reflects the current server session.
+# Usage: cache-stats [slot]  (default: all slots with a server log)
 cmd_cache_stats() {
     local want_slot="${1:-}"
     local found=0
     for slot in 1 2 3; do
         [[ -n "$want_slot" && "$slot" != "$want_slot" ]] && continue
-        local f="$LOG_DIR/cache-stats-${slot}.jsonl"
+        local f="$LOG_DIR/server-${slot}.log"
         [[ -f "$f" ]] || continue
         found=1
         echo "Slot $slot: $f"
         python3 - "$f" <<'PY'
-import json, sys
-n = p = c = 0
-for line in open(sys.argv[1]):
-    line = line.strip()
-    if not line:
+import re, sys
+proc, gen, total = {}, {}, {}
+re_pe = re.compile(r"task\s+(\d+) \| prompt eval time =.*?/\s*(\d+) tokens")
+re_ev = re.compile(r"task\s+(\d+) \|\s+eval time =.*?/\s*(\d+) tokens")
+re_st = re.compile(r"task\s+(\d+) \| stop processing: n_tokens = (\d+)")
+for ln in open(sys.argv[1], errors="replace"):
+    m = re_pe.search(ln);  m and proc.update({m.group(1): int(m.group(2))})
+    m = re_ev.search(ln);  m and gen.update({m.group(1): int(m.group(2))})
+    m = re_st.search(ln);  m and total.update({m.group(1): int(m.group(2))})
+n = tp = tc = 0
+for tid, T in total.items():
+    ptotal = T - gen.get(tid, 0)          # prompt tokens = context minus generated
+    if ptotal <= 0:
         continue
-    try:
-        d = json.loads(line)
-    except ValueError:
-        continue
-    n += 1; p += d.get("prompt", 0); c += d.get("cached", 0)
-if p:
-    print(f"  requests={n}  prompt_tokens={p}  cached_tokens={c}  "
-          f"reprocessed={p-c}  hit_rate={100*c/p:.1f}%")
+    cached = max(0, ptotal - proc.get(tid, 0))
+    n += 1; tp += ptotal; tc += cached
+if tp:
+    print(f"  tasks={n}  prompt_tokens={tp}  cached={tc}  "
+          f"reprocessed={tp-tc}  hit_rate={100*tc/tp:.1f}%")
 else:
-    print("  no completion requests recorded yet")
+    print("  no finished completion tasks in the log yet")
 PY
     done
-    [[ "$found" -eq 0 ]] && echo "No cache-stats files yet (start a server; stats appear once completions are served)."
+    [[ "$found" -eq 0 ]] && echo "No server logs yet (start a server first)."
+    return 0
 }
 
 cmd_env() {
@@ -658,7 +670,7 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  --verbose: -lv 4, reveals ggml/backend + buffer-size startup logs (more runtime logging too)"
     printf "  %-20s %s\n" "stop [slot]"            "stop slot (or all if omitted)"
     printf "  %-20s %s\n" "status"                 "show running state"
-    printf "  %-20s %s\n" "cache-stats [slot]"     "show prompt-cache hit rate from proxy stats"
+    printf "  %-20s %s\n" "cache-stats [slot]"     "show prompt-cache hit rate (from the server log)"
     printf "  %-20s %s\n" "bench [opts] <m>"       "run benchmark (model or 'all')"
     printf "  %-20s %s\n" "list"                   "show available models"
     printf "  %-20s %s\n" "env <name> [slot]"      "set Claude Code env vars (source!)"
