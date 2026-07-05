@@ -2,7 +2,7 @@
 # Unified LLM server manager for Claude Code.
 # Usage:
 #   ./run.sh                                     list available models
-#   ./run.sh start <name> [slot] [--reasoning-budget N] [--no-reasoning] [--parallel N] [--ctx N] [--cache-ram N]  start server + proxy in background (slot 1-3, default 1)
+#   ./run.sh start <name> [slot] [--reasoning-budget N] [--no-reasoning] [--parallel N] [--ctx N] [--cache-ram N] [--verbose]  start server + proxy in background (slot 1-3, default 1)
 #   ./run.sh stop [slot]                         stop slot (or all if omitted)
 #   ./run.sh status                              show running state
 #   source ./run.sh env <name> [slot]            export Claude Code env vars in this shell
@@ -102,6 +102,7 @@ cmd_start() {
     local parallel=""
     local ctx=""                # "" = model default; N>0 = override context size
     local cache_ram=""          # "" = server default (8192 MiB); 0 = disable prompt cache; -1 = no limit; N>0 = MiB cap
+    local verbose=false         # true = -lv 4 (TRACE): reveals ggml/backend + buffer-size startup logs
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -111,12 +112,13 @@ cmd_start() {
             --parallel) parallel="$2"; shift 2 ;;
             --ctx) ctx="$2"; shift 2 ;;
             --cache-ram) cache_ram="$2"; shift 2 ;;
+            --verbose) verbose=true; shift ;;
             -*) echo "Unknown option: $1"; exit 1 ;;
             *) if [[ -z "$name" ]]; then name="$1"; elif [[ "$slot" == "1" ]]; then slot="$1"; fi; shift ;;
         esac
     done
 
-    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--reasoning-budget N] [--no-reasoning] [--mlock] [--parallel N] [--ctx N] [--cache-ram N]"; exit 1; }
+    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--reasoning-budget N] [--no-reasoning] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--verbose]"; exit 1; }
     [[ "$slot" != "1" && "$slot" != "2" && "$slot" != "3" ]] && { echo "Error: slot must be 1, 2, or 3"; exit 1; }
     if [[ -n "$parallel" && ! "$parallel" =~ ^[1-9][0-9]*$ ]]; then
         echo "Error: --parallel requires a positive integer (got '$parallel')"; exit 1
@@ -147,6 +149,7 @@ cmd_start() {
 
     local proxy_log="$LOG_DIR/proxy-${slot}.log"
     local server_log="$LOG_DIR/server-${slot}.log"
+    local stats_file="$LOG_DIR/cache-stats-${slot}.jsonl"
 
     # Expand tilde in model paths
     local model_path="${_r_model//\~/$HOME}"
@@ -169,6 +172,10 @@ cmd_start() {
     # --cache-ram overrides the server's default prompt-cache size (8192 MiB).
     # 0 disables the host-RAM prompt cache (keeps system RAM flat during use).
     [[ -n "$cache_ram" ]] && cmd+=(--cache-ram "$cache_ram")
+    # llama.cpp maps ggml/model-load INFO logs to TRACE (level 4); the default
+    # verbosity (3=INFO) filters them, so backend detection and buffer-size
+    # lines never reach the log. -lv 4 reveals them (also more runtime logging).
+    [[ "$verbose" == true ]] && cmd+=(-lv 4)
     [[ "$mlock" == true ]] && cmd+=(--mlock)
     if [[ -n "$reasoning_budget" ]]; then
         if [[ "$reasoning_budget" == "0" ]]; then
@@ -187,6 +194,7 @@ cmd_start() {
     # immediately (and nothing is lost when the proxy is killed on stop).
     LLM_BACKEND_URL="http://localhost:${port_server}" \
     LLM_PROXY_PORT="${port_proxy}" \
+    LLM_STATS_FILE="$stats_file" \
     python3 -u "$PROXY_SCRIPT" > "$proxy_log" 2>&1 &
     local proxy_pid=$!
     echo "$proxy_pid" > "$PID_DIR/proxy-${slot}.pid"
@@ -614,6 +622,7 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  --no-reasoning: alias for --reasoning-budget 0; --parallel N: server slots (default 1)"
     printf "  %-20s %s\n" ""                      "  --ctx N: override the model's default context size"
     printf "  %-20s %s\n" ""                      "  --cache-ram N: prompt-cache host-RAM cap in MiB (0=disable, -1=no limit; default 8192)"
+    printf "  %-20s %s\n" ""                      "  --verbose: -lv 4, reveals ggml/backend + buffer-size startup logs (more runtime logging too)"
     printf "  %-20s %s\n" "stop [slot]"            "stop slot (or all if omitted)"
     printf "  %-20s %s\n" "status"                 "show running state"
     printf "  %-20s %s\n" "bench [opts] <m>"       "run benchmark (model or 'all')"
