@@ -2,7 +2,7 @@
 # Unified LLM server manager for Claude Code.
 # Usage:
 #   ./run.sh                                     list available models
-#   ./run.sh start <name> [slot] [--reasoning-budget N] [--no-reasoning] [--parallel N] [--ctx N] [--cache-ram N] [--verbose]  start server + proxy in background (slot 1-3, default 1)
+#   ./run.sh start <name> [slot] [--reasoning-budget N] [--no-reasoning] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs]  start server + proxy in background (slot 1-3, default 1)
 #   ./run.sh stop [slot]                         stop slot (or all if omitted)
 #   ./run.sh status                              show running state
 #   source ./run.sh env <name> [slot]            export Claude Code env vars in this shell
@@ -103,6 +103,7 @@ cmd_start() {
     local ctx=""                # "" = model default; N>0 = override context size
     local cache_ram=""          # "" = server default (8192 MiB); 0 = disable prompt cache; -1 = no limit; N>0 = MiB cap
     local verbose=false         # true = -lv 4 (TRACE): reveals ggml/backend + buffer-size startup logs
+    local clear_logs=false      # true = truncate this slot's server/proxy logs before starting
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -113,12 +114,13 @@ cmd_start() {
             --ctx) ctx="$2"; shift 2 ;;
             --cache-ram) cache_ram="$2"; shift 2 ;;
             --verbose) verbose=true; shift ;;
+            --clear-logs) clear_logs=true; shift ;;
             -*) echo "Unknown option: $1"; exit 1 ;;
             *) if [[ -z "$name" ]]; then name="$1"; elif [[ "$slot" == "1" ]]; then slot="$1"; fi; shift ;;
         esac
     done
 
-    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--reasoning-budget N] [--no-reasoning] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--verbose]"; exit 1; }
+    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--reasoning-budget N] [--no-reasoning] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs]"; exit 1; }
     [[ "$slot" != "1" && "$slot" != "2" && "$slot" != "3" ]] && { echo "Error: slot must be 1, 2, or 3"; exit 1; }
     if [[ -n "$parallel" && ! "$parallel" =~ ^[1-9][0-9]*$ ]]; then
         echo "Error: --parallel requires a positive integer (got '$parallel')"; exit 1
@@ -149,6 +151,13 @@ cmd_start() {
 
     local proxy_log="$LOG_DIR/proxy-${slot}.log"
     local server_log="$LOG_DIR/server-${slot}.log"
+
+    # --clear-logs: start this slot's logs fresh (e.g. for a clean cache-stats run)
+    if [[ "$clear_logs" == true ]]; then
+        : > "$server_log"
+        : > "$proxy_log"
+        echo "Cleared logs for slot $slot"
+    fi
 
     # Expand tilde in model paths
     local model_path="${_r_model//\~/$HOME}"
