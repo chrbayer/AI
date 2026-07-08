@@ -250,6 +250,22 @@ cmd_start() {
     fi
     [[ "$mlock" == true ]] && echo "mlock: enabled (--mlock)"
 
+    # Full launch command: the ground truth of every flag we set explicitly
+    # (samplers, cache-type-k/v, flash-attn, threads, ngl come from models.conf).
+    echo "----- effective config -----"
+    echo "Command:"
+    printf '  %s\n' "${cmd[*]}"
+    # Behaviour-relevant llama.cpp defaults we do NOT pass, so they stay hidden
+    # in the log otherwise. Show them here with their effective (default) values.
+    _has_flag() { local f; for f in "${cmd[@]}"; do [[ "$f" == "$1" ]] && return 0; done; return 1; }
+    echo "Defaults in effect (not overridden):"
+    _has_flag --slot-prompt-similarity || echo "  slot-prompt-similarity: 0.1  (LCP slot routing; 0 = pure LRU)"
+    _has_flag --batch-size            || echo "  batch-size:             2048"
+    _has_flag --ubatch-size           || echo "  ubatch-size:            512"
+    _has_flag --keep                  || echo "  keep:                   0"
+    _has_flag -lv                     || echo "  verbosity:              3 (INFO)  — use --verbose for TRACE"
+    echo "----------------------------"
+
     # Preload jemalloc for the server (better allocation behaviour under load).
     # stdbuf -oL -eL line-buffers stdio so raw ggml/ROCm prints (llama.cpp only
     # flushes its own LOG_* lines) also reach $server_log promptly; it appends
