@@ -2,7 +2,7 @@
 # Unified LLM server manager for Claude Code.
 # Usage:
 #   ./run.sh                                     list available models
-#   ./run.sh start <name> [slot] [--reasoning-budget N] [--no-reasoning] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs]  start server + proxy in background (slot 1-3, default 1)
+#   ./run.sh start <name> [slot] [--reasoning-budget N] [--no-reasoning] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR]  start server + proxy in background (slot 1-3, default 1)
 #   ./run.sh stop [slot]                         stop slot (or all if omitted)
 #   ./run.sh status                              show running state
 #   source ./run.sh env <name> [slot]            export Claude Code env vars in this shell
@@ -104,6 +104,7 @@ cmd_start() {
     local cache_ram=""          # "" = server default (8192 MiB); 0 = disable prompt cache; -1 = no limit; N>0 = MiB cap
     local verbose=false         # true = -lv 4 (TRACE): reveals ggml/backend + buffer-size startup logs
     local clear_logs=false      # true = truncate this slot's server/proxy logs before starting
+    local host=""               # "" = llama-server default (127.0.0.1); e.g. 0.0.0.0 to expose on LAN
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -115,12 +116,13 @@ cmd_start() {
             --cache-ram) cache_ram="$2"; shift 2 ;;
             --verbose) verbose=true; shift ;;
             --clear-logs) clear_logs=true; shift ;;
+            --host) host="$2"; shift 2 ;;
             -*) echo "Unknown option: $1"; exit 1 ;;
             *) if [[ -z "$name" ]]; then name="$1"; elif [[ "$slot" == "1" ]]; then slot="$1"; fi; shift ;;
         esac
     done
 
-    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--reasoning-budget N] [--no-reasoning] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs]"; exit 1; }
+    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--reasoning-budget N] [--no-reasoning] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR]"; exit 1; }
     [[ "$slot" != "1" && "$slot" != "2" && "$slot" != "3" ]] && { echo "Error: slot must be 1, 2, or 3"; exit 1; }
     if [[ -n "$parallel" && ! "$parallel" =~ ^[1-9][0-9]*$ ]]; then
         echo "Error: --parallel requires a positive integer (got '$parallel')"; exit 1
@@ -171,6 +173,8 @@ cmd_start() {
         --model "$model_path" \
         --port "$port_server")
 
+    # --host exposes the server beyond localhost (e.g. 0.0.0.0 for LAN access).
+    [[ -n "$host" ]] && cmd+=(--host "$host")
     [[ -n "$mmproj_path" ]] && cmd+=(--mmproj "$mmproj_path")
     # --parallel and --timeout are managed centrally here, not in models.conf.
     cmd+=(--alias "$_r_client" "${_r_args[@]}" --parallel "${parallel:-1}" --timeout 600)
@@ -201,6 +205,7 @@ cmd_start() {
     # -u: unbuffered stdout/stderr so every log line lands in $proxy_log
     # immediately (and nothing is lost when the proxy is killed on stop).
     LLM_BACKEND_URL="http://localhost:${port_server}" \
+    LLM_PROXY_HOST="${host:-127.0.0.1}" \
     LLM_PROXY_PORT="${port_proxy}" \
     python3 -u "$PROXY_SCRIPT" > "$proxy_log" 2>&1 &
     local proxy_pid=$!
@@ -227,6 +232,7 @@ cmd_start() {
     echo "Starting llama.cpp server [slot $slot] on port $port_server..."
     echo "Model: $_r_label ($_r_alias)"
     echo "ROCm env: ${_r_rocm_env:-—}"
+    echo "Host:     ${host:-127.0.0.1 (default)}"
     echo "Context:  ${_r_ctx:-default}"
     echo "Parallel: ${parallel:-1}"
     echo "Timeout:  600s"
