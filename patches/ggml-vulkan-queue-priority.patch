@@ -1,0 +1,48 @@
+diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vulkan.cpp
+index 96d89943a..c8e1c9a7b 100644
+--- a/ggml/src/ggml-vulkan/ggml-vulkan.cpp
++++ b/ggml/src/ggml-vulkan/ggml-vulkan.cpp
+@@ -6046,6 +6046,43 @@ static vk_device ggml_vk_get_device(size_t idx) {
+         }
+         vk::DeviceCreateInfo device_create_info{};
+         std::vector<const char *> device_extensions;
++
++        // GGML_VK_QUEUE_PRIORITY patch: optional per-process GPU scheduling priority
++        // via VK_EXT_global_priority. Set env GGML_VK_QUEUE_PRIORITY=low|medium|high|
++        // realtime to bias how the GPU scheduler time-slices this process against
++        // others sharing the GPU. Unset keeps the driver default (medium). "low" needs
++        // no special rights on RADV; "high"/"realtime" typically need CAP_SYS_NICE.
++        VkDeviceQueueGlobalPriorityCreateInfoEXT ggml_vk_global_priority_info = {};
++        {
++            const char * ggml_vk_qp = getenv("GGML_VK_QUEUE_PRIORITY");
++            if (ggml_vk_qp != nullptr) {
++                bool ggml_vk_gp_available = false;
++                for (const auto & properties : ext_props) {
++                    if (strcmp("VK_EXT_global_priority", properties.extensionName) == 0) {
++                        ggml_vk_gp_available = true;
++                        break;
++                    }
++                }
++                if (ggml_vk_gp_available) {
++                    VkQueueGlobalPriorityEXT ggml_vk_prio = VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT;
++                    if      (strcmp(ggml_vk_qp, "low")      == 0) ggml_vk_prio = VK_QUEUE_GLOBAL_PRIORITY_LOW_EXT;
++                    else if (strcmp(ggml_vk_qp, "medium")   == 0) ggml_vk_prio = VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT;
++                    else if (strcmp(ggml_vk_qp, "high")     == 0) ggml_vk_prio = VK_QUEUE_GLOBAL_PRIORITY_HIGH_EXT;
++                    else if (strcmp(ggml_vk_qp, "realtime") == 0) ggml_vk_prio = VK_QUEUE_GLOBAL_PRIORITY_REALTIME_EXT;
++                    ggml_vk_global_priority_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_EXT;
++                    ggml_vk_global_priority_info.pNext = nullptr;
++                    ggml_vk_global_priority_info.globalPriority = ggml_vk_prio;
++                    for (auto & ggml_vk_qci : device_queue_create_infos) {
++                        ggml_vk_qci.pNext = &ggml_vk_global_priority_info;
++                    }
++                    device_extensions.push_back("VK_EXT_global_priority");
++                    GGML_LOG_INFO("ggml_vulkan: GGML_VK_QUEUE_PRIORITY=%s applied via VK_EXT_global_priority\n", ggml_vk_qp);
++                } else {
++                    GGML_LOG_INFO("ggml_vulkan: GGML_VK_QUEUE_PRIORITY=%s ignored (VK_EXT_global_priority not available)\n", ggml_vk_qp);
++                }
++            }
++        }
++
+         vk::PhysicalDeviceFeatures device_features = device->physical_device.getFeatures();
+ 
+         VkPhysicalDeviceFeatures2 device_features2;

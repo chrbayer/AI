@@ -2,7 +2,7 @@
 # Unified LLM server manager for Claude Code.
 # Usage:
 #   ./run.sh                                     list available models
-#   ./run.sh start <name> [slot] [--reasoning-budget N] [--no-reasoning] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR]  start server + proxy in background (slot 1-3, default 1)
+#   ./run.sh start <name> [slot] [--reasoning-budget N] [--no-reasoning] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime]  start server + proxy in background (slot 1-3, default 1)
 #   ./run.sh stop [slot]                         stop slot (or all if omitted)
 #   ./run.sh status                              show running state
 #   source ./run.sh env <name> [slot]            export Claude Code env vars in this shell
@@ -105,6 +105,7 @@ cmd_start() {
     local verbose=false         # true = -lv 4 (TRACE): reveals ggml/backend + buffer-size startup logs
     local clear_logs=false      # true = truncate this slot's server/proxy logs before starting
     local host=""               # "" = llama-server default (127.0.0.1); e.g. 0.0.0.0 to expose on LAN
+    local gpu_priority=""       # "" = driver default; low|medium|high|realtime (needs patched ggml-vulkan)
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -117,12 +118,13 @@ cmd_start() {
             --verbose) verbose=true; shift ;;
             --clear-logs) clear_logs=true; shift ;;
             --host) host="$2"; shift 2 ;;
+            --gpu-priority) gpu_priority="$2"; shift 2 ;;
             -*) echo "Unknown option: $1"; exit 1 ;;
             *) if [[ -z "$name" ]]; then name="$1"; elif [[ "$slot" == "1" ]]; then slot="$1"; fi; shift ;;
         esac
     done
 
-    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--reasoning-budget N] [--no-reasoning] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR]"; exit 1; }
+    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--reasoning-budget N] [--no-reasoning] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime]"; exit 1; }
     [[ "$slot" != "1" && "$slot" != "2" && "$slot" != "3" ]] && { echo "Error: slot must be 1, 2, or 3"; exit 1; }
     if [[ -n "$parallel" && ! "$parallel" =~ ^[1-9][0-9]*$ ]]; then
         echo "Error: --parallel requires a positive integer (got '$parallel')"; exit 1
@@ -132,6 +134,9 @@ cmd_start() {
     fi
     if [[ -n "$cache_ram" && ! "$cache_ram" =~ ^(-1|0|[1-9][0-9]*)$ ]]; then
         echo "Error: --cache-ram requires -1 (no limit), 0 (disable prompt cache), or N>0 (MiB cap); got '$cache_ram'"; exit 1
+    fi
+    if [[ -n "$gpu_priority" && ! "$gpu_priority" =~ ^(low|medium|high|realtime)$ ]]; then
+        echo "Error: --gpu-priority requires low, medium, high, or realtime; got '$gpu_priority'"; exit 1
     fi
     if [[ -n "$reasoning_budget" && ! "$reasoning_budget" =~ ^(-1|0|[1-9][0-9]*)$ ]]; then
         echo "Error: --reasoning-budget requires -1 (unrestricted), 0 (off), or N>0 (token budget); got '$reasoning_budget'"; exit 1
@@ -255,6 +260,7 @@ cmd_start() {
         fi
     fi
     [[ "$mlock" == true ]] && echo "mlock: enabled (--mlock)"
+    [[ -n "$gpu_priority" ]] && echo "GPU priority: $gpu_priority (GGML_VK_QUEUE_PRIORITY; needs patched ggml-vulkan)"
 
     # Full launch command: the ground truth of every flag we set explicitly
     # (samplers, cache-type-k/v, flash-attn, threads, ngl come from models.conf).
@@ -277,10 +283,14 @@ cmd_start() {
     # flushes its own LOG_* lines) also reach $server_log promptly; it appends
     # libstdbuf to LD_PRELOAD, coexisting with the jemalloc preload.
     # _r_rocm_env is intentionally unquoted — word-splits space-separated KEY=VAL pairs for env
+    # --gpu-priority sets GGML_VK_QUEUE_PRIORITY for the patched ggml-vulkan backend
+    # (VK_EXT_global_priority). Empty var = not set = driver default. See patches/.
+    local gpu_prio_env=""
+    [[ -n "$gpu_priority" ]] && gpu_prio_env="GGML_VK_QUEUE_PRIORITY=$gpu_priority"
     if [[ -n "$_r_rocm_env" ]]; then
-        env LD_PRELOAD=/lib64/libjemalloc.so.2 $_r_rocm_env stdbuf -oL -eL "${cmd[@]}" > "$server_log" 2>&1 &
+        env LD_PRELOAD=/lib64/libjemalloc.so.2 $gpu_prio_env $_r_rocm_env stdbuf -oL -eL "${cmd[@]}" > "$server_log" 2>&1 &
     else
-        env LD_PRELOAD=/lib64/libjemalloc.so.2 stdbuf -oL -eL "${cmd[@]}" > "$server_log" 2>&1 &
+        env LD_PRELOAD=/lib64/libjemalloc.so.2 $gpu_prio_env stdbuf -oL -eL "${cmd[@]}" > "$server_log" 2>&1 &
     fi
     local server_pid=$!
     echo "$server_pid" > "$PID_DIR/server-${slot}.pid"
