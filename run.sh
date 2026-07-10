@@ -235,48 +235,56 @@ cmd_start() {
 
     # Start llama-server in background
     echo "Starting llama.cpp server [slot $slot] on port $port_server..."
-    echo "Model: $_r_label ($_r_alias)"
-    echo "ROCm env: ${_r_rocm_env:-—}"
-    echo "Host:     ${host:-127.0.0.1 (default)}"
-    echo "Context:  ${_r_ctx:-default}"
-    echo "Parallel: ${parallel:-1}"
-    echo "Timeout:  600s"
-    if [[ -n "$cache_ram" ]]; then
-        case "$cache_ram" in
-            0)  echo "PromptCache: disabled (--cache-ram 0)" ;;
-            -1) echo "PromptCache: no limit (--cache-ram -1)" ;;
-            *)  echo "PromptCache: ${cache_ram} MiB (--cache-ram ${cache_ram})" ;;
-        esac
-    else
-        echo "PromptCache: 8192 MiB (server default)"
-    fi
-    if [[ -n "$reasoning_budget" ]]; then
-        if [[ "$reasoning_budget" == "0" ]]; then
-            echo "Reasoning: disabled (--reasoning off --reasoning-budget 0)"
-        elif [[ "$reasoning_budget" == "-1" ]]; then
-            echo "Reasoning: unrestricted (--reasoning on --reasoning-budget -1)"
-        else
-            echo "Reasoning: limited to ${reasoning_budget} tokens (--reasoning on)"
-        fi
-    fi
-    [[ "$mlock" == true ]] && echo "mlock: enabled (--mlock)"
-    [[ -n "$gpu_priority" ]] && echo "GPU priority: $gpu_priority (GGML_VK_QUEUE_PRIORITY; needs patched ggml-vulkan)"
 
-    # Full launch command: the ground truth of every flag we set explicitly
-    # (samplers, cache-type-k/v, flash-attn, threads, ngl come from models.conf).
-    echo "----- effective config -----"
-    echo "Command:"
-    printf '  %s\n' "${cmd[*]}"
-    # Behaviour-relevant llama.cpp defaults we do NOT pass, so they stay hidden
-    # in the log otherwise. Show them here with their effective (default) values.
+    # Behaviour-relevant llama.cpp defaults we do NOT pass, so they stay hidden.
     _has_flag() { local f; for f in "${cmd[@]}"; do [[ "$f" == "$1" ]] && return 0; done; return 1; }
-    echo "Defaults in effect (not overridden):"
-    _has_flag --slot-prompt-similarity || echo "  slot-prompt-similarity: 0.1  (LCP slot routing; 0 = pure LRU)"
-    _has_flag --batch-size            || echo "  batch-size:             2048"
-    _has_flag --ubatch-size           || echo "  ubatch-size:            512"
-    _has_flag --keep                  || echo "  keep:                   0"
-    _has_flag -lv                     || echo "  verbosity:              3 (INFO)  — use --verbose for TRACE"
-    echo "----------------------------"
+
+    # Render the effective start config once. It is printed to the terminal AND
+    # written to the top of the server log (below), so a saved log is self-describing.
+    # The Command line is the ground truth of every flag (samplers, cache-type-k/v,
+    # flash-attn, threads, ngl come from models.conf); the Defaults section shows
+    # behaviour-relevant llama.cpp defaults we never pass.
+    _render_config() {
+        echo "Model: $_r_label ($_r_alias)"
+        echo "ROCm env: ${_r_rocm_env:-—}"
+        echo "Host:     ${host:-127.0.0.1 (default)}"
+        echo "Context:  ${_r_ctx:-default}"
+        echo "Parallel: ${parallel:-1}"
+        echo "Timeout:  600s"
+        if [[ -n "$cache_ram" ]]; then
+            case "$cache_ram" in
+                0)  echo "PromptCache: disabled (--cache-ram 0)" ;;
+                -1) echo "PromptCache: no limit (--cache-ram -1)" ;;
+                *)  echo "PromptCache: ${cache_ram} MiB (--cache-ram ${cache_ram})" ;;
+            esac
+        else
+            echo "PromptCache: 8192 MiB (server default)"
+        fi
+        if [[ -n "$reasoning_budget" ]]; then
+            if [[ "$reasoning_budget" == "0" ]]; then
+                echo "Reasoning: disabled (--reasoning off --reasoning-budget 0)"
+            elif [[ "$reasoning_budget" == "-1" ]]; then
+                echo "Reasoning: unrestricted (--reasoning on --reasoning-budget -1)"
+            else
+                echo "Reasoning: limited to ${reasoning_budget} tokens (--reasoning on)"
+            fi
+        fi
+        [[ "$mlock" == true ]] && echo "mlock: enabled (--mlock)"
+        [[ -n "$gpu_priority" ]] && echo "GPU priority: $gpu_priority (GGML_VK_QUEUE_PRIORITY; needs patched ggml-vulkan)"
+        echo "----- effective config -----"
+        echo "Command:"
+        printf '  %s\n' "${cmd[*]}"
+        echo "Defaults in effect (not overridden):"
+        _has_flag --slot-prompt-similarity || echo "  slot-prompt-similarity: 0.1  (LCP slot routing; 0 = pure LRU)"
+        _has_flag --batch-size            || echo "  batch-size:             2048"
+        _has_flag --ubatch-size           || echo "  ubatch-size:            512"
+        _has_flag --keep                  || echo "  keep:                   0"
+        _has_flag -lv                     || echo "  verbosity:              3 (INFO)  — use --verbose for TRACE"
+        echo "----------------------------"
+    }
+    local config_text
+    config_text="$(_render_config)"
+    echo "$config_text"
 
     # Preload jemalloc for the server (better allocation behaviour under load).
     # stdbuf -oL -eL line-buffers stdio so raw ggml/ROCm prints (llama.cpp only
@@ -287,10 +295,15 @@ cmd_start() {
     # (VK_EXT_global_priority). Empty var = not set = driver default. See patches/.
     local gpu_prio_env=""
     [[ -n "$gpu_priority" ]] && gpu_prio_env="GGML_VK_QUEUE_PRIORITY=$gpu_priority"
+    # Write the effective config to the top of a fresh server log, then let the
+    # server append below it (>>), so the saved log is self-describing. Each start
+    # truncates first, preserving the fresh-log-per-start behaviour.
+    : > "$server_log"
+    printf '%s\n\n' "$config_text" >> "$server_log"
     if [[ -n "$_r_rocm_env" ]]; then
-        env LD_PRELOAD=/lib64/libjemalloc.so.2 $gpu_prio_env $_r_rocm_env stdbuf -oL -eL "${cmd[@]}" > "$server_log" 2>&1 &
+        env LD_PRELOAD=/lib64/libjemalloc.so.2 $gpu_prio_env $_r_rocm_env stdbuf -oL -eL "${cmd[@]}" >> "$server_log" 2>&1 &
     else
-        env LD_PRELOAD=/lib64/libjemalloc.so.2 $gpu_prio_env stdbuf -oL -eL "${cmd[@]}" > "$server_log" 2>&1 &
+        env LD_PRELOAD=/lib64/libjemalloc.so.2 $gpu_prio_env stdbuf -oL -eL "${cmd[@]}" >> "$server_log" 2>&1 &
     fi
     local server_pid=$!
     echo "$server_pid" > "$PID_DIR/server-${slot}.pid"
