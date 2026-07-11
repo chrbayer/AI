@@ -2,7 +2,7 @@
 # Unified LLM server manager for Claude Code.
 # Usage:
 #   ./run.sh                                     list available models
-#   ./run.sh start <name> [slot] [--reasoning-budget N] [--no-reasoning] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime]  start server + proxy in background (slot 1-3, default 1)
+#   ./run.sh start <name> [slot] [--reasoning-budget N] [--no-reasoning] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj]  start server + proxy in background (slot 1-3, default 1)
 #   ./run.sh stop [slot]                         stop slot (or all if omitted)
 #   ./run.sh status                              show running state
 #   source ./run.sh env <name> [slot]            export Claude Code env vars in this shell
@@ -106,6 +106,7 @@ cmd_start() {
     local clear_logs=false      # true = truncate this slot's server/proxy logs before starting
     local host=""               # "" = llama-server default (127.0.0.1); e.g. 0.0.0.0 to expose on LAN
     local gpu_priority=""       # "" = driver default; low|medium|high|realtime (needs patched ggml-vulkan)
+    local use_mmproj=false      # true = load the model's mmproj (multimodal projector), if defined
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -119,12 +120,13 @@ cmd_start() {
             --clear-logs) clear_logs=true; shift ;;
             --host) host="$2"; shift 2 ;;
             --gpu-priority) gpu_priority="$2"; shift 2 ;;
+            --mmproj) use_mmproj=true; shift ;;
             -*) echo "Unknown option: $1"; exit 1 ;;
             *) if [[ -z "$name" ]]; then name="$1"; elif [[ "$slot" == "1" ]]; then slot="$1"; fi; shift ;;
         esac
     done
 
-    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--reasoning-budget N] [--no-reasoning] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime]"; exit 1; }
+    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--reasoning-budget N] [--no-reasoning] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj]"; exit 1; }
     [[ "$slot" != "1" && "$slot" != "2" && "$slot" != "3" ]] && { echo "Error: slot must be 1, 2, or 3"; exit 1; }
     if [[ -n "$parallel" && ! "$parallel" =~ ^[1-9][0-9]*$ ]]; then
         echo "Error: --parallel requires a positive integer (got '$parallel')"; exit 1
@@ -168,9 +170,14 @@ cmd_start() {
 
     # Expand tilde in model paths
     local model_path="${_r_model//\~/$HOME}"
+    # mmproj (multimodal projector) is only loaded on explicit --mmproj request.
     local mmproj_path=""
-    if [[ -n "$_r_mmproj" ]]; then
-        mmproj_path="${_r_mmproj//\~/$HOME}"
+    if [[ "$use_mmproj" == true ]]; then
+        if [[ -n "$_r_mmproj" ]]; then
+            mmproj_path="${_r_mmproj//\~/$HOME}"
+        else
+            echo "Error: --mmproj requested but model '$name' defines no mmproj"; exit 1
+        fi
     fi
 
     # Build llama-server command
@@ -246,6 +253,11 @@ cmd_start() {
     # behaviour-relevant llama.cpp defaults we never pass.
     _render_config() {
         echo "Model: $_r_label ($_r_alias)"
+        if [[ -n "$mmproj_path" ]]; then
+            echo "mmproj: $mmproj_path (--mmproj)"
+        elif [[ -n "$_r_mmproj" ]]; then
+            echo "mmproj: available but not loaded (pass --mmproj)"
+        fi
         echo "ROCm env: ${_r_rocm_env:-—}"
         echo "Host:     ${host:-127.0.0.1 (default)}"
         echo "Context:  ${_r_ctx:-default}"
