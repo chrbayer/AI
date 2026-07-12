@@ -260,6 +260,15 @@ cmd_start() {
         fi
         echo "ROCm env: ${_r_rocm_env:-—}"
         echo "Host:     ${host:-127.0.0.1 (default)}"
+        if [[ -n "$host" && "$host" != "127.0.0.1" && "$host" != "localhost" && "$host" != "::1" ]]; then
+            if [[ "$host" == "0.0.0.0" || "$host" == "::" ]]; then
+                echo "  WARNING: bound to ALL interfaces without authentication —"
+                echo "           expose only inside a trusted network."
+            else
+                echo "  WARNING: reachable beyond localhost ($host) without authentication —"
+                echo "           expose only inside a trusted network."
+            fi
+        fi
         echo "Context:  ${_r_ctx:-default}"
         echo "Parallel: ${parallel:-1}"
         echo "Timeout:  600s"
