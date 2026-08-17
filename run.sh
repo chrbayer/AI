@@ -2,10 +2,11 @@
 # Unified LLM server manager for Claude Code.
 # Usage:
 #   ./run.sh                                     list available models
-#   ./run.sh start <name> [slot] [--reasoning-budget N] [--no-reasoning] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj]  start server + proxy in background (slot 1-3, default 1)
+#   ./run.sh start <name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning-budget N] [--no-reasoning] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj]  start server (+ proxy with --proxy) in background (slot 1-3, default 1)
 #   ./run.sh stop [slot]                         stop slot (or all if omitted)
 #   ./run.sh status                              show running state
-#   source ./run.sh env <name> [slot]            export Claude Code env vars in this shell
+#   ./run.sh gen-certs <public-hostname>         create CA + certificates for --public
+#   source ./run.sh env <name> [slot] [--proxy|--direct]   export Claude Code env vars in this shell
 #
 # Ports:  slot 1 → server :8001  proxy :8081
 #         slot 2 → server :8002  proxy :8082
@@ -26,6 +27,19 @@ PORT_BASE_SERVER=8000  # slot N → port 8000+N
 PORT_BASE_PROXY=8080   # slot N → port 8080+N
 PID_DIR="$SCRIPT_DIR/.pids"
 LOG_DIR="$SCRIPT_DIR/logs"
+
+# ── Public exposure (--public) ───────────────────────────────
+# Internet traffic never reaches llama-server or the proxy directly: stunnel
+# terminates a mutually authenticated TLS connection from the VPS and forwards
+# to 127.0.0.1. That keeps --public fully independent of --host, which stays
+# what it always was — plain LAN exposure.
+PORT_BASE_TLS_SERVER=8440   # slot N → port 8440+N  (TLS front for the server)
+PORT_BASE_TLS_PROXY=8450    # slot N → port 8450+N  (TLS front for the proxy)
+LLM_CONF_DIR="${LLM_CONF_DIR:-$HOME/.config/llm}"
+TOKEN_FILE="${LLM_TOKEN_FILE:-$LLM_CONF_DIR/tokens}"
+TLS_DIR="$LLM_CONF_DIR/tls"
+STUNNEL_DIR="$SCRIPT_DIR/.stunnel"
+PUBLIC_MAX_PREDICT_DEFAULT=8192   # --public caps generation length unless --max-predict says otherwise
 
 # Detect sourcing:
 # - bash: BASH_SOURCE[0] != $0 when sourced
@@ -94,6 +108,92 @@ cmd_list() {
     echo ""
 }
 
+# ── Public exposure helpers ─────────────────────────────────
+
+# Count real tokens in the token file (blank lines and # comments don't count).
+_token_count() {
+    # grep -c prints 0 *and* exits 1 when nothing matches, so capture first and
+    # only then fall back — piping the failure into `echo 0` yields "0\n0".
+    local n
+    n=$(grep -cvE '^[[:space:]]*(#|$)' "$TOKEN_FILE" 2>/dev/null) || n=0
+    echo "${n:-0}"
+}
+
+# Everything --public needs must exist *before* a single port opens.
+_check_public_prereqs() {
+    local ok=true
+
+    if ! command -v stunnel > /dev/null; then
+        echo "Error: --public needs stunnel (sudo dnf install stunnel)"
+        ok=false
+    fi
+
+    if [[ ! -f "$TOKEN_FILE" ]]; then
+        echo "Error: no token file at $TOKEN_FILE"
+        echo "       Create one (0600, one token per line), e.g.:"
+        echo "         mkdir -p $LLM_CONF_DIR && umask 077"
+        echo "         openssl rand -hex 32 > $TOKEN_FILE"
+        ok=false
+    else
+        local perms
+        perms=$(stat -c %a "$TOKEN_FILE")
+        if [[ ! "$perms" =~ ^[0-7]00$ ]]; then
+            echo "Error: $TOKEN_FILE is mode $perms — must not be readable by group or others."
+            echo "       chmod 600 $TOKEN_FILE"
+            ok=false
+        elif [[ "$(_token_count)" -eq 0 ]]; then
+            echo "Error: $TOKEN_FILE contains no tokens (blank lines and # comments don't count)"
+            ok=false
+        fi
+    fi
+
+    local f
+    for f in server.pem server.key ca.pem; do
+        if [[ ! -f "$TLS_DIR/$f" ]]; then
+            echo "Error: missing $TLS_DIR/$f — run: $0 gen-certs <public-hostname>"
+            ok=false
+        fi
+    done
+
+    [[ "$ok" == true ]]
+}
+
+# Generate the stunnel config for one slot. verifyPeer + CAfile mean only a
+# client holding a certificate from our own CA (i.e. the VPS) can complete the
+# handshake — a scanner hitting the port never gets past the TLS layer.
+_write_stunnel_conf() {
+    local slot="$1" with_proxy="$2" conf="$3"
+    local port_server=$(( PORT_BASE_SERVER + slot ))
+    local port_proxy=$(( PORT_BASE_PROXY + slot ))
+    local tls_server=$(( PORT_BASE_TLS_SERVER + slot ))
+    local tls_proxy=$(( PORT_BASE_TLS_PROXY + slot ))
+
+    {
+        echo "foreground = yes"
+        echo "pid ="
+        echo "sslVersionMin = TLSv1.2"
+        echo "TIMEOUTidle = 900"
+        echo ""
+        echo "[server-${slot}]"
+        echo "accept = 0.0.0.0:${tls_server}"
+        echo "connect = 127.0.0.1:${port_server}"
+        echo "cert = $TLS_DIR/server.pem"
+        echo "key = $TLS_DIR/server.key"
+        echo "CAfile = $TLS_DIR/ca.pem"
+        echo "verifyPeer = yes"
+        if [[ "$with_proxy" == true ]]; then
+            echo ""
+            echo "[proxy-${slot}]"
+            echo "accept = 0.0.0.0:${tls_proxy}"
+            echo "connect = 127.0.0.1:${port_proxy}"
+            echo "cert = $TLS_DIR/server.pem"
+            echo "key = $TLS_DIR/server.key"
+            echo "CAfile = $TLS_DIR/ca.pem"
+            echo "verifyPeer = yes"
+        fi
+    } > "$conf"
+}
+
 cmd_start() {
     local name=""
     local slot="1"
@@ -107,9 +207,15 @@ cmd_start() {
     local host=""               # "" = llama-server default (127.0.0.1); e.g. 0.0.0.0 to expose on LAN
     local gpu_priority=""       # "" = driver default; low|medium|high|realtime (needs patched ggml-vulkan)
     local use_mmproj=false      # true = load the model's mmproj (multimodal projector), if defined
+    local start_proxy=false     # true = also start proxy.py (timestamp normalization for prompt caching)
+    local public=false          # true = token auth + hardening + stunnel TLS front for the VPS
+    local max_predict=""        # "" = model/server default; N = cap tokens per generation
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
+            --proxy) start_proxy=true; shift ;;
+            --public) public=true; shift ;;
+            --max-predict) max_predict="$2"; shift 2 ;;
             --reasoning-budget) reasoning_budget="$2"; shift 2 ;;
             --no-reasoning) reasoning_budget=0; shift ;;   # alias for --reasoning-budget 0
             --mlock) mlock=true; shift ;;
@@ -126,7 +232,7 @@ cmd_start() {
         esac
     done
 
-    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--reasoning-budget N] [--no-reasoning] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj]"; exit 1; }
+    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning-budget N] [--no-reasoning] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj]"; exit 1; }
     [[ "$slot" != "1" && "$slot" != "2" && "$slot" != "3" ]] && { echo "Error: slot must be 1, 2, or 3"; exit 1; }
     if [[ -n "$parallel" && ! "$parallel" =~ ^[1-9][0-9]*$ ]]; then
         echo "Error: --parallel requires a positive integer (got '$parallel')"; exit 1
@@ -143,16 +249,28 @@ cmd_start() {
     if [[ -n "$reasoning_budget" && ! "$reasoning_budget" =~ ^(-1|0|[1-9][0-9]*)$ ]]; then
         echo "Error: --reasoning-budget requires -1 (unrestricted), 0 (off), or N>0 (token budget); got '$reasoning_budget'"; exit 1
     fi
+    if [[ -n "$max_predict" && ! "$max_predict" =~ ^(-1|[1-9][0-9]*)$ ]]; then
+        echo "Error: --max-predict requires -1 (no limit) or N>0 (token cap); got '$max_predict'"; exit 1
+    fi
+    if [[ "$public" == true ]]; then
+        _check_public_prereqs || exit 1
+        # --public without a cap would let one request generate until --timeout.
+        [[ -z "$max_predict" ]] && max_predict="$PUBLIC_MAX_PREDICT_DEFAULT"
+    fi
 
     local port_server=$(( PORT_BASE_SERVER + slot ))
     local port_proxy=$(( PORT_BASE_PROXY + slot ))
 
     _resolve_model "$name" || { echo "Unknown model: $name"; cmd_list; exit 1; }
-    _check_deps python3 || exit 1
+    [[ "$start_proxy" == true ]] && { _check_deps python3 || exit 1; }
 
     # Guard: abort if ports are already in use
     if ss -tlnp 2>/dev/null | grep -q ":${port_server} "; then
         echo "Error: Port $port_server already in use. Is slot $slot already running?"
+        exit 1
+    fi
+    if [[ "$start_proxy" == true ]] && ss -tlnp 2>/dev/null | grep -q ":${port_proxy} "; then
+        echo "Error: Port $port_proxy already in use. Is a proxy for slot $slot already running?"
         exit 1
     fi
 
@@ -196,6 +314,16 @@ cmd_start() {
     # --cache-ram overrides the server's default prompt-cache size (8192 MiB).
     # 0 disables the host-RAM prompt cache (keeps system RAM flat during use).
     [[ -n "$cache_ram" ]] && cmd+=(--cache-ram "$cache_ram")
+    # --public authenticates at llama-server itself. proxy.py forwards the
+    # Authorization header untouched, so this one key file covers the direct and
+    # the proxied endpoint alike. --no-slots matters most: /slots is enabled by
+    # default and exposes other clients' prompts.
+    if [[ "$public" == true ]]; then
+        cmd+=(--api-key-file "$TOKEN_FILE" --no-webui --no-slots)
+    fi
+    # A cap on generated tokens; without it a single request can hold the GPU
+    # until --timeout expires.
+    [[ -n "$max_predict" && "$max_predict" != "-1" ]] && cmd+=(--n-predict "$max_predict")
     # llama.cpp maps ggml/model-load INFO logs to TRACE (level 4); the default
     # verbosity (3=INFO) filters them, so backend detection and buffer-size
     # lines never reach the log. -lv 4 reveals them (also more runtime logging).
@@ -212,33 +340,41 @@ cmd_start() {
         fi
     fi
 
-    # Start proxy and poll until it listens on the port (max 10s)
-    echo "Starting proxy [slot $slot] on port $port_proxy..."
-    # -u: unbuffered stdout/stderr so every log line lands in $proxy_log
-    # immediately (and nothing is lost when the proxy is killed on stop).
-    LLM_BACKEND_URL="http://localhost:${port_server}" \
-    LLM_PROXY_HOST="${host:-127.0.0.1}" \
-    LLM_PROXY_PORT="${port_proxy}" \
-    python3 -u "$PROXY_SCRIPT" > "$proxy_log" 2>&1 &
-    local proxy_pid=$!
-    echo "$proxy_pid" > "$PID_DIR/proxy-${slot}.pid"
+    # The proxy is opt-in (--proxy): it only rewrites time/date stamps to keep the
+    # prompt cache warm, which a client that sends no such stamps does not need.
+    # Without it, clients talk to llama-server directly (see cmd_env).
+    if [[ "$start_proxy" == true ]]; then
+        # Start proxy and poll until it listens on the port (max 10s)
+        echo "Starting proxy [slot $slot] on port $port_proxy..."
+        # -u: unbuffered stdout/stderr so every log line lands in $proxy_log
+        # immediately (and nothing is lost when the proxy is killed on stop).
+        # LLM_TOKEN_FILE switches the proxy into hardened mode: token check,
+        # path allowlist, concurrency and body-size caps. Unset = pass-through.
+        LLM_BACKEND_URL="http://localhost:${port_server}" \
+        LLM_PROXY_HOST="${host:-127.0.0.1}" \
+        LLM_PROXY_PORT="${port_proxy}" \
+        LLM_TOKEN_FILE="$([[ "$public" == true ]] && echo "$TOKEN_FILE")" \
+        python3 -u "$PROXY_SCRIPT" > "$proxy_log" 2>&1 &
+        local proxy_pid=$!
+        echo "$proxy_pid" > "$PID_DIR/proxy-${slot}.pid"
 
-    local max_wait=10
-    for (( i=0; i<max_wait; i++ )); do
-        sleep 1
-        if ! ps -p "$proxy_pid" > /dev/null 2>&1; then
-            echo "Error: Proxy failed to start. See $proxy_log"
-            exit 1
-        fi
-        if ss -tlnp 2>/dev/null | grep -q ":${port_proxy} "; then
-            echo "Proxy running (PID: $proxy_pid)"
-            break
-        fi
-        if (( i == max_wait - 1 )); then
-            echo "Error: Proxy did not listen on port $port_proxy within ${max_wait}s. See $proxy_log"
-            exit 1
-        fi
-    done
+        local max_wait=10
+        for (( i=0; i<max_wait; i++ )); do
+            sleep 1
+            if ! ps -p "$proxy_pid" > /dev/null 2>&1; then
+                echo "Error: Proxy failed to start. See $proxy_log"
+                exit 1
+            fi
+            if ss -tlnp 2>/dev/null | grep -q ":${port_proxy} "; then
+                echo "Proxy running (PID: $proxy_pid)"
+                break
+            fi
+            if (( i == max_wait - 1 )); then
+                echo "Error: Proxy did not listen on port $port_proxy within ${max_wait}s. See $proxy_log"
+                exit 1
+            fi
+        done
+    fi
 
     # Start llama-server in background
     echo "Starting llama.cpp server [slot $slot] on port $port_server..."
@@ -260,14 +396,34 @@ cmd_start() {
         fi
         echo "ROCm env: ${_r_rocm_env:-—}"
         echo "Host:     ${host:-127.0.0.1 (default)}"
+        # The LAN listener carries no authentication unless --public added a key
+        # file; the TLS front below is a separate, always-authenticated path.
         if [[ -n "$host" && "$host" != "127.0.0.1" && "$host" != "localhost" && "$host" != "::1" ]]; then
-            if [[ "$host" == "0.0.0.0" || "$host" == "::" ]]; then
-                echo "  WARNING: bound to ALL interfaces without authentication —"
-                echo "           expose only inside a trusted network."
+            local where="beyond localhost ($host)"
+            [[ "$host" == "0.0.0.0" || "$host" == "::" ]] && where="to ALL interfaces"
+            if [[ "$public" == true ]]; then
+                echo "  NOTE: bound $where; token auth is active (--public)."
             else
-                echo "  WARNING: reachable beyond localhost ($host) without authentication —"
+                echo "  WARNING: bound $where without authentication —"
                 echo "           expose only inside a trusted network."
             fi
+        fi
+        if [[ "$public" == true ]]; then
+            echo "Public:   enabled (--public)"
+            echo "  Tokens:  $(_token_count) from $TOKEN_FILE"
+            echo "  TLS in:  0.0.0.0:$(( PORT_BASE_TLS_SERVER + slot )) → server :$port_server (mTLS, client cert required)"
+            if [[ "$start_proxy" == true ]]; then
+                echo "           0.0.0.0:$(( PORT_BASE_TLS_PROXY + slot )) → proxy  :$port_proxy (mTLS, client cert required)"
+            fi
+            echo "  Server:  --no-webui --no-slots, generation capped at ${max_predict} tokens"
+            echo "  Proxy:   path allowlist, token check, concurrency cap"
+        else
+            echo "Public:   disabled — reachable only via localhost/LAN (pass --public to expose via the VPS)"
+        fi
+        if [[ "$start_proxy" == true ]]; then
+            echo "Proxy:    enabled on :$port_proxy (--proxy) — normalizes time/date stamps for the prompt cache"
+        else
+            echo "Proxy:    disabled — clients talk to :$port_server directly (pass --proxy to enable)"
         fi
         echo "Context:  ${_r_ctx:-default}"
         echo "Parallel: ${parallel:-1}"
@@ -330,9 +486,31 @@ cmd_start() {
     echo "$server_pid" > "$PID_DIR/server-${slot}.pid"
 
     echo "Server running (PID: $server_pid)"
+
+    # Start the TLS front last, so the port only opens once there is a backend
+    # behind it.
+    local stunnel_log="$LOG_DIR/stunnel-${slot}.log"
+    if [[ "$public" == true ]]; then
+        mkdir -p "$STUNNEL_DIR"
+        local stunnel_conf="$STUNNEL_DIR/slot-${slot}.conf"
+        _write_stunnel_conf "$slot" "$start_proxy" "$stunnel_conf"
+        stunnel "$stunnel_conf" > "$stunnel_log" 2>&1 &
+        local stunnel_pid=$!
+        echo "$stunnel_pid" > "$PID_DIR/stunnel-${slot}.pid"
+
+        sleep 1
+        if ! ps -p "$stunnel_pid" > /dev/null 2>&1; then
+            echo "Error: stunnel failed to start. See $stunnel_log"
+            exit 1
+        fi
+        echo "TLS front running (PID: $stunnel_pid) on :$(( PORT_BASE_TLS_SERVER + slot ))$(
+            [[ "$start_proxy" == true ]] && echo ", :$(( PORT_BASE_TLS_PROXY + slot ))")"
+    fi
+
     echo ""
     echo "  Logs:  tail -f $server_log"
-    echo "         tail -f $proxy_log"
+    [[ "$start_proxy" == true ]] && echo "         tail -f $proxy_log"
+    [[ "$public" == true ]] && echo "         tail -f $stunnel_log"
     echo "  Stop:  $0 stop $slot"
 }
 
@@ -376,7 +554,19 @@ _stop_slot() {
         stopped=$(( stopped + 1 ))
     fi
 
-    rm -f "$PID_DIR/server-${slot}.pid" "$PID_DIR/proxy-${slot}.pid"
+    # Stop the TLS front — closing the public port first would be nicer, but the
+    # slot is going down either way and stunnel is the cheapest to restart.
+    local stunnel_pid=""
+    [[ -f "$PID_DIR/stunnel-${slot}.pid" ]] && stunnel_pid=$(cat "$PID_DIR/stunnel-${slot}.pid")
+    if [[ -n "$stunnel_pid" ]] && ps -p "$stunnel_pid" > /dev/null 2>&1; then
+        kill "$stunnel_pid" 2>/dev/null
+        echo "Slot $slot: stunnel (PID: $stunnel_pid) stopped."
+        stopped=$(( stopped + 1 ))
+    fi
+
+    rm -f "$PID_DIR/server-${slot}.pid" "$PID_DIR/proxy-${slot}.pid" "$PID_DIR/stunnel-${slot}.pid"
+    rm -f "$STUNNEL_DIR/slot-${slot}.conf"
+    rmdir "$STUNNEL_DIR" 2>/dev/null || true
     return $(( stopped == 0 ))
 }
 
@@ -423,6 +613,16 @@ cmd_status() {
         fi
         if [[ -n "$proxy_pid" ]] && ps -p "$proxy_pid" > /dev/null 2>&1; then
             echo "Slot $slot: proxy       (PID: $proxy_pid) on :$port_proxy"
+            slot_active=1; found=1
+        fi
+
+        local stunnel_pid=""
+        [[ -f "$PID_DIR/stunnel-${slot}.pid" ]] && stunnel_pid=$(cat "$PID_DIR/stunnel-${slot}.pid")
+        if [[ -n "$stunnel_pid" ]] && ps -p "$stunnel_pid" > /dev/null 2>&1; then
+            local tls_ports=":$(( PORT_BASE_TLS_SERVER + slot ))"
+            ss -tlnp 2>/dev/null | grep -q ":$(( PORT_BASE_TLS_PROXY + slot )) " && \
+                tls_ports="$tls_ports, :$(( PORT_BASE_TLS_PROXY + slot ))"
+            echo "Slot $slot: stunnel     (PID: $stunnel_pid) on $tls_ports  [public, mTLS]"
             slot_active=1; found=1
         fi
     done
@@ -475,23 +675,57 @@ PY
 }
 
 cmd_env() {
-    local name="${1:-}"
-    local slot="${2:-1}"
-    [[ -z "$name" ]] && { echo "Usage: source $0 env <model-name> [slot]"; return 1; }
+    local name=""
+    local slot="1"
+    local want=""               # "" = auto (proxy if one is listening); proxy|direct = forced
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --proxy) want="proxy"; shift ;;
+            --direct) want="direct"; shift ;;
+            -*) echo "Unknown option: $1"; return 1 ;;
+            *) if [[ -z "$name" ]]; then name="$1"; elif [[ "$slot" == "1" ]]; then slot="$1"; fi; shift ;;
+        esac
+    done
+
+    [[ -z "$name" ]] && { echo "Usage: source $0 env <model-name> [slot] [--proxy|--direct]"; return 1; }
     [[ "$slot" != "1" && "$slot" != "2" && "$slot" != "3" ]] && { echo "Error: slot must be 1, 2, or 3"; return 1; }
 
     local port_proxy=$(( PORT_BASE_PROXY + slot ))
+    local port_server=$(( PORT_BASE_SERVER + slot ))
+
+    # Since the proxy is opt-in (start --proxy), point at whichever endpoint is
+    # actually up: the proxy when it listens, the server otherwise. --proxy /
+    # --direct force the choice (e.g. to set env before starting the slot).
+    local port_target="$port_server" via="server"
+    case "$want" in
+        proxy)  port_target="$port_proxy"; via="proxy" ;;
+        direct) port_target="$port_server"; via="server" ;;
+        *)      if ss -tlnp 2>/dev/null | grep -q ":${port_proxy} "; then
+                    port_target="$port_proxy"; via="proxy"
+                fi ;;
+    esac
 
     _resolve_model "$name" || { echo "Unknown model: $name"; cmd_list; return 1; }
 
     local config_dir=".claude-${_r_name}"
     [[ "$slot" -gt 1 ]] && config_dir=".claude-${_r_name}-${slot}"
 
+    # A slot started with --public demands a token. Reuse the first one from the
+    # token file so the local workflow stays a plain `source ./run.sh env`; a
+    # server started without --public ignores the header anyway.
+    local token="sk-no-key-required" token_src="placeholder"
+    if [[ -r "$TOKEN_FILE" ]]; then
+        local first
+        first=$(grep -m1 -vE '^[[:space:]]*(#|$)' "$TOKEN_FILE" 2>/dev/null)
+        [[ -n "$first" ]] && { token="$first"; token_src="$TOKEN_FILE"; }
+    fi
+
     # When sourced, these exports take effect in the caller's shell.
     # When executed directly, they're printed for the user to see.
     export CLAUDE_CONFIG_DIR="$config_dir"
-    export ANTHROPIC_BASE_URL="http://localhost:$port_proxy"
-    export ANTHROPIC_AUTH_TOKEN="sk-no-key-required"
+    export ANTHROPIC_BASE_URL="http://localhost:$port_target"
+    export ANTHROPIC_AUTH_TOKEN="$token"
     export ANTHROPIC_MODEL="$_r_client"
     export ANTHROPIC_SMALL_FAST_MODEL="$_r_client"
     export ANTHROPIC_DEFAULT_SONNET_MODEL="$_r_client"
@@ -500,13 +734,14 @@ cmd_env() {
     export API_TIMEOUT_MS="3000000"
     export PI_STREAM_FIRST_EVENT_TIMEOUT_MS="600000"
     export PI_OPENAI_STREAM_IDLE_TIMEOUT_MS="600000"
-    export OPENAI_BASE_URL="http://localhost:$port_proxy/v1"
-    export OPENAI_API_KEY="sk-no-key-required"
+    export OPENAI_BASE_URL="http://localhost:$port_target/v1"
+    export OPENAI_API_KEY="$token"
 
-    echo "Claude Code env set for $_r_label ($_r_client) [slot $slot]"
+    echo "Claude Code env set for $_r_label ($_r_client) [slot $slot] via $via"
     echo "  CLAUDE_CONFIG_DIR=$config_dir"
-    echo "  ANTHROPIC_BASE_URL=http://localhost:$port_proxy"
-    echo "  OPENAI_BASE_URL=http://localhost:$port_proxy/v1"
+    echo "  Token: $token_src"
+    echo "  ANTHROPIC_BASE_URL=http://localhost:$port_target"
+    echo "  OPENAI_BASE_URL=http://localhost:$port_target/v1"
     echo "  ANTHROPIC_MODEL=$_r_client"
 }
 
@@ -530,6 +765,59 @@ cmd_clear() {
 
     echo "Environment cleared."
     echo "Run 'source $0 env <name> [slot]' to set up a model again."
+}
+
+# Create the private CA and the two certificates the public path needs:
+#   server.pem/.key       — presented by stunnel here; SAN must be the hostname
+#                           the VPS connects to, or SSLProxyCheckPeerName fails
+#   vps-client-combined.pem — copied to the VPS; without it stunnel's verifyPeer
+#                           refuses the handshake, so scanners never get through
+cmd_gen_certs() {
+    local hostname="" force=false
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --force) force=true; shift ;;
+            -*) echo "Unknown option: $1"; return 1 ;;
+            *) [[ -z "$hostname" ]] && hostname="$1"; shift ;;
+        esac
+    done
+    [[ -z "$hostname" ]] && { echo "Usage: $0 gen-certs <public-hostname> [--force]"; return 1; }
+    _check_deps openssl || return 1
+
+    if [[ -f "$TLS_DIR/ca.pem" && "$force" != true ]]; then
+        echo "Error: $TLS_DIR/ca.pem already exists."
+        echo "       Re-issuing invalidates the client cert already on the VPS. Pass --force if that's intended."
+        return 1
+    fi
+
+    mkdir -p "$TLS_DIR"
+    chmod 700 "$TLS_DIR"
+    ( umask 077 && cd "$TLS_DIR" && \
+      openssl req -x509 -newkey rsa:4096 -sha256 -days 3650 -nodes \
+          -keyout ca.key -out ca.pem -subj "/CN=llm-local-ca" 2>/dev/null && \
+      openssl req -newkey rsa:4096 -nodes -keyout server.key -out server.csr \
+          -subj "/CN=$hostname" 2>/dev/null && \
+      openssl x509 -req -in server.csr -CA ca.pem -CAkey ca.key -CAcreateserial \
+          -out server.pem -days 3650 -sha256 \
+          -extfile <(printf 'subjectAltName=DNS:%s\nextendedKeyUsage=serverAuth\n' "$hostname") 2>/dev/null && \
+      openssl req -newkey rsa:4096 -nodes -keyout vps-client.key -out vps-client.csr \
+          -subj "/CN=vps" 2>/dev/null && \
+      openssl x509 -req -in vps-client.csr -CA ca.pem -CAkey ca.key -CAcreateserial \
+          -out vps-client.pem -days 3650 -sha256 \
+          -extfile <(printf 'extendedKeyUsage=clientAuth\n') 2>/dev/null && \
+      cat vps-client.pem vps-client.key > vps-client-combined.pem && \
+      rm -f server.csr vps-client.csr ) || { echo "Error: certificate generation failed"; return 1; }
+
+    echo "Certificates written to $TLS_DIR (valid 10 years, CN/SAN = $hostname)"
+    echo ""
+    echo "  Stays here:      ca.pem  server.pem  server.key"
+    echo "  Copy to the VPS: vps-client-combined.pem   → SSLProxyMachineCertificateFile"
+    echo "                   ca.pem                    → SSLProxyCACertificateFile"
+    echo ""
+    echo "  scp $TLS_DIR/vps-client-combined.pem $TLS_DIR/ca.pem <vps>:/etc/apache2/llm/"
+    echo ""
+    echo "  Note: the VPS must reach $hostname (DynDNS → your router), and"
+    echo "        vps-client-combined.pem holds a private key — chmod 600 it there."
 }
 
 # ── Benchmark ────────────────────────────────────────────────
@@ -735,24 +1023,31 @@ cmd_help() {
     echo ""
     printf "\033[1m$(basename "$0")\033[0m — LLM server manager\n"
     echo ""
-    printf "  %-20s %s\n" "start <name> [slot]"   "start server + proxy (slot 1-3, default 1)"
+    printf "  %-20s %s\n" "start <name> [slot]"   "start server (slot 1-3, default 1)"
+    printf "  %-20s %s\n" ""                      "  --proxy: also start proxy.py (normalizes time/date stamps for the prompt cache)"
     printf "  %-20s %s\n" ""                      "  --reasoning-budget N: cap thinking tokens (0=off, N>0=limited, -1=unrestricted)"
     printf "  %-20s %s\n" ""                      "  --no-reasoning: alias for --reasoning-budget 0; --parallel N: server slots (default 1)"
     printf "  %-20s %s\n" ""                      "  --ctx N: override the model's default context size"
     printf "  %-20s %s\n" ""                      "  --cache-ram N: prompt-cache host-RAM cap in MiB (0=disable, -1=no limit; default 8192)"
     printf "  %-20s %s\n" ""                      "  --verbose: -lv 4, reveals ggml/backend + buffer-size startup logs (more runtime logging too)"
+    printf "  %-20s %s\n" ""                      "  --public: token auth + hardening + mTLS front for the VPS (needs gen-certs)"
+    printf "  %-20s %s\n" ""                      "  --max-predict N: cap tokens per generation (-1=no limit; --public defaults to 8192)"
     printf "  %-20s %s\n" "stop [slot]"            "stop slot (or all if omitted)"
     printf "  %-20s %s\n" "status"                 "show running state"
     printf "  %-20s %s\n" "cache-stats [slot]"     "show prompt-cache hit rate (from the server log)"
+    printf "  %-20s %s\n" "gen-certs <host>"       "create the CA + server/VPS certificates for --public"
     printf "  %-20s %s\n" "bench [opts] <m>"       "run benchmark (model or 'all')"
     printf "  %-20s %s\n" "list"                   "show available models"
-    printf "  %-20s %s\n" "env <name> [slot]"      "set Claude Code env vars (source!)"
+    printf "  %-20s %s\n" "env <name> [slot]"      "set Claude Code env vars (source!); --proxy/--direct force the endpoint"
     printf "  %-20s %s\n" "clear"                  "clear env vars (source!)"
     printf "  %-20s %s\n" "download <m>"           "download model(s) (or 'all')"
     echo ""
     echo "  Ports:  slot 1 → server :8001  proxy :8081"
     echo "          slot 2 → server :8002  proxy :8082"
     echo "          slot 3 → server :8003  proxy :8083"
+    echo ""
+    echo "  --public adds a TLS front per slot: server :844N, proxy :845N (N = slot)"
+    echo "          Forward only those at the router; :800N/:808N stay local/LAN."
     echo ""
 }
 
@@ -857,10 +1152,11 @@ else
         stop)       shift; cmd_stop "$@" ;;
         status)     cmd_status ;;
         cache-stats) shift; cmd_cache_stats "$@" ;;
+        gen-certs)  shift; cmd_gen_certs "$@" ;;
         bench)      shift; cmd_benchmark "$@" ;;
         list)       cmd_list ;;
         help)       cmd_help ;;
-        env)        echo "This command must be sourced:  source $0 env <name> [slot]" ;;
+        env)        echo "This command must be sourced:  source $0 env <name> [slot] [--proxy|--direct]" ;;
         download)   shift; cmd_download "$@" ;;
         *)          cmd_help; cmd_list ;;
     esac

@@ -21,6 +21,9 @@ Benchmarks/
 # Pid Files
 .pids/
 
+# Generated stunnel configs (--public)
+.stunnel/
+
 # IDE
 .vscode/
 .idea/
