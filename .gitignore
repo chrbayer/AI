@@ -24,6 +24,9 @@ Benchmarks/
 # Generated stunnel configs (--public)
 .stunnel/
 
+# Slot state dir (--slot-save-path; holds saved slot KV dumps)
+.slots/
+
 # IDE
 .vscode/
 .idea/

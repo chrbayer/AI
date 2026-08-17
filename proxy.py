@@ -25,8 +25,8 @@ MAX_CONCURRENCY = int(os.environ.get('LLM_MAX_CONCURRENCY', '4'))
 MAX_BODY_BYTES  = int(os.environ.get('LLM_MAX_BODY_BYTES', str(32 * 1024 * 1024)))
 
 # Endpoints a public client legitimately needs. Everything else llama-server
-# offers — /slots (leaks other users' prompts), /props, the Web UI, /metrics —
-# stays unreachable through the proxy.
+# offers — GET /slots (leaks other clients' prompts), /props, the Web UI,
+# /metrics — stays unreachable through the proxy.
 ALLOWED_PATHS = frozenset([
     "/health",
     "/v1/models",
@@ -36,6 +36,13 @@ ALLOWED_PATHS = frozenset([
     "/v1/messages",
     "/v1/messages/count_tokens",
 ])
+
+# The one exception to the allowlist: POST /slots/{id}?action=erase frees a
+# slot's KV cache, which a remote client legitimately needs. The sibling actions
+# on the same path write files on this machine (`save`/`restore`, enabled by the
+# --slot-save-path that erase itself requires), so the action is matched
+# explicitly rather than the path.
+_SLOT_PATH = re.compile(r"^slots/\d+$")
 
 _HOP_BY_HOP = frozenset([
     "connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
@@ -86,6 +93,18 @@ def _authorized():
     return ok
 
 
+def _path_allowed(path):
+    """Public mode: allowlisted path, or a KV erase on one slot."""
+    if f"/{path}" in ALLOWED_PATHS:
+        return True
+    # Exactly one action parameter: llama-server copies the query multimap into a
+    # std::map, so the *last* occurrence wins there, while Werkzeug reports the
+    # first — ?action=erase&action=save would pass here and save on the server.
+    return (request.method == "POST"
+            and _SLOT_PATH.match(path) is not None
+            and request.args.getlist("action") == ["erase"])
+
+
 def _deny(status, message):
     return Response(json.dumps({"error": message}), status=status,
                     content_type="application/json")
@@ -119,13 +138,16 @@ def proxy(path):
             log.warning("Rejected request from %s: bad or missing token (%s /%s)",
                         _client_addr(), request.method, path)
             return _deny(401, "unauthorized")
-        if f"/{path}" not in ALLOWED_PATHS:
+        if not _path_allowed(path):
             log.warning("Rejected request from %s: path not allowed (/%s)", _client_addr(), path)
             return _deny(404, "not found")
         if request.content_length and request.content_length > MAX_BODY_BYTES:
             return _deny(413, "request body too large")
 
-    url = f"{TARGET_URL}/{path}"
+    # Forward the query string verbatim; llama-server reads parameters from it
+    # (?action=erase on /slots/{id}, ?fail_on_no_slot=1 on /slots).
+    qs = request.query_string.decode()
+    url = f"{TARGET_URL}/{path}" + (f"?{qs}" if qs else "")
     data = request.get_json(silent=True)
 
     if data and "messages" in data:

@@ -21,6 +21,7 @@ pip install waitress   # optional, recommended for production proxy
 ./run.sh start <name> [slot] [--proxy] # Start server in background (slot 1 or 2, default 1)
 ./run.sh stop [slot]                   # Stop slot, or all if omitted
 ./run.sh status                        # Show running state (all slots)
+./run.sh clear-kv [slot]               # Drop the KV cache without restarting
 ./run.sh bench [--full] <model|all>    # Run benchmark (default: default ROCm + Vulkan)
 ./run.sh bench --full all              # Full test: all 8 ROCm combos + Vulkan
 source ./run.sh env <name> [slot]      # Set Claude Code env vars
@@ -64,6 +65,38 @@ claude
 ./run.sh stop                  # stop everything
 ```
 
+### Clearing the KV cache
+
+llama-server keeps each conversation in a server slot; a new prompt reuses the
+longest common prefix that is still there. To start from nothing without
+restarting the model:
+
+```bash
+./run.sh clear-kv          # every running slot
+./run.sh clear-kv 2        # only slot 2
+```
+
+The underlying endpoint is llama-server's own, and the proxy forwards it
+unchanged:
+
+```bash
+curl -X POST 'http://localhost:8001/slots/0?action=erase'   # server slot 0
+curl -X POST 'http://localhost:8081/slots/0?action=erase'   # same, via the proxy
+```
+
+Slot ids run from 0 to `--parallel N` minus one — `clear-kv` reads the count from
+`/props` and walks all of them. The action needs `--slot-save-path`, which `start`
+always passes (`.slots/`, gitignored).
+
+Two limits worth knowing:
+
+- **It never interrupts a running generation.** The server defers the erase until
+  the slot falls idle, so the call can block for as long as the generation takes.
+- **It does not touch the host-RAM prompt cache** (`--cache-ram`, 8192 MiB by
+  default), and no endpoint does. Measured on a cleared slot: of a 53-token
+  prompt sent again afterwards, 52 tokens came straight back from host RAM. For a
+  hard reset, start the slot with `--cache-ram 0`.
+
 ## Exposing models on the internet (`--public`)
 
 `--host` is and stays plain LAN exposure without authentication. `--public` is
@@ -94,10 +127,15 @@ mkdir -p ~/.config/llm && (umask 077 && openssl rand -hex 32 > ~/.config/llm/tok
 ```
 
 `--public` implies authentication — there is no way to open the port without it.
-It also passes `--no-webui --no-slots` to llama-server (`/slots` is enabled by
+It also passes `--no-webui --no-slots` to llama-server (`GET /slots` is enabled by
 default and shows other clients' prompts) and caps generation at 8192 tokens
 (`--max-predict N` to change, `-1` for no limit). The proxy switches to a path
 allowlist, checks tokens itself, and caps concurrent requests.
+
+The one `/slots` request that stays open from outside is
+`POST /slots/{id}?action=erase` (see above) — clearing your own KV cache from
+away is the point. Its siblings `save` and `restore` write files here, so the
+proxy rejects them and the vhost blocks them on the direct path too.
 
 **Tokens** live in `~/.config/llm/tokens`, one per line, `#` comments allowed,
 mode 0600 (enforced). Revoking one means deleting the line and restarting the

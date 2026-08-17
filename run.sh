@@ -5,6 +5,7 @@
 #   ./run.sh start <name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning-budget N] [--no-reasoning] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj]  start server (+ proxy with --proxy) in background (slot 1-3, default 1)
 #   ./run.sh stop [slot]                         stop slot (or all if omitted)
 #   ./run.sh status                              show running state
+#   ./run.sh clear-kv [slot]                     drop the KV cache without restarting (all slots, or one)
 #   ./run.sh gen-certs <public-hostname>         create CA + certificates for --public
 #   source ./run.sh env <name> [slot] [--proxy|--direct]   export Claude Code env vars in this shell
 #
@@ -27,6 +28,10 @@ PORT_BASE_SERVER=8000  # slot N → port 8000+N
 PORT_BASE_PROXY=8080   # slot N → port 8080+N
 PID_DIR="$SCRIPT_DIR/.pids"
 LOG_DIR="$SCRIPT_DIR/logs"
+# --slot-save-path is what enables POST /slots/{id}?action=erase, the only way
+# to drop a slot's KV cache without restarting the server (see clear-kv). The
+# same flag also enables the save/restore actions, which write into this dir.
+SLOT_STATE_DIR="$SCRIPT_DIR/.slots"
 
 # ── Public exposure (--public) ───────────────────────────────
 # Internet traffic never reaches llama-server or the proxy directly: stunnel
@@ -274,7 +279,7 @@ cmd_start() {
         exit 1
     fi
 
-    mkdir -p "$PID_DIR" "$LOG_DIR"
+    mkdir -p "$PID_DIR" "$LOG_DIR" "$SLOT_STATE_DIR"
 
     local proxy_log="$LOG_DIR/proxy-${slot}.log"
     local server_log="$LOG_DIR/server-${slot}.log"
@@ -314,6 +319,9 @@ cmd_start() {
     # --cache-ram overrides the server's default prompt-cache size (8192 MiB).
     # 0 disables the host-RAM prompt cache (keeps system RAM flat during use).
     [[ -n "$cache_ram" ]] && cmd+=(--cache-ram "$cache_ram")
+    # Unconditional, so `clear-kv` works on every slot. The trailing slash is
+    # required: llama-server concatenates path + filename without a separator.
+    cmd+=(--slot-save-path "$SLOT_STATE_DIR/")
     # --public authenticates at llama-server itself. proxy.py forwards the
     # Authorization header untouched, so this one key file covers the direct and
     # the proxied endpoint alike. --no-slots matters most: /slots is enabled by
@@ -567,6 +575,8 @@ _stop_slot() {
     rm -f "$PID_DIR/server-${slot}.pid" "$PID_DIR/proxy-${slot}.pid" "$PID_DIR/stunnel-${slot}.pid"
     rm -f "$STUNNEL_DIR/slot-${slot}.conf"
     rmdir "$STUNNEL_DIR" 2>/dev/null || true
+    # Only succeeds while nothing was saved there via ?action=save.
+    rmdir "$SLOT_STATE_DIR" 2>/dev/null || true
     return $(( stopped == 0 ))
 }
 
@@ -671,6 +681,92 @@ else:
 PY
     done
     [[ "$found" -eq 0 ]] && echo "No server logs yet (start a server first)."
+    return 0
+}
+
+# Drop the KV cache of the running slots without restarting the server:
+# POST /slots/{id}?action=erase for every server slot (--parallel N creates
+# ids 0..N-1). That action needs --slot-save-path, which cmd_start always passes.
+#
+# Two things this does *not* do: it never interrupts a running generation (the
+# server defers the erase until the slot falls idle, so the call can block), and
+# it leaves the host-RAM prompt cache alone (--cache-ram, 8192 MiB by default) —
+# a matching prompt can be restored from there afterwards.
+#
+# Usage: clear-kv [slot]  (default: every running slot)
+cmd_clear_kv() {
+    local want_slot="${1:-}"
+    if [[ -n "$want_slot" && "$want_slot" != "1" && "$want_slot" != "2" && "$want_slot" != "3" ]]; then
+        echo "Error: slot must be 1, 2, or 3"; return 1
+    fi
+    _check_deps python3 || return 1
+
+    # A slot started with --public requires a token; reuse the first one, exactly
+    # as cmd_env does. A server without --api-key-file ignores the header.
+    local token=""
+    if [[ -r "$TOKEN_FILE" ]]; then
+        token=$(grep -m1 -vE '^[[:space:]]*(#|$)' "$TOKEN_FILE" 2>/dev/null)
+    fi
+
+    local found=0
+    for slot in 1 2 3; do
+        [[ -n "$want_slot" && "$slot" != "$want_slot" ]] && continue
+        local server_pid=""
+        [[ -f "$PID_DIR/server-${slot}.pid" ]] && server_pid=$(cat "$PID_DIR/server-${slot}.pid")
+        [[ -n "$server_pid" ]] && ps -p "$server_pid" > /dev/null 2>&1 || continue
+        found=1
+
+        echo "Slot $slot: clearing KV on :$(( PORT_BASE_SERVER + slot ))"
+        LLM_KV_TOKEN="$token" python3 - "$(( PORT_BASE_SERVER + slot ))" <<'KVPY'
+import json, os, sys, urllib.error, urllib.request
+
+base    = f"http://127.0.0.1:{sys.argv[1]}"
+token   = os.environ.get("LLM_KV_TOKEN", "")
+headers = {"Authorization": f"Bearer {token}"} if token else {}
+
+def call(path, method="GET", timeout=30):
+    req = urllib.request.Request(f"{base}{path}", method=method, headers=headers)
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.load(r)
+
+try:
+    # /props reports the slot count and stays readable even with --no-slots.
+    n_slots = int(call("/props").get("total_slots", 1))
+except Exception as e:
+    print(f"  Error: cannot read /props ({e})")
+    sys.exit(1)
+
+total = 0
+for i in range(n_slots):
+    try:
+        # Generous timeout: a busy slot only frees up once its generation ends,
+        # which the server bounds with --timeout 600.
+        res = call(f"/slots/{i}?action=erase", method="POST", timeout=620)
+    except urllib.error.HTTPError as e:
+        print(f"  slot {i}: HTTP {e.code} — {e.read().decode(errors='replace').strip()}")
+        continue
+    except Exception as e:
+        print(f"  slot {i}: {e}")
+        continue
+    n = int(res.get("n_erased", 0))
+    total += n
+    print(f"  slot {i}: {n} tokens erased")
+
+print(f"  total: {total} tokens")
+KVPY
+
+        # The prompt could still come back from host RAM, which no endpoint clears.
+        local pc
+        pc=$(grep -m1 '^PromptCache:' "$LOG_DIR/server-${slot}.log" 2>/dev/null)
+        if [[ -n "$pc" && "$pc" != *disabled* ]]; then
+            echo "  Note: ${pc#PromptCache: } — a matching prompt may be restored from host RAM."
+            echo "        Start the slot with --cache-ram 0 for a hard reset."
+        fi
+    done
+    if [[ "$found" -eq 0 ]]; then
+        echo "No running server${want_slot:+ in slot $want_slot}."
+        return 1
+    fi
     return 0
 }
 
@@ -1035,6 +1131,7 @@ cmd_help() {
     printf "  %-20s %s\n" "stop [slot]"            "stop slot (or all if omitted)"
     printf "  %-20s %s\n" "status"                 "show running state"
     printf "  %-20s %s\n" "cache-stats [slot]"     "show prompt-cache hit rate (from the server log)"
+    printf "  %-20s %s\n" "clear-kv [slot]"        "drop the KV cache of every server slot (or one slot)"
     printf "  %-20s %s\n" "gen-certs <host>"       "create the CA + server/VPS certificates for --public"
     printf "  %-20s %s\n" "bench [opts] <m>"       "run benchmark (model or 'all')"
     printf "  %-20s %s\n" "list"                   "show available models"
@@ -1152,6 +1249,7 @@ else
         stop)       shift; cmd_stop "$@" ;;
         status)     cmd_status ;;
         cache-stats) shift; cmd_cache_stats "$@" ;;
+        clear-kv)   shift; cmd_clear_kv "$@" ;;
         gen-certs)  shift; cmd_gen_certs "$@" ;;
         bench)      shift; cmd_benchmark "$@" ;;
         list)       cmd_list ;;
