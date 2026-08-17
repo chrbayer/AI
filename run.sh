@@ -2,10 +2,11 @@
 # Unified LLM server manager for Claude Code.
 # Usage:
 #   ./run.sh                                     list available models
-#   ./run.sh start <name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning-budget N] [--no-reasoning] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj]  start server (+ proxy with --proxy) in background (slot 1-3, default 1)
+#   ./run.sh start <name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj]  start server (+ proxy with --proxy) in background (slot 1-3, default 1)
 #   ./run.sh stop [slot]                         stop slot (or all if omitted)
 #   ./run.sh status                              show running state
 #   ./run.sh clear-kv [slot]                     drop the KV cache without restarting (all slots, or one)
+#   ./run.sh probe-reasoning [model]             show what each model's chat template supports
 #   ./run.sh gen-certs <public-hostname>         create CA + certificates for --public
 #   source ./run.sh env <name> [slot] [--proxy|--direct]   export Claude Code env vars in this shell
 #
@@ -63,7 +64,7 @@ source "$SCRIPT_DIR/models.conf"
 _resolve_model() {
     local name="$1"
     for entry in "${_MODELS[@]}"; do
-        IFS='|' read -r m_name m_binary m_model m_mmproj m_alias m_label m_args m_client m_rocm_env m_hf_repo m_hf_includes m_hf_dir m_no_reasoning_args m_ctx <<< "$entry"
+        IFS='|' read -r m_name m_binary m_model m_mmproj m_alias m_label m_args m_client m_rocm_env m_hf_repo m_hf_includes m_hf_dir m_no_reasoning_args m_ctx m_reasoning m_reasoning_levels <<< "$entry"
         if [[ "$m_name" == "$name" ]]; then
             _r_name="$m_name"
             _r_binary="$m_binary"
@@ -79,10 +80,22 @@ _resolve_model() {
             _r_hf_dir="${m_hf_dir:-}"
             _r_no_reasoning_args=($m_no_reasoning_args)
             _r_ctx="${m_ctx:-}"
+            _r_reasoning="${m_reasoning:-unknown}"
+            _r_reasoning_levels="${m_reasoning_levels:-}"
             return 0
         fi
     done
     return 1
+}
+
+# Guard for value-taking options: bash's `shift 2` quietly fails when only the
+# flag itself is left, and the option loop would then spin forever. Call as
+# `_need_value "$@"` so $1 is the flag and $2 its value.
+_need_value() {
+    if [[ $# -lt 2 ]]; then
+        echo "Error: $1 requires a value"
+        return 1
+    fi
 }
 
 # Check that required commands exist; prints error and returns 1 if any are missing.
@@ -111,6 +124,113 @@ cmd_list() {
     echo "  ./run.sh start <name> [slot]     start server + proxy (slot 1 or 2)"
     echo "  source ./run.sh env <name> [slot]  set Claude Code env vars in this shell"
     echo ""
+}
+
+# ── Reasoning ───────────────────────────────────────────────
+#
+# One switch for every model: --reasoning off|on|low|medium|high|max|N. What each
+# model can actually do lives in models.conf (`reasoning`, `reasoning_levels`),
+# because the mechanism is the chat template, not the server: --reasoning sets the
+# template kwarg enable_thinking, --reasoning-effort sets the template variables
+# reasoning_effort / reasoning_strength. A template that reads neither cannot be
+# steered, and templates raise on level names they do not know — so a request the
+# model cannot honour is refused here instead of failing per request later.
+#
+# Fills _reasoning_args (llama-server flags) and _reasoning_note (one line for the
+# start output). Returns 1 with an explanation on stderr if the model cannot comply.
+REASONING_LEVELS="low medium high max"
+
+_translate_reasoning() {
+    local spec="$1" mode="$2" level_map="$3"
+    _reasoning_args=()
+    _reasoning_note=""
+
+    # A token budget is spelled as a number; 0 means off, -1 unrestricted.
+    if [[ "$spec" =~ ^(-1|[0-9]+)$ ]]; then
+        [[ "$spec" == "0" ]] && spec="off"
+    elif [[ ! " off on $REASONING_LEVELS " == *" $spec "* ]]; then
+        echo "Error: --reasoning takes off, on, a level ($REASONING_LEVELS), or a token budget (N, -1); got '$spec'" >&2
+        return 1
+    fi
+
+    local is_level=false
+    [[ " $REASONING_LEVELS " == *" $spec "* ]] && is_level=true
+
+    case "$mode" in
+        none)
+            if [[ "$spec" == "off" ]]; then
+                _reasoning_note="not applicable — this model has no thinking mode"
+                return 0
+            fi
+            echo "Error: model '$_r_name' has no thinking mode (its chat template has no reasoning at all)" >&2
+            return 1
+            ;;
+        locked-off)
+            if [[ "$spec" == "off" ]]; then
+                _reasoning_note="already off — the chat template locks thinking closed"
+                return 0
+            fi
+            echo "Error: the chat template of '$_r_name' locks thinking closed, so '--reasoning $spec' cannot work." >&2
+            echo "       Only a different template (--chat-template-file with the stock one) would restore it." >&2
+            return 1
+            ;;
+        toggle)
+            if [[ "$is_level" == true ]]; then
+                echo "Error: model '$_r_name' supports on/off and a token budget, but no reasoning levels." >&2
+                echo "       Use --reasoning on, off, or a token budget (e.g. --reasoning 2048)." >&2
+                return 1
+            fi
+            ;;
+        effort|unknown) ;;
+        *)
+            echo "Error: model '$_r_name' has an unknown reasoning mode '$mode' in models.conf" >&2
+            return 1
+            ;;
+    esac
+
+    if [[ "$spec" == "off" ]]; then
+        # The model's own sampler tweaks for non-thinking mode come first, so an
+        # explicit flag later in the command line still wins.
+        [[ ${#_r_no_reasoning_args[@]} -gt 0 ]] && _reasoning_args+=("${_r_no_reasoning_args[@]}")
+        _reasoning_args+=(--reasoning off --reasoning-budget 0)
+        _reasoning_note="off (--reasoning off --reasoning-budget 0)"
+        return 0
+    fi
+
+    if [[ "$spec" == "on" ]]; then
+        _reasoning_args+=(--reasoning on)
+        _reasoning_note="on, template default depth"
+        return 0
+    fi
+
+    if [[ "$is_level" == true ]]; then
+        local mapped=""
+        if [[ "$mode" == "effort" ]]; then
+            # "low=low medium=medium high=high max=xhigh" → the name this template takes
+            local pair
+            for pair in $level_map; do
+                [[ "${pair%%=*}" == "$spec" ]] && mapped="${pair#*=}"
+            done
+            if [[ -z "$mapped" ]]; then
+                echo "Error: model '$_r_name' does not map the level '$spec' (has: ${level_map:-none})" >&2
+                return 1
+            fi
+        else
+            mapped="$spec"   # unknown mode: pass the canonical name through
+        fi
+        _reasoning_args+=(--reasoning on --reasoning-effort "$mapped")
+        _reasoning_note="level $spec (--reasoning-effort $mapped)"
+        return 0
+    fi
+
+    # Remaining case: a token budget.
+    _reasoning_args+=(--reasoning on --reasoning-budget "$spec")
+    if [[ "$spec" == "-1" ]]; then
+        _reasoning_note="on, unrestricted budget"
+    else
+        _reasoning_note="on, budget ${spec} tokens"
+    fi
+    return 0
 }
 
 # ── Public exposure helpers ─────────────────────────────────
@@ -202,7 +322,7 @@ _write_stunnel_conf() {
 cmd_start() {
     local name=""
     local slot="1"
-    local reasoning_budget=""   # "" = model default; 0 = off; N>0 = limited; -1 = unrestricted
+    local reasoning=""          # "" = model/template default; off|on|<level>|N (see _translate_reasoning)
     local mlock=false
     local parallel=""
     local ctx=""                # "" = model default; N>0 = override context size
@@ -220,24 +340,25 @@ cmd_start() {
         case "$1" in
             --proxy) start_proxy=true; shift ;;
             --public) public=true; shift ;;
-            --max-predict) max_predict="$2"; shift 2 ;;
-            --reasoning-budget) reasoning_budget="$2"; shift 2 ;;
-            --no-reasoning) reasoning_budget=0; shift ;;   # alias for --reasoning-budget 0
+            --max-predict) _need_value "$@" || exit 1; max_predict="$2"; shift 2 ;;
+            --reasoning) _need_value "$@" || exit 1; reasoning="$2"; shift 2 ;;
+            --reasoning-budget) _need_value "$@" || exit 1; reasoning="$2"; shift 2 ;;   # alias: a budget is a valid --reasoning spec
+            --no-reasoning) reasoning=off; shift ;;          # alias for --reasoning off
             --mlock) mlock=true; shift ;;
-            --parallel) parallel="$2"; shift 2 ;;
-            --ctx) ctx="$2"; shift 2 ;;
-            --cache-ram) cache_ram="$2"; shift 2 ;;
+            --parallel) _need_value "$@" || exit 1; parallel="$2"; shift 2 ;;
+            --ctx) _need_value "$@" || exit 1; ctx="$2"; shift 2 ;;
+            --cache-ram) _need_value "$@" || exit 1; cache_ram="$2"; shift 2 ;;
             --verbose) verbose=true; shift ;;
             --clear-logs) clear_logs=true; shift ;;
-            --host) host="$2"; shift 2 ;;
-            --gpu-priority) gpu_priority="$2"; shift 2 ;;
+            --host) _need_value "$@" || exit 1; host="$2"; shift 2 ;;
+            --gpu-priority) _need_value "$@" || exit 1; gpu_priority="$2"; shift 2 ;;
             --mmproj) use_mmproj=true; shift ;;
             -*) echo "Unknown option: $1"; exit 1 ;;
             *) if [[ -z "$name" ]]; then name="$1"; elif [[ "$slot" == "1" ]]; then slot="$1"; fi; shift ;;
         esac
     done
 
-    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning-budget N] [--no-reasoning] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj]"; exit 1; }
+    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj]"; exit 1; }
     [[ "$slot" != "1" && "$slot" != "2" && "$slot" != "3" ]] && { echo "Error: slot must be 1, 2, or 3"; exit 1; }
     if [[ -n "$parallel" && ! "$parallel" =~ ^[1-9][0-9]*$ ]]; then
         echo "Error: --parallel requires a positive integer (got '$parallel')"; exit 1
@@ -250,9 +371,6 @@ cmd_start() {
     fi
     if [[ -n "$gpu_priority" && ! "$gpu_priority" =~ ^(low|medium|high|realtime)$ ]]; then
         echo "Error: --gpu-priority requires low, medium, high, or realtime; got '$gpu_priority'"; exit 1
-    fi
-    if [[ -n "$reasoning_budget" && ! "$reasoning_budget" =~ ^(-1|0|[1-9][0-9]*)$ ]]; then
-        echo "Error: --reasoning-budget requires -1 (unrestricted), 0 (off), or N>0 (token budget); got '$reasoning_budget'"; exit 1
     fi
     if [[ -n "$max_predict" && ! "$max_predict" =~ ^(-1|[1-9][0-9]*)$ ]]; then
         echo "Error: --max-predict requires -1 (no limit) or N>0 (token cap); got '$max_predict'"; exit 1
@@ -268,6 +386,12 @@ cmd_start() {
 
     _resolve_model "$name" || { echo "Unknown model: $name"; cmd_list; exit 1; }
     [[ "$start_proxy" == true ]] && { _check_deps python3 || exit 1; }
+
+    # Needs the resolved model, since what --reasoning can mean depends on it.
+    _reasoning_args=(); _reasoning_note=""
+    if [[ -n "$reasoning" ]]; then
+        _translate_reasoning "$reasoning" "$_r_reasoning" "$_r_reasoning_levels" || exit 1
+    fi
 
     # Guard: abort if ports are already in use
     if ss -tlnp 2>/dev/null | grep -q ":${port_server} "; then
@@ -337,16 +461,8 @@ cmd_start() {
     # lines never reach the log. -lv 4 reveals them (also more runtime logging).
     [[ "$verbose" == true ]] && cmd+=(-lv 4)
     [[ "$mlock" == true ]] && cmd+=(--mlock)
-    if [[ -n "$reasoning_budget" ]]; then
-        if [[ "$reasoning_budget" == "0" ]]; then
-            # Off: apply the model's no-reasoning sampler tweaks and force thinking off.
-            [[ ${#_r_no_reasoning_args[@]} -gt 0 ]] && cmd+=("${_r_no_reasoning_args[@]}")
-            cmd+=(--reasoning off --reasoning-budget 0)
-        else
-            # Limited (N>0) or unrestricted (-1): keep thinking on, cap the token budget.
-            cmd+=(--reasoning on --reasoning-budget "$reasoning_budget")
-        fi
-    fi
+    # Whatever --reasoning translated into for this model (may be empty).
+    [[ ${#_reasoning_args[@]} -gt 0 ]] && cmd+=("${_reasoning_args[@]}")
 
     # The proxy is opt-in (--proxy): it only rewrites time/date stamps to keep the
     # prompt cache warm, which a client that sends no such stamps does not need.
@@ -445,14 +561,14 @@ cmd_start() {
         else
             echo "PromptCache: 8192 MiB (server default)"
         fi
-        if [[ -n "$reasoning_budget" ]]; then
-            if [[ "$reasoning_budget" == "0" ]]; then
-                echo "Reasoning: disabled (--reasoning off --reasoning-budget 0)"
-            elif [[ "$reasoning_budget" == "-1" ]]; then
-                echo "Reasoning: unrestricted (--reasoning on --reasoning-budget -1)"
-            else
-                echo "Reasoning: limited to ${reasoning_budget} tokens (--reasoning on)"
-            fi
+        if [[ -n "$reasoning" ]]; then
+            echo "Reasoning: ${_reasoning_note}"
+            [[ "$_r_reasoning" == "unknown" ]] && \
+                echo "  NOTE: this model's template support is unverified in models.conf —"
+            [[ "$_r_reasoning" == "unknown" ]] && \
+                echo "        the flags are passed through, run '$0 probe-reasoning' once it is downloaded."
+        else
+            echo "Reasoning: template default (model supports: $_r_reasoning)"
         fi
         [[ "$mlock" == true ]] && echo "mlock: enabled (--mlock)"
         [[ -n "$gpu_priority" ]] && echo "GPU priority: $gpu_priority (GGML_VK_QUEUE_PRIORITY; needs patched ggml-vulkan)"
@@ -767,6 +883,76 @@ KVPY
         echo "No running server${want_slot:+ in slot $want_slot}."
         return 1
     fi
+    return 0
+}
+
+# Read the chat template out of each downloaded GGUF and report what it actually
+# supports, next to what models.conf claims. This is the same signal llama.cpp
+# probes at load time (jinja::caps_*): enable_thinking for on/off,
+# reasoning_effort / reasoning_strength for levels.
+#
+# Usage: probe-reasoning [model]
+cmd_probe_reasoning() {
+    local want="${1:-}"
+    _check_deps python3 || return 1
+
+    # gguf-py ships with the llama.cpp sources, not with the binary.
+    local gguf_py=""
+    if python3 -c "import gguf" 2>/dev/null; then
+        gguf_py=""
+    elif [[ -d "${LLAMA_SRC:-$HOME/src/llama.cpp}/gguf-py" ]]; then
+        gguf_py="${LLAMA_SRC:-$HOME/src/llama.cpp}/gguf-py"
+    else
+        echo "Error: needs the gguf python module — either 'pip install gguf' or a"
+        echo "       llama.cpp checkout (set LLAMA_SRC, default ~/src/llama.cpp)"
+        return 1
+    fi
+
+    printf "  %-11s %-11s %-11s %s\n" "MODEL" "CONFIGURED" "TEMPLATE" "READS"
+    printf "  %-11s %-11s %-11s %s\n" "-----" "----------" "--------" "-----"
+
+    local entry
+    for entry in "${_MODELS[@]}"; do
+        IFS='|' read -r m_name _ m_model _ _ _ _ _ _ _ _ _ _ _ m_reasoning _ <<< "$entry"
+        [[ -n "$want" && "$m_name" != "$want" ]] && continue
+        local path="${m_model//\~/$HOME}"
+        if [[ ! -f "$path" ]]; then
+            # ASCII dash: bash pads printf by bytes, so a multibyte one misaligns.
+            printf "  %-11s %-11s %-11s %s\n" "$m_name" "$m_reasoning" "-" "not downloaded"
+            continue
+        fi
+        GGUF_PY="$gguf_py" python3 - "$m_name" "$m_reasoning" "$path" <<'PROBEPY'
+import os, sys
+if os.environ.get("GGUF_PY"):
+    sys.path.insert(0, os.environ["GGUF_PY"])
+from gguf import GGUFReader
+
+name, configured, path = sys.argv[1], sys.argv[2], sys.argv[3]
+
+tmpl = None
+for f in GGUFReader(path).fields.values():
+    if f.name == "tokenizer.chat_template":
+        tmpl = f.contents()
+
+if tmpl is None:
+    print(f"  {name:<11} {configured:<11} {'—':<11} no chat template in the GGUF")
+    sys.exit(0)
+
+reads = [v for v in ("enable_thinking", "reasoning_effort", "reasoning_strength") if v in tmpl]
+if "reasoning_effort" in reads or "reasoning_strength" in reads:
+    seen = "effort"
+elif "enable_thinking" in reads:
+    seen = "toggle"
+elif "<think>" in tmpl:
+    # Think tags present but nothing to switch on them: hard-coded either way.
+    seen = "locked-off"
+else:
+    seen = "none"
+
+mark = "" if seen == configured else "   <-- differs"
+print(f"  {name:<11} {configured:<11} {seen:<11} {', '.join(reads) or '—'}{mark}")
+PROBEPY
+    done
     return 0
 }
 
@@ -1121,8 +1307,9 @@ cmd_help() {
     echo ""
     printf "  %-20s %s\n" "start <name> [slot]"   "start server (slot 1-3, default 1)"
     printf "  %-20s %s\n" ""                      "  --proxy: also start proxy.py (normalizes time/date stamps for the prompt cache)"
-    printf "  %-20s %s\n" ""                      "  --reasoning-budget N: cap thinking tokens (0=off, N>0=limited, -1=unrestricted)"
-    printf "  %-20s %s\n" ""                      "  --no-reasoning: alias for --reasoning-budget 0; --parallel N: server slots (default 1)"
+    printf "  %-20s %s\n" ""                      "  --reasoning off|on|low|medium|high|max|N: one switch for every model;"
+    printf "  %-20s %s\n" ""                      "    levels and on/off are translated per model (see 'probe-reasoning'), N = token budget"
+    printf "  %-20s %s\n" ""                      "  --no-reasoning / --reasoning-budget N: kept as aliases; --parallel N: server slots (default 1)"
     printf "  %-20s %s\n" ""                      "  --ctx N: override the model's default context size"
     printf "  %-20s %s\n" ""                      "  --cache-ram N: prompt-cache host-RAM cap in MiB (0=disable, -1=no limit; default 8192)"
     printf "  %-20s %s\n" ""                      "  --verbose: -lv 4, reveals ggml/backend + buffer-size startup logs (more runtime logging too)"
@@ -1132,6 +1319,7 @@ cmd_help() {
     printf "  %-20s %s\n" "status"                 "show running state"
     printf "  %-20s %s\n" "cache-stats [slot]"     "show prompt-cache hit rate (from the server log)"
     printf "  %-20s %s\n" "clear-kv [slot]"        "drop the KV cache of every server slot (or one slot)"
+    printf "  %-20s %s\n" "probe-reasoning [m]"    "what each downloaded model's chat template supports vs. models.conf"
     printf "  %-20s %s\n" "gen-certs <host>"       "create the CA + server/VPS certificates for --public"
     printf "  %-20s %s\n" "bench [opts] <m>"       "run benchmark (model or 'all')"
     printf "  %-20s %s\n" "list"                   "show available models"
@@ -1250,6 +1438,7 @@ else
         status)     cmd_status ;;
         cache-stats) shift; cmd_cache_stats "$@" ;;
         clear-kv)   shift; cmd_clear_kv "$@" ;;
+        probe-reasoning) shift; cmd_probe_reasoning "$@" ;;
         gen-certs)  shift; cmd_gen_certs "$@" ;;
         bench)      shift; cmd_benchmark "$@" ;;
         list)       cmd_list ;;

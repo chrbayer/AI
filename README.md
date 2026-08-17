@@ -22,6 +22,7 @@ pip install waitress   # optional, recommended for production proxy
 ./run.sh stop [slot]                   # Stop slot, or all if omitted
 ./run.sh status                        # Show running state (all slots)
 ./run.sh clear-kv [slot]               # Drop the KV cache without restarting
+./run.sh probe-reasoning [model]       # What each model's chat template supports
 ./run.sh bench [--full] <model|all>    # Run benchmark (default: default ROCm + Vulkan)
 ./run.sh bench --full all              # Full test: all 8 ROCm combos + Vulkan
 source ./run.sh env <name> [slot]      # Set Claude Code env vars
@@ -64,6 +65,61 @@ claude
 ./run.sh stop 1                # stop only slot 1
 ./run.sh stop                  # stop everything
 ```
+
+### Reasoning
+
+One switch for every model:
+
+```bash
+./run.sh start <name> [slot] --reasoning off        # no thinking
+./run.sh start <name> [slot] --reasoning on         # thinking, template default depth
+./run.sh start <name> [slot] --reasoning high       # low | medium | high | max
+./run.sh start <name> [slot] --reasoning 2048       # thinking, capped at N tokens (-1 = uncapped)
+```
+
+`--no-reasoning` and `--reasoning-budget N` still work as aliases.
+
+What reaches llama-server depends on the model, because the mechanism is the chat
+template rather than the server: `--reasoning` sets the template kwarg
+`enable_thinking`, `--reasoning-effort` sets the template variables
+`reasoning_effort` / `reasoning_strength`. So each entry in `models.conf` declares
+what its template actually reads:
+
+| `reasoning` | Meaning | `--reasoning` accepts |
+| --- | --- | --- |
+| `none` | no thinking in the template at all | `off` (as a no-op) |
+| `toggle` | template reads `enable_thinking` | `off`, `on`, budget |
+| `effort` | plus `reasoning_effort` / `reasoning_strength` | `off`, `on`, level, budget |
+| `locked-off` | template hard-codes thinking closed | `off` (as a no-op) |
+| `unknown` | not verified yet — flags pass through, `start` says so | everything |
+
+Level names differ per model, so `reasoning_levels` maps the unified scale onto
+what the template accepts — templates raise on names they do not know (stock
+Qwen3.8 knows only `low`, `medium`, `xhigh`). `muse` therefore maps `max` → `xhigh`
+while keeping `high` → `high`. Asking for something a model cannot do fails
+immediately, before any port opens or any weight is read:
+
+```
+$ ./run.sh start qwen 1 --reasoning low
+Error: model 'qwen' supports on/off and a token budget, but no reasoning levels.
+       Use --reasoning on, off, or a token budget (e.g. --reasoning 2048).
+```
+
+`probe-reasoning` reads the chat template out of every downloaded GGUF and shows
+what it really supports next to what `models.conf` claims — the same signal
+llama.cpp probes at load time:
+
+```
+$ ./run.sh probe-reasoning
+  MODEL       CONFIGURED  TEMPLATE    READS
+  qwen        toggle      toggle      enable_thinking
+  qwen3.8     locked-off  locked-off  -
+  muse        effort      effort      reasoning_strength
+  minimax     unknown     -           not downloaded
+```
+
+It needs the `gguf` python module — either installed, or a llama.cpp checkout
+(`LLAMA_SRC`, default `~/src/llama.cpp`).
 
 ### Clearing the KV cache
 
