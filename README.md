@@ -144,18 +144,23 @@ workflow is unchanged.
 
 ## Models
 
-- **qwen-moe** — Qwen3.6-35B-A3B MoE uncensored (Vulkan)
-- **qwen-vl** — Qwen3-VL-8B vision-language uncensored (Vulkan)
-- **qwen** — Qwen3.6-27B uncensored (Vulkan)
-- **qwen3.8** — Qwen3.8-27B uncensored v4, Q6_K + mmproj, thinking off in the baked template (Vulkan)
-- **gemma** — Gemma-4-31B-it (Vulkan)
-- **gemma-unc** — Gemma-4-31B-it uncensored (Vulkan)
-- **gemma-moe** — Gemma-4-26B-A4B-it MoE (Vulkan)
-- **gemma-moe-unc** — Gemma-4-26B-A4B-it uncensored MoE (Vulkan)
-- **minimax** — MiniMax-M2.7 (Vulkan)
-- **r1-unc** — DeepSeek-R1-Distill-Llama-70B-Uncensored-v2 Q8_0 (Vulkan)
-- **r1-reason** — DeepSeek-R1-Distill-Llama-70B Unbiased Reasoner i1-Q6K (Vulkan)
-- **mistral** — Mistral-Medium-3.5-128B (Vulkan)
+Order and names follow `models.conf`; `./run.sh list` prints the same set. All of
+them are served by the Vulkan build — the ROCm build is opt-in per model
+(`LLAMA_ROCM_BIN`) and is what `bench` compares against.
+
+- **qwen-moe** — Qwen3.6-35B-A3B MoE uncensored, Q8_K_P, 64K ctx, mmproj available
+- **qwen** — Qwen3.6-27B uncensored, Q8_K_P, 64K ctx, mmproj available
+- **qwen3.8** — Qwen3.8-27B uncensored v4, Q6_K, 64K ctx, mmproj available; thinking is locked off in the baked chat template
+- **qwen-vl** — Qwen3-VL-8B vision-language uncensored, Q8_0, 8K ctx, mmproj available
+- **gemma** — Gemma-4-31B-it uncensored, Q8_0, 128K ctx
+- **gemma-moe** — Gemma-4-26B-A4B-it MoE uncensored, Q8_0, 128K ctx
+- **minimax** — MiniMax-M2.7, UD-IQ3_S, 64K ctx
+- **llama3.3** — Llama-3.3-70B-Instruct abliterated, Q6_K, 32K ctx
+- **r1** — DeepSeek-R1-Distill-Llama-70B Uncensored v2 Unbiased Reasoner, i1-Q5_K_M, 128K ctx
+- **mistral** — Mistral-Medium-3.5-128B, UD-Q5_K_XL, 32K ctx
+- **diamond** — L3.3-70B Magnum Diamond, i1-Q5_K_M, 32K ctx
+
+Multimodal projectors are only loaded on an explicit `--mmproj`.
 
 ## Architecture
 
