@@ -152,6 +152,7 @@ them are served by the Vulkan build — the ROCm build is opt-in per model
 - **qwen** — Qwen3.6-27B uncensored, Q8_K_P, 64K ctx, mmproj available
 - **qwen3.8** — Qwen3.8-27B uncensored v4, Q6_K, 64K ctx, mmproj available; thinking is locked off in the baked chat template
 - **qwen-vl** — Qwen3-VL-8B vision-language uncensored, Q8_0, 8K ctx, mmproj available
+- **muse** — Muse-Glimmer-30B abliterated aggressive (Meta base, agentic), Q8_0, 128K ctx, mmproj available
 - **gemma** — Gemma-4-31B-it uncensored, Q8_0, 128K ctx
 - **gemma-moe** — Gemma-4-26B-A4B-it MoE uncensored, Q8_0, 128K ctx
 - **minimax** — MiniMax-M2.7, UD-IQ3_S, 64K ctx
