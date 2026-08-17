@@ -144,16 +144,17 @@ workflow is unchanged.
 
 ## Models
 
-- **qwen-moe** — Qwen3.6-35B-A3B MoE uncensored (ROCm)
-- **qwen-vl** — Qwen3-VL-8B vision-language uncensored (ROCm)
-- **qwen** — Qwen3.6-27B uncensored (ROCm)
-- **gemma** — Gemma-4-31B-it (ROCm)
-- **gemma-unc** — Gemma-4-31B-it uncensored (ROCm)
+- **qwen-moe** — Qwen3.6-35B-A3B MoE uncensored (Vulkan)
+- **qwen-vl** — Qwen3-VL-8B vision-language uncensored (Vulkan)
+- **qwen** — Qwen3.6-27B uncensored (Vulkan)
+- **qwen3.8** — Qwen3.8-27B uncensored v4, Q6_K + mmproj, thinking off in the baked template (Vulkan)
+- **gemma** — Gemma-4-31B-it (Vulkan)
+- **gemma-unc** — Gemma-4-31B-it uncensored (Vulkan)
 - **gemma-moe** — Gemma-4-26B-A4B-it MoE (Vulkan)
 - **gemma-moe-unc** — Gemma-4-26B-A4B-it uncensored MoE (Vulkan)
 - **minimax** — MiniMax-M2.7 (Vulkan)
-- **r1-unc** — DeepSeek-R1-Distill-Llama-70B-Uncensored-v2 Q8_0 (ROCm)
-- **r1-reason** — DeepSeek-R1-Distill-Llama-70B Unbiased Reasoner i1-Q6K (ROCm)
+- **r1-unc** — DeepSeek-R1-Distill-Llama-70B-Uncensored-v2 Q8_0 (Vulkan)
+- **r1-reason** — DeepSeek-R1-Distill-Llama-70B Unbiased Reasoner i1-Q6K (Vulkan)
 - **mistral** — Mistral-Medium-3.5-128B (Vulkan)
 
 ## Architecture
