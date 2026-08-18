@@ -208,8 +208,25 @@ tokens). They are the slowest models here and gain the most:
 
 | | without | with | acceptance |
 | --- | --- | --- | --- |
-| `llama3.3` (Q6_K, 57.9 GB) | 3.85 | **10.34** | 54 % |
+| `llama3.3` (Q6_K, 57.9 GB) | 3.85 | **7.59** | 31 % |
 | `diamond` (Q5_K_M, 49.9 GB) | 4.49 | **8.78** | 34 % |
+| `gemma` (Q8_0, 32.6 GB) | 6.62 | **11.91** | 36 % |
+
+`gemma` drafts from a gemma-4-E2B; the two 70B share one Llama-3.2-1B. The draft's
+quant is its own tradeoff, since its cost is bandwidth and its benefit is accuracy:
+on German prose Q6_K won (7.59) over both Q8_0 (7.32) and Q4_K_M (7.51).
+
+That `llama3.3` figure is measured on **German** prose, which is what the model is
+kept for. The same prompt in English accepts 54 % and reaches 10.34 t/s — language
+alone nearly doubles the gain, so an English benchmark would badly overstate what
+this box does in practice.
+
+**Never on an MoE.** Measured on `qwen-moe`: 44.58 t/s plain against 4.55 t/s with a
+draft, a tenfold loss. An MoE reads only its active experts per token, so it is
+already fast and a draft costs more than the tokens it saves; batch-verifying N
+tokens then routes each to its own experts, widening the read instead of sharing
+it. `qwen-moe` and `gemma-moe` declare no `spec_args`, which makes `--spec on`
+refuse outright.
 
 Diamond gains less because Magnum is heavily retrained, so a stock draft predicts
 it worse. Acceptance also depends on the text: prose and dialogue run 15-20 points
