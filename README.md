@@ -96,8 +96,9 @@ what its template actually reads:
 Level names differ per model, so `reasoning_levels` maps the unified scale onto
 what the template accepts — templates raise on names they do not know (stock
 Qwen3.8 knows only `low`, `medium`, `xhigh`). `muse` therefore maps `max` → `xhigh`
-while keeping `high` → `high`. Asking for something a model cannot do fails
-immediately, before any port opens or any weight is read:
+while keeping `high` → `high`; `qwen3.8` has no `high` at all and folds both onto
+`xhigh`. Asking for something a model cannot do fails immediately, before any
+port opens or any weight is read:
 
 ```
 $ ./run.sh start qwen 1 --reasoning low
@@ -105,15 +106,37 @@ Error: model 'qwen' supports on/off and a token budget, but no reasoning levels.
        Use --reasoning on, off, or a token budget (e.g. --reasoning 2048).
 ```
 
-`probe-reasoning` reads the chat template out of every downloaded GGUF and shows
-what it really supports next to what `models.conf` claims — the same signal
-llama.cpp probes at load time:
+**A client can override all of this per request.** `--reasoning` is a default, not
+a lock: `chat_template_kwargs: {"enable_thinking": true}` in a request beats
+`--reasoning off --reasoning-budget 0` and reopens `<think>`. A bare
+`reasoning_effort` field does not, nor does an Anthropic `thinking` block — only
+`chat_template_kwargs`, because it goes straight into the template. llama.cpp's
+own web UI sends it whenever its **Reasoning** dropdown is on a level rather than
+on `Default`, which is the usual reason a slot started with `--reasoning off`
+still thinks. `Off` there works too; only `Default` leaves the decision to the
+server. Check what the server really builds with `/apply-template`, which renders
+the prompt without generating:
+
+```
+$ curl -s localhost:8001/apply-template -H 'Content-Type: application/json' \
+    -d '{"messages":[{"role":"user","content":"Hi"}]}' | jq -r .prompt | tail -6
+<|im_start|>assistant
+<think>
+
+</think>
+
+```
+
+`probe-reasoning` reads the chat template every downloaded model actually runs
+with and shows what it really supports next to what `models.conf` claims — the
+same signal llama.cpp probes at load time. Where `extra_args` override the baked
+template with `--chat-template-file`, it reads that file instead and names it:
 
 ```
 $ ./run.sh probe-reasoning
   MODEL       CONFIGURED  TEMPLATE    READS
   qwen        toggle      toggle      enable_thinking
-  qwen3.8     locked-off  locked-off  -
+  qwen3.8     effort      effort      enable_thinking, reasoning_effort  [qwen3.8-unc.jinja]
   muse        effort      effort      reasoning_strength
   minimax     unknown     -           not downloaded
 ```
@@ -206,7 +229,7 @@ them are served by the Vulkan build — the ROCm build is opt-in per model
 
 - **qwen-moe** — Qwen3.6-35B-A3B MoE uncensored, Q8_K_P, 64K ctx, mmproj available
 - **qwen** — Qwen3.6-27B uncensored, Q8_K_P, 64K ctx, mmproj available
-- **qwen3.8** — Qwen3.8-27B uncensored v4, Q6_K, 64K ctx, mmproj available; thinking is locked off in the baked chat template
+- **qwen3.8** — Qwen3.8-27B uncensored v4, Q6_K, 64K ctx, mmproj available; runs `templates/qwen3.8-unc.jinja` instead of the baked template, which restores thinking
 - **qwen-vl** — Qwen3-VL-8B vision-language uncensored, Q8_0, 8K ctx, mmproj available
 - **muse** — Muse-Glimmer-30B abliterated aggressive (Meta base, agentic), Q8_0, 128K ctx, mmproj available
 - **gemma** — Gemma-4-31B-it uncensored, Q8_0, 128K ctx

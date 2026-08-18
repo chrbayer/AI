@@ -886,10 +886,13 @@ KVPY
     return 0
 }
 
-# Read the chat template out of each downloaded GGUF and report what it actually
+# Read the chat template each model actually runs with and report what it
 # supports, next to what models.conf claims. This is the same signal llama.cpp
 # probes at load time (jinja::caps_*): enable_thinking for on/off,
-# reasoning_effort / reasoning_strength for levels.
+# reasoning_effort / reasoning_strength for levels. The template is the one baked
+# into the GGUF unless extra_args override it with --chat-template-file, which is
+# what the server would then load — probing the GGUF there would report the
+# template the model ships with rather than the one it runs.
 #
 # Usage: probe-reasoning [model]
 cmd_probe_reasoning() {
@@ -913,26 +916,46 @@ cmd_probe_reasoning() {
 
     local entry
     for entry in "${_MODELS[@]}"; do
-        IFS='|' read -r m_name _ m_model _ _ _ _ _ _ _ _ _ _ _ m_reasoning _ <<< "$entry"
+        IFS='|' read -r m_name _ m_model _ _ _ m_args _ _ _ _ _ _ _ m_reasoning _ <<< "$entry"
         [[ -n "$want" && "$m_name" != "$want" ]] && continue
         local path="${m_model//\~/$HOME}"
+
         if [[ ! -f "$path" ]]; then
             # ASCII dash: bash pads printf by bytes, so a multibyte one misaligns.
             printf "  %-11s %-11s %-11s %s\n" "$m_name" "$m_reasoning" "-" "not downloaded"
             continue
         fi
-        GGUF_PY="$gguf_py" python3 - "$m_name" "$m_reasoning" "$path" <<'PROBEPY'
+        # --chat-template-file <path> anywhere in extra_args wins over the GGUF.
+        # read -ra rather than an unquoted expansion: args are split on spaces
+        # here, but a stray glob in them must not hit the filesystem.
+        local tmpl_file="" prev=""
+        local -a args_arr=()
+        read -ra args_arr <<< "$m_args"
+        local word
+        for word in "${args_arr[@]}"; do
+            [[ "$prev" == "--chat-template-file" ]] && { tmpl_file="$word"; break; }
+            prev="$word"
+        done
+        GGUF_PY="$gguf_py" python3 - "$m_name" "$m_reasoning" "$path" "$tmpl_file" <<'PROBEPY'
 import os, sys
 if os.environ.get("GGUF_PY"):
     sys.path.insert(0, os.environ["GGUF_PY"])
 from gguf import GGUFReader
 
-name, configured, path = sys.argv[1], sys.argv[2], sys.argv[3]
+name, configured, path, tmpl_file = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 
-tmpl = None
-for f in GGUFReader(path).fields.values():
-    if f.name == "tokenizer.chat_template":
-        tmpl = f.contents()
+tmpl, source = None, ""
+if tmpl_file:
+    source = f"  [{os.path.basename(tmpl_file)}]"
+    if not os.path.isfile(tmpl_file):
+        print(f"  {name:<11} {configured:<11} {'?':<11} --chat-template-file {tmpl_file} is missing")
+        sys.exit(0)
+    with open(tmpl_file, encoding="utf-8") as fh:
+        tmpl = fh.read()
+else:
+    for f in GGUFReader(path).fields.values():
+        if f.name == "tokenizer.chat_template":
+            tmpl = f.contents()
 
 if tmpl is None:
     print(f"  {name:<11} {configured:<11} {'—':<11} no chat template in the GGUF")
@@ -950,7 +973,7 @@ else:
     seen = "none"
 
 mark = "" if seen == configured else "   <-- differs"
-print(f"  {name:<11} {configured:<11} {seen:<11} {', '.join(reads) or '—'}{mark}")
+print(f"  {name:<11} {configured:<11} {seen:<11} {', '.join(reads) or '—'}{source}{mark}")
 PROBEPY
     done
     return 0
