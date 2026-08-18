@@ -198,11 +198,34 @@ and can. This is why the entry runs the larger Q8 file even though it is 4 GB
 more to read per token: on raw bandwidth Q8 is the slower choice (7.22 against
 8.07 t/s), but the better head buys back more than it costs.
 
-Only Qwen3.8 carries such a head today. Qwen3.6 (`qwen`, `qwen-moe`) is an
-MTP-capable architecture in llama.cpp but its GGUFs contain no `nextn` tensors,
-and llama/gemma4/muse-glimmer are not MTP architectures at all. Those would need
-`--spec-type draft-simple` with a separate small model sharing the exact
-vocabulary — a real download, unlike the MTP path.
+Only Qwen3.8 carries such a head. Qwen3.6 (`qwen`, `qwen-moe`) is an MTP-capable
+architecture in llama.cpp but its GGUFs contain no `nextn` tensors, and
+llama/gemma4/muse-glimmer are not MTP architectures at all.
+
+The two 70B models get there the other way, with `--spec-type draft-simple` and a
+separate Llama-3.2-1B whose tokenizer is identical (checked by hashing all 128256
+tokens). They are the slowest models here and gain the most:
+
+| | without | with | acceptance |
+| --- | --- | --- | --- |
+| `llama3.3` (Q6_K, 57.9 GB) | 3.85 | **10.34** | 54 % |
+| `diamond` (Q5_K_M, 49.9 GB) | 4.49 | **8.78** | 34 % |
+
+Diamond gains less because Magnum is heavily retrained, so a stock draft predicts
+it worse. Acceptance also depends on the text: prose and dialogue run 15-20 points
+below technical writing, the widest spread in these measurements — wider than
+between any two draft models.
+
+An abliterated draft was measured against both targets and lost 5 of 6 runs, which
+is worth recording because the opposite sounds obvious. A refusal only ever affects
+the first token of an answer, and speculation never re-decides it: the draft is
+always fed the accepted prefix, so once the target has declined to refuse, a stock
+draft follows the context like any other.
+
+Unlike an MTP head, that draft is a second file from a second repo, so
+`_model_hf_draft` holds `"<repo> <include-pattern>"` and `download` fetches it
+after the model. Its destination is not configured — it is the directory of the
+`--model-draft` path in `_model_spec_args`, so the two cannot drift apart.
 
 ### Clearing the KV cache
 
@@ -295,10 +318,10 @@ them are served by the Vulkan build — the ROCm build is opt-in per model
 - **gemma** — Gemma-4-31B-it uncensored, Q8_0, 128K ctx
 - **gemma-moe** — Gemma-4-26B-A4B-it MoE uncensored, Q8_0, 128K ctx
 - **minimax** — MiniMax-M2.7, UD-IQ3_S, 64K ctx
-- **llama3.3** — Llama-3.3-70B-Instruct abliterated, Q6_K, 32K ctx
+- **llama3.3** — Llama-3.3-70B-Instruct abliterated, Q6_K, 32K ctx; drafted by Llama-3.2-1B (~2.7×)
 - **r1** — DeepSeek-R1-Distill-Llama-70B Uncensored v2 Unbiased Reasoner, i1-Q5_K_M, 128K ctx
 - **mistral** — Mistral-Medium-3.5-128B, UD-Q5_K_XL, 32K ctx
-- **diamond** — L3.3-70B Magnum Diamond, i1-Q5_K_M, 32K ctx
+- **diamond** — L3.3-70B Magnum Diamond, i1-Q5_K_M, 32K ctx; drafted by the same Llama-3.2-1B (~2.0×)
 
 Multimodal projectors are only loaded on an explicit `--mmproj`.
 

@@ -64,7 +64,7 @@ source "$SCRIPT_DIR/models.conf"
 _resolve_model() {
     local name="$1"
     for entry in "${_MODELS[@]}"; do
-        IFS='|' read -r m_name m_binary m_model m_mmproj m_alias m_label m_args m_client m_rocm_env m_hf_repo m_hf_includes m_hf_dir m_no_reasoning_args m_ctx m_reasoning m_reasoning_levels m_spec_args <<< "$entry"
+        IFS='|' read -r m_name m_binary m_model m_mmproj m_alias m_label m_args m_client m_rocm_env m_hf_repo m_hf_includes m_hf_dir m_no_reasoning_args m_ctx m_reasoning m_reasoning_levels m_spec_args m_hf_draft <<< "$entry"
         if [[ "$m_name" == "$name" ]]; then
             _r_name="$m_name"
             _r_binary="$m_binary"
@@ -83,6 +83,7 @@ _resolve_model() {
             _r_reasoning="${m_reasoning:-unknown}"
             _r_reasoning_levels="${m_reasoning_levels:-}"
             _r_spec_args=($m_spec_args)
+            _r_hf_draft="${m_hf_draft:-}"
             return 0
         fi
     done
@@ -1387,6 +1388,38 @@ cmd_help() {
 
 # ── Download ────────────────────────────────────────────────
 
+# Where a model's draft belongs: the directory of the file its spec_args point
+# --model-draft at. Deriving it keeps one source of truth for that path, instead
+# of a second field that silently disagrees after an edit.
+_draft_dir_from_spec() {
+    local prev="" word
+    for word in "$@"; do
+        case "$prev" in
+            -md|--model-draft|--spec-draft-model) dirname "$word"; return 0 ;;
+        esac
+        prev="$word"
+    done
+    return 1
+}
+
+# A model's draft ships in its own repo (unlike an in-GGUF MTP head), so it needs
+# a second download. _model_hf_draft holds "<repo> <include-pattern>".
+_download_draft() {
+    local draft_spec="$1" force="${2:-}"
+    shift 2 2>/dev/null || shift $#
+    local repo pat
+    read -r repo pat <<< "$draft_spec"
+    [[ -z "$repo" ]] && return 0
+    local dir
+    dir=$(_draft_dir_from_spec "$@") || {
+        echo "  Skipping draft: spec_args name no --model-draft path" >&2
+        return 0
+    }
+    echo "  Draft model:"
+    _download_model "$repo" "$dir" "$pat" "$force"
+}
+
+
 _download_model() {
     local repo="$1"
     local model_path="$2"
@@ -1438,7 +1471,7 @@ cmd_download() {
     if [[ "$target" == "all" ]]; then
         echo "Downloading all models..."
         for entry in "${_MODELS[@]}"; do
-            IFS='|' read -r m_name _ m_model _ _ m_label _ _ _ m_hf_repo m_hf_includes m_hf_dir _ <<< "$entry"
+            IFS='|' read -r m_name _ m_model _ _ m_label _ _ _ m_hf_repo m_hf_includes m_hf_dir _ _ _ _ m_spec_args m_hf_draft <<< "$entry"
             if [[ -z "$m_hf_repo" ]]; then
                 echo "  Skipping $m_label: no download info configured"
                 continue
@@ -1451,6 +1484,10 @@ cmd_download() {
             fi
             echo "=== $m_label ==="
             _download_model "$m_hf_repo" "$model_dir" "$m_hf_includes" "$force"
+            if [[ -n "$m_hf_draft" ]]; then
+                local -a sa=(); read -ra sa <<< "$m_spec_args"
+                _download_draft "$m_hf_draft" "$force" "${sa[@]}"
+            fi
         done
         return
     fi
@@ -1469,6 +1506,8 @@ cmd_download() {
         model_dir="$(dirname "${_r_model//\~/$HOME}")"
     fi
     _download_model "$_r_hf_repo" "$model_dir" "$_r_hf_includes" "$force"
+    [[ -n "$_r_hf_draft" ]] && _download_draft "$_r_hf_draft" "$force" "${_r_spec_args[@]}"
+    return 0
 }
 
 # ── Dispatch ────────────────────────────────────────────────
