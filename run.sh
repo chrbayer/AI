@@ -2,7 +2,7 @@
 # Unified LLM server manager for Claude Code.
 # Usage:
 #   ./run.sh                                     list available models
-#   ./run.sh start <name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj]  start server (+ proxy with --proxy) in background (slot 1-3, default 1)
+#   ./run.sh start <name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off]  start server (+ proxy with --proxy) in background (slot 1-3, default 1)
 #   ./run.sh stop [slot]                         stop slot (or all if omitted)
 #   ./run.sh status                              show running state
 #   ./run.sh clear-kv [slot]                     drop the KV cache without restarting (all slots, or one)
@@ -64,7 +64,7 @@ source "$SCRIPT_DIR/models.conf"
 _resolve_model() {
     local name="$1"
     for entry in "${_MODELS[@]}"; do
-        IFS='|' read -r m_name m_binary m_model m_mmproj m_alias m_label m_args m_client m_rocm_env m_hf_repo m_hf_includes m_hf_dir m_no_reasoning_args m_ctx m_reasoning m_reasoning_levels <<< "$entry"
+        IFS='|' read -r m_name m_binary m_model m_mmproj m_alias m_label m_args m_client m_rocm_env m_hf_repo m_hf_includes m_hf_dir m_no_reasoning_args m_ctx m_reasoning m_reasoning_levels m_spec_args <<< "$entry"
         if [[ "$m_name" == "$name" ]]; then
             _r_name="$m_name"
             _r_binary="$m_binary"
@@ -82,6 +82,7 @@ _resolve_model() {
             _r_ctx="${m_ctx:-}"
             _r_reasoning="${m_reasoning:-unknown}"
             _r_reasoning_levels="${m_reasoning_levels:-}"
+            _r_spec_args=($m_spec_args)
             return 0
         fi
     done
@@ -335,6 +336,7 @@ cmd_start() {
     local start_proxy=false     # true = also start proxy.py (timestamp normalization for prompt caching)
     local public=false          # true = token auth + hardening + stunnel TLS front for the VPS
     local max_predict=""        # "" = model/server default; N = cap tokens per generation
+    local spec=""               # "" = on when the model declares spec_args; on|off forces it
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -353,12 +355,14 @@ cmd_start() {
             --host) _need_value "$@" || exit 1; host="$2"; shift 2 ;;
             --gpu-priority) _need_value "$@" || exit 1; gpu_priority="$2"; shift 2 ;;
             --mmproj) use_mmproj=true; shift ;;
+            --spec) _need_value "$@" || exit 1; spec="$2"; shift 2 ;;
+            --no-spec) spec=off; shift ;;                     # alias for --spec off
             -*) echo "Unknown option: $1"; exit 1 ;;
             *) if [[ -z "$name" ]]; then name="$1"; elif [[ "$slot" == "1" ]]; then slot="$1"; fi; shift ;;
         esac
     done
 
-    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj]"; exit 1; }
+    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off]"; exit 1; }
     [[ "$slot" != "1" && "$slot" != "2" && "$slot" != "3" ]] && { echo "Error: slot must be 1, 2, or 3"; exit 1; }
     if [[ -n "$parallel" && ! "$parallel" =~ ^[1-9][0-9]*$ ]]; then
         echo "Error: --parallel requires a positive integer (got '$parallel')"; exit 1
@@ -427,6 +431,16 @@ cmd_start() {
         fi
     fi
 
+    if [[ -n "$spec" && "$spec" != "on" && "$spec" != "off" ]]; then
+        echo "Error: --spec takes on or off; got '$spec'" >&2
+        exit 1
+    fi
+    if [[ "$spec" == "on" && ${#_r_spec_args[@]} -eq 0 ]]; then
+        echo "Error: model '$_r_name' declares no speculative decoding in models.conf." >&2
+        echo "       It needs a draft head in its own GGUF to speculate without a second model." >&2
+        exit 1
+    fi
+
     # Build llama-server command
     local -a cmd=("${_r_binary}" \
         --model "$model_path" \
@@ -463,6 +477,9 @@ cmd_start() {
     [[ "$mlock" == true ]] && cmd+=(--mlock)
     # Whatever --reasoning translated into for this model (may be empty).
     [[ ${#_reasoning_args[@]} -gt 0 ]] && cmd+=("${_reasoning_args[@]}")
+    # Speculative decoding: on whenever the model declares it, unless --spec off.
+    # The draft head ships inside the model's own GGUF, so this costs no extra file.
+    [[ "$spec" != "off" && ${#_r_spec_args[@]} -gt 0 ]] && cmd+=("${_r_spec_args[@]}")
 
     # The proxy is opt-in (--proxy): it only rewrites time/date stamps to keep the
     # prompt cache warm, which a client that sends no such stamps does not need.
@@ -569,6 +586,13 @@ cmd_start() {
                 echo "        the flags are passed through, run '$0 probe-reasoning' once it is downloaded."
         else
             echo "Reasoning: template default (model supports: $_r_reasoning)"
+        fi
+        if [[ ${#_r_spec_args[@]} -eq 0 ]]; then
+            echo "Speculative: not available for this model"
+        elif [[ "$spec" == "off" ]]; then
+            echo "Speculative: off (--spec off)"
+        else
+            echo "Speculative: on (${_r_spec_args[*]})"
         fi
         [[ "$mlock" == true ]] && echo "mlock: enabled (--mlock)"
         [[ -n "$gpu_priority" ]] && echo "GPU priority: $gpu_priority (GGML_VK_QUEUE_PRIORITY; needs patched ggml-vulkan)"
@@ -1335,6 +1359,8 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  --no-reasoning / --reasoning-budget N: kept as aliases; --parallel N: server slots (default 1)"
     printf "  %-20s %s\n" ""                      "  --ctx N: override the model's default context size"
     printf "  %-20s %s\n" ""                      "  --cache-ram N: prompt-cache host-RAM cap in MiB (0=disable, -1=no limit; default 8192)"
+    printf "  %-20s %s\n" ""                      "  --spec on|off / --no-spec: speculative decoding; on by default where the"
+    printf "  %-20s %s\n" ""                      "    model's own GGUF carries a draft head (currently qwen3.8)"
     printf "  %-20s %s\n" ""                      "  --verbose: -lv 4, reveals ggml/backend + buffer-size startup logs (more runtime logging too)"
     printf "  %-20s %s\n" ""                      "  --public: token auth + hardening + mTLS front for the VPS (needs gen-certs)"
     printf "  %-20s %s\n" ""                      "  --max-predict N: cap tokens per generation (-1=no limit; --public defaults to 8192)"

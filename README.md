@@ -144,6 +144,50 @@ $ ./run.sh probe-reasoning
 It needs the `gguf` python module — either installed, or a llama.cpp checkout
 (`LLAMA_SRC`, default `~/src/llama.cpp`).
 
+### Speculative decoding
+
+Generation on this box is bound by memory bandwidth, not compute. Every token
+drags the whole model through memory once, so the token rate is simply
+*bandwidth ÷ file size* — two measured points, both landing on ~220 GB/s:
+
+```
+Q8 27B   35.3 GB × 6.29 t/s = 222 GB/s
+Q6_K 27B 27.5 GB × 7.98 t/s = 219 GB/s
+```
+
+Meanwhile `pp512` runs at 281 t/s against `tg128`'s 6.3 — about 45× more compute
+sitting idle. Speculative decoding spends that idle compute: a cheap draft head
+proposes N tokens and the big model verifies all of them in **one** pass, for
+roughly the price of a single token.
+
+Qwen3.8 ships its own draft head — the multi-token-prediction layer in `blk.64`,
+which llama.cpp otherwise skips at load ("unused tensor ... ignoring"). No second
+model, no extra download. `models.conf` declares it per model:
+
+```bash
+_model_spec_args=(--spec-type draft-mtp)
+```
+
+It is on by default wherever it is declared; `--spec off` (or `--no-spec`) turns
+it off, `--spec on` errors out on a model that has no draft head. Measured on
+qwen3.8 at its production context size:
+
+| | tokens/s | acceptance | VRAM |
+| --- | --- | --- | --- |
+| off | 8.07 | — | 29.9 GB |
+| on | **14.85** | 47 % | 32.6 GB |
+
+That is 1.84× for 2.7 GB. `--spec-draft-n-max` stays at its default of 3 — deeper
+drafts guess on top of guesses and lose acceptance faster than they save passes
+(4 → 15.6, 5 → 14.0, 6 → 13.1 t/s). The output distribution is unchanged by
+construction: the big model verifies every token, it only does so in batches.
+
+Only Qwen3.8 carries such a head today. Qwen3.6 (`qwen`, `qwen-moe`) is an
+MTP-capable architecture in llama.cpp but its GGUFs contain no `nextn` tensors,
+and llama/gemma4/muse-glimmer are not MTP architectures at all. Those would need
+`--spec-type draft-simple` with a separate small model sharing the exact
+vocabulary — a real download, unlike the MTP path.
+
 ### Clearing the KV cache
 
 llama-server keeps each conversation in a server slot; a new prompt reuses the
