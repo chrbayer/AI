@@ -165,7 +165,7 @@ which llama.cpp otherwise skips at load ("unused tensor ... ignoring"). No secon
 model, no extra download. `models.conf` declares it per model:
 
 ```bash
-_model_spec_args=(--spec-type draft-mtp)
+_model_spec_args=(--spec-type draft-mtp --spec-draft-n-max 4)
 ```
 
 It is on by default wherever it is declared; `--spec off` (or `--no-spec`) turns
@@ -174,13 +174,29 @@ qwen3.8 at its production context size:
 
 | | tokens/s | acceptance | VRAM |
 | --- | --- | --- | --- |
-| off | 8.07 | — | 29.9 GB |
-| on | **14.85** | 47 % | 32.6 GB |
+| off | 7.22 | — | 33.4 GB |
+| on | **15.48** | 58 % | 36.9 GB |
 
-That is 1.84× for 2.7 GB. `--spec-draft-n-max` stays at its default of 3 — deeper
-drafts guess on top of guesses and lose acceptance faster than they save passes
-(4 → 15.6, 5 → 14.0, 6 → 13.1 t/s). The output distribution is unchanged by
-construction: the big model verifies every token, it only does so in batches.
+That is 2.14× for 3.5 GB. The output distribution is unchanged by construction:
+the big model verifies every token, it only does so in batches.
+
+How deep to draft is the one thing worth tuning, and the answer depends on the
+draft head's precision rather than on taste. Both quants of this model, swept:
+
+| n-max | Q6_K head | Q8_K_P head |
+| --- | --- | --- |
+| 3 | **14.85** (47 %) | 14.36 (61 %) |
+| 4 | 14.60 (38 %) | **15.48** (58 %) |
+| 5 | — | 15.20 (51 %) |
+| 6 | 13.06 (28 %) | 14.87 (46 %) |
+| 8 | — | 10.95 (34 %) |
+
+Drafting deeper stacks guesses on guesses, so acceptance decays with every step
+— the question is only whether the saved verification pass outweighs it. The Q6
+head starts at 47 % and cannot afford a fourth step; the Q8 head starts at 61 %
+and can. This is why the entry runs the larger Q8 file even though it is 4 GB
+more to read per token: on raw bandwidth Q8 is the slower choice (7.22 against
+8.07 t/s), but the better head buys back more than it costs.
 
 Only Qwen3.8 carries such a head today. Qwen3.6 (`qwen`, `qwen-moe`) is an
 MTP-capable architecture in llama.cpp but its GGUFs contain no `nextn` tensors,
@@ -273,7 +289,7 @@ them are served by the Vulkan build — the ROCm build is opt-in per model
 
 - **qwen-moe** — Qwen3.6-35B-A3B MoE uncensored, Q8_K_P, 64K ctx, mmproj available
 - **qwen** — Qwen3.6-27B uncensored, Q8_K_P, 64K ctx, mmproj available
-- **qwen3.8** — Qwen3.8-27B uncensored v4, Q6_K, 64K ctx, mmproj available; runs `templates/qwen3.8-unc.jinja` instead of the baked template, which restores thinking
+- **qwen3.8** — Qwen3.8-27B uncensored (HauhauCS), Q8_K_P, 64K ctx, mmproj available; drafts its own tokens from the MTP head in the GGUF (~2.1×), and runs `templates/qwen3.8-unc.jinja` for the uncensored system default
 - **qwen-vl** — Qwen3-VL-8B vision-language uncensored, Q8_0, 8K ctx, mmproj available
 - **muse** — Muse-Glimmer-30B abliterated aggressive (Meta base, agentic), Q8_0, 128K ctx, mmproj available
 - **gemma** — Gemma-4-31B-it uncensored, Q8_0, 128K ctx
