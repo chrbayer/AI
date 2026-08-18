@@ -64,7 +64,7 @@ source "$SCRIPT_DIR/models.conf"
 _resolve_model() {
     local name="$1"
     for entry in "${_MODELS[@]}"; do
-        IFS='|' read -r m_name m_binary m_model m_mmproj m_alias m_label m_args m_client m_rocm_env m_hf_repo m_hf_includes m_hf_dir m_no_reasoning_args m_ctx m_reasoning m_reasoning_levels m_spec_args m_hf_draft <<< "$entry"
+        IFS='|' read -r m_name m_binary m_model m_mmproj m_alias m_label m_args m_client m_rocm_env m_hf_repo m_hf_includes m_hf_dir m_no_reasoning_args m_ctx m_reasoning m_reasoning_levels m_spec_args m_hf_draft m_hf_mmproj <<< "$entry"
         if [[ "$m_name" == "$name" ]]; then
             _r_name="$m_name"
             _r_binary="$m_binary"
@@ -84,6 +84,7 @@ _resolve_model() {
             _r_reasoning_levels="${m_reasoning_levels:-}"
             _r_spec_args=($m_spec_args)
             _r_hf_draft="${m_hf_draft:-}"
+            _r_hf_mmproj="${m_hf_mmproj:-}"
             return 0
         fi
     done
@@ -1402,8 +1403,9 @@ _draft_dir_from_spec() {
     return 1
 }
 
-# A model's draft ships in its own repo (unlike an in-GGUF MTP head), so it needs
-# a second download. _model_hf_draft holds "<repo> <include-pattern>".
+# Some files a model needs live in a different repo than the model itself: the
+# draft it speculates with, and — for the uncensored gemmas — the vision projector,
+# which only the stock repo ships. Both fields hold "<repo> <include-pattern>".
 _download_draft() {
     local draft_spec="$1" force="${2:-}"
     shift 2 2>/dev/null || shift $#
@@ -1417,6 +1419,17 @@ _download_draft() {
     }
     echo "  Draft model:"
     _download_model "$repo" "$dir" "$pat" "$force"
+}
+
+# Same idea for the mmproj, whose destination is simply where _model_mmproj says
+# the file goes.
+_download_mmproj() {
+    local spec="$1" mmproj_path="$2" force="${3:-}"
+    local repo pat
+    read -r repo pat <<< "$spec"
+    [[ -z "$repo" || -z "$mmproj_path" ]] && return 0
+    echo "  Vision projector:"
+    _download_model "$repo" "$(dirname "${mmproj_path//\~/$HOME}")" "$pat" "$force"
 }
 
 
@@ -1471,7 +1484,7 @@ cmd_download() {
     if [[ "$target" == "all" ]]; then
         echo "Downloading all models..."
         for entry in "${_MODELS[@]}"; do
-            IFS='|' read -r m_name _ m_model _ _ m_label _ _ _ m_hf_repo m_hf_includes m_hf_dir _ _ _ _ m_spec_args m_hf_draft <<< "$entry"
+            IFS='|' read -r m_name _ m_model m_mmproj _ m_label _ _ _ m_hf_repo m_hf_includes m_hf_dir _ _ _ _ m_spec_args m_hf_draft m_hf_mmproj <<< "$entry"
             if [[ -z "$m_hf_repo" ]]; then
                 echo "  Skipping $m_label: no download info configured"
                 continue
@@ -1488,6 +1501,7 @@ cmd_download() {
                 local -a sa=(); read -ra sa <<< "$m_spec_args"
                 _download_draft "$m_hf_draft" "$force" "${sa[@]}"
             fi
+            [[ -n "$m_hf_mmproj" ]] && _download_mmproj "$m_hf_mmproj" "$m_mmproj" "$force"
         done
         return
     fi
@@ -1507,6 +1521,7 @@ cmd_download() {
     fi
     _download_model "$_r_hf_repo" "$model_dir" "$_r_hf_includes" "$force"
     [[ -n "$_r_hf_draft" ]] && _download_draft "$_r_hf_draft" "$force" "${_r_spec_args[@]}"
+    [[ -n "$_r_hf_mmproj" ]] && _download_mmproj "$_r_hf_mmproj" "$_r_mmproj" "$force"
     return 0
 }
 
