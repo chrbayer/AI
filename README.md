@@ -221,6 +221,14 @@ kept for. The same prompt in English accepts 54 % and reaches 10.34 t/s — lang
 alone nearly doubles the gain, so an English benchmark would badly overstate what
 this box does in practice.
 
+Size ratio is what decides it, not the quant level. Muse has neither an MTP head
+nor a small sibling, so the only draft available is a coarser copy of itself —
+Q2_K at 10.7 GB against 29.6 GB, a ratio of 1:2.8 where the working cases sit at
+1:10 to 1:44. It loses: 7.73 t/s plain against 7.47 (n-max 2) and 7.13 (n-max 3),
+despite 58 % acceptance, because a 30B draft also runs a full attention pass per
+proposal on top of its bandwidth cost. Muse therefore declares no `spec_args`, and
+the 10.7 GB file was deleted rather than kept.
+
 **Never on an MoE.** Measured on `qwen-moe`: 44.58 t/s plain against 4.55 t/s with a
 draft, a tenfold loss. An MoE reads only its active experts per token, so it is
 already fast and a draft costs more than the tokens it saves; batch-verifying N
@@ -243,6 +251,22 @@ Unlike an MTP head, that draft is a second file from a second repo, so
 `_model_hf_draft` holds `"<repo> <include-pattern>"` and `download` fetches it
 after the model. Its destination is not configured — it is the directory of the
 `--model-draft` path in `_model_spec_args`, so the two cannot drift apart.
+
+### Idle CPU (`--poll 0`)
+
+llama.cpp's worker threads busy-wait on GPU completions by default, which shows up
+as 700-1400 % CPU while the GPU does the actual work — enough to make the machine
+feel loaded when it is only waiting. `--poll 0` is in `_common`, measured across
+every model with and without speculation:
+
+| | tokens/s | CPU |
+| --- | --- | --- |
+| polling | 3.85 - 44.54 | 733 - 1400 % |
+| `--poll 0` | within 2 % of it | 22 - 49 % |
+
+Throughput moves by at most 2 % and usually by nothing; two of the ten runs came
+out marginally faster, which is the size of the noise. Waiting is worst *without*
+speculation, since each token leaves the CPU idle longer.
 
 ### Clearing the KV cache
 
