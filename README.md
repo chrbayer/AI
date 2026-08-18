@@ -96,7 +96,7 @@ what its template actually reads:
 Level names differ per model, so `reasoning_levels` maps the unified scale onto
 what the template accepts — templates raise on names they do not know (stock
 Qwen3.8 knows only `low`, `medium`, `xhigh`). `muse` therefore maps `max` → `xhigh`
-while keeping `high` → `high`; `qwen3.8` has no `high` at all and folds both onto
+while keeping `high` → `high`; `qwen` has no `high` at all and folds both onto
 `xhigh`. Asking for something a model cannot do fails immediately, before any
 port opens or any weight is read:
 
@@ -136,7 +136,7 @@ template with `--chat-template-file`, it reads that file instead and names it:
 $ ./run.sh probe-reasoning
   MODEL       CONFIGURED  TEMPLATE    READS
   qwen        toggle      toggle      enable_thinking
-  qwen3.8     effort      effort      enable_thinking, reasoning_effort  [qwen3.8-unc.jinja]
+  qwen        effort      effort      enable_thinking, reasoning_effort  [qwen3.8-unc.jinja]
   muse        effort      effort      reasoning_strength
   minimax     unknown     -           not downloaded
 ```
@@ -170,7 +170,7 @@ _model_spec_args=(--spec-type draft-mtp --spec-draft-n-max 4)
 
 It is on by default wherever it is declared; `--spec off` (or `--no-spec`) turns
 it off, `--spec on` errors out on a model that has no draft head. Measured on
-qwen3.8 at its production context size:
+qwen at its production context size:
 
 | | tokens/s | acceptance | VRAM |
 | --- | --- | --- | --- |
@@ -198,8 +198,8 @@ and can. This is why the entry runs the larger Q8 file even though it is 4 GB
 more to read per token: on raw bandwidth Q8 is the slower choice (7.22 against
 8.07 t/s), but the better head buys back more than it costs.
 
-Only Qwen3.8 carries such a head. Qwen3.6 (`qwen`, `qwen-moe`) is an MTP-capable
-architecture in llama.cpp but its GGUFs contain no `nextn` tensors, and
+Only Qwen3.8 carries such a head. Qwen3.6 (`qwen-moe`) is an MTP-capable
+architecture in llama.cpp but its GGUF contains no `nextn` tensors, and
 llama/gemma4/muse-glimmer are not MTP architectures at all.
 
 The two 70B models get there the other way, with `--spec-type draft-simple` and a
@@ -311,8 +311,7 @@ them are served by the Vulkan build — the ROCm build is opt-in per model
 (`LLAMA_ROCM_BIN`) and is what `bench` compares against.
 
 - **qwen-moe** — Qwen3.6-35B-A3B MoE uncensored, Q8_K_P, 64K ctx, mmproj available
-- **qwen** — Qwen3.6-27B uncensored, Q8_K_P, 64K ctx, mmproj available
-- **qwen3.8** — Qwen3.8-27B uncensored (HauhauCS), Q8_K_P, 64K ctx, mmproj available; drafts its own tokens from the MTP head in the GGUF (~2.1×), and runs `templates/qwen3.8-unc.jinja` for the uncensored system default
+- **qwen** — Qwen3.8-27B uncensored (HauhauCS), Q8_K_P, 64K ctx, mmproj available; drafts its own tokens from the MTP head in the GGUF (~2.1×), and runs `templates/qwen3.8-unc.jinja` for the uncensored system default. Replaced the 3.6-27B entry, which it supersedes outright
 - **qwen-vl** — Qwen3-VL-8B vision-language uncensored, Q8_0, 8K ctx, mmproj available
 - **muse** — Muse-Glimmer-30B abliterated aggressive (Meta base, agentic), Q8_0, 128K ctx, mmproj available
 - **gemma** — Gemma-4-31B-it uncensored, Q8_0, 128K ctx
