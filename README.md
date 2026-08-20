@@ -252,6 +252,18 @@ Unlike an MTP head, that draft is a second file from a second repo, so
 after the model. Its destination is not configured — it is the directory of the
 `--model-draft` path in `_model_spec_args`, so the two cannot drift apart.
 
+### The server outlives its shell
+
+`start` detaches the server with `setsid`, so it runs in its own session with no
+controlling terminal: closing the terminal you started it from no longer sends it
+SIGHUP, and it survives that shell exiting. `stop` and `status` are unaffected —
+they go by the PID file, which the server writes itself just before exec rather
+than taking `$!`, since under job control `$!` names the `setsid` wrapper instead
+of `llama-server`.
+
+The proxy (`--proxy`) and the TLS front (`--public`) are still plain background
+jobs of the calling shell.
+
 ### Idle CPU (`--poll 0`)
 
 llama.cpp's worker threads busy-wait on GPU completions by default, which shows up

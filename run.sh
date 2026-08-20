@@ -627,15 +627,36 @@ cmd_start() {
     # truncates first, preserving the fresh-log-per-start behaviour.
     : > "$server_log"
     printf '%s\n\n' "$config_text" >> "$server_log"
+    # setsid puts the server in its own session, so closing the terminal that ran
+    # `start` no longer sends it SIGHUP and it outlives this shell. stdin comes
+    # from /dev/null for the same reason: nothing left to tie it to a terminal.
+    #
+    # The PID is written by the child itself, right before it execs. $! cannot be
+    # used here: when job control is on, setsid finds itself a process group
+    # leader, forks instead of exec-ing, and $! then names the wrapper rather than
+    # llama-server — which stop and status would later fail to find.
+    local pidfile="$PID_DIR/server-${slot}.pid"
+    rm -f "$pidfile"
     if [[ -n "$_r_rocm_env" ]]; then
-        env LD_PRELOAD=/lib64/libjemalloc.so.2 $gpu_prio_env $_r_rocm_env stdbuf -oL -eL "${cmd[@]}" >> "$server_log" 2>&1 &
+        setsid bash -c 'echo $$ > "$1"; shift; exec "$@"' _ "$pidfile" \
+            env LD_PRELOAD=/lib64/libjemalloc.so.2 $gpu_prio_env $_r_rocm_env stdbuf -oL -eL "${cmd[@]}" \
+            >> "$server_log" 2>&1 < /dev/null &
     else
-        env LD_PRELOAD=/lib64/libjemalloc.so.2 $gpu_prio_env stdbuf -oL -eL "${cmd[@]}" >> "$server_log" 2>&1 &
+        setsid bash -c 'echo $$ > "$1"; shift; exec "$@"' _ "$pidfile" \
+            env LD_PRELOAD=/lib64/libjemalloc.so.2 $gpu_prio_env stdbuf -oL -eL "${cmd[@]}" \
+            >> "$server_log" 2>&1 < /dev/null &
     fi
-    local server_pid=$!
-    echo "$server_pid" > "$PID_DIR/server-${slot}.pid"
+    local server_pid="" _i
+    for _i in $(seq 1 50); do
+        [[ -s "$pidfile" ]] && { server_pid=$(<"$pidfile"); break; }
+        sleep 0.1
+    done
+    if [[ -z "$server_pid" ]]; then
+        echo "Error: the server did not report a PID. See $server_log" >&2
+        return 1
+    fi
 
-    echo "Server running (PID: $server_pid)"
+    echo "Server running (PID: $server_pid, detached)"
 
     # Start the TLS front last, so the port only opens once there is a backend
     # behind it.
