@@ -254,15 +254,16 @@ after the model. Its destination is not configured — it is the directory of th
 
 ### The server outlives its shell
 
-`start` detaches the server with `setsid`, so it runs in its own session with no
-controlling terminal: closing the terminal you started it from no longer sends it
-SIGHUP, and it survives that shell exiting. `stop` and `status` are unaffected —
-they go by the PID file, which the server writes itself just before exec rather
-than taking `$!`, since under job control `$!` names the `setsid` wrapper instead
-of `llama-server`.
+`start` detaches everything it launches — the server, the proxy under `--proxy`,
+the TLS front under `--public` — through `_spawn_detached`. Each runs in its own
+session with no controlling terminal, so closing the terminal you started it from
+no longer sends it SIGHUP and it survives that shell exiting.
 
-The proxy (`--proxy`) and the TLS front (`--public`) are still plain background
-jobs of the calling shell.
+`stop` and `status` are unaffected: they go by the PID file, which the child
+writes itself just before exec rather than the caller taking `$!`. Under job
+control `setsid` finds itself a process group leader and forks instead of
+exec-ing, so `$!` would name the wrapper and the PID file would point at a
+process that has already gone.
 
 ### Idle CPU (`--poll 0`)
 

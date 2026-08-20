@@ -91,6 +91,34 @@ _resolve_model() {
     return 1
 }
 
+# Start a long-lived process in its own session, so it survives the shell that
+# started it: no controlling terminal means no SIGHUP when that terminal closes.
+# Prints the PID and leaves it in $pidfile.
+#
+# The child writes its own PID immediately before exec rather than the caller
+# taking $!. With job control on, setsid finds itself a process group leader and
+# forks instead of exec-ing, so $! would name the wrapper — and stop/status,
+# which read the PID file, would then be pointing at a process that is already
+# gone. Any KEY=VAL environment has to be passed via `env`, since shell-level
+# assignments would not survive being handed on as arguments.
+_spawn_detached() {
+    local pidfile="$1" logfile="$2" mode="$3"; shift 3
+    rm -f "$pidfile"
+    if [[ "$mode" == append ]]; then
+        setsid bash -c 'echo $$ > "$1"; shift; exec "$@"' _ "$pidfile" "$@" \
+            >> "$logfile" 2>&1 < /dev/null &
+    else
+        setsid bash -c 'echo $$ > "$1"; shift; exec "$@"' _ "$pidfile" "$@" \
+            > "$logfile" 2>&1 < /dev/null &
+    fi
+    local i
+    for i in $(seq 1 50); do
+        [[ -s "$pidfile" ]] && { cat "$pidfile"; return 0; }
+        sleep 0.1
+    done
+    return 1
+}
+
 # Guard for value-taking options: bash's `shift 2` quietly fails when only the
 # flag itself is left, and the option loop would then spin forever. Call as
 # `_need_value "$@"` so $1 is the flag and $2 its value.
@@ -493,13 +521,17 @@ cmd_start() {
         # immediately (and nothing is lost when the proxy is killed on stop).
         # LLM_TOKEN_FILE switches the proxy into hardened mode: token check,
         # path allowlist, concurrency and body-size caps. Unset = pass-through.
-        LLM_BACKEND_URL="http://localhost:${port_server}" \
-        LLM_PROXY_HOST="${host:-127.0.0.1}" \
-        LLM_PROXY_PORT="${port_proxy}" \
-        LLM_TOKEN_FILE="$([[ "$public" == true ]] && echo "$TOKEN_FILE")" \
-        python3 -u "$PROXY_SCRIPT" > "$proxy_log" 2>&1 &
-        local proxy_pid=$!
-        echo "$proxy_pid" > "$PID_DIR/proxy-${slot}.pid"
+        local proxy_pid=""
+        proxy_pid=$(_spawn_detached "$PID_DIR/proxy-${slot}.pid" "$proxy_log" truncate \
+            env LLM_BACKEND_URL="http://localhost:${port_server}" \
+                LLM_PROXY_HOST="${host:-127.0.0.1}" \
+                LLM_PROXY_PORT="${port_proxy}" \
+                LLM_TOKEN_FILE="$([[ "$public" == true ]] && echo "$TOKEN_FILE")" \
+                python3 -u "$PROXY_SCRIPT")
+        if [[ -z "$proxy_pid" ]]; then
+            echo "Error: the proxy did not report a PID. See $proxy_log"
+            exit 1
+        fi
 
         local max_wait=10
         for (( i=0; i<max_wait; i++ )); do
@@ -627,30 +659,11 @@ cmd_start() {
     # truncates first, preserving the fresh-log-per-start behaviour.
     : > "$server_log"
     printf '%s\n\n' "$config_text" >> "$server_log"
-    # setsid puts the server in its own session, so closing the terminal that ran
-    # `start` no longer sends it SIGHUP and it outlives this shell. stdin comes
-    # from /dev/null for the same reason: nothing left to tie it to a terminal.
-    #
-    # The PID is written by the child itself, right before it execs. $! cannot be
-    # used here: when job control is on, setsid finds itself a process group
-    # leader, forks instead of exec-ing, and $! then names the wrapper rather than
-    # llama-server — which stop and status would later fail to find.
-    local pidfile="$PID_DIR/server-${slot}.pid"
-    rm -f "$pidfile"
-    if [[ -n "$_r_rocm_env" ]]; then
-        setsid bash -c 'echo $$ > "$1"; shift; exec "$@"' _ "$pidfile" \
-            env LD_PRELOAD=/lib64/libjemalloc.so.2 $gpu_prio_env $_r_rocm_env stdbuf -oL -eL "${cmd[@]}" \
-            >> "$server_log" 2>&1 < /dev/null &
-    else
-        setsid bash -c 'echo $$ > "$1"; shift; exec "$@"' _ "$pidfile" \
-            env LD_PRELOAD=/lib64/libjemalloc.so.2 $gpu_prio_env stdbuf -oL -eL "${cmd[@]}" \
-            >> "$server_log" 2>&1 < /dev/null &
-    fi
-    local server_pid="" _i
-    for _i in $(seq 1 50); do
-        [[ -s "$pidfile" ]] && { server_pid=$(<"$pidfile"); break; }
-        sleep 0.1
-    done
+    # Detached, so the model outlives the terminal it was started from.
+    # _r_rocm_env is unquoted on purpose: it word-splits into KEY=VAL pairs for env.
+    local server_pid=""
+    server_pid=$(_spawn_detached "$PID_DIR/server-${slot}.pid" "$server_log" append \
+        env LD_PRELOAD=/lib64/libjemalloc.so.2 $gpu_prio_env $_r_rocm_env stdbuf -oL -eL "${cmd[@]}")
     if [[ -z "$server_pid" ]]; then
         echo "Error: the server did not report a PID. See $server_log" >&2
         return 1
@@ -665,9 +678,13 @@ cmd_start() {
         mkdir -p "$STUNNEL_DIR"
         local stunnel_conf="$STUNNEL_DIR/slot-${slot}.conf"
         _write_stunnel_conf "$slot" "$start_proxy" "$stunnel_conf"
-        stunnel "$stunnel_conf" > "$stunnel_log" 2>&1 &
-        local stunnel_pid=$!
-        echo "$stunnel_pid" > "$PID_DIR/stunnel-${slot}.pid"
+        local stunnel_pid=""
+        stunnel_pid=$(_spawn_detached "$PID_DIR/stunnel-${slot}.pid" "$stunnel_log" truncate \
+            stunnel "$stunnel_conf")
+        if [[ -z "$stunnel_pid" ]]; then
+            echo "Error: stunnel did not report a PID. See $stunnel_log"
+            exit 1
+        fi
 
         sleep 1
         if ! ps -p "$stunnel_pid" > /dev/null 2>&1; then
