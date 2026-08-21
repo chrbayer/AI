@@ -18,17 +18,39 @@ pip install waitress   # optional, recommended for production proxy
 
 ```bash
 ./run.sh list                          # Show available models
-./run.sh start <name> [slot] [--proxy] # Start server in background (slot 1 or 2, default 1)
+./run.sh start <name> [slot] [--proxy] # Start server in background (slot 1-3, default 1)
 ./run.sh stop [slot]                   # Stop slot, or all if omitted
 ./run.sh status                        # Show running state (all slots)
+./run.sh cache-stats [slot]            # Prompt-cache hit rate, read from the server log
 ./run.sh clear-kv [slot]               # Drop the KV cache without restarting
 ./run.sh probe-reasoning [model]       # What each model's chat template supports
+./run.sh gen-certs <host>              # CA + server/VPS certificates for --public
 ./run.sh bench [--full] <model|all>    # Run benchmark (default: default ROCm + Vulkan)
 ./run.sh bench --full all              # Full test: all 8 ROCm combos + Vulkan
 source ./run.sh env <name> [slot]      # Set Claude Code env vars
 source ./run.sh clear                  # Clear env vars
 ./run.sh download <model>              # Download model(s)
 ```
+
+### `start` options
+
+| Option | Effect |
+| --- | --- |
+| `--proxy` | also start `proxy.py` (see below) |
+| `--reasoning off\|on\|low\|medium\|high\|max\|N` | one switch for every model; `N` is a token budget |
+| `--no-reasoning`, `--reasoning-budget N` | aliases for the above |
+| `--parallel N` | server slots (default 1) |
+| `--mlock` | lock the weights in memory so nothing gets paged out |
+| `--ctx N` | override the model's default context size |
+| `--cache-ram N` | prompt-cache host-RAM cap in MiB (0 = disable, -1 = no limit; default 8192) |
+| `--spec on\|off`, `--no-spec` | speculative decoding; on by default where the GGUF carries a draft head |
+| `--mmproj` | load the model's multimodal projector (vision), where `models.conf` defines one |
+| `--host ADDR` | bind address (default 127.0.0.1; `0.0.0.0` exposes the server on the LAN) |
+| `--gpu-priority low\|medium\|high\|realtime` | Vulkan queue priority (needs the patched ggml-vulkan) |
+| `--verbose` | `-lv 4`, reveals ggml/backend + buffer-size startup logs |
+| `--clear-logs` | truncate this slot's server/proxy log before starting |
+| `--public` | token auth + hardening + mTLS front for the VPS (needs `gen-certs`) |
+| `--max-predict N` | cap tokens per generation (-1 = no limit; `--public` defaults to 8192) |
 
 ### The proxy is opt-in
 

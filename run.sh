@@ -2,7 +2,7 @@
 # Unified LLM server manager for Claude Code.
 # Usage:
 #   ./run.sh                                     list available models
-#   ./run.sh start <name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off]  start server (+ proxy with --proxy) in background (slot 1-3, default 1)
+#   ./run.sh start <name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off]  start server (+ proxy with --proxy) in background (slot 1-3, default 1)
 #   ./run.sh stop [slot]                         stop slot (or all if omitted)
 #   ./run.sh status                              show running state
 #   ./run.sh clear-kv [slot]                     drop the KV cache without restarting (all slots, or one)
@@ -1396,12 +1396,18 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  --proxy: also start proxy.py (normalizes time/date stamps for the prompt cache)"
     printf "  %-20s %s\n" ""                      "  --reasoning off|on|low|medium|high|max|N: one switch for every model;"
     printf "  %-20s %s\n" ""                      "    levels and on/off are translated per model (see 'probe-reasoning'), N = token budget"
-    printf "  %-20s %s\n" ""                      "  --no-reasoning / --reasoning-budget N: kept as aliases; --parallel N: server slots (default 1)"
+    printf "  %-20s %s\n" ""                      "  --no-reasoning / --reasoning-budget N: kept as aliases"
+    printf "  %-20s %s\n" ""                      "  --parallel N: server slots (default 1)"
+    printf "  %-20s %s\n" ""                      "  --mlock: lock the weights in memory so nothing gets paged out"
     printf "  %-20s %s\n" ""                      "  --ctx N: override the model's default context size"
     printf "  %-20s %s\n" ""                      "  --cache-ram N: prompt-cache host-RAM cap in MiB (0=disable, -1=no limit; default 8192)"
     printf "  %-20s %s\n" ""                      "  --spec on|off / --no-spec: speculative decoding; on by default where the"
     printf "  %-20s %s\n" ""                      "    model's own GGUF carries a draft head (currently qwen3.8)"
+    printf "  %-20s %s\n" ""                      "  --mmproj: load the model's multimodal projector (vision), where models.conf defines one"
+    printf "  %-20s %s\n" ""                      "  --host ADDR: bind address (default 127.0.0.1; 0.0.0.0 exposes the server on the LAN)"
+    printf "  %-20s %s\n" ""                      "  --gpu-priority low|medium|high|realtime: Vulkan queue priority (needs patched ggml-vulkan)"
     printf "  %-20s %s\n" ""                      "  --verbose: -lv 4, reveals ggml/backend + buffer-size startup logs (more runtime logging too)"
+    printf "  %-20s %s\n" ""                      "  --clear-logs: truncate this slot's server/proxy log before starting"
     printf "  %-20s %s\n" ""                      "  --public: token auth + hardening + mTLS front for the VPS (needs gen-certs)"
     printf "  %-20s %s\n" ""                      "  --max-predict N: cap tokens per generation (-1=no limit; --public defaults to 8192)"
     printf "  %-20s %s\n" "stop [slot]"            "stop slot (or all if omitted)"
