@@ -2,7 +2,7 @@
 # Unified LLM server manager for Claude Code.
 # Usage:
 #   ./run.sh                                     list available models
-#   ./run.sh start <name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off]  start server (+ proxy with --proxy) in background (slot 1-3, default 1)
+#   ./run.sh start <name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec]  start server (+ proxy with --proxy) in background (slot 1-3, default 1)
 #   ./run.sh stop [slot]                         stop slot (or all if omitted)
 #   ./run.sh status                              show running state
 #   ./run.sh clear-kv [slot]                     drop the KV cache without restarting (all slots, or one)
@@ -392,7 +392,7 @@ cmd_start() {
         esac
     done
 
-    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off]"; exit 1; }
+    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec]"; exit 1; }
     [[ "$slot" != "1" && "$slot" != "2" && "$slot" != "3" ]] && { echo "Error: slot must be 1, 2, or 3"; exit 1; }
     if [[ -n "$parallel" && ! "$parallel" =~ ^[1-9][0-9]*$ ]]; then
         echo "Error: --parallel requires a positive integer (got '$parallel')"; exit 1
@@ -1401,8 +1401,8 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  --mlock: lock the weights in memory so nothing gets paged out"
     printf "  %-20s %s\n" ""                      "  --ctx N: override the model's default context size"
     printf "  %-20s %s\n" ""                      "  --cache-ram N: prompt-cache host-RAM cap in MiB (0=disable, -1=no limit; default 8192)"
-    printf "  %-20s %s\n" ""                      "  --spec on|off / --no-spec: speculative decoding; on by default where the"
-    printf "  %-20s %s\n" ""                      "    model's own GGUF carries a draft head (currently qwen3.8)"
+    printf "  %-20s %s\n" ""                      "  --spec on|off / --no-spec: speculative decoding; on by default for every model"
+    printf "  %-20s %s\n" ""                      "    that declares a draft in models.conf (qwen, gemma, llama3.3, diamond)"
     printf "  %-20s %s\n" ""                      "  --mmproj: load the model's multimodal projector (vision), where models.conf defines one"
     printf "  %-20s %s\n" ""                      "  --host ADDR: bind address (default 127.0.0.1; 0.0.0.0 exposes the server on the LAN)"
     printf "  %-20s %s\n" ""                      "  --gpu-priority low|medium|high|realtime: Vulkan queue priority (needs patched ggml-vulkan)"

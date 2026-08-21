@@ -43,7 +43,7 @@ source ./run.sh clear                  # Clear env vars
 | `--mlock` | lock the weights in memory so nothing gets paged out |
 | `--ctx N` | override the model's default context size |
 | `--cache-ram N` | prompt-cache host-RAM cap in MiB (0 = disable, -1 = no limit; default 8192) |
-| `--spec on\|off`, `--no-spec` | speculative decoding; on by default where the GGUF carries a draft head |
+| `--spec on\|off`, `--no-spec` | speculative decoding; on by default for every model that declares a draft (`qwen`, `gemma`, `llama3.3`, `diamond`) |
 | `--mmproj` | load the model's multimodal projector (vision), where `models.conf` defines one |
 | `--host ADDR` | bind address (default 127.0.0.1; `0.0.0.0` exposes the server on the LAN) |
 | `--gpu-priority low\|medium\|high\|realtime` | Vulkan queue priority (needs the patched ggml-vulkan) |
