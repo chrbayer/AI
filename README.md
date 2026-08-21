@@ -261,10 +261,16 @@ Q6_K (7.59) over Q8_0 (7.32) and Q4_K_M (7.51) — so the optimum is per model, 
 constant, and worth measuring rather than assuming.
 
 Draft depth was swept the same way and lands on the same `--spec-draft-n-max 4` the
-other 70B use (n-max 2: 5.88, 3: 6.18, 4: 6.35). Acceptance moves the other way —
-44 % per proposal at n-max 2 against 32 % at 4 — because a short draft is likelier
-to be taken whole. It is still slower: what it saves per accepted token does not
-cover verifying that much more often.
+other 70B use, again as an interior peak:
+
+| n-max | 2 | 3 | 4 | 5 | 6 |
+| --- | --- | --- | --- | --- | --- |
+| t/s | 5.88 | 6.18 | **6.35** | 5.86 | 5.45 |
+| acceptance | 44 % | 37 % | 32 % | 23 % | 20 % |
+
+Acceptance only ever falls as the draft lengthens, because a short proposal is
+likelier to be taken whole. Up to 4 the longer accepted runs still outweigh that
+decay; past it they no longer do, and the rejected tail is decoded for nothing.
 
 That `llama3.3` figure is measured on **German** prose, which is what the model is
 kept for. The same prompt in English accepts 54 % and reaches 10.34 t/s — language
