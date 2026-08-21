@@ -43,7 +43,7 @@ source ./run.sh clear                  # Clear env vars
 | `--mlock` | lock the weights in memory so nothing gets paged out |
 | `--ctx N` | override the model's default context size |
 | `--cache-ram N` | prompt-cache host-RAM cap in MiB (0 = disable, -1 = no limit; default 8192) |
-| `--spec on\|off`, `--no-spec` | speculative decoding; on by default for every model that declares a draft (`qwen`, `gemma`, `llama3.3`, `diamond`) |
+| `--spec on\|off`, `--no-spec` | speculative decoding; on by default for every model that declares a draft (`qwen`, `gemma`, `llama3.3`, `diamond`, `magnum`) |
 | `--mmproj` | load the model's multimodal projector (vision), where `models.conf` defines one |
 | `--host ADDR` | bind address (default 127.0.0.1; `0.0.0.0` exposes the server on the LAN) |
 | `--gpu-priority low\|medium\|high\|realtime` | Vulkan queue priority (needs the patched ggml-vulkan) |
@@ -224,19 +224,47 @@ Only Qwen3.8 carries such a head. Qwen3.6 (`qwen-moe`) is an MTP-capable
 architecture in llama.cpp but its GGUF contains no `nextn` tensors, and
 llama/gemma4/muse-glimmer are not MTP architectures at all.
 
-The two 70B models get there the other way, with `--spec-type draft-simple` and a
-separate Llama-3.2-1B whose tokenizer is identical (checked by hashing all 128256
-tokens). They are the slowest models here and gain the most:
+The 70B-class models get there the other way, with `--spec-type draft-simple` and a
+separate small model of the same family. They are the slowest models here and gain
+the most:
 
 | | without | with | acceptance |
 | --- | --- | --- | --- |
 | `llama3.3` (Q6_K, 57.9 GB) | 3.85 | **7.59** | 31 % |
 | `diamond` (Q5_K_M, 49.9 GB) | 4.49 | **8.78** | 34 % |
+| `magnum` (Q6_K, 64.4 GB) | 3.49 | **6.93** | 32 % |
 | `gemma` (Q8_0, 32.6 GB) | 6.62 | **11.91** | 36 % |
 
-`gemma` drafts from a gemma-4-E2B; the two 70B share one Llama-3.2-1B. The draft's
-quant is its own tradeoff, since its cost is bandwidth and its benefit is accuracy:
-on German prose Q6_K won (7.59) over both Q8_0 (7.32) and Q4_K_M (7.51).
+`gemma` drafts from a gemma-4-E2B, `llama3.3` and `diamond` share one Llama-3.2-1B
+whose tokenizer is identical to theirs (checked by hashing all 128256 tokens), and
+`magnum` — a Qwen2.5-72B fulltune, not a Llama derivative — drafts from a
+Qwen2.5-1.5B-Instruct. That last pair is the one case here where the vocabularies
+are not identical, 152064 against 151936. llama.cpp allows a difference of at most
+`SPEC_VOCAB_MAX_SIZE_DIFFERENCE` = 128 and then compares the token texts from id 5
+up, so this pair fits with nothing to spare — a draft one step further from the
+target would be refused at load.
+
+The draft's quant is its own tradeoff, since its cost is bandwidth and its benefit
+is accuracy. `magnum` was measured across the whole ladder, mean of German and
+English prose:
+
+| draft | Q2_K | Q3_K_M | Q4_K_M | Q5_K_M | Q6_K | Q8_0 |
+| --- | --- | --- | --- | --- | --- | --- |
+| size | 0.63 GB | 0.77 GB | 0.92 GB | 1.05 GB | 1.19 GB | 1.53 GB |
+| t/s | 5.27 | 5.88 | **6.35** | 6.15 | 5.89 | 5.70 |
+| acceptance | 18 % | 24 % | 27 % | 27 % | 25 % | 24 % |
+
+The peak sits in the middle and both ends fall away for different reasons: below
+Q4_K_M the draft stops guessing well (acceptance drops to 18 %), above it the extra
+bandwidth per proposal is no longer repaid. `llama3.3` peaked one step higher, at
+Q6_K (7.59) over Q8_0 (7.32) and Q4_K_M (7.51) — so the optimum is per model, not a
+constant, and worth measuring rather than assuming.
+
+Draft depth was swept the same way and lands on the same `--spec-draft-n-max 4` the
+other 70B use (n-max 2: 5.88, 3: 6.18, 4: 6.35). Acceptance moves the other way —
+44 % per proposal at n-max 2 against 32 % at 4 — because a short draft is likelier
+to be taken whole. It is still slower: what it saves per accepted token does not
+cover verifying that much more often.
 
 That `llama3.3` figure is measured on **German** prose, which is what the model is
 kept for. The same prompt in English accepts 54 % and reaches 10.34 t/s — language
@@ -397,6 +425,7 @@ them are served by the Vulkan build — the ROCm build is opt-in per model
 - **r1** — DeepSeek-R1-Distill-Llama-70B Uncensored v2 Unbiased Reasoner, i1-Q5_K_M, 128K ctx
 - **mistral** — Mistral-Medium-3.5-128B, UD-Q5_K_XL, 32K ctx
 - **diamond** — L3.3-70B Magnum Diamond, i1-Q5_K_M, 32K ctx; drafted by the same Llama-3.2-1B (~2.0×)
+- **magnum** — Magnum-v4-72B, Q6_K, 32K ctx; a Qwen2.5-72B fulltune, drafted by Qwen2.5-1.5B-Instruct Q4_K_M (~2.0×)
 
 Multimodal projectors are only loaded on an explicit `--mmproj`.
 

@@ -1402,7 +1402,7 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  --ctx N: override the model's default context size"
     printf "  %-20s %s\n" ""                      "  --cache-ram N: prompt-cache host-RAM cap in MiB (0=disable, -1=no limit; default 8192)"
     printf "  %-20s %s\n" ""                      "  --spec on|off / --no-spec: speculative decoding; on by default for every model"
-    printf "  %-20s %s\n" ""                      "    that declares a draft in models.conf (qwen, gemma, llama3.3, diamond)"
+    printf "  %-20s %s\n" ""                      "    that declares a draft in models.conf (qwen, gemma, llama3.3, diamond, magnum)"
     printf "  %-20s %s\n" ""                      "  --mmproj: load the model's multimodal projector (vision), where models.conf defines one"
     printf "  %-20s %s\n" ""                      "  --host ADDR: bind address (default 127.0.0.1; 0.0.0.0 exposes the server on the LAN)"
     printf "  %-20s %s\n" ""                      "  --gpu-priority low|medium|high|realtime: Vulkan queue priority (needs patched ggml-vulkan)"
