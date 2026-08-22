@@ -292,6 +292,23 @@ tokens then routes each to its own experts, widening the read instead of sharing
 it. `qwen-moe` and `gemma-moe` declare no `spec_args`, which makes `--spec on`
 refuse outright.
 
+**Never on a vision turn.** `qwen-vl` gains on text — 25.4 t/s plain against 34-39
+with a Qwen3-0.6B draft, whose vocabulary is identical, so roughly 1.3-1.5x. Any
+request carrying an image then fails outright:
+
+```
+HTTP 500  decode() failed: failed to process speculative batch
+```
+
+The server hands the draft only the text tokens (`get_text_tokens()` in
+server-context.cpp drops the image placeholders), so the two contexts drift apart
+the moment an image is in the prompt — the draft's KV cache stands at position 4
+while the target continues at 52, past 48 image tokens, and the batch is refused
+because positions must stay consecutive. It is not a quality tradeoff that costs
+acceptance, it is a hard failure, and it is independent of the draft's quant.
+`qwen-vl` therefore declares no `spec_args`: a gain on text turns is not worth
+losing the one thing the model is kept for.
+
 Diamond gains less because Magnum is heavily retrained, so a stock draft predicts
 it worse. Acceptance also depends on the text: prose and dialogue run 15-20 points
 below technical writing, the widest spread in these measurements — wider than
