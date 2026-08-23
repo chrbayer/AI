@@ -4,7 +4,7 @@
 #   ./run.sh                                     list available models
 #   ./run.sh start <name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec]  start server (+ proxy with --proxy) in background (slot 1-3, default 1)
 #   ./run.sh stop [slot]                         stop slot (or all if omitted)
-#   ./run.sh status                              show running state
+#   ./run.sh status                              show running state, model and key parameters per slot
 #   ./run.sh clear-kv [slot]                     drop the KV cache without restarting (all slots, or one)
 #   ./run.sh probe-reasoning [model]             show what each model's chat template supports
 #   ./run.sh gen-certs <public-hostname>         create CA + certificates for --public
@@ -777,6 +777,114 @@ cmd_stop() {
     rmdir "$PID_DIR" 2>/dev/null || true
 }
 
+# Read a running process's argv (NUL-separated in /proc) into $_ARGV.
+_read_argv() {
+    local pid="$1"
+    _ARGV=()
+    [[ -r "/proc/$pid/cmdline" ]] || return 1
+    mapfile -d '' -t _ARGV < "/proc/$pid/cmdline" 2>/dev/null || return 1
+    (( ${#_ARGV[@]} > 0 )) || return 1
+    return 0
+}
+
+# Find the models.conf entry whose model file matches $1; on a hit the label is
+# printed and the name returned, so status can name the model the way `list` does.
+_label_for_model_path() {
+    local path="$1" entry
+    local -a f
+    for entry in "${_MODELS[@]}"; do
+        IFS='|' read -r -a f <<< "$entry"
+        if [[ "${f[2]//\~/$HOME}" == "$path" ]]; then
+            echo "${f[5]}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Describe a running llama-server from its own argv rather than from what the
+# last start printed: the process is the ground truth even when the log belongs
+# to an older run or the server was started by hand.
+_describe_server() {
+    local pid="$1"
+    local indent="         "
+    if ! _read_argv "$pid"; then
+        echo "${indent}Model:     unknown (cannot read /proc/$pid/cmdline)"
+        return 0
+    fi
+
+    local model="" served="" ctx="" parallel="" predict="" cache_ram="" mmproj="" host=""
+    local spec_type="" spec_draft="" spec_n=""
+    local reason="" reason_effort="" reason_budget=""
+    local mlock=false auth=false
+    local i=0
+    while (( i < ${#_ARGV[@]} )); do
+        case "${_ARGV[i]}" in
+            -m|--model)          model="${_ARGV[i+1]}";        i=$(( i + 2 )) ;;
+            --alias)             served="${_ARGV[i+1]}";       i=$(( i + 2 )) ;;
+            -c|--ctx-size)       ctx="${_ARGV[i+1]}";          i=$(( i + 2 )) ;;
+            -np|--parallel)      parallel="${_ARGV[i+1]}";     i=$(( i + 2 )) ;;
+            -n|--n-predict)      predict="${_ARGV[i+1]}";      i=$(( i + 2 )) ;;
+            --cache-ram)         cache_ram="${_ARGV[i+1]}";    i=$(( i + 2 )) ;;
+            --mmproj)            mmproj="${_ARGV[i+1]}";       i=$(( i + 2 )) ;;
+            --host)              host="${_ARGV[i+1]}";         i=$(( i + 2 )) ;;
+            --spec-type)         spec_type="${_ARGV[i+1]}";    i=$(( i + 2 )) ;;
+            -md|--model-draft)   spec_draft="${_ARGV[i+1]}";   i=$(( i + 2 )) ;;
+            --spec-draft-n-max)  spec_n="${_ARGV[i+1]}";       i=$(( i + 2 )) ;;
+            --reasoning)         reason="${_ARGV[i+1]}";       i=$(( i + 2 )) ;;
+            --reasoning-effort)  reason_effort="${_ARGV[i+1]}"; i=$(( i + 2 )) ;;
+            --reasoning-budget)  reason_budget="${_ARGV[i+1]}"; i=$(( i + 2 )) ;;
+            --mlock)             mlock=true;                   i=$(( i + 1 )) ;;
+            --api-key-file)      auth=true;                    i=$(( i + 2 )) ;;
+            *)                                                 i=$(( i + 1 )) ;;
+        esac
+    done
+
+    # A model started outside run.sh has no models.conf entry — fall back to the file.
+    local label=""
+    [[ -n "$model" ]] && label=$(_label_for_model_path "$model")
+    [[ -z "$label" && -n "$model" ]] && label="$(basename "$model")"
+    echo "${indent}Model:     ${label:-unknown}${served:+ ($served)}"
+
+    # Parameters that change what the server does, in the order start prints them.
+    local -a params=("ctx ${ctx:-default}" "parallel ${parallel:-1}")
+    [[ -n "$predict" ]]   && params+=("n-predict $predict")
+    case "$cache_ram" in
+        "")   ;;
+        0)    params+=("prompt-cache off") ;;
+        -1)   params+=("prompt-cache unlimited") ;;
+        *)    params+=("prompt-cache ${cache_ram} MiB") ;;
+    esac
+    [[ -n "$mmproj" ]]    && params+=("mmproj")
+    [[ "$mlock" == true ]] && params+=("mlock")
+    [[ -n "$host" ]]      && params+=("host $host")
+    [[ "$auth" == true ]] && params+=("token auth")
+    local joined="" p
+    for p in "${params[@]}"; do joined+="${joined:+, }$p"; done
+    echo "${indent}Params:    $joined"
+
+    # --reasoning off comes with a budget of 0; naming both would say it twice.
+    if [[ "$reason" == "off" ]]; then
+        echo "${indent}Reasoning: off"
+    elif [[ -n "$reason$reason_effort$reason_budget" ]]; then
+        local note="${reason:-on}"
+        [[ -n "$reason_effort" ]] && note+=", effort $reason_effort"
+        [[ -n "$reason_budget" ]] && note+=", budget $reason_budget"
+        echo "${indent}Reasoning: $note"
+    else
+        echo "${indent}Reasoning: template default"
+    fi
+
+    if [[ -n "$spec_type$spec_draft$spec_n" ]]; then
+        local note="${spec_type:-on}"
+        [[ -n "$spec_draft" ]] && note+=", draft $(basename "$spec_draft")"
+        [[ -n "$spec_n" ]]     && note+=", n-max $spec_n"
+        echo "${indent}Spec:      $note"
+    else
+        echo "${indent}Spec:      off"
+    fi
+}
+
 cmd_status() {
     local found=0
     for slot in 1 2 3; do
@@ -798,6 +906,7 @@ cmd_status() {
         local slot_active=0
         if [[ -n "$server_pid" ]] && ps -p "$server_pid" > /dev/null 2>&1; then
             echo "Slot $slot: llama-server (PID: $server_pid) on :$port_server"
+            _describe_server "$server_pid"
             echo "         Log: tail -f $LOG_DIR/server-${slot}.log"
             slot_active=1; found=1
         fi
@@ -817,6 +926,8 @@ cmd_status() {
         fi
     done
     [[ "$found" -eq 0 ]] && echo "Nothing running."
+    # Explicit, or the guard above would make a slot that IS running exit 1.
+    return 0
 }
 
 # Summarize prompt-cache effectiveness from the server log (works whether or
@@ -1411,7 +1522,7 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  --public: token auth + hardening + mTLS front for the VPS (needs gen-certs)"
     printf "  %-20s %s\n" ""                      "  --max-predict N: cap tokens per generation (-1=no limit; --public defaults to 8192)"
     printf "  %-20s %s\n" "stop [slot]"            "stop slot (or all if omitted)"
-    printf "  %-20s %s\n" "status"                 "show running state"
+    printf "  %-20s %s\n" "status"                 "show running state, model and key parameters per slot"
     printf "  %-20s %s\n" "cache-stats [slot]"     "show prompt-cache hit rate (from the server log)"
     printf "  %-20s %s\n" "clear-kv [slot]"        "drop the KV cache of every server slot (or one slot)"
     printf "  %-20s %s\n" "probe-reasoning [m]"    "what each downloaded model's chat template supports vs. models.conf"

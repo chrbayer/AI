@@ -20,7 +20,7 @@ pip install waitress   # optional, recommended for production proxy
 ./run.sh list                          # Show available models
 ./run.sh start <name> [slot] [--proxy] # Start server in background (slot 1-3, default 1)
 ./run.sh stop [slot]                   # Stop slot, or all if omitted
-./run.sh status                        # Show running state (all slots)
+./run.sh status                        # Running state, model and key parameters (all slots)
 ./run.sh cache-stats [slot]            # Prompt-cache hit rate, read from the server log
 ./run.sh clear-kv [slot]               # Drop the KV cache without restarting
 ./run.sh probe-reasoning [model]       # What each model's chat template supports
@@ -337,6 +337,28 @@ writes itself just before exec rather than the caller taking `$!`. Under job
 control `setsid` finds itself a process group leader and forks instead of
 exec-ing, so `$!` would name the wrapper and the PID file would point at a
 process that has already gone.
+
+### What `status` reports
+
+Besides the PIDs and ports, `status` names the model each slot serves and the
+parameters that decide how it behaves:
+
+```
+Slot 1: llama-server (PID: 330778) on :8001
+         Model:     Qwen3.6-35B-A3B MoE Unc (qwen-moe)
+         Params:    ctx 65536, parallel 1, prompt-cache off, host 0.0.0.0
+         Reasoning: off
+         Spec:      off
+         Log: tail -f logs/server-1.log
+```
+
+It reads that from `/proc/<pid>/cmdline`, the argv of the process that is
+actually running, not from the config `start` wrote to the log — so it stays
+right for a slot that was started by hand, and it cannot describe an older run
+whose log is still lying around. The label comes from the `models.conf` entry
+whose model file matches; a file no entry knows is shown by its own name.
+`Params` lists only what departs from the defaults, apart from `ctx` and
+`parallel`, which are always named.
 
 ### Idle CPU (`--poll 0`)
 
