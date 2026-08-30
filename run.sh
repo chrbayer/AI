@@ -2,7 +2,7 @@
 # Unified LLM server manager for Claude Code.
 # Usage:
 #   ./run.sh                                     list available models
-#   ./run.sh start <name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec]  start server (+ proxy with --proxy) in background (slot 1-3, default 1)
+#   ./run.sh start <name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec]  start server (+ proxy with --proxy) in background (slot 1-3, default 1)
 #   ./run.sh stop [slot]                         stop slot (or all if omitted)
 #   ./run.sh status                              show running state, model and key parameters per slot
 #   ./run.sh clear-kv [slot]                     drop the KV cache without restarting (all slots, or one)
@@ -358,6 +358,7 @@ cmd_start() {
     local parallel=""
     local ctx=""                # "" = model default; N>0 = override context size
     local cache_ram=""          # "" = server default (8192 MiB); 0 = disable prompt cache; -1 = no limit; N>0 = MiB cap
+    local similarity=""         # "" = server default (0.1); 0 = pure LRU slot pick; F in 0..1 = prefix share a slot must already hold
     local verbose=false         # true = -lv 4 (TRACE): reveals ggml/backend + buffer-size startup logs
     local clear_logs=false      # true = truncate this slot's server/proxy logs before starting
     local host=""               # "" = llama-server default (127.0.0.1); e.g. 0.0.0.0 to expose on LAN
@@ -380,6 +381,7 @@ cmd_start() {
             --parallel) _need_value "$@" || exit 1; parallel="$2"; shift 2 ;;
             --ctx) _need_value "$@" || exit 1; ctx="$2"; shift 2 ;;
             --cache-ram) _need_value "$@" || exit 1; cache_ram="$2"; shift 2 ;;
+            --similarity) _need_value "$@" || exit 1; similarity="$2"; shift 2 ;;
             --verbose) verbose=true; shift ;;
             --clear-logs) clear_logs=true; shift ;;
             --host) _need_value "$@" || exit 1; host="$2"; shift 2 ;;
@@ -392,7 +394,7 @@ cmd_start() {
         esac
     done
 
-    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec]"; exit 1; }
+    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec]"; exit 1; }
     [[ "$slot" != "1" && "$slot" != "2" && "$slot" != "3" ]] && { echo "Error: slot must be 1, 2, or 3"; exit 1; }
     if [[ -n "$parallel" && ! "$parallel" =~ ^[1-9][0-9]*$ ]]; then
         echo "Error: --parallel requires a positive integer (got '$parallel')"; exit 1
@@ -402,6 +404,9 @@ cmd_start() {
     fi
     if [[ -n "$cache_ram" && ! "$cache_ram" =~ ^(-1|0|[1-9][0-9]*)$ ]]; then
         echo "Error: --cache-ram requires -1 (no limit), 0 (disable prompt cache), or N>0 (MiB cap); got '$cache_ram'"; exit 1
+    fi
+    if [[ -n "$similarity" && ! "$similarity" =~ ^(0(\.[0-9]+)?|1(\.0+)?|\.[0-9]+)$ ]]; then
+        echo "Error: --similarity requires a fraction from 0 to 1 (0 = pure LRU); got '$similarity'"; exit 1
     fi
     if [[ -n "$gpu_priority" && ! "$gpu_priority" =~ ^(low|medium|high|realtime)$ ]]; then
         echo "Error: --gpu-priority requires low, medium, high, or realtime; got '$gpu_priority'"; exit 1
@@ -487,6 +492,9 @@ cmd_start() {
     # --cache-ram overrides the server's default prompt-cache size (8192 MiB).
     # 0 disables the host-RAM prompt cache (keeps system RAM flat during use).
     [[ -n "$cache_ram" ]] && cmd+=(--cache-ram "$cache_ram")
+    # --similarity is llama-server's --slot-prompt-similarity: how much of a prompt
+    # a slot must already hold (longest common prefix) to be reused; 0 = pure LRU.
+    [[ -n "$similarity" ]] && cmd+=(--slot-prompt-similarity "$similarity")
     # Unconditional, so `clear-kv` works on every slot. The trailing slash is
     # required: llama-server concatenates path + filename without a separator.
     cmd+=(--slot-save-path "$SLOT_STATE_DIR/")
@@ -611,6 +619,12 @@ cmd_start() {
             esac
         else
             echo "PromptCache: 8192 MiB (server default)"
+        fi
+        if [[ -n "$similarity" ]]; then
+            case "$similarity" in
+                0|0.0*) echo "SlotSimilarity: 0 — pure LRU slot pick (--similarity $similarity)" ;;
+                *)      echo "SlotSimilarity: $similarity (--similarity $similarity)" ;;
+            esac
         fi
         if [[ -n "$reasoning" ]]; then
             echo "Reasoning: ${_reasoning_note}"
@@ -813,7 +827,7 @@ _describe_server() {
         return 0
     fi
 
-    local model="" served="" ctx="" parallel="" predict="" cache_ram="" mmproj="" host=""
+    local model="" served="" ctx="" parallel="" predict="" cache_ram="" mmproj="" host="" similarity=""
     local spec_type="" spec_draft="" spec_n=""
     local reason="" reason_effort="" reason_budget=""
     local mlock=false auth=false
@@ -826,6 +840,7 @@ _describe_server() {
             -np|--parallel)      parallel="${_ARGV[i+1]}";     i=$(( i + 2 )) ;;
             -n|--n-predict)      predict="${_ARGV[i+1]}";      i=$(( i + 2 )) ;;
             --cache-ram)         cache_ram="${_ARGV[i+1]}";    i=$(( i + 2 )) ;;
+            --slot-prompt-similarity) similarity="${_ARGV[i+1]}"; i=$(( i + 2 )) ;;
             --mmproj)            mmproj="${_ARGV[i+1]}";       i=$(( i + 2 )) ;;
             --host)              host="${_ARGV[i+1]}";         i=$(( i + 2 )) ;;
             --spec-type)         spec_type="${_ARGV[i+1]}";    i=$(( i + 2 )) ;;
@@ -854,6 +869,11 @@ _describe_server() {
         0)    params+=("prompt-cache off") ;;
         -1)   params+=("prompt-cache unlimited") ;;
         *)    params+=("prompt-cache ${cache_ram} MiB") ;;
+    esac
+    case "$similarity" in
+        "")     ;;
+        0|0.0*) params+=("slot pick LRU") ;;
+        *)      params+=("slot similarity $similarity") ;;
     esac
     [[ -n "$mmproj" ]]    && params+=("mmproj")
     [[ "$mlock" == true ]] && params+=("mlock")
@@ -1512,6 +1532,8 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  --mlock: lock the weights in memory so nothing gets paged out"
     printf "  %-20s %s\n" ""                      "  --ctx N: override the model's default context size"
     printf "  %-20s %s\n" ""                      "  --cache-ram N: prompt-cache host-RAM cap in MiB (0=disable, -1=no limit; default 8192)"
+    printf "  %-20s %s\n" ""                      "  --similarity F: prefix share (0..1) a slot must already hold to be reused (llama-server's"
+    printf "  %-20s %s\n" ""                      "    --slot-prompt-similarity; default 0.1, 0 = pure LRU slot pick)"
     printf "  %-20s %s\n" ""                      "  --spec on|off / --no-spec: speculative decoding; on by default for every model"
     printf "  %-20s %s\n" ""                      "    that declares a draft in models.conf (qwen, gemma, llama3.3, diamond, magnum)"
     printf "  %-20s %s\n" ""                      "  --mmproj: load the model's multimodal projector (vision), where models.conf defines one"
