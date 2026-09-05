@@ -2,7 +2,10 @@
 # Unified LLM server manager for Claude Code.
 # Usage:
 #   ./run.sh                                     list available models
-#   ./run.sh start <name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec]  start server (+ proxy with --proxy) in background (slot 1-3, default 1)
+#   ./run.sh start <name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--temp F] [--top-p F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec]  start server (+ proxy with --proxy) in background (slot 1-3, default 1)
+#   ./run.sh preset <name> [--dry-run] [--force] [--wait N]  bring the machine to a whole configuration from presets.conf: keep what already matches, stop the rest, start what is missing
+#   ./run.sh preset-save <name> [--label TEXT] [--dry-run] [--force]  write the running configuration to presets.conf as a preset
+#   ./run.sh presets                             list the defined presets
 #   ./run.sh stop [slot]                         stop slot (or all if omitted)
 #   ./run.sh status                              show running state, model and key parameters per slot
 #   ./run.sh clear-kv [slot]                     drop the KV cache without restarting (all slots, or one)
@@ -60,6 +63,15 @@ fi
 _MODELS=()
 source "$SCRIPT_DIR/models.conf"
 
+# ── Load preset definitions ─────────────────────────────────
+# A preset names a whole configuration: which models run, on which slots, with
+# which start flags. models.conf has to be loaded first — a preset only ever
+# refers to models defined there.
+# Guarded, unlike models.conf: without presets there is nothing to start a preset
+# from, but every other command still works.
+_PRESETS=()
+[[ -f "$SCRIPT_DIR/presets.conf" ]] && source "$SCRIPT_DIR/presets.conf"
+
 # Parse a model entry by name; sets _r_* variables.
 _resolve_model() {
     local name="$1"
@@ -85,6 +97,23 @@ _resolve_model() {
             _r_spec_args=($m_spec_args)
             _r_hf_draft="${m_hf_draft:-}"
             _r_hf_mmproj="${m_hf_mmproj:-}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Parse a preset entry by name; sets _p_name, _p_label and the _p_entries array
+# (one "<model> <slot> [flags...]" line per model).
+_resolve_preset() {
+    local name="$1" entry
+    local -a f
+    for entry in "${_PRESETS[@]}"; do
+        IFS='|' read -r -a f <<< "$entry"
+        if [[ "${f[0]}" == "$name" ]]; then
+            _p_name="${f[0]}"
+            _p_label="${f[1]}"
+            _p_entries=("${f[@]:2}")
             return 0
         fi
     done
@@ -153,6 +182,7 @@ cmd_list() {
     done
     echo ""
     echo "  ./run.sh start <name> [slot]     start server + proxy (slot 1 or 2)"
+    echo "  ./run.sh presets                 configurations that start several of them at once"
     echo "  source ./run.sh env <name> [slot]  set Claude Code env vars in this shell"
     echo ""
 }
@@ -350,6 +380,67 @@ _write_stunnel_conf() {
     } > "$conf"
 }
 
+# Start proxy.py for one slot and wait until it listens. Its own function so
+# `preset` can add a missing proxy to a slot whose model already matches —
+# reloading 70B of weights for a process that starts in a second would be absurd.
+_start_proxy() {
+    local slot="$1" host="$2" public="$3"
+    local port_server=$(( PORT_BASE_SERVER + slot ))
+    local port_proxy=$(( PORT_BASE_PROXY + slot ))
+    local proxy_log="$LOG_DIR/proxy-${slot}.log"
+    mkdir -p "$PID_DIR" "$LOG_DIR"
+
+    echo "Starting proxy [slot $slot] on port $port_proxy..."
+    # -u: unbuffered stdout/stderr so every log line lands in $proxy_log
+    # immediately (and nothing is lost when the proxy is killed on stop).
+    # LLM_TOKEN_FILE switches the proxy into hardened mode: token check,
+    # path allowlist, concurrency and body-size caps. Unset = pass-through.
+    local proxy_pid=""
+    proxy_pid=$(_spawn_detached "$PID_DIR/proxy-${slot}.pid" "$proxy_log" truncate \
+        env LLM_BACKEND_URL="http://localhost:${port_server}" \
+            LLM_PROXY_HOST="${host:-127.0.0.1}" \
+            LLM_PROXY_PORT="${port_proxy}" \
+            LLM_TOKEN_FILE="$([[ "$public" == true ]] && echo "$TOKEN_FILE")" \
+            python3 -u "$PROXY_SCRIPT")
+    if [[ -z "$proxy_pid" ]]; then
+        echo "Error: the proxy did not report a PID. See $proxy_log"
+        return 1
+    fi
+
+    local max_wait=10 i
+    for (( i=0; i<max_wait; i++ )); do
+        sleep 1
+        if ! ps -p "$proxy_pid" > /dev/null 2>&1; then
+            echo "Error: Proxy failed to start. See $proxy_log"
+            return 1
+        fi
+        if ss -tlnp 2>/dev/null | grep -q ":${port_proxy} "; then
+            echo "Proxy running (PID: $proxy_pid)"
+            return 0
+        fi
+    done
+    echo "Error: Proxy did not listen on port $port_proxy within ${max_wait}s. See $proxy_log"
+    return 1
+}
+
+# Stop only the proxy of a slot, leaving the loaded model alone.
+_stop_proxy() {
+    local slot="$1"
+    local port_proxy=$(( PORT_BASE_PROXY + slot ))
+    local proxy_pid=""
+    [[ -f "$PID_DIR/proxy-${slot}.pid" ]] && proxy_pid=$(cat "$PID_DIR/proxy-${slot}.pid")
+    if [[ -z "$proxy_pid" ]] || ! ps -p "$proxy_pid" > /dev/null 2>&1; then
+        proxy_pid=$(_pid_on_port "$port_proxy")
+    fi
+    if [[ -n "$proxy_pid" ]] && ps -p "$proxy_pid" > /dev/null 2>&1; then
+        kill "$proxy_pid" 2>/dev/null
+        rm -f "$PID_DIR/proxy-${slot}.pid"
+        echo "Slot $slot: proxy (PID: $proxy_pid) stopped."
+        return 0
+    fi
+    return 1
+}
+
 cmd_start() {
     local name=""
     local slot="1"
@@ -368,6 +459,15 @@ cmd_start() {
     local public=false          # true = token auth + hardening + stunnel TLS front for the VPS
     local max_predict=""        # "" = model/server default; N = cap tokens per generation
     local spec=""               # "" = on when the model declares spec_args; on|off forces it
+    # Samplers otherwise live in models.conf, per model. These two override them
+    # for one run, which is what a task-specific preset needs: the same model at
+    # temp 0.1 for code and at its own 0.6 for prose.
+    local temp=""
+    local top_p=""
+    # --print-cmd builds and validates everything, prints the llama-server command
+    # and starts nothing. `preset` uses it to compare a slot's target state against
+    # the argv of what is actually running there.
+    local print_cmd=false
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -388,7 +488,10 @@ cmd_start() {
             --gpu-priority) _need_value "$@" || exit 1; gpu_priority="$2"; shift 2 ;;
             --mmproj) use_mmproj=true; shift ;;
             --spec) _need_value "$@" || exit 1; spec="$2"; shift 2 ;;
+            --temp) _need_value "$@" || exit 1; temp="$2"; shift 2 ;;
+            --top-p) _need_value "$@" || exit 1; top_p="$2"; shift 2 ;;
             --no-spec) spec=off; shift ;;                     # alias for --spec off
+            --print-cmd) print_cmd=true; shift ;;
             -*) echo "Unknown option: $1"; exit 1 ;;
             *) if [[ -z "$name" ]]; then name="$1"; elif [[ "$slot" == "1" ]]; then slot="$1"; fi; shift ;;
         esac
@@ -414,6 +517,12 @@ cmd_start() {
     if [[ -n "$max_predict" && ! "$max_predict" =~ ^(-1|[1-9][0-9]*)$ ]]; then
         echo "Error: --max-predict requires -1 (no limit) or N>0 (token cap); got '$max_predict'"; exit 1
     fi
+    if [[ -n "$temp" && ! "$temp" =~ ^([0-1](\.[0-9]+)?|2(\.0+)?|\.[0-9]+)$ ]]; then
+        echo "Error: --temp requires a number from 0 to 2 (0 = greedy); got '$temp'"; exit 1
+    fi
+    if [[ -n "$top_p" && ! "$top_p" =~ ^(0(\.[0-9]+)?|1(\.0+)?|\.[0-9]+)$ ]]; then
+        echo "Error: --top-p requires a fraction from 0 to 1; got '$top_p'"; exit 1
+    fi
     if [[ "$public" == true ]]; then
         _check_public_prereqs || exit 1
         # --public without a cap would let one request generate until --timeout.
@@ -432,23 +541,29 @@ cmd_start() {
         _translate_reasoning "$reasoning" "$_r_reasoning" "$_r_reasoning_levels" || exit 1
     fi
 
-    # Guard: abort if ports are already in use
-    if ss -tlnp 2>/dev/null | grep -q ":${port_server} "; then
-        echo "Error: Port $port_server already in use. Is slot $slot already running?"
-        exit 1
-    fi
-    if [[ "$start_proxy" == true ]] && ss -tlnp 2>/dev/null | grep -q ":${port_proxy} "; then
-        echo "Error: Port $port_proxy already in use. Is a proxy for slot $slot already running?"
-        exit 1
-    fi
+    # Guard: abort if ports are already in use. Skipped for --print-cmd, which
+    # describes a slot rather than claiming it — usually one that is running.
+    if [[ "$print_cmd" != true ]]; then
+        if ss -tlnp 2>/dev/null | grep -q ":${port_server} "; then
+            echo "Error: Port $port_server already in use. Is slot $slot already running?"
+            exit 1
+        fi
+        if [[ "$start_proxy" == true ]] && ss -tlnp 2>/dev/null | grep -q ":${port_proxy} "; then
+            echo "Error: Port $port_proxy already in use. Is a proxy for slot $slot already running?"
+            exit 1
+        fi
 
-    mkdir -p "$PID_DIR" "$LOG_DIR" "$SLOT_STATE_DIR"
+        mkdir -p "$PID_DIR" "$LOG_DIR" "$SLOT_STATE_DIR"
+        # Whatever preset once owned this slot does not own what starts here now;
+        # `preset` writes the marker back after this call returns.
+        rm -f "$PID_DIR/preset-${slot}"
+    fi
 
     local proxy_log="$LOG_DIR/proxy-${slot}.log"
     local server_log="$LOG_DIR/server-${slot}.log"
 
     # --clear-logs: start this slot's logs fresh (e.g. for a clean cache-stats run)
-    if [[ "$clear_logs" == true ]]; then
+    if [[ "$clear_logs" == true && "$print_cmd" != true ]]; then
         : > "$server_log"
         : > "$proxy_log"
         echo "Cleared logs for slot $slot"
@@ -518,45 +633,24 @@ cmd_start() {
     # Speculative decoding: on whenever the model declares it, unless --spec off.
     # The draft head ships inside the model's own GGUF, so this costs no extra file.
     [[ "$spec" != "off" && ${#_r_spec_args[@]} -gt 0 ]] && cmd+=("${_r_spec_args[@]}")
+    # Last, on purpose: llama-server takes the last occurrence of a sampler flag,
+    # so these override both models.conf and the sampler set that --reasoning off
+    # brings with it.
+    [[ -n "$temp" ]] && cmd+=(--temp "$temp")
+    [[ -n "$top_p" ]] && cmd+=(--top-p "$top_p")
+
+    # Everything above only assembled the command; nothing has been started yet,
+    # which is what makes --print-cmd a safe way to ask "what would this slot run?".
+    if [[ "$print_cmd" == true ]]; then
+        printf '%s\n' "${cmd[*]}"
+        return 0
+    fi
 
     # The proxy is opt-in (--proxy): it only rewrites time/date stamps to keep the
     # prompt cache warm, which a client that sends no such stamps does not need.
     # Without it, clients talk to llama-server directly (see cmd_env).
     if [[ "$start_proxy" == true ]]; then
-        # Start proxy and poll until it listens on the port (max 10s)
-        echo "Starting proxy [slot $slot] on port $port_proxy..."
-        # -u: unbuffered stdout/stderr so every log line lands in $proxy_log
-        # immediately (and nothing is lost when the proxy is killed on stop).
-        # LLM_TOKEN_FILE switches the proxy into hardened mode: token check,
-        # path allowlist, concurrency and body-size caps. Unset = pass-through.
-        local proxy_pid=""
-        proxy_pid=$(_spawn_detached "$PID_DIR/proxy-${slot}.pid" "$proxy_log" truncate \
-            env LLM_BACKEND_URL="http://localhost:${port_server}" \
-                LLM_PROXY_HOST="${host:-127.0.0.1}" \
-                LLM_PROXY_PORT="${port_proxy}" \
-                LLM_TOKEN_FILE="$([[ "$public" == true ]] && echo "$TOKEN_FILE")" \
-                python3 -u "$PROXY_SCRIPT")
-        if [[ -z "$proxy_pid" ]]; then
-            echo "Error: the proxy did not report a PID. See $proxy_log"
-            exit 1
-        fi
-
-        local max_wait=10
-        for (( i=0; i<max_wait; i++ )); do
-            sleep 1
-            if ! ps -p "$proxy_pid" > /dev/null 2>&1; then
-                echo "Error: Proxy failed to start. See $proxy_log"
-                exit 1
-            fi
-            if ss -tlnp 2>/dev/null | grep -q ":${port_proxy} "; then
-                echo "Proxy running (PID: $proxy_pid)"
-                break
-            fi
-            if (( i == max_wait - 1 )); then
-                echo "Error: Proxy did not listen on port $port_proxy within ${max_wait}s. See $proxy_log"
-                exit 1
-            fi
-        done
+        _start_proxy "$slot" "$host" "$public" || exit 1
     fi
 
     # Start llama-server in background
@@ -642,6 +736,12 @@ cmd_start() {
         else
             echo "Speculative: on (${_r_spec_args[*]})"
         fi
+        if [[ -n "$temp$top_p" ]]; then
+            local sam=""
+            [[ -n "$temp" ]] && sam+="temp $temp"
+            [[ -n "$top_p" ]] && sam+="${sam:+, }top-p $top_p"
+            echo "Samplers: $sam — overriding what models.conf sets for this model"
+        fi
         [[ "$mlock" == true ]] && echo "mlock: enabled (--mlock)"
         [[ -n "$gpu_priority" ]] && echo "GPU priority: $gpu_priority (GGML_VK_QUEUE_PRIORITY; needs patched ggml-vulkan)"
         echo "----- effective config -----"
@@ -716,6 +816,45 @@ cmd_start() {
     echo "  Stop:  $0 stop $slot"
 }
 
+# The server / proxy actually running on a slot: the PID file if it still names a
+# live process, otherwise whoever holds the port. Prints the PID, or returns 1.
+_slot_server_pid() {
+    local slot="$1" pid=""
+    [[ -f "$PID_DIR/server-${slot}.pid" ]] && pid=$(cat "$PID_DIR/server-${slot}.pid")
+    if [[ -z "$pid" ]] || ! ps -p "$pid" > /dev/null 2>&1; then
+        pid=$(_pid_on_port $(( PORT_BASE_SERVER + slot )))
+    fi
+    [[ -n "$pid" ]] && ps -p "$pid" > /dev/null 2>&1 || return 1
+    echo "$pid"
+}
+
+_slot_proxy_pid() {
+    local slot="$1" pid=""
+    [[ -f "$PID_DIR/proxy-${slot}.pid" ]] && pid=$(cat "$PID_DIR/proxy-${slot}.pid")
+    if [[ -z "$pid" ]] || ! ps -p "$pid" > /dev/null 2>&1; then
+        pid=$(_pid_on_port $(( PORT_BASE_PROXY + slot )))
+    fi
+    [[ -n "$pid" ]] && ps -p "$pid" > /dev/null 2>&1 || return 1
+    echo "$pid"
+}
+
+# The label of whatever model a slot is running, read from the process itself.
+# Falls back to the file name, and to "unknown" for anything unreadable.
+_slot_model_label() {
+    local slot="$1" pid="" i
+    pid=$(_slot_server_pid "$slot") || { echo "unknown"; return 1; }
+    _read_argv "$pid" || { echo "unknown"; return 1; }
+    for (( i=0; i < ${#_ARGV[@]} - 1; i++ )); do
+        case "${_ARGV[i]}" in
+            -m|--model)
+                local label
+                label=$(_label_for_model_path "${_ARGV[i+1]}") || label="$(basename "${_ARGV[i+1]}")"
+                echo "$label"; return 0 ;;
+        esac
+    done
+    echo "unknown"
+}
+
 # Find a PID listening on a given port (uses ss or lsof).
 _pid_on_port() {
     local port="$1"
@@ -728,33 +867,16 @@ _pid_on_port() {
 
 _stop_slot() {
     local slot="$1"
-    local port_server=$(( PORT_BASE_SERVER + slot ))
-    local port_proxy=$(( PORT_BASE_PROXY + slot ))
     local stopped=0
 
-    # Stop server — prefer stored PID, fall back to port scan
     local server_pid=""
-    [[ -f "$PID_DIR/server-${slot}.pid" ]] && server_pid=$(cat "$PID_DIR/server-${slot}.pid")
-    if [[ -z "$server_pid" ]] || ! ps -p "$server_pid" > /dev/null 2>&1; then
-        server_pid=$(_pid_on_port "$port_server")
-    fi
-    if [[ -n "$server_pid" ]] && ps -p "$server_pid" > /dev/null 2>&1; then
+    if server_pid=$(_slot_server_pid "$slot"); then
         kill "$server_pid" 2>/dev/null
         echo "Slot $slot: llama-server (PID: $server_pid) stopped."
         stopped=$(( stopped + 1 ))
     fi
 
-    # Stop proxy — prefer stored PID, fall back to port scan
-    local proxy_pid=""
-    [[ -f "$PID_DIR/proxy-${slot}.pid" ]] && proxy_pid=$(cat "$PID_DIR/proxy-${slot}.pid")
-    if [[ -z "$proxy_pid" ]] || ! ps -p "$proxy_pid" > /dev/null 2>&1; then
-        proxy_pid=$(_pid_on_port "$port_proxy")
-    fi
-    if [[ -n "$proxy_pid" ]] && ps -p "$proxy_pid" > /dev/null 2>&1; then
-        kill "$proxy_pid" 2>/dev/null
-        echo "Slot $slot: proxy (PID: $proxy_pid) stopped."
-        stopped=$(( stopped + 1 ))
-    fi
+    _stop_proxy "$slot" && stopped=$(( stopped + 1 ))
 
     # Stop the TLS front — closing the public port first would be nicer, but the
     # slot is going down either way and stunnel is the cheapest to restart.
@@ -767,6 +889,7 @@ _stop_slot() {
     fi
 
     rm -f "$PID_DIR/server-${slot}.pid" "$PID_DIR/proxy-${slot}.pid" "$PID_DIR/stunnel-${slot}.pid"
+    rm -f "$PID_DIR/preset-${slot}"
     rm -f "$STUNNEL_DIR/slot-${slot}.conf"
     rmdir "$STUNNEL_DIR" 2>/dev/null || true
     # Only succeeds while nothing was saved there via ?action=save.
@@ -789,6 +912,606 @@ cmd_stop() {
     fi
 
     rmdir "$PID_DIR" 2>/dev/null || true
+}
+
+# ── Presets ─────────────────────────────────────────────────
+#
+# A preset is a whole configuration under one name: the models, their slots and
+# their start flags (presets.conf). Every entry goes through cmd_start unchanged,
+# so a preset can do exactly what `start` can do and nothing has to be mirrored.
+
+cmd_presets() {
+    printf "\n\033[1mAvailable presets:\033[0m\n\n"
+    if (( ${#_PRESETS[@]} == 0 )); then
+        echo "  none defined — add one to presets.conf"
+        echo ""
+        return 0
+    fi
+    local entry line
+    local -a f w
+    for entry in "${_PRESETS[@]}"; do
+        IFS='|' read -r -a f <<< "$entry"
+        printf "  \033[36m%-14s\033[0m %s\n" "${f[0]}" "${f[1]}"
+        for line in "${f[@]:2}"; do
+            w=(); read -ra w <<< "$line"
+            printf "  %-14s   slot %-3s %-14s %s\n" "" "${w[1]}" "${w[0]}" "${w[*]:2}"
+        done
+        echo ""
+    done
+    echo "  ./run.sh preset <name>            bring the machine to that configuration:"
+    echo "                                    keep what already matches, stop the rest, start what is missing"
+    echo "  ./run.sh preset <name> --dry-run  show the plan, change nothing"
+    echo ""
+}
+
+# A model is ready once llama-server binds its port — which happens after the
+# weights are loaded, minutes rather than seconds for the big files. Waiting for
+# it serializes VRAM allocation across a preset's models and turns a failed load
+# into an error here, instead of letting the next model load on top of it.
+_wait_for_slot() {
+    local slot="$1" limit="$2"
+    local port=$(( PORT_BASE_SERVER + slot ))
+    local pid=""
+    [[ -f "$PID_DIR/server-${slot}.pid" ]] && pid=$(cat "$PID_DIR/server-${slot}.pid")
+    local waited=0
+    while (( waited < limit )); do
+        if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
+            echo "  ready after ${waited}s — listening on :$port"
+            return 0
+        fi
+        if [[ -n "$pid" ]] && ! ps -p "$pid" > /dev/null 2>&1; then
+            echo "  the server exited while loading — see $LOG_DIR/server-${slot}.log" >&2
+            return 1
+        fi
+        sleep 2
+        waited=$(( waited + 2 ))
+        (( waited % 30 == 0 )) && echo "  loading… ${waited}s"
+    done
+    echo "  still not listening on :$port after ${limit}s — see $LOG_DIR/server-${slot}.log" >&2
+    return 1
+}
+
+cmd_preset() {
+    local name=""
+    local dry_run=false
+    local force=false           # true = reload every model, even one that already matches
+    local wait_limit=900        # per model; a 78 GiB file off disk is minutes, not seconds
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --dry-run) dry_run=true; shift ;;
+            --force) force=true; shift ;;
+            --wait) _need_value "$@" || exit 1; wait_limit="$2"; shift 2 ;;
+            -*) echo "Unknown option: $1"; exit 1 ;;
+            *) [[ -z "$name" ]] && name="$1"; shift ;;
+        esac
+    done
+
+    [[ -z "$name" ]] && { cmd_presets; exit 1; }
+    if [[ ! "$wait_limit" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Error: --wait requires a positive number of seconds (got '$wait_limit')"; exit 1
+    fi
+    _resolve_preset "$name" || { echo "Unknown preset: $name"; cmd_presets; exit 1; }
+    (( ${#_p_entries[@]} == 0 )) && { echo "Error: preset '$name' lists no models."; exit 1; }
+
+    # ── Read the preset, and ask start what each entry would run ────────────
+    # Everything is checked before anything is touched: a name typo or an
+    # impossible flag in the last entry must not disturb a running slot.
+    local -a e_model=() e_slot=() e_flags=() e_label=() e_cmd=() e_proxy=()
+    local line seen=""
+    local -a w
+    for line in "${_p_entries[@]}"; do
+        w=(); read -ra w <<< "$line"
+        if (( ${#w[@]} < 2 )); then
+            echo "Error: preset '$name': entry '$line' needs a model and a slot."; exit 1
+        fi
+        local m="${w[0]}" s="${w[1]}"
+        _resolve_model "$m" || { echo "Error: preset '$name': unknown model '$m'."; exit 1; }
+        if [[ "$s" != "1" && "$s" != "2" && "$s" != "3" ]]; then
+            echo "Error: preset '$name': '$m' asks for slot '$s'; slots are 1, 2 or 3."; exit 1
+        fi
+        if [[ " $seen " == *" $s "* ]]; then
+            echo "Error: preset '$name': slot $s is claimed twice — one server per slot."; exit 1
+        fi
+        seen+=" $s"
+
+        # start itself is the authority on what this entry means — flags, samplers,
+        # reasoning translation, speculation and all. Asking it beats re-deriving
+        # any of that here, and it validates the entry on the way.
+        local out rc
+        out=$( cmd_start "$m" "$s" "${w[@]:2}" --print-cmd 2>&1 ); rc=$?
+        if (( rc != 0 )); then
+            echo "Error: preset '$name': entry '$line' cannot be started:"
+            printf '  %s\n' "$out"
+            exit 1
+        fi
+
+        e_model+=("$m"); e_slot+=("$s"); e_flags+=("${w[*]:2}"); e_label+=("$_r_label")
+        e_cmd+=("$out")
+        [[ " ${w[*]:2} " == *" --proxy "* ]] && e_proxy+=(true) || e_proxy+=(false)
+    done
+
+    # ── Compare against what is running ─────────────────────────────────────
+    # Per slot, the target command against the running process's own argv. A full
+    # comparison, so a slot counts as matching only when every flag agrees — model,
+    # context, parallel, samplers, mmproj, speculation, reasoning.
+    local total=${#e_model[@]} i
+    local -a e_action=() e_proxy_action=()
+    local keep_n=0 start_n=0 restart_n=0
+    for (( i=0; i<total; i++ )); do
+        local s="${e_slot[i]}" pid="" action="start" proxy_action="none"
+        if pid=$(_slot_server_pid "$s"); then
+            if [[ "$force" == true ]]; then
+                action="restart"
+            elif _read_argv "$pid" && [[ "${_ARGV[*]}" == "${e_cmd[i]}" ]]; then
+                action="keep"
+            else
+                action="restart"
+            fi
+        fi
+        # A proxy is a second, cheap process; when the model itself is right, the
+        # proxy is added or removed on its own rather than reloading the weights.
+        if [[ "$action" == "keep" ]]; then
+            local proxy_up=false
+            _slot_proxy_pid "$s" > /dev/null && proxy_up=true
+            if [[ "${e_proxy[i]}" == true && "$proxy_up" == false ]]; then
+                proxy_action="start"
+            elif [[ "${e_proxy[i]}" == false && "$proxy_up" == true ]]; then
+                proxy_action="stop"
+            fi
+        fi
+        e_action+=("$action"); e_proxy_action+=("$proxy_action")
+        case "$action" in
+            keep)    keep_n=$(( keep_n + 1 )) ;;
+            start)   start_n=$(( start_n + 1 )) ;;
+            restart) restart_n=$(( restart_n + 1 )) ;;
+        esac
+    done
+
+    # Slots the preset does not name: a preset describes the whole machine, so
+    # anything else running is stopped — including a model this preset itself put
+    # on a slot it no longer uses.
+    local -a foreign=()
+    local s
+    for s in 1 2 3; do
+        [[ " $seen " == *" $s "* ]] && continue
+        if _slot_server_pid "$s" > /dev/null || _slot_proxy_pid "$s" > /dev/null; then
+            foreign+=("$s")
+        fi
+    done
+
+    # ── The plan ────────────────────────────────────────────────────────────
+    echo ""
+    printf "\033[1mPreset '%s' — %s\033[0m\n" "$_p_name" "$_p_label"
+    echo ""
+    for s in "${foreign[@]}"; do
+        local running=""
+        running=$(_slot_model_label "$s")
+        [[ "$running" == "unknown" ]] && running="(proxy only)"
+        printf "  slot %s  %-14s %-24s %s\n" "$s" "-" "$running" "stop — not part of this preset"
+    done
+    for (( i=0; i<total; i++ )); do
+        local note=""
+        case "${e_action[i]}" in
+            keep)    note="already running like this — keep" ;;
+            start)   note="start" ;;
+            restart) note=$([[ "$force" == true ]] && echo "restart (--force)" || echo "runs a different configuration — stop and start") ;;
+        esac
+        case "${e_proxy_action[i]}" in
+            start) note+=", add proxy" ;;
+            stop)  note+=", stop proxy" ;;
+        esac
+        printf "  slot %s  %-14s %-24s %s\n" "${e_slot[i]}" "${e_model[i]}" "${e_label[i]}" "$note"
+    done
+
+    if [[ "$dry_run" == true ]]; then
+        if (( start_n + restart_n > 0 )); then
+            echo ""
+            echo "Would start:"
+            for (( i=0; i<total; i++ )); do
+                [[ "${e_action[i]}" == "keep" ]] && continue
+                echo "  $0 start ${e_model[i]} ${e_slot[i]} ${e_flags[i]}"
+            done
+        fi
+        echo ""
+        return 0
+    fi
+
+    if (( start_n + restart_n == 0 )) && (( ${#foreign[@]} == 0 )); then
+        local pending=0 j
+        for (( j=0; j<total; j++ )); do [[ "${e_proxy_action[j]}" == "none" ]] || pending=1; done
+        if (( pending == 0 )); then
+            echo ""
+            echo "Preset '$_p_name' is already running exactly like this — nothing to do."
+            for (( j=0; j<total; j++ )); do echo "$_p_name" > "$PID_DIR/preset-${e_slot[j]}"; done
+            echo ""
+            return 0
+        fi
+    fi
+
+    # ── Stop first, start second ────────────────────────────────────────────
+    # Everything that has to go goes before the first model loads: the new weights
+    # need the VRAM the old ones are holding.
+    echo ""
+    for s in "${foreign[@]}"; do
+        local running=""
+        running=$(_slot_model_label "$s")
+        _stop_slot "$s" > /dev/null && \
+            echo "Slot $s: $running stopped (not part of preset '$_p_name')."
+    done
+    for (( i=0; i<total; i++ )); do
+        [[ "${e_action[i]}" == "restart" ]] || continue
+        _stop_slot "${e_slot[i]}" > /dev/null && echo "Slot ${e_slot[i]}: stopped (ran a different configuration)."
+    done
+
+    # Kept slots: reconcile the proxy alone, and claim the slot for this preset.
+    for (( i=0; i<total; i++ )); do
+        [[ "${e_action[i]}" == "keep" ]] || continue
+        case "${e_proxy_action[i]}" in
+            start) _start_proxy "${e_slot[i]}" "" false || {
+                       echo "Error: could not add the proxy to slot ${e_slot[i]}."; exit 1; } ;;
+            stop)  _stop_proxy "${e_slot[i]}" > /dev/null && \
+                       echo "Slot ${e_slot[i]}: proxy stopped (this preset does not ask for one)." ;;
+        esac
+        echo "$_p_name" > "$PID_DIR/preset-${e_slot[i]}"
+        printf "Slot %s: %s keeps running (%s).\n" "${e_slot[i]}" "${e_model[i]}" "${e_label[i]}"
+    done
+
+    local -a started=()
+    local n=0
+    for (( i=0; i<total; i++ )); do
+        [[ "${e_action[i]}" == "keep" ]] && continue
+        n=$(( n + 1 ))
+        local m="${e_model[i]}" sl="${e_slot[i]}"
+        local -a flags=(); read -ra flags <<< "${e_flags[i]}"
+        echo ""
+        printf "\033[1m[%d/%d] %s → slot %s\033[0m\n" "$n" "$(( start_n + restart_n ))" "$m" "$sl"
+        # In a subshell: cmd_start ends a failed start with `exit`, which would
+        # otherwise take the preset — and the rollback below — down with it.
+        if ( cmd_start "$m" "$sl" "${flags[@]}" ) && _wait_for_slot "$sl" "$wait_limit"; then
+            echo "$_p_name" > "$PID_DIR/preset-${sl}"
+            started+=("$sl")
+            continue
+        fi
+
+        # Rolling back what this run started: a half-loaded preset is a
+        # configuration nobody asked for, and its slots hold VRAM the next
+        # attempt needs. Slots that were already running and matched are left
+        # alone — stopping a good model to tidy up would help no one.
+        echo ""
+        echo "Preset '$_p_name' failed at $m (slot $sl) — rolling back this run."
+        _stop_slot "$sl" > /dev/null 2>&1 || true
+        local r
+        for r in "${started[@]}"; do
+            _stop_slot "$r" || true
+        done
+        if (( keep_n > 0 )); then
+            echo "Still running from before: $(
+                for (( r=0; r<total; r++ )); do
+                    [[ "${e_action[r]}" == "keep" ]] && printf '%s (slot %s) ' "${e_model[r]}" "${e_slot[r]}"
+                done)"
+        else
+            echo "Nothing of preset '$_p_name' is running."
+        fi
+        exit 1
+    done
+
+    echo ""
+    printf "\033[1mPreset '%s' is up.\033[0m\n" "$_p_name"
+    for (( i=0; i<total; i++ )); do
+        printf "  slot %s: %-32s :%s\n" "${e_slot[i]}" "${e_label[i]}" "$(( PORT_BASE_SERVER + e_slot[i] ))"
+    done
+    echo ""
+    echo "  Env:    each shell picks one of them:"
+    for (( i=0; i<total; i++ )); do
+        echo "            source $0 env ${e_model[i]} ${e_slot[i]}"
+    done
+    echo "  Status: $0 status"
+    echo "  Stop:   $0 stop"
+    echo ""
+}
+
+# ── Capturing a running configuration ───────────────────────
+#
+# The reverse of `preset`: read what is running and write it back as a preset.
+# Nothing here is trusted on derivation alone — every entry it builds is fed
+# back through `start --print-cmd` and has to reproduce the server's own argv
+# flag for flag before it may be written (see _capture_slot).
+
+# Every model name in models.conf that points at a given .gguf. Usually one, but
+# two entries may share a file and differ only in flags, and then the
+# verification below is what tells them apart.
+_names_for_model_path() {
+    local path="$1" entry
+    local -a f
+    for entry in "${_MODELS[@]}"; do
+        IFS='|' read -r -a f <<< "$entry"
+        [[ "${f[2]//\~/$HOME}" == "$path" ]] && echo "${f[0]}"
+    done
+}
+
+# The level name that produced a given --reasoning-effort for this model, i.e.
+# _translate_reasoning read backwards through reasoning_levels.
+_level_for_effort() {
+    local effort="$1" map="$2" pair level
+    for level in $REASONING_LEVELS; do
+        for pair in $map; do
+            [[ "${pair%%=*}" == "$level" && "${pair#*=}" == "$effort" ]] && { echo "$level"; return 0; }
+        done
+    done
+    # No map (mode "unknown"): the canonical name was passed through unchanged.
+    [[ -z "$map" ]] && { echo "$effort"; return 0; }
+    return 1
+}
+
+# Turn the process running on a slot back into a preset entry.
+# Sets _cap_entry ("<model> <slot> [flags...]") and _cap_label; returns 1 with an
+# explanation on stderr when the running server cannot be expressed as one.
+_capture_slot() {
+    local slot="$1"
+    _cap_diff_name=""; _cap_diff_built=""
+    local pid=""
+    pid=$(_slot_server_pid "$slot") || { echo "slot $slot: nothing is running there" >&2; return 1; }
+    _read_argv "$pid" || { echo "slot $slot: cannot read /proc/$pid/cmdline" >&2; return 1; }
+
+    local model="" mmproj="" ctx="" parallel="" predict="" cache_ram="" similarity="" host=""
+    local spec_type="" reason="" reason_effort="" reason_budget=""
+    local last_temp="" last_top_p=""
+    local mlock=false auth=false verbose=false
+    local i=0
+    while (( i < ${#_ARGV[@]} )); do
+        case "${_ARGV[i]}" in
+            -m|--model)               model="${_ARGV[i+1]}";        i=$(( i + 2 )) ;;
+            --mmproj)                 mmproj="${_ARGV[i+1]}";       i=$(( i + 2 )) ;;
+            -c|--ctx-size)            ctx="${_ARGV[i+1]}";          i=$(( i + 2 )) ;;
+            -np|--parallel)           parallel="${_ARGV[i+1]}";     i=$(( i + 2 )) ;;
+            -n|--n-predict)           predict="${_ARGV[i+1]}";      i=$(( i + 2 )) ;;
+            --cache-ram)              cache_ram="${_ARGV[i+1]}";    i=$(( i + 2 )) ;;
+            --slot-prompt-similarity) similarity="${_ARGV[i+1]}";   i=$(( i + 2 )) ;;
+            --host)                   host="${_ARGV[i+1]}";         i=$(( i + 2 )) ;;
+            --spec-type)              spec_type="${_ARGV[i+1]}";    i=$(( i + 2 )) ;;
+            --reasoning)              reason="${_ARGV[i+1]}";       i=$(( i + 2 )) ;;
+            --reasoning-effort)       reason_effort="${_ARGV[i+1]}"; i=$(( i + 2 )) ;;
+            --reasoning-budget)       reason_budget="${_ARGV[i+1]}"; i=$(( i + 2 )) ;;
+            --api-key-file)           auth=true;                    i=$(( i + 2 )) ;;
+            -lv)                      verbose=true;                 i=$(( i + 2 )) ;;
+            --mlock)                  mlock=true;                   i=$(( i + 1 )) ;;
+            # Samplers may legitimately repeat — models.conf sets them, --reasoning
+            # off may reset them, --temp/--top-p override both. The last wins, so
+            # keep overwriting and end up with what the server actually uses.
+            --temp)                   last_temp="${_ARGV[i+1]}";    i=$(( i + 2 )) ;;
+            --top-p)                  last_top_p="${_ARGV[i+1]}";   i=$(( i + 2 )) ;;
+            *)                                                      i=$(( i + 1 )) ;;
+        esac
+    done
+
+    if [[ -z "$model" ]]; then
+        echo "slot $slot: the running process names no --model; it was not started from here" >&2
+        return 1
+    fi
+    local -a candidates=()
+    mapfile -t candidates < <(_names_for_model_path "$model")
+    if (( ${#candidates[@]} == 0 )); then
+        echo "slot $slot: $(basename "$model") is not in models.conf — add it there first" >&2
+        return 1
+    fi
+
+    # GGML_VK_QUEUE_PRIORITY lives in the environment, not in argv, so the
+    # verification below cannot see it — read it from the process itself.
+    local gpu_priority=""
+    if [[ -r "/proc/$pid/environ" ]]; then
+        gpu_priority=$(tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null |
+                       sed -n 's/^GGML_VK_QUEUE_PRIORITY=//p' | head -1)
+    fi
+    local proxy_up=false
+    _slot_proxy_pid "$slot" > /dev/null && proxy_up=true
+
+    local name
+    for name in "${candidates[@]}"; do
+        _resolve_model "$name" || continue
+        local -a flags=()
+        [[ "$proxy_up" == true ]] && flags+=(--proxy)
+        [[ "$auth" == true ]] && flags+=(--public)
+        [[ -n "$predict" ]] && flags+=(--max-predict "$predict")
+
+        # Reasoning, read back through _translate_reasoning's own rules.
+        if [[ "$reason" == "off" ]]; then
+            flags+=(--reasoning off)
+        elif [[ -n "$reason_effort" ]]; then
+            local level=""
+            level=$(_level_for_effort "$reason_effort" "$_r_reasoning_levels") || {
+                echo "slot $slot: reasoning effort '$reason_effort' matches no level of '$name'" >&2
+                continue; }
+            flags+=(--reasoning "$level")
+        elif [[ -n "$reason_budget" ]]; then
+            flags+=(--reasoning "$reason_budget")
+        elif [[ "$reason" == "on" ]]; then
+            flags+=(--reasoning on)
+        fi
+
+        [[ -n "$parallel" && "$parallel" != "1" ]] && flags+=(--parallel "$parallel")
+        [[ -n "$ctx" && "$ctx" != "$_r_ctx" ]] && flags+=(--ctx "$ctx")
+        [[ -n "$cache_ram" ]] && flags+=(--cache-ram "$cache_ram")
+        [[ -n "$similarity" ]] && flags+=(--similarity "$similarity")
+        [[ -n "$mmproj" ]] && flags+=(--mmproj)
+        [[ "$mlock" == true ]] && flags+=(--mlock)
+        [[ -n "$host" ]] && flags+=(--host "$host")
+        [[ -n "$gpu_priority" ]] && flags+=(--gpu-priority "$gpu_priority")
+        [[ "$verbose" == true ]] && flags+=(--verbose)
+        # Speculation is on by default wherever the model declares it, so only
+        # its absence needs saying.
+        [[ ${#_r_spec_args[@]} -gt 0 && -z "$spec_type" ]] && flags+=(--spec off)
+
+        # The proof: what these flags mean has to be what is actually running.
+        local built=""
+        built=$( cmd_start "$name" "$slot" "${flags[@]}" --print-cmd 2>/dev/null ) || continue
+        if [[ "$built" == "${_ARGV[*]}" ]]; then
+            _cap_entry="$name $slot ${flags[*]}"
+            _cap_label="$_r_label"
+            return 0
+        fi
+
+        # Second try with the samplers the process ends on. Unlike every other flag
+        # these cannot simply be read off: models.conf sets them for every model, so
+        # only a comparison shows whether this server was given different ones. The
+        # smallest set that reproduces the command wins, so a captured entry never
+        # carries a --temp that merely repeats the model's own.
+        local attempt
+        for attempt in temp top-p both; do
+            local -a flags2=("${flags[@]}")
+            case "$attempt" in
+                temp)  [[ -n "$last_temp" ]] || continue
+                       flags2+=(--temp "$last_temp") ;;
+                top-p) [[ -n "$last_top_p" ]] || continue
+                       flags2+=(--top-p "$last_top_p") ;;
+                both)  [[ -n "$last_temp" && -n "$last_top_p" ]] || continue
+                       flags2+=(--temp "$last_temp" --top-p "$last_top_p") ;;
+            esac
+            local built2=""
+            built2=$( cmd_start "$name" "$slot" "${flags2[@]}" --print-cmd 2>/dev/null ) || continue
+            if [[ "$built2" == "${_ARGV[*]}" ]]; then
+                _cap_entry="$name $slot ${flags2[*]}"
+                _cap_label="$_r_label"
+                return 0
+            fi
+        done
+        _cap_diff_name="$name"
+        _cap_diff_built="$built"
+    done
+
+    # Nothing verified: say where it parts ways rather than writing a guess.
+    echo "slot $slot: cannot express the running server as start options." >&2
+    if [[ -n "${_cap_diff_built:-}" ]]; then
+        echo "  closest is '$_cap_diff_name', which would run:" >&2
+        echo "    $_cap_diff_built" >&2
+        echo "  while the process runs:" >&2
+        echo "    ${_ARGV[*]}" >&2
+    fi
+    echo "  it was probably started by hand with flags run.sh does not offer." >&2
+    return 1
+}
+
+cmd_preset_save() {
+    local name="" label="" dry_run=false force=false
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --dry-run) dry_run=true; shift ;;
+            --force) force=true; shift ;;
+            --label) _need_value "$@" || exit 1; label="$2"; shift 2 ;;
+            -*) echo "Unknown option: $1"; exit 1 ;;
+            *) [[ -z "$name" ]] && name="$1"; shift ;;
+        esac
+    done
+
+    [[ -z "$name" ]] && { echo "Usage: $0 preset-save <name> [--label TEXT] [--dry-run] [--force]"; exit 1; }
+    if [[ ! "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+        echo "Error: a preset name may hold letters, digits, dot, dash and underscore; got '$name'"; exit 1
+    fi
+    # A dry run writes nothing, so an existing name is worth showing, not refusing.
+    if _resolve_preset "$name" && [[ "$force" != true && "$dry_run" != true ]]; then
+        echo "Error: preset '$name' already exists in presets.conf."
+        echo "       Pass --force to replace it, or pick another name."
+        exit 1
+    fi
+
+    local -a entries=() labels=()
+    local slot
+    for slot in 1 2 3; do
+        _slot_server_pid "$slot" > /dev/null || continue
+        _capture_slot "$slot" || exit 1
+        entries+=("$_cap_entry")
+        labels+=("$_cap_label")
+    done
+    if (( ${#entries[@]} == 0 )); then
+        echo "Nothing is running — there is no configuration to save."
+        exit 1
+    fi
+
+    # Default label: the models themselves, which is what the listing shows.
+    if [[ -z "$label" ]]; then
+        local l
+        for l in "${labels[@]}"; do label+="${label:+ + }$l"; done
+    fi
+    label="${label//\"/\'}"     # the label is written inside a double-quoted assignment
+
+    # Align the model column the way the hand-written entries are aligned.
+    local width=0 e
+    for e in "${entries[@]}"; do
+        local m="${e%% *}"
+        (( ${#m} > width )) && width=${#m}
+    done
+
+    local block=""
+    block+="# Captured from the running configuration on $(date +%F)."$'\n'
+    block+="# Verified: each entry reproduces its server's own argv flag for flag."$'\n'
+    block+="_preset_name=\"$name\""$'\n'
+    block+="_preset_label=\"$label\""$'\n'
+    block+="_preset_entries=("$'\n'
+    for e in "${entries[@]}"; do
+        local m="${e%% *}" rest="${e#* }"
+        block+="$(printf '    "%-*s %s"' "$width" "$m" "$rest")"$'\n'
+    done
+    block+=")"$'\n'
+    block+="add_preset"$'\n'
+
+    if [[ "$dry_run" == true ]]; then
+        echo ""
+        if _resolve_preset "$name"; then
+            echo "Would replace the existing preset '$name' in $SCRIPT_DIR/presets.conf with:"
+        else
+            echo "Would append to $SCRIPT_DIR/presets.conf:"
+        fi
+        echo ""
+        printf '%s' "$block" | sed 's/^/  /'
+        echo ""
+        return 0
+    fi
+
+    local conf="$SCRIPT_DIR/presets.conf"
+    if [[ ! -w "$conf" ]]; then
+        echo "Error: cannot write $conf"; exit 1
+    fi
+    # Replacing: drop the old block and the comment lines that belong to it, so
+    # --force leaves no stale description behind.
+    if _resolve_preset "$name"; then
+        local tmp
+        tmp=$(mktemp) || { echo "Error: cannot create a temporary file"; exit 1; }
+        PRESET_NAME="$name" awk '
+            /^_preset_name="/ {
+                if ($0 == "_preset_name=\"" ENVIRON["PRESET_NAME"] "\"") { drop = 1; hold_n = 0; next }
+                for (i = 1; i <= hold_n; i++) print hold[i]
+                hold_n = 0
+            }
+            drop { if ($0 == "add_preset") drop = 0; next }
+            /^#/ { hold[++hold_n] = $0; next }          # comments may belong to the next block
+            /^[[:space:]]*$/ && hold_n > 0 { for (i = 1; i <= hold_n; i++) print hold[i]; hold_n = 0 }
+            { for (i = 1; i <= hold_n; i++) print hold[i]; hold_n = 0; print }
+            END { for (i = 1; i <= hold_n; i++) print hold[i] }
+        ' "$conf" > "$tmp" || { rm -f "$tmp"; echo "Error: rewriting $conf failed"; exit 1; }
+        # Collapse the blank lines the removed block left behind.
+        awk 'NF == 0 { blank++; next } { while (blank > 2) blank--; while (blank-- > 0) print ""; blank = 0; print }' \
+            "$tmp" > "$tmp.2" && mv "$tmp.2" "$tmp"
+        mv "$tmp" "$conf"
+        echo "Replaced the previous preset '$name'."
+    fi
+
+    printf '\n%s' "$block" >> "$conf"
+
+    # Read it back the way run.sh will: a block that does not load is a bug that
+    # has to surface here, not on the next start.
+    if ! bash -n "$conf" 2>/dev/null; then
+        echo "Error: $conf no longer parses — please check the end of the file."
+        exit 1
+    fi
+    echo ""
+    echo "Saved preset '$name' to $conf:"
+    echo ""
+    printf '%s' "$block" | sed 's/^/  /'
+    echo ""
+    echo "  ./run.sh preset $name          bring the machine back to it"
+    echo "  ./run.sh preset $name --dry-run   check it against what runs now"
+    echo ""
 }
 
 # Read a running process's argv (NUL-separated in /proc) into $_ARGV.
@@ -911,21 +1634,18 @@ cmd_status() {
         local port_server=$(( PORT_BASE_SERVER + slot ))
         local port_proxy=$(( PORT_BASE_PROXY + slot ))
 
-        local server_pid=""
-        [[ -f "$PID_DIR/server-${slot}.pid" ]] && server_pid=$(cat "$PID_DIR/server-${slot}.pid")
-        if [[ -z "$server_pid" ]] || ! ps -p "$server_pid" > /dev/null 2>&1; then
-            server_pid=$(_pid_on_port "$port_server")
-        fi
-
-        local proxy_pid=""
-        [[ -f "$PID_DIR/proxy-${slot}.pid" ]] && proxy_pid=$(cat "$PID_DIR/proxy-${slot}.pid")
-        if [[ -z "$proxy_pid" ]] || ! ps -p "$proxy_pid" > /dev/null 2>&1; then
-            proxy_pid=$(_pid_on_port "$port_proxy")
-        fi
+        local server_pid="" proxy_pid=""
+        server_pid=$(_slot_server_pid "$slot") || server_pid=""
+        proxy_pid=$(_slot_proxy_pid "$slot") || proxy_pid=""
 
         local slot_active=0
+        # Written by `preset`, removed by `start` and `stop` — so it only ever
+        # names a slot this machine still holds for that preset.
+        local preset_note=""
+        [[ -s "$PID_DIR/preset-${slot}" ]] && preset_note="  [Preset: $(cat "$PID_DIR/preset-${slot}")]"
+
         if [[ -n "$server_pid" ]] && ps -p "$server_pid" > /dev/null 2>&1; then
-            echo "Slot $slot: llama-server (PID: $server_pid) on :$port_server"
+            echo "Slot $slot: llama-server (PID: $server_pid) on :$port_server$preset_note"
             _describe_server "$server_pid"
             echo "         Log: tail -f $LOG_DIR/server-${slot}.log"
             slot_active=1; found=1
@@ -1536,6 +2256,8 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "    --slot-prompt-similarity; default 0.1, 0 = pure LRU slot pick)"
     printf "  %-20s %s\n" ""                      "  --spec on|off / --no-spec: speculative decoding; on by default for every model"
     printf "  %-20s %s\n" ""                      "    that declares a draft in models.conf (qwen, gemma, llama3.3, diamond, magnum)"
+    printf "  %-20s %s\n" ""                      "  --temp F / --top-p F: override the samplers models.conf sets for this model,"
+    printf "  %-20s %s\n" ""                      "    e.g. --temp 0.1 for code on a model tuned for prose"
     printf "  %-20s %s\n" ""                      "  --mmproj: load the model's multimodal projector (vision), where models.conf defines one"
     printf "  %-20s %s\n" ""                      "  --host ADDR: bind address (default 127.0.0.1; 0.0.0.0 exposes the server on the LAN)"
     printf "  %-20s %s\n" ""                      "  --gpu-priority low|medium|high|realtime: Vulkan queue priority (needs patched ggml-vulkan)"
@@ -1543,6 +2265,16 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  --clear-logs: truncate this slot's server/proxy log before starting"
     printf "  %-20s %s\n" ""                      "  --public: token auth + hardening + mTLS front for the VPS (needs gen-certs)"
     printf "  %-20s %s\n" ""                      "  --max-predict N: cap tokens per generation (-1=no limit; --public defaults to 8192)"
+    printf "  %-20s %s\n" "preset <name>"          "bring the machine to the configuration presets.conf names (several models at once)"
+    printf "  %-20s %s\n" ""                      "  keeps every slot that already runs exactly what the preset asks for,"
+    printf "  %-20s %s\n" ""                      "  stops what differs or is not part of it, starts only what is missing"
+    printf "  %-20s %s\n" ""                      "  --dry-run: show the plan (keep / stop / start), change nothing"
+    printf "  %-20s %s\n" ""                      "  --force: reload every model, even one that already matches"
+    printf "  %-20s %s\n" ""                      "  --wait N: seconds to wait per model for its port (default 900)"
+    printf "  %-20s %s\n" "preset-save <name>"     "write what is running now to presets.conf as a preset"
+    printf "  %-20s %s\n" ""                      "  every entry is verified to reproduce its server's own argv before anything is written"
+    printf "  %-20s %s\n" ""                      "  --label TEXT: description for the listing; --dry-run: print it; --force: replace an existing one"
+    printf "  %-20s %s\n" "presets"                "show the defined presets and what they start"
     printf "  %-20s %s\n" "stop [slot]"            "stop slot (or all if omitted)"
     printf "  %-20s %s\n" "status"                 "show running state, model and key parameters per slot"
     printf "  %-20s %s\n" "cache-stats [slot]"     "show prompt-cache hit rate (from the server log)"
@@ -1714,6 +2446,9 @@ if [[ "$_IS_SOURCED" == true ]]; then
 else
     case "${1:-}" in
         start)      shift; cmd_start "$@" ;;
+        preset)     shift; cmd_preset "$@" ;;
+        preset-save) shift; cmd_preset_save "$@" ;;
+        presets)    cmd_presets ;;
         stop)       shift; cmd_stop "$@" ;;
         status)     cmd_status ;;
         cache-stats) shift; cmd_cache_stats "$@" ;;

@@ -19,6 +19,9 @@ pip install waitress   # optional, recommended for production proxy
 ```bash
 ./run.sh list                          # Show available models
 ./run.sh start <name> [slot] [--proxy] # Start server in background (slot 1-3, default 1)
+./run.sh presets                       # Show the defined presets
+./run.sh preset <name>                 # Bring the machine to a whole configuration (see below)
+./run.sh preset-save <name>            # Record what is running now as a preset
 ./run.sh stop [slot]                   # Stop slot, or all if omitted
 ./run.sh status                        # Running state, model and key parameters (all slots)
 ./run.sh cache-stats [slot]            # Prompt-cache hit rate, read from the server log
@@ -45,6 +48,7 @@ source ./run.sh clear                  # Clear env vars
 | `--cache-ram N` | prompt-cache host-RAM cap in MiB (0 = disable, -1 = no limit; default 8192) |
 | `--similarity F` | prefix share (0..1) a slot must already hold to be reused — llama-server's `--slot-prompt-similarity` (default 0.1; 0 = pure LRU slot pick) |
 | `--spec on\|off`, `--no-spec` | speculative decoding; on by default for every model that declares a draft (`qwen`, `gemma`, `llama3.3`, `diamond`, `magnum`) |
+| `--temp F`, `--top-p F` | override the samplers `models.conf` sets for this model. Passed last, so they also win over the non-thinking sampler set that `--reasoning off` brings with it — the same model can run at `--temp 0.1` for code and at its own 0.6 for prose |
 | `--mmproj` | load the model's multimodal projector (vision), where `models.conf` defines one |
 | `--host ADDR` | bind address (default 127.0.0.1; `0.0.0.0` exposes the server on the LAN) |
 | `--gpu-priority low\|medium\|high\|realtime` | Vulkan queue priority (needs the patched ggml-vulkan) |
@@ -52,6 +56,7 @@ source ./run.sh clear                  # Clear env vars
 | `--clear-logs` | truncate this slot's server/proxy log before starting |
 | `--public` | token auth + hardening + mTLS front for the VPS (needs `gen-certs`) |
 | `--max-predict N` | cap tokens per generation (-1 = no limit; `--public` defaults to 8192) |
+| `--print-cmd` | build and validate everything, print the llama-server command, start nothing (this is how `preset` compares a slot against what it should run) |
 
 ### The proxy is opt-in
 
@@ -88,6 +93,110 @@ claude
 ./run.sh stop 1                # stop only slot 1
 ./run.sh stop                  # stop everything
 ```
+
+### Presets
+
+A preset is a whole configuration under one name: which models run, on which
+slot, with which flags. `presets.conf` holds them, in the same shape as
+`models.conf`:
+
+```bash
+_preset_name="c4f"
+_preset_label="Llama-3.3-70B with Qwen3-VL-8B next to it for images"
+_preset_entries=(
+    "llama3.3 2 --parallel 5 --ctx 61440 --similarity 0.92"
+    "qwen-vl  3 --mmproj"
+)
+add_preset
+```
+
+Each entry is exactly what would follow `run.sh start` — model, slot, then any
+`start` flag. They are passed on untouched, so a preset can do whatever `start`
+can do and there is no second option dialect to keep in sync.
+
+```bash
+./run.sh presets                 # what is defined, and what each one starts
+./run.sh preset c4f              # bring the machine to that configuration
+./run.sh preset c4f --dry-run    # show the plan, change nothing
+./run.sh preset c4f --force      # reload everything, even what already matches
+```
+
+`preset` does not start blindly — it brings the machine to the named
+configuration, keeping whatever already fits:
+
+| Slot state | What happens |
+| --- | --- |
+| runs exactly what the preset asks for | kept, untouched |
+| runs the same model with different flags, or a different model | stopped, started again as the preset wants it |
+| empty | started |
+| runs something the preset does not name | stopped — a preset describes the whole machine |
+| model matches, only the proxy is missing or surplus | just the proxy is started or stopped, the weights stay loaded |
+
+"Exactly" is meant literally: the target command is compared flag by flag against
+the running process's own argv (`/proc/<pid>/cmdline`), so a differing `--ctx` or
+`--parallel` counts as a mismatch. The comparison uses `start --print-cmd`, which
+builds and validates the whole command and starts nothing — so `start` stays the
+single authority on what an entry means.
+
+```
+Preset 'c4f' — Llama-3.3-70B with Qwen3-VL-8B next to it for images
+
+  slot 1  -              Gemma-4-31B-it Unc       stop — not part of this preset
+  slot 2  llama3.3       Llama-3.3-70B Abl        already running like this — keep
+  slot 3  qwen-vl        Qwen3-VL-8B Unc          already running like this — keep
+```
+
+Everything that has to go is stopped before the first new model loads — the new
+weights need the VRAM the old ones hold. The models are then started one after
+another, each waited for until it listens on its port, which serializes VRAM
+allocation and makes a failed load visible immediately (`--wait N`, default 900s).
+If one does not come up, the slots *this run* started are stopped again; slots
+that were already running and matched are left alone.
+
+What a preset does not do is check that its models fit into VRAM together. An
+over-committed set fails on the model that no longer fits; the sizes are yours to
+add up.
+
+### Recording what runs as a preset
+
+`preset-save` is the other direction: it reads the running slots and writes them
+back into `presets.conf`.
+
+```bash
+./run.sh preset-save c4f                      # append what runs now as preset "c4f"
+./run.sh preset-save c4f --dry-run            # print the block, write nothing
+./run.sh preset-save c4f --force              # replace an existing preset of that name
+./run.sh preset-save c4f --label "for images" # description for the listing
+```
+
+The flags are derived from the running process — `--ctx` only when it differs
+from the model's default, `--spec off` only when a model that could speculate
+does not, `--reasoning` read back through the level map of that model's template,
+`--proxy` when a proxy is up, `--gpu-priority` from the process environment.
+Samplers are the one thing that cannot be read off directly — `models.conf` sets
+them for every model — so the capture tries the smallest set of `--temp`/`--top-p`
+that reproduces the command, and writes none when the model's own values are in
+force. None
+of that is trusted on derivation alone: each entry is fed back through
+`start --print-cmd` and has to reproduce the server's own argv flag for flag.
+Only then is it written. A slot that cannot be expressed in `start` options — a
+model missing from `models.conf`, or a server started by hand — stops the whole
+save with a diff showing where it parts ways, and nothing is written.
+
+Two harmless normalizations follow from that: a flag that only restates a default
+is dropped, and where a model maps two levels onto the same template value (qwen
+sends both `high` and `max` as `xhigh`) the first of them is written. Both
+produce the identical command, which is what the verification checks.
+
+`status` names the preset a slot came from; `stop` clears that marker, as does
+starting something else on the slot by hand.
+
+```
+Slot 2: llama-server (PID: 1826416) on :8002  [Preset: c4f]
+```
+
+Every slot stays an ordinary slot, so `source ./run.sh env <model> <slot>` picks
+one of the running models per shell as before.
 
 ### Reasoning
 
@@ -479,5 +588,6 @@ Multimodal projectors are only loaded on an explicit `--mmproj`.
 
 - `proxy.py` — optional Flask proxy (`start --proxy`) that forwards requests to the local llama-server and optimizes prompts for caching; port and backend configurable via `LLM_PROXY_PORT` / `LLM_BACKEND_URL`
 - `models.conf` — Model definitions (paths, binaries, ROCm env vars)
+- `presets.conf` — Named configurations: which models run together, on which slots, with which flags (`run.sh preset <name>`)
 - `run.sh` — Main entry point for all commands
 - `deploy/vps-llm-vhost.conf` — Apache vhost for the VPS in front of `--public`
