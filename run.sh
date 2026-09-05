@@ -3,7 +3,7 @@
 # Usage:
 #   ./run.sh                                     list available models
 #   ./run.sh start <name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--temp F] [--top-p F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec]  start server (+ proxy with --proxy) in background (slot 1-3, default 1)
-#   ./run.sh preset <name> [--dry-run] [--force] [--wait N]  bring the machine to a whole configuration from presets.conf: keep what already matches, stop the rest, start what is missing
+#   ./run.sh preset <name> [--dry-run] [--force] [--wait N] [--proxy] [--public] [--host ADDR] [--clear-logs] [--verbose] [--gpu-priority L]  bring the machine to a whole configuration from presets.conf: keep what already matches, stop the rest, start what is missing
 #   ./run.sh preset-save <name> [--label TEXT] [--dry-run] [--force]  write the running configuration to presets.conf as a preset
 #   ./run.sh presets                             list the defined presets
 #   ./run.sh stop [slot]                         stop slot (or all if omitted)
@@ -976,13 +976,27 @@ cmd_preset() {
     local dry_run=false
     local force=false           # true = reload every model, even one that already matches
     local wait_limit=900        # per model; a 78 GiB file off disk is minutes, not seconds
+    # start options that describe how a slot is run and reached rather than what
+    # the model does. Those apply to a whole configuration equally, so they are
+    # given here and appended to every entry; what shapes the model itself
+    # (--ctx, --reasoning, --temp, --parallel, …) stays with its entry in
+    # presets.conf, where it belongs to one model and not to the set.
+    local -a extra=()
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --dry-run) dry_run=true; shift ;;
             --force) force=true; shift ;;
             --wait) _need_value "$@" || exit 1; wait_limit="$2"; shift 2 ;;
-            -*) echo "Unknown option: $1"; exit 1 ;;
+            --proxy|--public|--clear-logs|--verbose) extra+=("$1"); shift ;;
+            --host|--gpu-priority) _need_value "$@" || exit 1; extra+=("$1" "$2"); shift 2 ;;
+            -*) echo "Unknown option for preset: $1"
+                echo "  preset takes --dry-run, --force, --wait N, and the start options that"
+                echo "  apply to the whole configuration:"
+                echo "    --proxy  --public  --host ADDR  --clear-logs  --verbose  --gpu-priority L"
+                echo "  They are appended to every entry, so they win over what the entry itself"
+                echo "  says. Per-model options such as --ctx or --reasoning belong in the entry."
+                exit 1 ;;
             *) [[ -z "$name" ]] && name="$1"; shift ;;
         esac
     done
@@ -997,7 +1011,8 @@ cmd_preset() {
     # ── Read the preset, and ask start what each entry would run ────────────
     # Everything is checked before anything is touched: a name typo or an
     # impossible flag in the last entry must not disturb a running slot.
-    local -a e_model=() e_slot=() e_flags=() e_label=() e_cmd=() e_proxy=()
+    local -a e_model=() e_slot=() e_flags=() e_label=() e_cmd=() e_proxy=() e_public=() e_host=()
+    local word
     local line seen=""
     local -a w
     for line in "${_p_entries[@]}"; do
@@ -1015,20 +1030,32 @@ cmd_preset() {
         fi
         seen+=" $s"
 
+        # The entry's own flags first, the command-level ones after, so a --host
+        # given here overrides one written into the entry rather than the reverse.
+        local -a eff=("${w[@]:2}" "${extra[@]}")
+
         # start itself is the authority on what this entry means — flags, samplers,
         # reasoning translation, speculation and all. Asking it beats re-deriving
         # any of that here, and it validates the entry on the way.
         local out rc
-        out=$( cmd_start "$m" "$s" "${w[@]:2}" --print-cmd 2>&1 ); rc=$?
+        out=$( cmd_start "$m" "$s" "${eff[@]}" --print-cmd 2>&1 ); rc=$?
         if (( rc != 0 )); then
             echo "Error: preset '$name': entry '$line' cannot be started:"
             printf '  %s\n' "$out"
             exit 1
         fi
 
-        e_model+=("$m"); e_slot+=("$s"); e_flags+=("${w[*]:2}"); e_label+=("$_r_label")
+        e_model+=("$m"); e_slot+=("$s"); e_flags+=("${eff[*]}"); e_label+=("$_r_label")
         e_cmd+=("$out")
-        [[ " ${w[*]:2} " == *" --proxy "* ]] && e_proxy+=(true) || e_proxy+=(false)
+        [[ " ${eff[*]} " == *" --proxy "* ]] && e_proxy+=(true) || e_proxy+=(false)
+        [[ " ${eff[*]} " == *" --public "* ]] && e_public+=(true) || e_public+=(false)
+        # The host a reconciled proxy has to bind, read from the same effective flags.
+        local eh="" prev=""
+        for word in "${eff[@]}"; do
+            [[ "$prev" == "--host" ]] && eh="$word"
+            prev="$word"
+        done
+        e_host+=("$eh")
     done
 
     # ── Compare against what is running ─────────────────────────────────────
@@ -1083,6 +1110,7 @@ cmd_preset() {
     # ── The plan ────────────────────────────────────────────────────────────
     echo ""
     printf "\033[1mPreset '%s' — %s\033[0m\n" "$_p_name" "$_p_label"
+    (( ${#extra[@]} > 0 )) && printf "applied to every entry: %s\n" "${extra[*]}"
     echo ""
     for s in "${foreign[@]}"; do
         local running=""
@@ -1103,6 +1131,12 @@ cmd_preset() {
         esac
         printf "  slot %s  %-14s %-24s %s\n" "${e_slot[i]}" "${e_model[i]}" "${e_label[i]}" "$note"
     done
+
+    if [[ " ${extra[*]} " == *" --clear-logs "* ]] && (( keep_n > 0 )); then
+        echo ""
+        echo "Note: --clear-logs only reaches slots that are started here."
+        echo "      $keep_n slot(s) keep running, and keep their logs."
+    fi
 
     if [[ "$dry_run" == true ]]; then
         if (( start_n + restart_n > 0 )); then
@@ -1148,7 +1182,7 @@ cmd_preset() {
     for (( i=0; i<total; i++ )); do
         [[ "${e_action[i]}" == "keep" ]] || continue
         case "${e_proxy_action[i]}" in
-            start) _start_proxy "${e_slot[i]}" "" false || {
+            start) _start_proxy "${e_slot[i]}" "${e_host[i]}" "${e_public[i]}" || {
                        echo "Error: could not add the proxy to slot ${e_slot[i]}."; exit 1; } ;;
             stop)  _stop_proxy "${e_slot[i]}" > /dev/null && \
                        echo "Slot ${e_slot[i]}: proxy stopped (this preset does not ask for one)." ;;
@@ -2270,6 +2304,9 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  stops what differs or is not part of it, starts only what is missing"
     printf "  %-20s %s\n" ""                      "  --dry-run: show the plan (keep / stop / start), change nothing"
     printf "  %-20s %s\n" ""                      "  --force: reload every model, even one that already matches"
+    printf "  %-20s %s\n" ""                      "  --proxy --public --host ADDR --clear-logs --verbose --gpu-priority L:"
+    printf "  %-20s %s\n" ""                      "    start options describing how the slots are run and reached, applied to"
+    printf "  %-20s %s\n" ""                      "    every entry and winning over what the entry itself says"
     printf "  %-20s %s\n" ""                      "  --wait N: seconds to wait per model for its port (default 900)"
     printf "  %-20s %s\n" "preset-save <name>"     "write what is running now to presets.conf as a preset"
     printf "  %-20s %s\n" ""                      "  every entry is verified to reproduce its server's own argv before anything is written"

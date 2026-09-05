@@ -121,6 +121,27 @@ can do and there is no second option dialect to keep in sync.
 ./run.sh preset c4f --force      # reload everything, even what already matches
 ```
 
+Some start options say how a slot is run and reached rather than what the model
+does, and those apply to a whole configuration equally. They are given on the
+command instead of in the file, and appended to every entry:
+
+```bash
+./run.sh preset wrs --host 0.0.0.0             # the whole set on the LAN
+./run.sh preset wrs --host 0.0.0.0 --public    # …with token auth and the TLS front
+./run.sh preset wrs --clear-logs --verbose     # a fresh, loud run of the same set
+```
+
+`--proxy`, `--public`, `--host ADDR`, `--clear-logs`, `--verbose` and
+`--gpu-priority L` are the set. They come after the entry's own flags, so a
+`--host` given here overrides one written into the entry. Everything that shapes
+the model itself — `--ctx`, `--reasoning`, `--temp`, `--parallel`, `--cache-ram`,
+`--spec` — belongs to its entry in `presets.conf` and is refused here, since it
+would mean something different for each model in the set. The same options also
+take part in the comparison, so `preset wrs` and `preset wrs --host 0.0.0.0`
+describe two different configurations and each will restart what the other left.
+`--clear-logs` is the exception that cannot reach a slot which keeps running; the
+plan says so when that happens.
+
 `preset` does not start blindly — it brings the machine to the named
 configuration, keeping whatever already fits:
 
