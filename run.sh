@@ -1004,7 +1004,7 @@ cmd_preset() {
     local name=""
     local dry_run=false
     local force=false           # true = reload every model, even one that already matches
-    local wait_limit=120        # per model, until it reports itself loaded (--wait N)
+    local wait_limit=300        # per model, until it reports itself loaded (--wait N)
     # start options that describe how a slot is run and reached rather than what
     # the model does. Those apply to a whole configuration equally, so they are
     # given here and appended to every entry; what shapes the model itself
@@ -2340,7 +2340,7 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  --proxy --public --host ADDR --clear-logs --verbose --gpu-priority L:"
     printf "  %-20s %s\n" ""                      "    start options describing how the slots are run and reached, applied to"
     printf "  %-20s %s\n" ""                      "    every entry and winning over what the entry itself says"
-    printf "  %-20s %s\n" ""                      "  --wait N: seconds to wait for each model to load (default 120)"
+    printf "  %-20s %s\n" ""                      "  --wait N: seconds to wait for each model to load (default 300)"
     printf "  %-20s %s\n" "preset-save <name>"     "write what is running now to presets.conf as a preset"
     printf "  %-20s %s\n" ""                      "  every entry is verified to reproduce its server's own argv before anything is written"
     printf "  %-20s %s\n" ""                      "  --label TEXT: description for the listing; --dry-run: print it; --force: replace an existing one"

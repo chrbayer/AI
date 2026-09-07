@@ -174,8 +174,9 @@ another, and each one is waited for until llama-server writes its own
 serializes VRAM allocation, and it makes the command return only once the last
 model is actually ready to answer. The wait ends early if the server reports an
 error (a severity `E` line) or exits, and gives up after `--wait N` seconds
-(default 120). Big models load longer than that: the two 70B/35B loads measured
-here took 2:11 and 3:15, so pass `--wait 300` for a set like `wrs`.
+(default 300). The limit is there for a server that hangs, not for one that is
+merely slow: the dense 27B and the 35B MoE measured here took 2:11 and 3:15 to
+load, so a big set stays well inside it.
 If one does not come up, the slots *this run* started are stopped again; slots
 that were already running and matched are left alone.
 
