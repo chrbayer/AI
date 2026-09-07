@@ -944,30 +944,59 @@ cmd_presets() {
     echo ""
 }
 
-# A model is ready once llama-server binds its port — which happens after the
-# weights are loaded, minutes rather than seconds for the big files. Waiting for
-# it serializes VRAM allocation across a preset's models and turns a failed load
-# into an error here, instead of letting the next model load on top of it.
+# A model is ready when llama-server says so itself:
+#
+#   2.11.562.067 I srv  llama_server: listening on http://127.0.0.1:8001
+#
+# It prints that line after 'model loaded', so it marks the end of the load and
+# not the moment the socket exists. Nothing else is as reliable: the port alone
+# could be an older server that never went away, and the process being alive
+# says nothing about how far it has got. Waiting for the line serializes VRAM
+# allocation across a preset's models — the next one may only start allocating
+# once this one has all it needs — and it makes the last model in a preset
+# finish loading before the shell prompt comes back.
+#
+# The wait ends early on an error: the server log marks those with severity E
+# ('E srv  llama_server: exiting due to model loading error'), and a load that
+# dies leaves no process behind. Either way there is nothing left to wait for.
+#
+# The log is appended to across starts, so the caller passes the size it had
+# before this start; only what was written after that may decide anything.
 _wait_for_slot() {
-    local slot="$1" limit="$2"
+    local slot="$1" limit="$2" offset="${3:-0}"
     local port=$(( PORT_BASE_SERVER + slot ))
+    local log="$LOG_DIR/server-${slot}.log"
     local pid=""
     [[ -f "$PID_DIR/server-${slot}.pid" ]] && pid=$(cat "$PID_DIR/server-${slot}.pid")
-    local waited=0
+    local waited=0 size=0 fresh="" err=""
     while (( waited < limit )); do
-        if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
-            echo "  ready after ${waited}s — listening on :$port"
+        size=0
+        [[ -f "$log" ]] && size=$(stat -c%s "$log" 2>/dev/null || echo 0)
+        # --clear-logs truncated it under us; what is there now is all this run's.
+        (( size < offset )) && offset=0
+        fresh=$(tail -c "+$(( offset + 1 ))" "$log" 2>/dev/null)
+
+        if grep -Eq "(llama_server:|server is) listening on http://[^[:space:]]*:${port}([^0-9]|\$)" <<< "$fresh"; then
+            echo "  loaded after ${waited}s — listening on :$port"
             return 0
         fi
-        if [[ -n "$pid" ]] && ! ps -p "$pid" > /dev/null 2>&1; then
-            echo "  the server exited while loading — see $LOG_DIR/server-${slot}.log" >&2
+        err=$(grep -m1 -E "^[0-9][0-9.]* E " <<< "$fresh")
+        if [[ -n "$err" ]]; then
+            echo "  the server reported an error while loading:" >&2
+            echo "    ${err}" >&2
+            echo "  see $log" >&2
             return 1
         fi
-        sleep 2
-        waited=$(( waited + 2 ))
+        if [[ -n "$pid" ]] && ! ps -p "$pid" > /dev/null 2>&1; then
+            echo "  the server exited while loading — see $log" >&2
+            return 1
+        fi
+        sleep 1
+        waited=$(( waited + 1 ))
         (( waited % 30 == 0 )) && echo "  loading… ${waited}s"
     done
-    echo "  still not listening on :$port after ${limit}s — see $LOG_DIR/server-${slot}.log" >&2
+    echo "  not loaded after ${limit}s — the log has no 'listening on :$port' yet." >&2
+    echo "  Raise the limit with --wait N if this model is simply slow to load; see $log" >&2
     return 1
 }
 
@@ -975,7 +1004,7 @@ cmd_preset() {
     local name=""
     local dry_run=false
     local force=false           # true = reload every model, even one that already matches
-    local wait_limit=900        # per model; a 78 GiB file off disk is minutes, not seconds
+    local wait_limit=120        # per model, until it reports itself loaded (--wait N)
     # start options that describe how a slot is run and reached rather than what
     # the model does. Those apply to a whole configuration equally, so they are
     # given here and appended to every entry; what shapes the model itself
@@ -1202,7 +1231,11 @@ cmd_preset() {
         printf "\033[1m[%d/%d] %s → slot %s\033[0m\n" "$n" "$(( start_n + restart_n ))" "$m" "$sl"
         # In a subshell: cmd_start ends a failed start with `exit`, which would
         # otherwise take the preset — and the rollback below — down with it.
-        if ( cmd_start "$m" "$sl" "${flags[@]}" ) && _wait_for_slot "$sl" "$wait_limit"; then
+        # Where this run's output starts in the appended server log — what was
+        # there before belongs to an earlier start and must not answer for this one.
+        local off=0
+        [[ -f "$LOG_DIR/server-${sl}.log" ]] && off=$(stat -c%s "$LOG_DIR/server-${sl}.log" 2>/dev/null || echo 0)
+        if ( cmd_start "$m" "$sl" "${flags[@]}" ) && _wait_for_slot "$sl" "$wait_limit" "$off"; then
             echo "$_p_name" > "$PID_DIR/preset-${sl}"
             started+=("$sl")
             continue
@@ -2307,7 +2340,7 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  --proxy --public --host ADDR --clear-logs --verbose --gpu-priority L:"
     printf "  %-20s %s\n" ""                      "    start options describing how the slots are run and reached, applied to"
     printf "  %-20s %s\n" ""                      "    every entry and winning over what the entry itself says"
-    printf "  %-20s %s\n" ""                      "  --wait N: seconds to wait per model for its port (default 900)"
+    printf "  %-20s %s\n" ""                      "  --wait N: seconds to wait for each model to load (default 120)"
     printf "  %-20s %s\n" "preset-save <name>"     "write what is running now to presets.conf as a preset"
     printf "  %-20s %s\n" ""                      "  every entry is verified to reproduce its server's own argv before anything is written"
     printf "  %-20s %s\n" ""                      "  --label TEXT: description for the listing; --dry-run: print it; --force: replace an existing one"

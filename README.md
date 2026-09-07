@@ -169,8 +169,13 @@ Preset 'c4f' — Llama-3.3-70B with Qwen3-VL-8B next to it for images
 
 Everything that has to go is stopped before the first new model loads — the new
 weights need the VRAM the old ones hold. The models are then started one after
-another, each waited for until it listens on its port, which serializes VRAM
-allocation and makes a failed load visible immediately (`--wait N`, default 900s).
+another, and each one is waited for until llama-server writes its own
+`listening on http://…:800N` line — the line it prints after `model loaded`. That
+serializes VRAM allocation, and it makes the command return only once the last
+model is actually ready to answer. The wait ends early if the server reports an
+error (a severity `E` line) or exits, and gives up after `--wait N` seconds
+(default 120). Big models load longer than that: the two 70B/35B loads measured
+here took 2:11 and 3:15, so pass `--wait 300` for a set like `wrs`.
 If one does not come up, the slots *this run* started are stopped again; slots
 that were already running and matched are left alone.
 
