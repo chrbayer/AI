@@ -43,7 +43,6 @@ source ./run.sh clear                  # Clear env vars
 | `--reasoning off\|on\|low\|medium\|high\|max\|N` | one switch for every model; `N` is a token budget |
 | `--no-reasoning`, `--reasoning-budget N` | aliases for the above |
 | `--parallel N` | server slots (default 1) |
-| `--mlock` | lock the weights in memory so nothing gets paged out |
 | `--ctx N` | override the model's default context size |
 | `--cache-ram N` | prompt-cache host-RAM cap in MiB (0 = disable, -1 = no limit; default 8192) |
 | `--similarity F` | prefix share (0..1) a slot must already hold to be reused — llama-server's `--slot-prompt-similarity` (default 0.1; 0 = pure LRU slot pick) |

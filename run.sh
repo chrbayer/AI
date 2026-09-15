@@ -2,7 +2,7 @@
 # Unified LLM server manager for Claude Code.
 # Usage:
 #   ./run.sh                                     list available models
-#   ./run.sh start <name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--temp F] [--top-p F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec]  start server (+ proxy with --proxy) in background (slot 1-3, default 1)
+#   ./run.sh start <name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--temp F] [--top-p F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec]  start server (+ proxy with --proxy) in background (slot 1-3, default 1)
 #   ./run.sh preset <name> [--dry-run] [--force] [--wait N] [--proxy] [--public] [--host ADDR] [--clear-logs] [--verbose] [--gpu-priority L]  bring the machine to a whole configuration from presets.conf: keep what already matches, stop the rest, start what is missing
 #   ./run.sh preset-save <name> [--label TEXT] [--dry-run] [--force]  write the running configuration to presets.conf as a preset
 #   ./run.sh presets                             list the defined presets
@@ -445,7 +445,6 @@ cmd_start() {
     local name=""
     local slot="1"
     local reasoning=""          # "" = model/template default; off|on|<level>|N (see _translate_reasoning)
-    local mlock=false
     local parallel=""
     local ctx=""                # "" = model default; N>0 = override context size
     local cache_ram=""          # "" = server default (8192 MiB); 0 = disable prompt cache; -1 = no limit; N>0 = MiB cap
@@ -477,7 +476,6 @@ cmd_start() {
             --reasoning) _need_value "$@" || exit 1; reasoning="$2"; shift 2 ;;
             --reasoning-budget) _need_value "$@" || exit 1; reasoning="$2"; shift 2 ;;   # alias: a budget is a valid --reasoning spec
             --no-reasoning) reasoning=off; shift ;;          # alias for --reasoning off
-            --mlock) mlock=true; shift ;;
             --parallel) _need_value "$@" || exit 1; parallel="$2"; shift 2 ;;
             --ctx) _need_value "$@" || exit 1; ctx="$2"; shift 2 ;;
             --cache-ram) _need_value "$@" || exit 1; cache_ram="$2"; shift 2 ;;
@@ -497,7 +495,7 @@ cmd_start() {
         esac
     done
 
-    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--mlock] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec]"; exit 1; }
+    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec]"; exit 1; }
     [[ "$slot" != "1" && "$slot" != "2" && "$slot" != "3" ]] && { echo "Error: slot must be 1, 2, or 3"; exit 1; }
     if [[ -n "$parallel" && ! "$parallel" =~ ^[1-9][0-9]*$ ]]; then
         echo "Error: --parallel requires a positive integer (got '$parallel')"; exit 1
@@ -627,7 +625,6 @@ cmd_start() {
     # verbosity (3=INFO) filters them, so backend detection and buffer-size
     # lines never reach the log. -lv 4 reveals them (also more runtime logging).
     [[ "$verbose" == true ]] && cmd+=(-lv 4)
-    [[ "$mlock" == true ]] && cmd+=(--mlock)
     # Whatever --reasoning translated into for this model (may be empty).
     [[ ${#_reasoning_args[@]} -gt 0 ]] && cmd+=("${_reasoning_args[@]}")
     # Speculative decoding: on whenever the model declares it, unless --spec off.
@@ -742,7 +739,6 @@ cmd_start() {
             [[ -n "$top_p" ]] && sam+="${sam:+, }top-p $top_p"
             echo "Samplers: $sam — overriding what models.conf sets for this model"
         fi
-        [[ "$mlock" == true ]] && echo "mlock: enabled (--mlock)"
         [[ -n "$gpu_priority" ]] && echo "GPU priority: $gpu_priority (GGML_VK_QUEUE_PRIORITY; needs patched ggml-vulkan)"
         echo "----- effective config -----"
         echo "Command:"
@@ -1324,7 +1320,7 @@ _capture_slot() {
     local model="" mmproj="" ctx="" parallel="" predict="" cache_ram="" similarity="" host=""
     local spec_type="" reason="" reason_effort="" reason_budget=""
     local last_temp="" last_top_p=""
-    local mlock=false auth=false verbose=false
+    local auth=false verbose=false
     local i=0
     while (( i < ${#_ARGV[@]} )); do
         case "${_ARGV[i]}" in
@@ -1342,7 +1338,6 @@ _capture_slot() {
             --reasoning-budget)       reason_budget="${_ARGV[i+1]}"; i=$(( i + 2 )) ;;
             --api-key-file)           auth=true;                    i=$(( i + 2 )) ;;
             -lv)                      verbose=true;                 i=$(( i + 2 )) ;;
-            --mlock)                  mlock=true;                   i=$(( i + 1 )) ;;
             # Samplers may legitimately repeat — models.conf sets them, --reasoning
             # off may reset them, --temp/--top-p override both. The last wins, so
             # keep overwriting and end up with what the server actually uses.
@@ -1401,7 +1396,6 @@ _capture_slot() {
         [[ -n "$cache_ram" ]] && flags+=(--cache-ram "$cache_ram")
         [[ -n "$similarity" ]] && flags+=(--similarity "$similarity")
         [[ -n "$mmproj" ]] && flags+=(--mmproj)
-        [[ "$mlock" == true ]] && flags+=(--mlock)
         [[ -n "$host" ]] && flags+=(--host "$host")
         [[ -n "$gpu_priority" ]] && flags+=(--gpu-priority "$gpu_priority")
         [[ "$verbose" == true ]] && flags+=(--verbose)
@@ -1620,7 +1614,7 @@ _describe_server() {
     local model="" served="" ctx="" parallel="" predict="" cache_ram="" mmproj="" host="" similarity=""
     local spec_type="" spec_draft="" spec_n=""
     local reason="" reason_effort="" reason_budget=""
-    local mlock=false auth=false
+    local auth=false
     local i=0
     while (( i < ${#_ARGV[@]} )); do
         case "${_ARGV[i]}" in
@@ -1639,7 +1633,6 @@ _describe_server() {
             --reasoning)         reason="${_ARGV[i+1]}";       i=$(( i + 2 )) ;;
             --reasoning-effort)  reason_effort="${_ARGV[i+1]}"; i=$(( i + 2 )) ;;
             --reasoning-budget)  reason_budget="${_ARGV[i+1]}"; i=$(( i + 2 )) ;;
-            --mlock)             mlock=true;                   i=$(( i + 1 )) ;;
             --api-key-file)      auth=true;                    i=$(( i + 2 )) ;;
             *)                                                 i=$(( i + 1 )) ;;
         esac
@@ -1666,7 +1659,6 @@ _describe_server() {
         *)      params+=("slot similarity $similarity") ;;
     esac
     [[ -n "$mmproj" ]]    && params+=("mmproj")
-    [[ "$mlock" == true ]] && params+=("mlock")
     [[ -n "$host" ]]      && params+=("host $host")
     [[ "$auth" == true ]] && params+=("token auth")
     local joined="" p
@@ -2128,7 +2120,7 @@ _roc_env_combos() {
 
 _rocm_bin="/opt/llama.cpp-rocm/llama-bench"
 _vulkan_bin="llama-bench"
-_bench_common_args=(-ngl 999 -t 16 --mmap 0 -fa 1)
+_bench_common_args=(-ngl 999 -t 16 -lm mlock -fa 1)
 
 run_bench() {
     local binary="$1"
@@ -2316,7 +2308,6 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "    levels and on/off are translated per model (see 'probe-reasoning'), N = token budget"
     printf "  %-20s %s\n" ""                      "  --no-reasoning / --reasoning-budget N: kept as aliases"
     printf "  %-20s %s\n" ""                      "  --parallel N: server slots (default 1)"
-    printf "  %-20s %s\n" ""                      "  --mlock: lock the weights in memory so nothing gets paged out"
     printf "  %-20s %s\n" ""                      "  --ctx N: override the model's default context size"
     printf "  %-20s %s\n" ""                      "  --cache-ram N: prompt-cache host-RAM cap in MiB (0=disable, -1=no limit; default 8192)"
     printf "  %-20s %s\n" ""                      "  --similarity F: prefix share (0..1) a slot must already hold to be reused (llama-server's"
