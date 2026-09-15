@@ -1,38 +1,73 @@
-# AI — LLM Server Manager
+# llmctl — LLM Server Manager
 
 Script-based tool to manage local LLM inference servers and proxies for Claude Code.
 
-## Setup
+## Installation & directories
 
 ```bash
-# Install Python dependencies
-pip install flask requests
-pip install waitress   # optional, recommended for production proxy
+sudo make install          # program to /usr/local (bin/llmctl, lib/llmctl, share/llmctl)
+sudo make install-link     # instead: /usr/local/bin/llmctl → this checkout, edits apply at once
+sudo make uninstall
 
-# Download a model
-./run.sh download <model-name>
-./run.sh download all   # all models
+pip install flask requests # for proxy.py
+pip install waitress       # optional, recommended for production proxy
+```
+
+The program is read-only; everything you own or the servers produce lives in
+your home directory:
+
+| Where | What | Override |
+| --- | --- | --- |
+| `~/.config/llmctl/` | `models.conf`, `presets.conf`, `tokens`, `tls/` | `LLMCTL_CONFIG_DIR` (tokens/tls also `LLM_CONF_DIR`, `LLM_TOKEN_FILE`) |
+| `~/.local/share/llmctl/models/` | the GGUF files (`$MODELS_DIR` in `models.conf`) | `LLMCTL_MODELS_DIR`, or set `MODELS_DIR` in `models.conf` |
+| `~/.local/share/llmctl/` | `benchmarks/`, `claude/<model>[-<slot>]` (Claude Code profiles set by `env`) | `LLMCTL_DATA_DIR` |
+| `~/.local/state/llmctl/` | `logs/`, `pids/`, `slots/`, `stunnel/` | `LLMCTL_STATE_DIR` |
+
+`examples/` holds a complete `models.conf` and `presets.conf`. Copy them to edit
+freely, or link them to a checkout so changes — including `preset-save` — stay
+under version control:
+
+```bash
+mkdir -p ~/.config/llmctl
+cp /usr/local/share/llmctl/examples/*.conf ~/.config/llmctl/
+# or
+ln -s ~/AI/examples/{models,presets}.conf ~/.config/llmctl/
+```
+
+A command cannot change the environment of the shell that runs it, so `env` and
+`clear` print shell code to evaluate. Once in `~/.zshrc` (or `~/.bashrc`)
+
+```bash
+eval "$(llmctl shell-init)"
+```
+
+and `llmctl env <name> [slot]` / `llmctl clear` apply to the current shell
+directly — that is the form used below. Without it: `eval "$(llmctl env qwen 1)"`.
+
+```bash
+llmctl download <model-name>
+llmctl download all   # all models
 ```
 
 ## Usage
 
 ```bash
-./run.sh list                          # Show available models
-./run.sh start <name> [slot] [--proxy] # Start server in background (slot 1-3, default 1)
-./run.sh presets                       # Show the defined presets
-./run.sh preset <name>                 # Bring the machine to a whole configuration (see below)
-./run.sh preset-save <name>            # Record what is running now as a preset
-./run.sh stop [slot]                   # Stop slot, or all if omitted
-./run.sh status                        # Running state, model and key parameters (all slots)
-./run.sh cache-stats [slot]            # Prompt-cache hit rate, read from the server log
-./run.sh clear-kv [slot]               # Drop the KV cache without restarting
-./run.sh probe-reasoning [model]       # What each model's chat template supports
-./run.sh gen-certs <host>              # CA + server/VPS certificates for --public
-./run.sh bench [--full] <model|all>    # Run benchmark (default: default ROCm + Vulkan)
-./run.sh bench --full all              # Full test: all 8 ROCm combos + Vulkan
-source ./run.sh env <name> [slot]      # Set Claude Code env vars
-source ./run.sh clear                  # Clear env vars
-./run.sh download <model>              # Download model(s)
+llmctl list                            # Show available models
+llmctl start <name> [slot] [--proxy] # Start server in background (slot 1-3, default 1)
+llmctl presets                         # Show the defined presets
+llmctl preset <name>                   # Bring the machine to a whole configuration (see below)
+llmctl preset-save <name>              # Record what is running now as a preset
+llmctl stop [slot]                     # Stop slot, or all if omitted
+llmctl status                          # Running state, model and key parameters (all slots)
+llmctl cache-stats [slot]              # Prompt-cache hit rate, read from the server log
+llmctl clear-kv [slot]                 # Drop the KV cache without restarting
+llmctl probe-reasoning [model]         # What each model's chat template supports
+llmctl gen-certs <host>                # CA + server/VPS certificates for --public
+llmctl bench [--full] <model|all>      # Run benchmark (default: default ROCm + Vulkan)
+llmctl bench --full all                # Full test: all 8 ROCm combos + Vulkan
+llmctl env <name> [slot]               # Set Claude Code env vars
+llmctl clear                           # Clear env vars
+llmctl download <model>                # Download model(s)
 ```
 
 ### `start` options
@@ -68,29 +103,29 @@ at llama-server otherwise. `--proxy` / `--direct` force the choice, e.g. when
 setting the env before starting the slot.
 
 ```bash
-./run.sh start qwen 1 --proxy          # server :8001 + proxy :8081
-source ./run.sh env qwen 1             # → :8081 (proxy detected)
-source ./run.sh env qwen 1 --direct    # → :8001 (bypass the proxy)
+llmctl start qwen 1 --proxy            # server :8001 + proxy :8081
+llmctl env qwen 1                      # → :8081 (proxy detected)
+llmctl env qwen 1 --direct             # → :8001 (bypass the proxy)
 ```
 
-Logs are written to `logs/server-<slot>.log` and `logs/proxy-<slot>.log`.
+Logs are written to `~/.local/state/llmctl/logs/server-<slot>.log` and `proxy-<slot>.log`.
 
 ### Running two models in parallel
 
 ```bash
-./run.sh start qwen 1 --proxy  # slot 1 → server :8001, proxy :8081
-./run.sh start gemma 2         # slot 2 → server :8002 (no proxy)
+llmctl start qwen 1 --proxy    # slot 1 → server :8001, proxy :8081
+llmctl start gemma 2           # slot 2 → server :8002 (no proxy)
 
 # In terminal A:
-source ./run.sh env qwen 1
+llmctl env qwen 1
 claude
 
 # In terminal B:
-source ./run.sh env gemma 2
+llmctl env gemma 2
 claude
 
-./run.sh stop 1                # stop only slot 1
-./run.sh stop                  # stop everything
+llmctl stop 1                  # stop only slot 1
+llmctl stop                    # stop everything
 ```
 
 ### Presets
@@ -109,15 +144,15 @@ _preset_entries=(
 add_preset
 ```
 
-Each entry is exactly what would follow `run.sh start` — model, slot, then any
+Each entry is exactly what would follow `llmctl start` — model, slot, then any
 `start` flag. They are passed on untouched, so a preset can do whatever `start`
 can do and there is no second option dialect to keep in sync.
 
 ```bash
-./run.sh presets                 # what is defined, and what each one starts
-./run.sh preset c4f              # bring the machine to that configuration
-./run.sh preset c4f --dry-run    # show the plan, change nothing
-./run.sh preset c4f --force      # reload everything, even what already matches
+llmctl presets                   # what is defined, and what each one starts
+llmctl preset c4f                # bring the machine to that configuration
+llmctl preset c4f --dry-run      # show the plan, change nothing
+llmctl preset c4f --force        # reload everything, even what already matches
 ```
 
 Some start options say how a slot is run and reached rather than what the model
@@ -125,9 +160,9 @@ does, and those apply to a whole configuration equally. They are given on the
 command instead of in the file, and appended to every entry:
 
 ```bash
-./run.sh preset wrs --host 0.0.0.0             # the whole set on the LAN
-./run.sh preset wrs --host 0.0.0.0 --public    # …with token auth and the TLS front
-./run.sh preset wrs --clear-logs --verbose     # a fresh, loud run of the same set
+llmctl preset wrs --host 0.0.0.0               # the whole set on the LAN
+llmctl preset wrs --host 0.0.0.0 --public      # …with token auth and the TLS front
+llmctl preset wrs --clear-logs --verbose       # a fresh, loud run of the same set
 ```
 
 `--proxy`, `--public`, `--host ADDR`, `--clear-logs`, `--verbose` and
@@ -189,10 +224,10 @@ add up.
 back into `presets.conf`.
 
 ```bash
-./run.sh preset-save c4f                      # append what runs now as preset "c4f"
-./run.sh preset-save c4f --dry-run            # print the block, write nothing
-./run.sh preset-save c4f --force              # replace an existing preset of that name
-./run.sh preset-save c4f --label "for images" # description for the listing
+llmctl preset-save c4f                        # append what runs now as preset "c4f"
+llmctl preset-save c4f --dry-run              # print the block, write nothing
+llmctl preset-save c4f --force                # replace an existing preset of that name
+llmctl preset-save c4f --label "for images" # description for the listing
 ```
 
 The flags are derived from the running process — `--ctx` only when it differs
@@ -221,7 +256,7 @@ starting something else on the slot by hand.
 Slot 2: llama-server (PID: 1826416) on :8002  [Preset: c4f]
 ```
 
-Every slot stays an ordinary slot, so `source ./run.sh env <model> <slot>` picks
+Every slot stays an ordinary slot, so `llmctl env <model> <slot>` picks
 one of the running models per shell as before.
 
 ### Reasoning
@@ -229,10 +264,10 @@ one of the running models per shell as before.
 One switch for every model:
 
 ```bash
-./run.sh start <name> [slot] --reasoning off        # no thinking
-./run.sh start <name> [slot] --reasoning on         # thinking, template default depth
-./run.sh start <name> [slot] --reasoning high       # low | medium | high | max
-./run.sh start <name> [slot] --reasoning 2048       # thinking, capped at N tokens (-1 = uncapped)
+llmctl start <name> [slot] --reasoning off          # no thinking
+llmctl start <name> [slot] --reasoning on           # thinking, template default depth
+llmctl start <name> [slot] --reasoning high         # low | medium | high | max
+llmctl start <name> [slot] --reasoning 2048         # thinking, capped at N tokens (-1 = uncapped)
 ```
 
 `--no-reasoning` and `--reasoning-budget N` still work as aliases.
@@ -259,7 +294,7 @@ while keeping `high` → `high`; `qwen` has no `high` at all and folds both onto
 port opens or any weight is read:
 
 ```
-$ ./run.sh start qwen 1 --reasoning low
+$ llmctl start qwen 1 --reasoning low
 Error: model 'qwen' supports on/off and a token budget, but no reasoning levels.
        Use --reasoning on, off, or a token budget (e.g. --reasoning 2048).
 ```
@@ -291,7 +326,7 @@ same signal llama.cpp probes at load time. Where `extra_args` override the baked
 template with `--chat-template-file`, it reads that file instead and names it:
 
 ```
-$ ./run.sh probe-reasoning
+$ llmctl probe-reasoning
   MODEL       CONFIGURED  TEMPLATE    READS
   qwen        toggle      toggle      enable_thinking
   qwen        effort      effort      enable_thinking, reasoning_effort  [qwen3.8-unc.jinja]
@@ -485,7 +520,7 @@ Slot 1: llama-server (PID: 330778) on :8001
          Params:    ctx 65536, parallel 1, prompt-cache off, host 0.0.0.0
          Reasoning: off
          Spec:      off
-         Log: tail -f logs/server-1.log
+         Log: tail -f ~/.local/state/llmctl/logs/server-1.log
 ```
 
 It reads that from `/proc/<pid>/cmdline`, the argv of the process that is
@@ -519,8 +554,8 @@ longest common prefix that is still there. To start from nothing without
 restarting the model:
 
 ```bash
-./run.sh clear-kv          # every running slot
-./run.sh clear-kv 2        # only slot 2
+llmctl clear-kv            # every running slot
+llmctl clear-kv 2          # only slot 2
 ```
 
 The underlying endpoint is llama-server's own, and the proxy forwards it
@@ -533,7 +568,7 @@ curl -X POST 'http://localhost:8081/slots/0?action=erase'   # same, via the prox
 
 Slot ids run from 0 to `--parallel N` minus one — `clear-kv` reads the count from
 `/props` and walks all of them. The action needs `--slot-save-path`, which `start`
-always passes (`.slots/`, gitignored).
+always passes (`~/.local/state/llmctl/slots/`).
 
 Two limits worth knowing:
 
@@ -564,13 +599,13 @@ scanner hitting the port fails at the TLS handshake — before reaching any HTTP
 **Setup**
 
 ```bash
-mkdir -p ~/.config/llm && (umask 077 && openssl rand -hex 32 > ~/.config/llm/tokens)
-./run.sh gen-certs llm-home.example.org      # SAN must be the name the VPS connects to
+mkdir -p ~/.config/llmctl && (umask 077 && openssl rand -hex 32 > ~/.config/llmctl/tokens)
+llmctl gen-certs llm-home.example.org        # SAN must be the name the VPS connects to
 # copy ca.pem + vps-client-combined.pem to the VPS (the command prints the scp line)
 # put deploy/vps-llm-vhost.conf on the VPS and adjust the two Define lines
 # forward 8441 (and 8451 with --proxy) at the router to this machine
 
-./run.sh start qwen 1 --proxy --public
+llmctl start qwen 1 --proxy --public
 ```
 
 `--public` implies authentication — there is no way to open the port without it.
@@ -584,14 +619,14 @@ The one `/slots` request that stays open from outside is
 away is the point. Its siblings `save` and `restore` write files here, so the
 proxy rejects them and the vhost blocks them on the direct path too.
 
-**Tokens** live in `~/.config/llm/tokens`, one per line, `#` comments allowed,
+**Tokens** live in `~/.config/llmctl/tokens`, one per line, `#` comments allowed,
 mode 0600 (enforced). Revoking one means deleting the line and restarting the
-slot. `source ./run.sh env` picks up the first token automatically, so the local
+slot. `llmctl env` picks up the first token automatically, so the local
 workflow is unchanged.
 
 ## Models
 
-Order and names follow `models.conf`; `./run.sh list` prints the same set. All of
+Order and names follow `models.conf`; `llmctl list` prints the same set. All of
 them are served by the Vulkan build — the ROCm build is opt-in per model
 (`LLAMA_ROCM_BIN`) and is what `bench` compares against.
 
@@ -612,8 +647,10 @@ Multimodal projectors are only loaded on an explicit `--mmproj`.
 
 ## Architecture
 
+- `llmctl` — Main entry point for all commands
 - `proxy.py` — optional Flask proxy (`start --proxy`) that forwards requests to the local llama-server and optimizes prompts for caching; port and backend configurable via `LLM_PROXY_PORT` / `LLM_BACKEND_URL`
-- `models.conf` — Model definitions (paths, binaries, ROCm env vars)
-- `presets.conf` — Named configurations: which models run together, on which slots, with which flags (`run.sh preset <name>`)
-- `run.sh` — Main entry point for all commands
+- `examples/models.conf` — Model definitions (paths, binaries, ROCm env vars); read from `~/.config/llmctl/`
+- `examples/presets.conf` — Named configurations: which models run together, on which slots, with which flags (`llmctl preset <name>`)
+- `templates/` — chat templates referenced from `models.conf` as `$SHARE_DIR/templates/…`
+- `Makefile` — `install`, `install-link`, `uninstall`
 - `deploy/vps-llm-vhost.conf` — Apache vhost for the VPS in front of `--public`
