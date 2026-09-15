@@ -1,41 +1,61 @@
 #!/bin/bash
-# Unified LLM server manager for Claude Code.
+# llmctl — LLM server manager for Claude Code.
 # Usage:
-#   ./run.sh                                     list available models
-#   ./run.sh start <name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--temp F] [--top-p F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec]  start server (+ proxy with --proxy) in background (slot 1-3, default 1)
-#   ./run.sh preset <name> [--dry-run] [--force] [--wait N] [--proxy] [--public] [--host ADDR] [--clear-logs] [--verbose] [--gpu-priority L]  bring the machine to a whole configuration from presets.conf: keep what already matches, stop the rest, start what is missing
-#   ./run.sh preset-save <name> [--label TEXT] [--dry-run] [--force]  write the running configuration to presets.conf as a preset
-#   ./run.sh presets                             list the defined presets
-#   ./run.sh stop [slot]                         stop slot (or all if omitted)
-#   ./run.sh status                              show running state, model and key parameters per slot
-#   ./run.sh clear-kv [slot]                     drop the KV cache without restarting (all slots, or one)
-#   ./run.sh probe-reasoning [model]             show what each model's chat template supports
-#   ./run.sh gen-certs <public-hostname>         create CA + certificates for --public
-#   source ./run.sh env <name> [slot] [--proxy|--direct]   export Claude Code env vars in this shell
+#   llmctl                                     list available models
+#   llmctl start <name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--temp F] [--top-p F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec]  start server (+ proxy with --proxy) in background (slot 1-3, default 1)
+#   llmctl preset <name> [--dry-run] [--force] [--wait N] [--proxy] [--public] [--host ADDR] [--clear-logs] [--verbose] [--gpu-priority L]  bring the machine to a whole configuration from presets.conf: keep what already matches, stop the rest, start what is missing
+#   llmctl preset-save <name> [--label TEXT] [--dry-run] [--force]  write the running configuration to presets.conf as a preset
+#   llmctl presets                             list the defined presets
+#   llmctl stop [slot]                         stop slot (or all if omitted)
+#   llmctl status                              show running state, model and key parameters per slot
+#   llmctl clear-kv [slot]                     drop the KV cache without restarting (all slots, or one)
+#   llmctl probe-reasoning [model]             show what each model's chat template supports
+#   llmctl gen-certs <public-hostname>         create CA + certificates for --public
+#   eval "$(llmctl env <name> [slot] [--proxy|--direct])"   export Claude Code env vars in this shell
+#   eval "$(llmctl shell-init)"                (in ~/.zshrc) makes `llmctl env|clear` do that eval itself
 #
 # Ports:  slot 1 → server :8001  proxy :8081
 #         slot 2 → server :8002  proxy :8082
 #         slot 3 → server :8003  proxy :8083
 
-# Resolve script directory
-if [[ -n "${BASH_SOURCE[0]:-}" ]]; then
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-elif [[ "$0" == -* ]]; then
-    # Sourced from zsh ($0 is shell name like -zsh) — use PWD
-    SCRIPT_DIR="$(pwd)"
-else
-    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-fi
+PROG=llmctl
 
-PROXY_SCRIPT="$SCRIPT_DIR/proxy.py"
+# ── Where things live ───────────────────────────────────────
+# The program itself (this file, proxy.py, templates, example configs) is
+# read-only and may be installed system-wide; everything a user owns or the
+# servers produce follows XDG in the home directory.
+#
+# A checkout is recognised by proxy.py sitting next to this file — also when
+# /usr/local/bin/llmctl is only a symlink into it (make install-link) — otherwise
+# the installed layout <prefix>/{bin,lib/llmctl,share/llmctl} applies.
+_self="$(readlink -f "${BASH_SOURCE[0]}")"
+_bin_dir="$(dirname "$_self")"
+if [[ -f "$_bin_dir/proxy.py" ]]; then
+    LIB_DIR="$_bin_dir"
+    SHARE_DIR="$_bin_dir"
+else
+    LIB_DIR="$(cd "$_bin_dir/../lib/llmctl" 2>/dev/null && pwd)"
+    SHARE_DIR="$(cd "$_bin_dir/../share/llmctl" 2>/dev/null && pwd)"
+fi
+unset _self _bin_dir
+
+CONFIG_DIR="${LLMCTL_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/llmctl}"
+DATA_DIR="${LLMCTL_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/llmctl}"
+STATE_DIR="${LLMCTL_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/llmctl}"
+# Default for models.conf's paths; models.conf may also set MODELS_DIR itself.
+MODELS_DIR="${LLMCTL_MODELS_DIR:-$DATA_DIR/models}"
+
+PROXY_SCRIPT="$LIB_DIR/proxy.py"
 PORT_BASE_SERVER=8000  # slot N → port 8000+N
 PORT_BASE_PROXY=8080   # slot N → port 8080+N
-PID_DIR="$SCRIPT_DIR/.pids"
-LOG_DIR="$SCRIPT_DIR/logs"
+# Not $XDG_RUNTIME_DIR: that is removed at the last logout, while the detached
+# servers keep running — stop/status would lose track of them.
+PID_DIR="$STATE_DIR/pids"
+LOG_DIR="$STATE_DIR/logs"
 # --slot-save-path is what enables POST /slots/{id}?action=erase, the only way
 # to drop a slot's KV cache without restarting the server (see clear-kv). The
 # same flag also enables the save/restore actions, which write into this dir.
-SLOT_STATE_DIR="$SCRIPT_DIR/.slots"
+SLOT_STATE_DIR="$STATE_DIR/slots"
 
 # ── Public exposure (--public) ───────────────────────────────
 # Internet traffic never reaches llama-server or the proxy directly: stunnel
@@ -44,24 +64,25 @@ SLOT_STATE_DIR="$SCRIPT_DIR/.slots"
 # what it always was — plain LAN exposure.
 PORT_BASE_TLS_SERVER=8440   # slot N → port 8440+N  (TLS front for the server)
 PORT_BASE_TLS_PROXY=8450    # slot N → port 8450+N  (TLS front for the proxy)
-LLM_CONF_DIR="${LLM_CONF_DIR:-$HOME/.config/llm}"
+LLM_CONF_DIR="${LLM_CONF_DIR:-$CONFIG_DIR}"
 TOKEN_FILE="${LLM_TOKEN_FILE:-$LLM_CONF_DIR/tokens}"
 TLS_DIR="$LLM_CONF_DIR/tls"
-STUNNEL_DIR="$SCRIPT_DIR/.stunnel"
+STUNNEL_DIR="$STATE_DIR/stunnel"
 PUBLIC_MAX_PREDICT_DEFAULT=8192   # --public caps generation length unless --max-predict says otherwise
 
-# Detect sourcing:
-# - bash: BASH_SOURCE[0] != $0 when sourced
-# - zsh: BASH_VERSION is unset when zsh sources a bash script
-if [[ "${BASH_SOURCE[0]:-}" != "$0" ]] || [[ -z "${BASH_VERSION:-}" ]]; then
-    _IS_SOURCED=true
-else
-    _IS_SOURCED=false
-fi
-
 # ── Load model definitions ──────────────────────────────────
+# Only help and shell-init get by without one; everything else names models.
 _MODELS=()
-source "$SCRIPT_DIR/models.conf"
+if [[ -f "$CONFIG_DIR/models.conf" ]]; then
+    source "$CONFIG_DIR/models.conf"
+elif [[ "${1:-}" != help && "${1:-}" != shell-init ]]; then
+    echo "Error: no model definitions at $CONFIG_DIR/models.conf" >&2
+    echo "  Start from the examples — copy them to edit freely:" >&2
+    echo "    mkdir -p $CONFIG_DIR && cp $SHARE_DIR/examples/*.conf $CONFIG_DIR/" >&2
+    echo "  or link them to a checkout, so changes stay under version control:" >&2
+    echo "    mkdir -p $CONFIG_DIR && ln -s <checkout>/examples/{models,presets}.conf $CONFIG_DIR/" >&2
+    exit 1
+fi
 
 # ── Load preset definitions ─────────────────────────────────
 # A preset names a whole configuration: which models run, on which slots, with
@@ -70,7 +91,7 @@ source "$SCRIPT_DIR/models.conf"
 # Guarded, unlike models.conf: without presets there is nothing to start a preset
 # from, but every other command still works.
 _PRESETS=()
-[[ -f "$SCRIPT_DIR/presets.conf" ]] && source "$SCRIPT_DIR/presets.conf"
+[[ -f "$CONFIG_DIR/presets.conf" ]] && source "$CONFIG_DIR/presets.conf"
 
 # Parse a model entry by name; sets _r_* variables.
 _resolve_model() {
@@ -181,9 +202,9 @@ cmd_list() {
         printf "  \033[36m%-14s\033[0m %-32s %-40s %s\n" "$m_name" "$m_label" "$m_binary" "${m_rocm_env:-—}"
     done
     echo ""
-    echo "  ./run.sh start <name> [slot]     start server + proxy (slot 1 or 2)"
-    echo "  ./run.sh presets                 configurations that start several of them at once"
-    echo "  source ./run.sh env <name> [slot]  set Claude Code env vars in this shell"
+    echo "  $PROG start <name> [slot]     start server + proxy (slot 1 or 2)"
+    echo "  $PROG presets                 configurations that start several of them at once"
+    echo "  eval \"\$($PROG env <name> [slot])\"  set Claude Code env vars in this shell"
     echo ""
 }
 
@@ -336,7 +357,7 @@ _check_public_prereqs() {
     local f
     for f in server.pem server.key ca.pem; do
         if [[ ! -f "$TLS_DIR/$f" ]]; then
-            echo "Error: missing $TLS_DIR/$f — run: $0 gen-certs <public-hostname>"
+            echo "Error: missing $TLS_DIR/$f — run: $PROG gen-certs <public-hostname>"
             ok=false
         fi
     done
@@ -495,7 +516,7 @@ cmd_start() {
         esac
     done
 
-    [[ -z "$name" ]] && { echo "Usage: $0 start <model-name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec]"; exit 1; }
+    [[ -z "$name" ]] && { echo "Usage: $PROG start <model-name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec]"; exit 1; }
     [[ "$slot" != "1" && "$slot" != "2" && "$slot" != "3" ]] && { echo "Error: slot must be 1, 2, or 3"; exit 1; }
     if [[ -n "$parallel" && ! "$parallel" =~ ^[1-9][0-9]*$ ]]; then
         echo "Error: --parallel requires a positive integer (got '$parallel')"; exit 1
@@ -722,7 +743,7 @@ cmd_start() {
             [[ "$_r_reasoning" == "unknown" ]] && \
                 echo "  NOTE: this model's template support is unverified in models.conf —"
             [[ "$_r_reasoning" == "unknown" ]] && \
-                echo "        the flags are passed through, run '$0 probe-reasoning' once it is downloaded."
+                echo "        the flags are passed through, run '$PROG probe-reasoning' once it is downloaded."
         else
             echo "Reasoning: template default (model supports: $_r_reasoning)"
         fi
@@ -809,7 +830,7 @@ cmd_start() {
     echo "  Logs:  tail -f $server_log"
     [[ "$start_proxy" == true ]] && echo "         tail -f $proxy_log"
     [[ "$public" == true ]] && echo "         tail -f $stunnel_log"
-    echo "  Stop:  $0 stop $slot"
+    echo "  Stop:  $PROG stop $slot"
 }
 
 # The server / proxy actually running on a slot: the PID file if it still names a
@@ -934,9 +955,9 @@ cmd_presets() {
         done
         echo ""
     done
-    echo "  ./run.sh preset <name>            bring the machine to that configuration:"
+    echo "  $PROG preset <name>            bring the machine to that configuration:"
     echo "                                    keep what already matches, stop the rest, start what is missing"
-    echo "  ./run.sh preset <name> --dry-run  show the plan, change nothing"
+    echo "  $PROG preset <name> --dry-run  show the plan, change nothing"
     echo ""
 }
 
@@ -1169,7 +1190,7 @@ cmd_preset() {
             echo "Would start:"
             for (( i=0; i<total; i++ )); do
                 [[ "${e_action[i]}" == "keep" ]] && continue
-                echo "  $0 start ${e_model[i]} ${e_slot[i]} ${e_flags[i]}"
+                echo "  $PROG start ${e_model[i]} ${e_slot[i]} ${e_flags[i]}"
             done
         fi
         echo ""
@@ -1267,10 +1288,10 @@ cmd_preset() {
     echo ""
     echo "  Env:    each shell picks one of them:"
     for (( i=0; i<total; i++ )); do
-        echo "            source $0 env ${e_model[i]} ${e_slot[i]}"
+        echo "            eval \"\$($PROG env ${e_model[i]} ${e_slot[i]})\""
     done
-    echo "  Status: $0 status"
-    echo "  Stop:   $0 stop"
+    echo "  Status: $PROG status"
+    echo "  Stop:   $PROG stop"
     echo ""
 }
 
@@ -1448,7 +1469,7 @@ _capture_slot() {
         echo "  while the process runs:" >&2
         echo "    ${_ARGV[*]}" >&2
     fi
-    echo "  it was probably started by hand with flags run.sh does not offer." >&2
+    echo "  it was probably started by hand with flags llmctl does not offer." >&2
     return 1
 }
 
@@ -1465,7 +1486,7 @@ cmd_preset_save() {
         esac
     done
 
-    [[ -z "$name" ]] && { echo "Usage: $0 preset-save <name> [--label TEXT] [--dry-run] [--force]"; exit 1; }
+    [[ -z "$name" ]] && { echo "Usage: $PROG preset-save <name> [--label TEXT] [--dry-run] [--force]"; exit 1; }
     if [[ ! "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
         echo "Error: a preset name may hold letters, digits, dot, dash and underscore; got '$name'"; exit 1
     fi
@@ -1519,9 +1540,9 @@ cmd_preset_save() {
     if [[ "$dry_run" == true ]]; then
         echo ""
         if _resolve_preset "$name"; then
-            echo "Would replace the existing preset '$name' in $SCRIPT_DIR/presets.conf with:"
+            echo "Would replace the existing preset '$name' in $CONFIG_DIR/presets.conf with:"
         else
-            echo "Would append to $SCRIPT_DIR/presets.conf:"
+            echo "Would append to $CONFIG_DIR/presets.conf:"
         fi
         echo ""
         printf '%s' "$block" | sed 's/^/  /'
@@ -1529,7 +1550,10 @@ cmd_preset_save() {
         return 0
     fi
 
-    local conf="$SCRIPT_DIR/presets.conf"
+    # Resolved, so a presets.conf linked to a checkout is rewritten there and the
+    # link itself survives.
+    local conf
+    conf="$(readlink -f "$CONFIG_DIR/presets.conf")"
     if [[ ! -w "$conf" ]]; then
         echo "Error: cannot write $conf"; exit 1
     fi
@@ -1553,13 +1577,13 @@ cmd_preset_save() {
         # Collapse the blank lines the removed block left behind.
         awk 'NF == 0 { blank++; next } { while (blank > 2) blank--; while (blank-- > 0) print ""; blank = 0; print }' \
             "$tmp" > "$tmp.2" && mv "$tmp.2" "$tmp"
-        mv "$tmp" "$conf"
+        cat "$tmp" > "$conf" && rm -f "$tmp"
         echo "Replaced the previous preset '$name'."
     fi
 
     printf '\n%s' "$block" >> "$conf"
 
-    # Read it back the way run.sh will: a block that does not load is a bug that
+    # Read it back the way llmctl will: a block that does not load is a bug that
     # has to surface here, not on the next start.
     if ! bash -n "$conf" 2>/dev/null; then
         echo "Error: $conf no longer parses — please check the end of the file."
@@ -1570,8 +1594,8 @@ cmd_preset_save() {
     echo ""
     printf '%s' "$block" | sed 's/^/  /'
     echo ""
-    echo "  ./run.sh preset $name          bring the machine back to it"
-    echo "  ./run.sh preset $name --dry-run   check it against what runs now"
+    echo "  $PROG preset $name          bring the machine back to it"
+    echo "  $PROG preset $name --dry-run   check it against what runs now"
     echo ""
 }
 
@@ -1638,7 +1662,7 @@ _describe_server() {
         esac
     done
 
-    # A model started outside run.sh has no models.conf entry — fall back to the file.
+    # A model started outside llmctl has no models.conf entry — fall back to the file.
     local label=""
     [[ -n "$model" ]] && label=$(_label_for_model_path "$model")
     [[ -z "$label" && -n "$model" ]] && label="$(basename "$model")"
@@ -1953,22 +1977,39 @@ PROBEPY
     return 0
 }
 
+# Everything env sets, in one list, so clear removes exactly that.
+_ENV_VARS=(CLAUDE_CONFIG_DIR ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN
+    ANTHROPIC_MODEL ANTHROPIC_SMALL_FAST_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL
+    ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL API_TIMEOUT_MS
+    PI_STREAM_FIRST_EVENT_TIMEOUT_MS PI_OPENAI_STREAM_IDLE_TIMEOUT_MS
+    OPENAI_BASE_URL OPENAI_API_KEY)
+
+# A child process cannot change its caller's environment, so env and clear print
+# shell code on stdout for the caller to eval, and talk to the user on stderr
+# only — anything else on stdout would be executed. `llmctl shell-init` wraps
+# that eval into a function.
+_eval_hint() {
+    [[ -t 1 ]] && echo "  (only printed — apply with: eval \"\$($PROG $*)\", or once: eval \"\$($PROG shell-init)\" in ~/.zshrc)" >&2
+    return 0
+}
+
 cmd_env() {
     local name=""
     local slot="1"
     local want=""               # "" = auto (proxy if one is listening); proxy|direct = forced
+    local args="env $*"
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --proxy) want="proxy"; shift ;;
             --direct) want="direct"; shift ;;
-            -*) echo "Unknown option: $1"; return 1 ;;
+            -*) echo "Unknown option: $1" >&2; return 1 ;;
             *) if [[ -z "$name" ]]; then name="$1"; elif [[ "$slot" == "1" ]]; then slot="$1"; fi; shift ;;
         esac
     done
 
-    [[ -z "$name" ]] && { echo "Usage: source $0 env <model-name> [slot] [--proxy|--direct]"; return 1; }
-    [[ "$slot" != "1" && "$slot" != "2" && "$slot" != "3" ]] && { echo "Error: slot must be 1, 2, or 3"; return 1; }
+    [[ -z "$name" ]] && { echo "Usage: eval \"\$($PROG env <model-name> [slot] [--proxy|--direct])\"" >&2; return 1; }
+    [[ "$slot" != "1" && "$slot" != "2" && "$slot" != "3" ]] && { echo "Error: slot must be 1, 2, or 3" >&2; return 1; }
 
     local port_proxy=$(( PORT_BASE_PROXY + slot ))
     local port_server=$(( PORT_BASE_SERVER + slot ))
@@ -1985,14 +2026,17 @@ cmd_env() {
                 fi ;;
     esac
 
-    _resolve_model "$name" || { echo "Unknown model: $name"; cmd_list; return 1; }
+    _resolve_model "$name" || { echo "Unknown model: $name" >&2; cmd_list >&2; return 1; }
 
-    local config_dir=".claude-${_r_name}"
-    [[ "$slot" -gt 1 ]] && config_dir=".claude-${_r_name}-${slot}"
+    # Absolute, so the Claude Code profile does not depend on the directory the
+    # command happens to be run from.
+    local config_dir="$DATA_DIR/claude/${_r_name}"
+    [[ "$slot" -gt 1 ]] && config_dir+="-${slot}"
+    mkdir -p "$config_dir"
 
     # A slot started with --public demands a token. Reuse the first one from the
-    # token file so the local workflow stays a plain `source ./run.sh env`; a
-    # server started without --public ignores the header anyway.
+    # token file so the local workflow stays a plain `llmctl env`; a server
+    # started without --public ignores the header anyway.
     local token="sk-no-key-required" token_src="placeholder"
     if [[ -r "$TOKEN_FILE" ]]; then
         local first
@@ -2000,50 +2044,58 @@ cmd_env() {
         [[ -n "$first" ]] && { token="$first"; token_src="$TOKEN_FILE"; }
     fi
 
-    # When sourced, these exports take effect in the caller's shell.
-    # When executed directly, they're printed for the user to see.
-    export CLAUDE_CONFIG_DIR="$config_dir"
-    export ANTHROPIC_BASE_URL="http://localhost:$port_target"
-    export ANTHROPIC_AUTH_TOKEN="$token"
-    export ANTHROPIC_MODEL="$_r_client"
-    export ANTHROPIC_SMALL_FAST_MODEL="$_r_client"
-    export ANTHROPIC_DEFAULT_SONNET_MODEL="$_r_client"
-    export ANTHROPIC_DEFAULT_OPUS_MODEL="$_r_client"
-    export ANTHROPIC_DEFAULT_HAIKU_MODEL="$_r_client"
-    export API_TIMEOUT_MS="3000000"
-    export PI_STREAM_FIRST_EVENT_TIMEOUT_MS="600000"
-    export PI_OPENAI_STREAM_IDLE_TIMEOUT_MS="600000"
-    export OPENAI_BASE_URL="http://localhost:$port_target/v1"
-    export OPENAI_API_KEY="$token"
+    local -A val=(
+        [CLAUDE_CONFIG_DIR]="$config_dir"
+        [ANTHROPIC_BASE_URL]="http://localhost:$port_target"
+        [ANTHROPIC_AUTH_TOKEN]="$token"
+        [ANTHROPIC_MODEL]="$_r_client"
+        [ANTHROPIC_SMALL_FAST_MODEL]="$_r_client"
+        [ANTHROPIC_DEFAULT_SONNET_MODEL]="$_r_client"
+        [ANTHROPIC_DEFAULT_OPUS_MODEL]="$_r_client"
+        [ANTHROPIC_DEFAULT_HAIKU_MODEL]="$_r_client"
+        [API_TIMEOUT_MS]="3000000"
+        [PI_STREAM_FIRST_EVENT_TIMEOUT_MS]="600000"
+        [PI_OPENAI_STREAM_IDLE_TIMEOUT_MS]="600000"
+        [OPENAI_BASE_URL]="http://localhost:$port_target/v1"
+        [OPENAI_API_KEY]="$token"
+    )
+    local var
+    for var in "${_ENV_VARS[@]}"; do
+        printf 'export %s=%q\n' "$var" "${val[$var]}"
+    done
 
-    echo "Claude Code env set for $_r_label ($_r_client) [slot $slot] via $via"
-    echo "  CLAUDE_CONFIG_DIR=$config_dir"
-    echo "  Token: $token_src"
-    echo "  ANTHROPIC_BASE_URL=http://localhost:$port_target"
-    echo "  OPENAI_BASE_URL=http://localhost:$port_target/v1"
-    echo "  ANTHROPIC_MODEL=$_r_client"
+    {
+        echo "Claude Code env set for $_r_label ($_r_client) [slot $slot] via $via"
+        echo "  CLAUDE_CONFIG_DIR=$config_dir"
+        echo "  Token: $token_src"
+        echo "  ANTHROPIC_BASE_URL=http://localhost:$port_target"
+        echo "  OPENAI_BASE_URL=http://localhost:$port_target/v1"
+        echo "  ANTHROPIC_MODEL=$_r_client"
+    } >&2
+    _eval_hint "$args"
 }
 
 cmd_clear() {
-    if [[ "$_IS_SOURCED" != true ]]; then
-        echo "This command must be sourced:  source $0 clear"
-        return 1
-    fi
+    echo "unset ${_ENV_VARS[*]}"
+    echo "Environment cleared. '$PROG env <name> [slot]' sets up a model again." >&2
+    _eval_hint clear
+}
 
-    unset CLAUDE_CONFIG_DIR
-    unset ANTHROPIC_BASE_URL
-    unset ANTHROPIC_AUTH_TOKEN
-    unset ANTHROPIC_MODEL
-    unset ANTHROPIC_SMALL_FAST_MODEL
-    unset ANTHROPIC_DEFAULT_SONNET_MODEL
-    unset ANTHROPIC_DEFAULT_OPUS_MODEL
-    unset ANTHROPIC_DEFAULT_HAIKU_MODEL
-    unset API_TIMEOUT_MS
-    unset OPENAI_BASE_URL
-    unset OPENAI_API_KEY
-
-    echo "Environment cleared."
-    echo "Run 'source $0 env <name> [slot]' to set up a model again."
+# Shell function for ~/.zshrc or ~/.bashrc: `eval "$(llmctl shell-init)"`.
+# It lets `llmctl env …` / `llmctl clear` apply their output to the current
+# shell directly; every other command is passed through unchanged.
+cmd_shell_init() {
+    cat <<'EOF'
+llmctl() {
+    case "${1:-}" in
+        env|clear)
+            local _llmctl_out
+            _llmctl_out="$(command llmctl "$@")" || return
+            eval "$_llmctl_out" ;;
+        *)  command llmctl "$@" ;;
+    esac
+}
+EOF
 }
 
 # Create the private CA and the two certificates the public path needs:
@@ -2060,7 +2112,7 @@ cmd_gen_certs() {
             *) [[ -z "$hostname" ]] && hostname="$1"; shift ;;
         esac
     done
-    [[ -z "$hostname" ]] && { echo "Usage: $0 gen-certs <public-hostname> [--force]"; return 1; }
+    [[ -z "$hostname" ]] && { echo "Usage: $PROG gen-certs <public-hostname> [--force]"; return 1; }
     _check_deps openssl || return 1
 
     if [[ -f "$TLS_DIR/ca.pem" && "$force" != true ]]; then
@@ -2244,7 +2296,7 @@ cmd_benchmark() {
     target="${1:-}"
 
     if [[ -z "$target" ]]; then
-        echo "Usage: $0 bench [options] <model-name|all>"
+        echo "Usage: $PROG bench [options] <model-name|all>"
         echo ""
         echo "  model-name   run benchmark for a single model"
         echo "  all          run benchmark for all models"
@@ -2258,13 +2310,13 @@ cmd_benchmark() {
             echo "    $m_name"
         done
         echo ""
-        echo "  Result file: Benchmarks/benchmark-<model>-<timestamp>.jsonl"
+        echo "  Result file: $DATA_DIR/benchmarks/benchmark-<model>-<timestamp>.jsonl"
         return
     fi
 
     _check_deps jq || return 1
 
-    local result_file="$SCRIPT_DIR/Benchmarks/benchmark-${target}-$(date +%Y%m%d-%H%M%S).jsonl"
+    local result_file="$DATA_DIR/benchmarks/benchmark-${target}-$(date +%Y%m%d-%H%M%S).jsonl"
     mkdir -p "$(dirname "$result_file")"
     echo "Results → $result_file"
     echo ""
@@ -2289,7 +2341,7 @@ cmd_benchmark() {
         done
         if [[ "$found" -eq 0 ]]; then
             echo "Unknown model: $target"
-            echo "Run '$0 bench' to see available models."
+            echo "Run '$PROG bench' to see available models."
             return 1
         fi
     fi
@@ -2300,7 +2352,7 @@ cmd_benchmark() {
 
 cmd_help() {
     echo ""
-    printf "\033[1m$(basename "$0")\033[0m — LLM server manager\n"
+    printf "\033[1m$PROG\033[0m — LLM server manager\n"
     echo ""
     printf "  %-20s %s\n" "start <name> [slot]"   "start server (slot 1-3, default 1)"
     printf "  %-20s %s\n" ""                      "  --proxy: also start proxy.py (normalizes time/date stamps for the prompt cache)"
@@ -2344,8 +2396,9 @@ cmd_help() {
     printf "  %-20s %s\n" "gen-certs <host>"       "create the CA + server/VPS certificates for --public"
     printf "  %-20s %s\n" "bench [opts] <m>"       "run benchmark (model or 'all')"
     printf "  %-20s %s\n" "list"                   "show available models"
-    printf "  %-20s %s\n" "env <name> [slot]"      "set Claude Code env vars (source!); --proxy/--direct force the endpoint"
-    printf "  %-20s %s\n" "clear"                  "clear env vars (source!)"
+    printf "  %-20s %s\n" "env <name> [slot]"      "print Claude Code env vars for eval \"\$($PROG env …)\"; --proxy/--direct force the endpoint"
+    printf "  %-20s %s\n" "clear"                  "print the matching unset for eval"
+    printf "  %-20s %s\n" "shell-init"             "shell function that evals env/clear itself: eval \"\$($PROG shell-init)\" in ~/.zshrc"
     printf "  %-20s %s\n" "download <m>"           "download model(s) (or 'all')"
     echo ""
     echo "  Ports:  slot 1 → server :8001  proxy :8081"
@@ -2436,7 +2489,7 @@ cmd_download() {
     target="${1:-}"
 
     if [[ -z "$target" ]]; then
-        echo "Usage: $0 download [--force] <model-name|all>"
+        echo "Usage: $PROG download [--force] <model-name|all>"
         echo ""
         echo "  Options:"
         echo "    --force, -f   force re-download even if model exists"
@@ -2476,7 +2529,7 @@ cmd_download() {
         return
     fi
 
-    _resolve_model "$target" || { echo "Unknown model: $target"; echo "Run '$0 download' to see available models."; return 1; }
+    _resolve_model "$target" || { echo "Unknown model: $target"; echo "Run '$PROG download' to see available models."; return 1; }
 
     if [[ -z "$_r_hf_repo" ]]; then
         echo "No download info configured for model: $target"
@@ -2496,31 +2549,23 @@ cmd_download() {
 }
 
 # ── Dispatch ────────────────────────────────────────────────
-if [[ "$_IS_SOURCED" == true ]]; then
-    if [[ "${1:-}" == "env" ]]; then
-        shift
-        cmd_env "$@"
-    elif [[ "${1:-}" == "clear" ]]; then
-        shift
-        cmd_clear "$@"
-    fi
-else
-    case "${1:-}" in
-        start)      shift; cmd_start "$@" ;;
-        preset)     shift; cmd_preset "$@" ;;
-        preset-save) shift; cmd_preset_save "$@" ;;
-        presets)    cmd_presets ;;
-        stop)       shift; cmd_stop "$@" ;;
-        status)     cmd_status ;;
-        cache-stats) shift; cmd_cache_stats "$@" ;;
-        clear-kv)   shift; cmd_clear_kv "$@" ;;
-        probe-reasoning) shift; cmd_probe_reasoning "$@" ;;
-        gen-certs)  shift; cmd_gen_certs "$@" ;;
-        bench)      shift; cmd_benchmark "$@" ;;
-        list)       cmd_list ;;
-        help)       cmd_help ;;
-        env)        echo "This command must be sourced:  source $0 env <name> [slot] [--proxy|--direct]" ;;
-        download)   shift; cmd_download "$@" ;;
-        *)          cmd_help; cmd_list ;;
-    esac
-fi
+case "${1:-}" in
+    start)      shift; cmd_start "$@" ;;
+    preset)     shift; cmd_preset "$@" ;;
+    preset-save) shift; cmd_preset_save "$@" ;;
+    presets)    cmd_presets ;;
+    stop)       shift; cmd_stop "$@" ;;
+    status)     cmd_status ;;
+    cache-stats) shift; cmd_cache_stats "$@" ;;
+    clear-kv)   shift; cmd_clear_kv "$@" ;;
+    probe-reasoning) shift; cmd_probe_reasoning "$@" ;;
+    gen-certs)  shift; cmd_gen_certs "$@" ;;
+    bench)      shift; cmd_benchmark "$@" ;;
+    list)       cmd_list ;;
+    help)       cmd_help ;;
+    env)        shift; cmd_env "$@" ;;
+    clear)      cmd_clear ;;
+    shell-init) cmd_shell_init ;;
+    download)   shift; cmd_download "$@" ;;
+    *)          cmd_help; cmd_list ;;
+esac
