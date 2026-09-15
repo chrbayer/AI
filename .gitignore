@@ -1,9 +1,5 @@
-# Logs
-*.log
-logs/
-
-# Models (track directory structure via .gitkeep)
-Models/
+# Models, logs, pids, slot dumps and benchmarks live outside the checkout now
+# (~/.local/share/llmctl, ~/.local/state/llmctl — see README).
 
 # Python
 __pycache__/
@@ -14,18 +10,6 @@ __pycache__/
 
 # Claude Code
 .claude*/
-
-# Benchmarks
-Benchmarks/
-
-# Pid Files
-.pids/
-
-# Generated stunnel configs (--public)
-.stunnel/
-
-# Slot state dir (--slot-save-path; holds saved slot KV dumps)
-.slots/
 
 # IDE
 .vscode/
