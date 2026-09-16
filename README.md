@@ -68,6 +68,7 @@ llmctl bench --full all                # Full test: all 8 ROCm combos + Vulkan
 llmctl env <name> [slot]               # Set Claude Code env vars
 llmctl clear                           # Clear env vars
 llmctl download <model>                # Download model(s)
+llmctl version                         # Print the version
 ```
 
 ### `start` options
