@@ -2,7 +2,7 @@
 # llmctl — LLM server manager for Claude Code.
 # Usage:
 #   llmctl                                     list available models
-#   llmctl start <name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--temp F] [--top-p F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec]  start server (+ proxy with --proxy) in background (slot 1-3, default 1)
+#   llmctl start <name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--temp F] [--top-p F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec]  start server (+ proxy with --proxy) in background (slot N, default 1)
 #   llmctl preset <name> [--dry-run] [--force] [--wait N] [--proxy] [--public] [--host ADDR] [--clear-logs] [--verbose] [--gpu-priority L]  bring the machine to a whole configuration from presets.conf: keep what already matches, stop the rest, start what is missing
 #   llmctl preset-save <name> [--label TEXT] [--dry-run] [--force]  write the running configuration to presets.conf as a preset
 #   llmctl presets                             list the defined presets
@@ -14,12 +14,11 @@
 #   eval "$(llmctl env <name> [slot] [--proxy|--direct])"   export Claude Code env vars in this shell
 #   eval "$(llmctl shell-init)"                (in ~/.zshrc) makes `llmctl env|clear` do that eval itself
 #
-# Ports:  slot 1 → server :8001  proxy :8081
-#         slot 2 → server :8002  proxy :8082
-#         slot 3 → server :8003  proxy :8083
+# Ports:  slot N → server :800N  proxy :808N   (slot 1 → :8001 / :8081, and so on)
+#         Slots are not a fixed set — any N the ports have room for works.
 
 PROG=llmctl
-LLMCTL_VERSION=1.0.0
+LLMCTL_VERSION=1.0.1
 
 # ── Where things live ───────────────────────────────────────
 # The program itself (this file, proxy.py, templates, example configs) is
@@ -47,8 +46,13 @@ STATE_DIR="${LLMCTL_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/llmctl}"
 MODELS_DIR="${LLMCTL_MODELS_DIR:-$DATA_DIR/models}"
 
 PROXY_SCRIPT="$LIB_DIR/proxy.py"
-PORT_BASE_SERVER=8000  # slot N → port 8000+N
-PORT_BASE_PROXY=8080   # slot N → port 8080+N
+# A slot is nothing but a number: every port derives from it, so there is no
+# list of slots anywhere and no fixed count. What does bound them is the port
+# layout — the gap between two bases is how many slots fit between them, which
+# is why SLOT_MAX below is computed rather than written down. Override a base to
+# move that bound.
+PORT_BASE_SERVER="${LLMCTL_PORT_BASE_SERVER:-8000}"  # slot N → port 8000+N
+PORT_BASE_PROXY="${LLMCTL_PORT_BASE_PROXY:-8080}"    # slot N → port 8080+N
 # Not $XDG_RUNTIME_DIR: that is removed at the last logout, while the detached
 # servers keep running — stop/status would lose track of them.
 PID_DIR="$STATE_DIR/pids"
@@ -63,13 +67,37 @@ SLOT_STATE_DIR="$STATE_DIR/slots"
 # terminates a mutually authenticated TLS connection from the VPS and forwards
 # to 127.0.0.1. That keeps --public fully independent of --host, which stays
 # what it always was — plain LAN exposure.
-PORT_BASE_TLS_SERVER=8440   # slot N → port 8440+N  (TLS front for the server)
-PORT_BASE_TLS_PROXY=8450    # slot N → port 8450+N  (TLS front for the proxy)
+PORT_BASE_TLS_SERVER="${LLMCTL_PORT_BASE_TLS_SERVER:-8440}"  # slot N → port 8440+N  (TLS front for the server)
+PORT_BASE_TLS_PROXY="${LLMCTL_PORT_BASE_TLS_PROXY:-8450}"    # slot N → port 8450+N  (TLS front for the proxy)
 LLM_CONF_DIR="${LLM_CONF_DIR:-$CONFIG_DIR}"
 TOKEN_FILE="${LLM_TOKEN_FILE:-$LLM_CONF_DIR/tokens}"
 TLS_DIR="$LLM_CONF_DIR/tls"
 STUNNEL_DIR="$STATE_DIR/stunnel"
 PUBLIC_MAX_PREDICT_DEFAULT=8192   # --public caps generation length unless --max-predict says otherwise
+
+# ── How many slots ──────────────────────────────────────────
+# As many as the ports allow. Server and proxy ports interleave from their two
+# bases, so the smaller base's range ends where the larger one begins; the same
+# holds for the two TLS fronts, which sit closer together and therefore bound
+# --public more tightly. Both numbers follow the bases, so raising a base raises
+# the limit with it.
+SLOT_MAX=$(( PORT_BASE_PROXY - PORT_BASE_SERVER - 1 ))
+SLOT_MAX_PUBLIC=$(( PORT_BASE_TLS_PROXY - PORT_BASE_TLS_SERVER - 1 ))
+
+# Every command that takes a slot number goes through here. Errors go to stderr,
+# because `env` is read by eval and must not have them land in the shell.
+_check_slot() {
+    local slot="$1"
+    if [[ ! "$slot" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Error: slot must be a positive number (got '$slot')" >&2; return 1
+    fi
+    if (( slot > SLOT_MAX )); then
+        echo "Error: slot $slot is past the port layout: server :$(( PORT_BASE_SERVER + 1 ))+ and proxy :$(( PORT_BASE_PROXY + 1 ))+ leave room for slots 1-$SLOT_MAX." >&2
+        echo "       Set LLMCTL_PORT_BASE_PROXY higher to make room for more." >&2
+        return 1
+    fi
+    return 0
+}
 
 # ── Load model definitions ──────────────────────────────────
 # Only help and shell-init get by without one; everything else names models.
@@ -203,7 +231,7 @@ cmd_list() {
         printf "  \033[36m%-14s\033[0m %-32s %-40s %s\n" "$m_name" "$m_label" "$m_binary" "${m_rocm_env:-—}"
     done
     echo ""
-    echo "  $PROG start <name> [slot]     start server + proxy (slot 1 or 2)"
+    echo "  $PROG start <name> [slot]     start server + proxy (slot N, default 1)"
     echo "  $PROG presets                 configurations that start several of them at once"
     echo "  eval \"\$($PROG env <name> [slot])\"  set Claude Code env vars in this shell"
     echo ""
@@ -518,7 +546,15 @@ cmd_start() {
     done
 
     [[ -z "$name" ]] && { echo "Usage: $PROG start <model-name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec]"; exit 1; }
-    [[ "$slot" != "1" && "$slot" != "2" && "$slot" != "3" ]] && { echo "Error: slot must be 1, 2, or 3"; exit 1; }
+    _check_slot "$slot" || exit 1
+    # The TLS fronts sit closer together than the plain ports, so --public runs
+    # out of room first — and silently, since the collision would only surface as
+    # a bind error in stunnel's log.
+    if [[ "$public" == true ]] && (( slot > SLOT_MAX_PUBLIC )); then
+        echo "Error: --public reaches slots 1-$SLOT_MAX_PUBLIC (TLS ports $PORT_BASE_TLS_SERVER+N for the server, $PORT_BASE_TLS_PROXY+N for the proxy); slot $slot would collide."
+        echo "       Set LLMCTL_PORT_BASE_TLS_PROXY higher to make room for more."
+        exit 1
+    fi
     if [[ -n "$parallel" && ! "$parallel" =~ ^[1-9][0-9]*$ ]]; then
         echo "Error: --parallel requires a positive integer (got '$parallel')"; exit 1
     fi
@@ -856,6 +892,61 @@ _slot_proxy_pid() {
     echo "$pid"
 }
 
+# Is this PID one of ours? Asked of whoever holds a port in our ranges, before
+# that port is taken as evidence of a slot: with dozens of slots possible, some
+# unrelated service on :8010 would otherwise show up in `status` as a slot.
+# Every server llmctl starts carries --slot-save-path, every proxy is proxy.py.
+_is_llmctl_process() {
+    local pid="$1" cmdline=""
+    cmdline=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null) || return 1
+    [[ "$cmdline" == *"--slot-save-path $SLOT_STATE_DIR/"* || "$cmdline" == *"$PROXY_SCRIPT"* ]]
+}
+
+# The slots this machine currently has something on, ascending. Nothing keeps a
+# list of slots, so it is reconstructed: the PID and preset files name the slots
+# llmctl knows about, and the listening ports catch the rest — a server whose PID
+# file was lost still answers on its port, which is the same fallback
+# _slot_server_pid uses for a single slot.
+_active_slots() {
+    local -a slots=()
+    local f n port pid
+    for f in "$PID_DIR"/server-*.pid "$PID_DIR"/proxy-*.pid "$PID_DIR"/stunnel-*.pid "$PID_DIR"/preset-*; do
+        [[ -e "$f" ]] || continue
+        n="${f##*/}"; n="${n#*-}"; n="${n%.pid}"
+        [[ "$n" =~ ^[1-9][0-9]*$ ]] && slots+=("$n")
+    done
+    while read -r port pid; do
+        [[ "$port" =~ ^[0-9]+$ && -n "$pid" ]] || continue
+        if   (( port > PORT_BASE_SERVER && port <= PORT_BASE_SERVER + SLOT_MAX )); then
+            n=$(( port - PORT_BASE_SERVER ))
+        elif (( port > PORT_BASE_PROXY  && port <= PORT_BASE_PROXY  + SLOT_MAX )); then
+            n=$(( port - PORT_BASE_PROXY ))
+        else
+            continue
+        fi
+        _is_llmctl_process "$pid" && slots+=("$n")
+    done < <(ss -tlnp 2>/dev/null | awk 'NR > 1 { n = split($4, a, ":"); p = ""
+                                                 if (match($0, /pid=[0-9]+/)) p = substr($0, RSTART + 4, RLENGTH - 4)
+                                                 print a[n], p }')
+    (( ${#slots[@]} )) || return 0
+    printf '%s\n' "${slots[@]}" | sort -un
+}
+
+# The slots that have a server log, ascending — which is what cache-stats reads,
+# and the reason it has its own enumeration: a log outlives the server it came
+# from, so the numbers here are the ones with statistics, not the running ones.
+_log_slots() {
+    local -a slots=()
+    local f n
+    for f in "$LOG_DIR"/server-*.log; do
+        [[ -e "$f" ]] || continue
+        n="${f##*/server-}"; n="${n%.log}"
+        [[ "$n" =~ ^[1-9][0-9]*$ ]] && slots+=("$n")
+    done
+    (( ${#slots[@]} )) || return 0
+    printf '%s\n' "${slots[@]}" | sort -un
+}
+
 # The label of whatever model a slot is running, read from the process itself.
 # Falls back to the file name, and to "unknown" for anything unreadable.
 _slot_model_label() {
@@ -919,11 +1010,11 @@ cmd_stop() {
     local slot="${1:-}"
 
     if [[ -n "$slot" ]]; then
-        [[ "$slot" != "1" && "$slot" != "2" && "$slot" != "3" ]] && { echo "Error: slot must be 1, 2, or 3"; return 1; }
+        _check_slot "$slot" || return 1
         _stop_slot "$slot" || echo "Slot $slot: nothing was running."
     else
         local total=0
-        for s in 1 2 3; do
+        for s in $(_active_slots); do
             _stop_slot "$s" && total=$(( total + 1 ))
         done
         [[ "$total" -eq 0 ]] && echo "Nothing was running."
@@ -1069,8 +1160,8 @@ cmd_preset() {
         fi
         local m="${w[0]}" s="${w[1]}"
         _resolve_model "$m" || { echo "Error: preset '$name': unknown model '$m'."; exit 1; }
-        if [[ "$s" != "1" && "$s" != "2" && "$s" != "3" ]]; then
-            echo "Error: preset '$name': '$m' asks for slot '$s'; slots are 1, 2 or 3."; exit 1
+        if ! _check_slot "$s" 2> /dev/null; then
+            echo "Error: preset '$name': '$m' asks for slot '$s'; slots are 1-$SLOT_MAX."; exit 1
         fi
         if [[ " $seen " == *" $s "* ]]; then
             echo "Error: preset '$name': slot $s is claimed twice — one server per slot."; exit 1
@@ -1147,7 +1238,7 @@ cmd_preset() {
     # on a slot it no longer uses.
     local -a foreign=()
     local s
-    for s in 1 2 3; do
+    for s in $(_active_slots); do
         [[ " $seen " == *" $s "* ]] && continue
         if _slot_server_pid "$s" > /dev/null || _slot_proxy_pid "$s" > /dev/null; then
             foreign+=("$s")
@@ -1163,7 +1254,7 @@ cmd_preset() {
         local running=""
         running=$(_slot_model_label "$s")
         [[ "$running" == "unknown" ]] && running="(proxy only)"
-        printf "  slot %s  %-14s %-24s %s\n" "$s" "-" "$running" "stop — not part of this preset"
+        printf "  slot %-3s %-14s %-24s %s\n" "$s" "-" "$running" "stop — not part of this preset"
     done
     for (( i=0; i<total; i++ )); do
         local note=""
@@ -1176,7 +1267,7 @@ cmd_preset() {
             start) note+=", add proxy" ;;
             stop)  note+=", stop proxy" ;;
         esac
-        printf "  slot %s  %-14s %-24s %s\n" "${e_slot[i]}" "${e_model[i]}" "${e_label[i]}" "$note"
+        printf "  slot %-3s %-14s %-24s %s\n" "${e_slot[i]}" "${e_model[i]}" "${e_label[i]}" "$note"
     done
 
     if [[ " ${extra[*]} " == *" --clear-logs "* ]] && (( keep_n > 0 )); then
@@ -1284,7 +1375,7 @@ cmd_preset() {
     echo ""
     printf "\033[1mPreset '%s' is up.\033[0m\n" "$_p_name"
     for (( i=0; i<total; i++ )); do
-        printf "  slot %s: %-32s :%s\n" "${e_slot[i]}" "${e_label[i]}" "$(( PORT_BASE_SERVER + e_slot[i] ))"
+        printf "  slot %-3s %-32s :%s\n" "${e_slot[i]}" "${e_label[i]}" "$(( PORT_BASE_SERVER + e_slot[i] ))"
     done
     echo ""
     echo "  Env:    each shell picks one of them:"
@@ -1500,7 +1591,7 @@ cmd_preset_save() {
 
     local -a entries=() labels=()
     local slot
-    for slot in 1 2 3; do
+    for slot in $(_active_slots); do
         _slot_server_pid "$slot" > /dev/null || continue
         _capture_slot "$slot" || exit 1
         entries+=("$_cap_entry")
@@ -1630,7 +1721,7 @@ _label_for_model_path() {
 # to an older run or the server was started by hand.
 _describe_server() {
     local pid="$1"
-    local indent="         "
+    local indent="${2:-         }"
     if ! _read_argv "$pid"; then
         echo "${indent}Model:     unknown (cannot read /proc/$pid/cmdline)"
         return 0
@@ -1714,7 +1805,7 @@ _describe_server() {
 
 cmd_status() {
     local found=0
-    for slot in 1 2 3; do
+    for slot in $(_active_slots); do
         local port_server=$(( PORT_BASE_SERVER + slot ))
         local port_proxy=$(( PORT_BASE_PROXY + slot ))
 
@@ -1728,10 +1819,13 @@ cmd_status() {
         local preset_note=""
         [[ -s "$PID_DIR/preset-${slot}" ]] && preset_note="  [Preset: $(cat "$PID_DIR/preset-${slot}")]"
 
+        # The detail lines hang under the "Slot N:" prefix, which grows with N.
+        local indent
+        printf -v indent '%*s' $(( 9 + ${#slot} - 1 )) ''
         if [[ -n "$server_pid" ]] && ps -p "$server_pid" > /dev/null 2>&1; then
             echo "Slot $slot: llama-server (PID: $server_pid) on :$port_server$preset_note"
-            _describe_server "$server_pid"
-            echo "         Log: tail -f $LOG_DIR/server-${slot}.log"
+            _describe_server "$server_pid" "$indent"
+            echo "${indent}Log: tail -f $LOG_DIR/server-${slot}.log"
             slot_active=1; found=1
         fi
         if [[ -n "$proxy_pid" ]] && ps -p "$proxy_pid" > /dev/null 2>&1; then
@@ -1764,9 +1858,9 @@ cmd_status() {
 # Usage: cache-stats [slot]  (default: all slots with a server log)
 cmd_cache_stats() {
     local want_slot="${1:-}"
+    [[ -n "$want_slot" ]] && { _check_slot "$want_slot" || return 1; }
     local found=0
-    for slot in 1 2 3; do
-        [[ -n "$want_slot" && "$slot" != "$want_slot" ]] && continue
+    for slot in ${want_slot:-$(_log_slots)}; do
         local f="$LOG_DIR/server-${slot}.log"
         [[ -f "$f" ]] || continue
         found=1
@@ -1811,9 +1905,7 @@ PY
 # Usage: clear-kv [slot]  (default: every running slot)
 cmd_clear_kv() {
     local want_slot="${1:-}"
-    if [[ -n "$want_slot" && "$want_slot" != "1" && "$want_slot" != "2" && "$want_slot" != "3" ]]; then
-        echo "Error: slot must be 1, 2, or 3"; return 1
-    fi
+    [[ -n "$want_slot" ]] && { _check_slot "$want_slot" || return 1; }
     _check_deps python3 || return 1
 
     # A slot started with --public requires a token; reuse the first one, exactly
@@ -1824,8 +1916,7 @@ cmd_clear_kv() {
     fi
 
     local found=0
-    for slot in 1 2 3; do
-        [[ -n "$want_slot" && "$slot" != "$want_slot" ]] && continue
+    for slot in ${want_slot:-$(_active_slots)}; do
         local server_pid=""
         [[ -f "$PID_DIR/server-${slot}.pid" ]] && server_pid=$(cat "$PID_DIR/server-${slot}.pid")
         [[ -n "$server_pid" ]] && ps -p "$server_pid" > /dev/null 2>&1 || continue
@@ -2010,7 +2101,7 @@ cmd_env() {
     done
 
     [[ -z "$name" ]] && { echo "Usage: eval \"\$($PROG env <model-name> [slot] [--proxy|--direct])\"" >&2; return 1; }
-    [[ "$slot" != "1" && "$slot" != "2" && "$slot" != "3" ]] && { echo "Error: slot must be 1, 2, or 3" >&2; return 1; }
+    _check_slot "$slot" || return 1
 
     local port_proxy=$(( PORT_BASE_PROXY + slot ))
     local port_server=$(( PORT_BASE_SERVER + slot ))
@@ -2359,7 +2450,7 @@ cmd_help() {
     echo ""
     printf "\033[1m$PROG\033[0m $LLMCTL_VERSION — LLM server manager\n"
     echo ""
-    printf "  %-20s %s\n" "start <name> [slot]"   "start server (slot 1-3, default 1)"
+    printf "  %-20s %s\n" "start <name> [slot]"   "start server (any slot 1-$SLOT_MAX, default 1)"
     printf "  %-20s %s\n" ""                      "  --proxy: also start proxy.py (normalizes time/date stamps for the prompt cache)"
     printf "  %-20s %s\n" ""                      "  --reasoning off|on|low|medium|high|max|N: one switch for every model;"
     printf "  %-20s %s\n" ""                      "    levels and on/off are translated per model (see 'probe-reasoning'), N = token budget"
@@ -2407,12 +2498,11 @@ cmd_help() {
     printf "  %-20s %s\n" "download <m>"           "download model(s) (or 'all')"
     printf "  %-20s %s\n" "version"                "print the version"
     echo ""
-    echo "  Ports:  slot 1 → server :8001  proxy :8081"
-    echo "          slot 2 → server :8002  proxy :8082"
-    echo "          slot 3 → server :8003  proxy :8083"
+    echo "  Ports:  slot N → server :$(( PORT_BASE_SERVER + 1 ))-$(( PORT_BASE_SERVER + SLOT_MAX ))  proxy :$(( PORT_BASE_PROXY + 1 ))-$(( PORT_BASE_PROXY + SLOT_MAX ))  (N added to the base)"
+    echo "          Run as many slots as you like; the port layout is the only limit."
     echo ""
-    echo "  --public adds a TLS front per slot: server :844N, proxy :845N (N = slot)"
-    echo "          Forward only those at the router; :800N/:808N stay local/LAN."
+    echo "  --public adds a TLS front per slot: server :$PORT_BASE_TLS_SERVER+N, proxy :$PORT_BASE_TLS_PROXY+N — slots 1-$SLOT_MAX_PUBLIC"
+    echo "          Forward only those at the router; the plain ports stay local/LAN."
     echo ""
 }
 

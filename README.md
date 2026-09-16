@@ -53,7 +53,7 @@ llmctl download all   # all models
 
 ```bash
 llmctl list                            # Show available models
-llmctl start <name> [slot] [--proxy] # Start server in background (slot 1-3, default 1)
+llmctl start <name> [slot] [--proxy] # Start server in background (any slot, default 1)
 llmctl presets                         # Show the defined presets
 llmctl preset <name>                   # Bring the machine to a whole configuration (see below)
 llmctl preset-save <name>              # Record what is running now as a preset
@@ -110,6 +110,24 @@ llmctl env qwen 1 --direct             # → :8001 (bypass the proxy)
 ```
 
 Logs are written to `~/.local/state/llmctl/logs/server-<slot>.log` and `proxy-<slot>.log`.
+
+### Slots
+
+A slot is just a number. Nothing enumerates slots and none is preallocated: the
+ports follow from the number (`:800N` for the server, `:808N` for the proxy),
+and commands that work on "all slots" find them from the PID files in
+`~/.local/state/llmctl/pids/` plus whatever is listening on those ports. Start
+slot 7 without ever having used 4, 5 or 6.
+
+The only limit is where the port ranges meet, so it moves with the bases:
+
+| | Range | Bound by | Override |
+| --- | --- | --- | --- |
+| server / proxy | slots 1–79 | `:8080` is where the proxy ports start | `LLMCTL_PORT_BASE_SERVER`, `LLMCTL_PORT_BASE_PROXY` |
+| `--public` | slots 1–9 | `:8450` is where the TLS proxy ports start | `LLMCTL_PORT_BASE_TLS_SERVER`, `LLMCTL_PORT_BASE_TLS_PROXY` |
+
+Both are checked before anything starts, and `llmctl help` prints the ranges that
+are actually in effect.
 
 ### Running two models in parallel
 
@@ -594,7 +612,8 @@ Client ──443/LE──► VPS Apache ──mTLS──► router ──► stu
 ```
 
 Only the stunnel ports are forwarded at the router; `:800N` and `:808N` never
-leave the machine. stunnel requires a client certificate from a private CA, so a
+leave the machine. The two TLS bases sit ten apart, so `--public` covers slots
+1–9 — plain slots go far higher (see [Slots](#slots)). stunnel requires a client certificate from a private CA, so a
 scanner hitting the port fails at the TLS handshake — before reaching any HTTP.
 
 **Setup**
