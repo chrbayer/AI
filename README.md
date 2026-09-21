@@ -100,6 +100,12 @@ rewrites time/date stamps in prompts so the prompt cache stays warm — worth it
 for clients that stamp every request, pointless for those that don't. (A
 [halogen](#the-halogen-backend) model is the exception: its proxy always runs.)
 
+It waits as long for the server as llama-server's own `--timeout` (600 s), so a
+long prefill is not cut off halfway. With `--public` it also fetches image URLs
+itself — public hosts only, redirects included — and passes them on inline:
+llama-server would otherwise fetch any URL a token holder names, `127.0.0.1` and
+the LAN included. That covers the proxied path; the direct one is not.
+
 `env` follows suit: it points at the proxy when one is listening for that slot,
 at llama-server otherwise. `--proxy` / `--direct` force the choice, e.g. when
 setting the env before starting the slot.

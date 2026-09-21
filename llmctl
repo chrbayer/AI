@@ -74,6 +74,9 @@ TOKEN_FILE="${LLM_TOKEN_FILE:-$LLM_CONF_DIR/tokens}"
 TLS_DIR="$LLM_CONF_DIR/tls"
 STUNNEL_DIR="$STATE_DIR/stunnel"
 PUBLIC_MAX_PREDICT_DEFAULT=8192   # --public caps generation length unless --max-predict says otherwise
+# llama-server's --timeout, and so also how long its proxy waits for it: the
+# proxy's own default of 300 s would cut off a prefill the server still allows.
+LLAMA_SERVER_TIMEOUT=600
 
 # ── How many slots ──────────────────────────────────────────
 # As many as the ports allow. Server and proxy ports interleave from their two
@@ -538,6 +541,13 @@ _start_proxy() {
         [[ -z "$halogen_cap" ]] && halogen_cap=$(_halogen_cap_of_slot "$slot")
         backend_env=(LLM_TRANSLATE_MESSAGES=1 LLM_PROXY_TIMEOUT="$HALOGEN_PROXY_TIMEOUT"
                      LLM_MAX_TOKENS_CAP="$halogen_cap" LLM_INLINE_IMAGE_URLS=1)
+    else
+        backend_env=(LLM_PROXY_TIMEOUT="$LLAMA_SERVER_TIMEOUT")
+        # llama-server fetches image URLs itself, from any address — through a
+        # public proxy that would let a token holder reach this machine and the
+        # LAN. So the proxy fetches them first, public hosts only, and the
+        # server only ever sees data: URLs. (The direct path is not covered.)
+        [[ "$public" == true ]] && backend_env+=(LLM_INLINE_IMAGE_URLS=1)
     fi
 
     echo "Starting proxy [slot $slot] on port $port_proxy..."
@@ -997,7 +1007,7 @@ cmd_start() {
     [[ -n "$host" ]] && cmd+=(--host "$host")
     [[ -n "$mmproj_path" ]] && cmd+=(--mmproj "$mmproj_path")
     # --parallel and --timeout are managed centrally here, not in models.conf.
-    cmd+=(--alias "$_r_client" "${_r_args[@]}" --parallel "${parallel:-1}" --timeout 600)
+    cmd+=(--alias "$_r_client" "${_r_args[@]}" --parallel "${parallel:-1}" --timeout "$LLAMA_SERVER_TIMEOUT")
     # --ctx overrides the model's default context size when given.
     [[ -n "$ctx" ]] && _r_ctx="$ctx"
     [[ -n "$_r_ctx" ]] && cmd+=(--ctx-size "$_r_ctx")
@@ -1089,7 +1099,7 @@ cmd_start() {
                 echo "           0.0.0.0:$(( PORT_BASE_TLS_PROXY + slot )) → proxy  :$port_proxy (mTLS, client cert required)"
             fi
             echo "  Server:  --no-webui --no-slots, generation capped at ${max_predict} tokens"
-            echo "  Proxy:   path allowlist, token check, concurrency cap"
+            echo "  Proxy:   path allowlist, token check, concurrency cap; fetches image URLs itself (public hosts only)"
         else
             echo "Public:   disabled — reachable only via localhost/LAN (pass --public to expose via the VPS)"
         fi
@@ -1100,7 +1110,7 @@ cmd_start() {
         fi
         echo "Context:  ${_r_ctx:-default}"
         echo "Parallel: ${parallel:-1}"
-        echo "Timeout:  600s"
+        echo "Timeout:  ${LLAMA_SERVER_TIMEOUT}s (server and proxy)"
         if [[ -n "$cache_ram" ]]; then
             case "$cache_ram" in
                 0)  echo "PromptCache: disabled (--cache-ram 0)" ;;

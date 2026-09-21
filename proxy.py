@@ -246,7 +246,8 @@ def _inline(url, cache):
 
 def inline_image_urls(data):
     """Replace http(s) image URLs by data: URLs, in Chat Completions messages
-    (image_url parts) and Responses input (input_image items). Raises
+    (image_url parts), Responses input (input_image items) and Messages content
+    (image blocks with a url source, also inside tool results). Raises
     ImageFetchError when an image cannot be fetched."""
     cache = {}
 
@@ -256,7 +257,17 @@ def inline_image_urls(data):
         for part in content:
             if not isinstance(part, dict):
                 continue
-            if part.get("type") == "image_url":
+            if part.get("type") == "image":
+                src = part.get("source")
+                if isinstance(src, dict) and src.get("type") == "url":
+                    inlined = _inline(src.get("url"), cache)
+                    if inlined.startswith("data:"):
+                        head, b64 = inlined.split(",", 1)
+                        part["source"] = {"type": "base64", "data": b64,
+                                          "media_type": head[5:].split(";")[0]}
+            elif part.get("type") == "tool_result":
+                parts(part.get("content"))
+            elif part.get("type") == "image_url":
                 iu = part.get("image_url")
                 if isinstance(iu, dict):
                     iu["url"] = _inline(iu.get("url"), cache)
