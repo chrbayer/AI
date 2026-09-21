@@ -18,7 +18,7 @@
 #         Slots are not a fixed set — any N the ports have room for works.
 
 PROG=llmctl
-LLMCTL_VERSION=1.1.1
+LLMCTL_VERSION=1.1.2
 
 # ── Where things live ───────────────────────────────────────
 # The program itself (this file, proxy.py, templates, example configs) is
@@ -46,6 +46,7 @@ STATE_DIR="${LLMCTL_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/llmctl}"
 MODELS_DIR="${LLMCTL_MODELS_DIR:-$DATA_DIR/models}"
 
 PROXY_SCRIPT="$LIB_DIR/proxy.py"
+HALOGEN_BENCH_SCRIPT="$LIB_DIR/halogen_bench.py"
 # A slot is nothing but a number: every port derives from it, so there is no
 # list of slots anywhere and no fixed count. What does bound them is the port
 # layout — the gap between two bases is how many slots fit between them, which
@@ -2912,7 +2913,15 @@ bench_model() {
         return
     fi
     if _resolve_model "$m_name" && [[ "$_r_backend" == halogen ]]; then
-        echo "  Skipping $m_label: a halogen checkpoint is no GGUF, llama-bench cannot read it"
+        bench_halogen "$m_name" "$model_path" "$m_label" "$full_mode" "$result_file"
+        return
+    fi
+    # llama-bench loads the whole model itself; beside a halogen server, which
+    # holds most of the machine, that would stall both or fail.
+    local hs
+    hs=$(_halogen_slots | head -1)
+    if [[ -n "$hs" ]]; then
+        echo "  Skipping $m_label: halogen runs on slot $hs, exclusively — $PROG stop $hs first"
         return
     fi
 
@@ -2937,6 +2946,36 @@ bench_model() {
     fi
 }
 
+# bench for a halogen model. llama-bench cannot read a .hgn checkpoint, and the
+# engine only exists as a server, so this measures the running slot over HTTP
+# (halogen_bench.py): prefill at several prompt lengths, decode on prose and
+# code. It records into the same JSONL file as llama-bench runs.
+bench_halogen() {
+    local m_name="$1" model_path="$2" m_label="$3" full_mode="$4" result_file="$5"
+    local slot="" s pid
+    for s in $(_halogen_slots); do
+        if pid=$(_slot_server_pid "$s") && _read_argv "$pid" && [[ "$(_argv_halogen_model)" == "$model_path" ]]; then
+            slot="$s"; break
+        fi
+    done
+    if [[ -z "$slot" ]]; then
+        echo "  Skipping $m_label: halogen is measured on a running server — start it first:"
+        echo "    $PROG start $m_name   (or a preset naming it), then $PROG bench $m_name"
+        return
+    fi
+    if ! curl -sf "http://127.0.0.1:$(( PORT_BASE_SERVER + slot ))/health" > /dev/null; then
+        echo "  Skipping $m_label: slot $slot does not answer yet (still loading?)"
+        return
+    fi
+    # Prompt lengths in tokens; --full adds the long end, where prefill slows.
+    local -a sizes=(1000 8000 32000)
+    [[ "$full_mode" == "full" ]] && sizes+=(64000 128000)
+    echo "  $m_label — halogen on slot $slot"
+    python3 "$HALOGEN_BENCH_SCRIPT" --url "http://127.0.0.1:$(( PORT_BASE_SERVER + slot ))" \
+        --record "$result_file" --model-name "$m_name" --model "$model_path" \
+        --binary "$_r_binary" "${sizes[@]}" || echo "    FAILED — see $result_file"
+}
+
 cmd_benchmark() {
     local target=""
     local full=""
@@ -2954,7 +2993,11 @@ cmd_benchmark() {
         echo "  all          run benchmark for all models"
         echo ""
         echo "  Options:"
-        echo "    --full      test all 8 ROCm env combos + Vulkan (default: only default ROCm)"
+        echo "    --full      test all 8 ROCm env combos + Vulkan (default: only default ROCm);"
+        echo "                halogen: prompts up to 128K instead of 32K"
+        echo ""
+        echo "  halogen models are measured on their running slot (prefill and decode"
+        echo "  over HTTP); llama models are skipped while a halogen server runs."
         echo ""
         echo "  Available models:"
         for entry in "${_MODELS[@]}"; do
@@ -3053,7 +3096,7 @@ cmd_help() {
     printf "  %-20s %s\n" "clear-kv [slot]"        "drop the KV cache of every server slot (or one slot)"
     printf "  %-20s %s\n" "probe-reasoning [m]"    "what each downloaded model's chat template supports vs. models.conf"
     printf "  %-20s %s\n" "gen-certs <host>"       "create the CA + server/VPS certificates for --public"
-    printf "  %-20s %s\n" "bench [opts] <m>"       "run benchmark (model or 'all')"
+    printf "  %-20s %s\n" "bench [opts] <m>"       "run benchmark (model or 'all'); halogen: measures the running slot"
     printf "  %-20s %s\n" "list"                   "show available models"
     printf "  %-20s %s\n" "env <name> [slot]"      "print Claude Code env vars for eval \"\$($PROG env …)\"; --proxy/--direct force the endpoint"
     printf "  %-20s %s\n" "clear"                  "print the matching unset for eval"

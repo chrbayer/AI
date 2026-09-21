@@ -65,6 +65,7 @@ llmctl probe-reasoning [model]         # What each model's chat template support
 llmctl gen-certs <host>                # CA + server/VPS certificates for --public
 llmctl bench [--full] <model|all>      # Run benchmark (default: default ROCm + Vulkan)
 llmctl bench --full all                # Full test: all 8 ROCm combos + Vulkan
+llmctl bench flash                     # halogen: prefill + decode of the running slot
 llmctl env <name> [slot]               # Set Claude Code env vars
 llmctl clear                           # Clear env vars
 llmctl download <model>                # Download model(s)
@@ -664,8 +665,12 @@ reading its own `.hgn` weights. The slot model stays the same — `start`, `stop
   `--compact` below 40 GiB.
 - `clear-kv` has nothing to call (restart with `--cache-ram 0` for a hard reset),
   `cache-stats` reads the server's own `/cache` counters, `probe-reasoning` reads
-  `tokenizer/chat_template.jinja` beside the checkpoint, and `bench` skips it
-  (llama-bench cannot read `.hgn`).
+  `tokenizer/chat_template.jinja` beside the checkpoint, and `bench` measures
+  the running slot over HTTP (`halogen_bench.py`), since llama-bench cannot read
+  `.hgn`: prefill at 1K/8K/32K tokens (`--full`: up to 128K) with the prompt
+  cache defeated, decode on prose and code. The runs land in the same
+  `benchmarks/*.jsonl` as llama-bench's, with a `results` list per run. While a
+  halogen server runs, `bench` skips the llama models.
 
 **Memory as `free` shows it is misleading.** The weights are pinned by the GPU
 driver straight out of the file cache, not `mlock`ed, so `free` and
@@ -752,6 +757,7 @@ Multimodal projectors are only loaded on an explicit `--mmproj`.
 - `llmctl` — Main entry point for all commands
 - `proxy.py` — optional Flask proxy (`start --proxy`) that forwards requests to the local llama-server and optimizes prompts for caching; port and backend configurable via `LLM_PROXY_PORT` / `LLM_BACKEND_URL`. For halogen it also answers `/v1/messages` (`LLM_TRANSLATE_MESSAGES=1`), clamps token budgets (`LLM_MAX_TOKENS_CAP`) and waits longer (`LLM_PROXY_TIMEOUT`)
 - `anthropic_compat.py` — the Messages ↔ Chat Completions translation `proxy.py` uses for backends without a Messages API
+- `halogen_bench.py` — `bench` for halogen models: prefill and decode speed of a running slot
 - `examples/models.conf` — Model definitions (paths, binaries, ROCm env vars); read from `~/.config/llmctl/`
 - `examples/presets.conf` — Named configurations: which models run together, on which slots, with which flags (`llmctl preset <name>`)
 - `templates/` — chat templates referenced from `models.conf` as `$SHARE_DIR/templates/…`
