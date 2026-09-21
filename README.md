@@ -97,7 +97,8 @@ llmctl version                         # Print the version
 
 `start` runs only llama-server. Pass `--proxy` to also start `proxy.py`, which
 rewrites time/date stamps in prompts so the prompt cache stays warm — worth it
-for clients that stamp every request, pointless for those that don't.
+for clients that stamp every request, pointless for those that don't. (A
+[halogen](#the-halogen-backend) model is the exception: its proxy always runs.)
 
 `env` follows suit: it points at the proxy when one is listening for that slot,
 at llama-server otherwise. `--proxy` / `--direct` force the choice, e.g. when
@@ -598,6 +599,73 @@ Two limits worth knowing:
   prompt sent again afterwards, 52 tokens came straight back from host RAM. For a
   hard reset, start the slot with `--cache-ram 0`.
 
+## The halogen backend
+
+A models.conf entry with `_model_backend="halogen"` runs
+[halogen-flash-server](https://github.com/peonist-ai/halogen-flash-server)
+instead of llama-server: a closed-source engine for one model family
+(Qwen3.8-Flash-Next, 125B MoE) on Strix Halo, shipped as a container and
+reading its own `.hgn` weights. The slot model stays the same — `start`, `stop`,
+`status`, `env`, `preset`, `preset-save` all work — with these differences:
+
+- **It runs in podman.** The server PID is the `podman run` client (its argv is
+  the full command, which is what `preset` compares), the container's output is
+  the server log, and the container is named `llmctl-halogen-<slot>`. `stop` uses
+  `podman stop`, which waits for the container to exit and removes it.
+- **It runs exclusively.** It pins ~68 GiB of weights and reserves ~30 GiB of KV
+  pool and working memory — most of a 128 GB machine. `start` refuses it beside
+  any other slot and refuses any other model beside it; a preset that names it
+  can name nothing else. `preset` switching between a halogen and a llama
+  configuration works, since it stops before it starts.
+- **Its proxy always runs.** The server speaks OpenAI Chat Completions and
+  Responses, not Anthropic Messages, so `proxy.py` translates `/v1/messages`
+  (see `anthropic_compat.py`): system, text, images, tool use and results,
+  thinking, streaming with pings during prefill. It also clamps token budgets to
+  the server's cap — halogen answers a larger `max_tokens` with HTTP 400 instead
+  of shortening it, and Claude Code asks for 32000 — and waits up to an hour for
+  the backend, since a full 256K prefill alone takes minutes. `env` always points
+  at the proxy, and also exports `CLAUDE_CODE_MAX_CONTEXT_TOKENS` with the slot's
+  context, which Claude Code cannot know for a model outside its catalog.
+- **Settings are container environment variables.** `extra_args` holds
+  `HALOGEN_*=VALUE` pairs; start options map onto the same variables:
+
+  | Option | halogen |
+  | --- | --- |
+  | `--ctx N` | `HALOGEN_CTX`; above the native 262144 also `HALOGEN_ROPE_YARN` (⌈N/262144⌉), and the KV pool grows to hold one full request |
+  | `--parallel N` | `HALOGEN_KV_SLOTS` (conversations generating at once, sharing one pool) |
+  | `--reasoning off\|level\|N` | `HALOGEN_ENABLE_THINKING=0`, `HALOGEN_REASONING_EFFORT`, `HALOGEN_MAX_THINKING_TOKENS` — server defaults a request may override |
+  | `--temp`, `--top-p` | `HALOGEN_TEMPERATURE`, `HALOGEN_TOP_P` (unset = greedy) |
+  | `--max-predict N` | `HALOGEN_MAX_TOKENS_CAP`, and the proxy clamps to it |
+  | `--cache-ram 0` | `HALOGEN_PROMPT_CACHE=0`; no other value exists |
+  | `--mmproj` | `HALOGEN_VISION_TOWER=1` (the vision file must sit beside the checkpoint) |
+  | `--host ADDR` | where podman publishes the port |
+  | `--public` | a TLS front for the **proxy only** — the server has no authentication, so its own port never gets one, and `--public` with a LAN `--host` is refused |
+
+  `--similarity`, `--gpu-priority`, `--verbose` and `--spec off` have no
+  equivalent and are refused. The MTP draft is always on; it is byte-identical
+  to plain decoding.
+- **`--compact`** (any model, but made for this one) has the kernel defragment
+  free memory before the start (`sudo`). The server needs its ~30 GiB in 2 MiB
+  pieces; with fewer free, the kernel compacts on the fly and startup and
+  every prefill can stall for minutes. `start` measures this and suggests
+  `--compact` below 40 GiB.
+- `clear-kv` has nothing to call (restart with `--cache-ram 0` for a hard reset),
+  `cache-stats` reads the server's own `/cache` counters, `probe-reasoning` reads
+  `tokenizer/chat_template.jinja` beside the checkpoint, and `bench` skips it
+  (llama-bench cannot read `.hgn`).
+
+**Memory as `free` shows it is misleading.** The weights are pinned by the GPU
+driver straight out of the file cache, not `mlock`ed, so `free` and
+`MemAvailable` count them as reclaimable cache: ~80 GiB "available" while
+~13 GiB really are. `status` prints the real figure.
+
+**The host matters more than for llama-server.** Measured on this machine:
+prefill 1100–1300 t/s and decode 35 t/s (prose) / 48 t/s (code) after a fresh
+boot with `amd_iommu=off amdgpu.noretry=0` on the kernel line; the same server
+with fragmented memory managed 8–370 t/s of prefill, most requests stalling
+40–200 s in kernel compaction. Keep `vm.compaction_proactiveness` at the kernel
+default (20) — 0 does not prevent the stalls.
+
 ## Exposing models on the internet (`--public`)
 
 `--host` is and stays plain LAN exposure without authentication. `--public` is
@@ -662,13 +730,15 @@ them are served by the Vulkan build — the ROCm build is opt-in per model
 - **mistral** — Mistral-Medium-3.5-128B, UD-Q5_K_XL, 32K ctx
 - **diamond** — L3.3-70B Magnum Diamond, i1-Q5_K_M, 32K ctx; drafted by the same Llama-3.2-1B (~2.0×)
 - **magnum** — Magnum-v4-72B, Q6_K, 32K ctx; a Qwen2.5-72B fulltune, drafted by Qwen2.5-1.5B-Instruct Q4_K_M (~2.0×)
+- **flash** — Qwen3.8-Flash-Next 125B MoE on the [halogen backend](#the-halogen-backend), 4-bit `.hgn`, 256K ctx (512K with YaRN via `--ctx 524288`), vision file available; runs exclusively
 
 Multimodal projectors are only loaded on an explicit `--mmproj`.
 
 ## Architecture
 
 - `llmctl` — Main entry point for all commands
-- `proxy.py` — optional Flask proxy (`start --proxy`) that forwards requests to the local llama-server and optimizes prompts for caching; port and backend configurable via `LLM_PROXY_PORT` / `LLM_BACKEND_URL`
+- `proxy.py` — optional Flask proxy (`start --proxy`) that forwards requests to the local llama-server and optimizes prompts for caching; port and backend configurable via `LLM_PROXY_PORT` / `LLM_BACKEND_URL`. For halogen it also answers `/v1/messages` (`LLM_TRANSLATE_MESSAGES=1`), clamps token budgets (`LLM_MAX_TOKENS_CAP`) and waits longer (`LLM_PROXY_TIMEOUT`)
+- `anthropic_compat.py` — the Messages ↔ Chat Completions translation `proxy.py` uses for backends without a Messages API
 - `examples/models.conf` — Model definitions (paths, binaries, ROCm env vars); read from `~/.config/llmctl/`
 - `examples/presets.conf` — Named configurations: which models run together, on which slots, with which flags (`llmctl preset <name>`)
 - `templates/` — chat templates referenced from `models.conf` as `$SHARE_DIR/templates/…`

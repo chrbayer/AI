@@ -2,7 +2,7 @@
 # llmctl — LLM server manager for Claude Code.
 # Usage:
 #   llmctl                                     list available models
-#   llmctl start <name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--temp F] [--top-p F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec]  start server (+ proxy with --proxy) in background (slot N, default 1)
+#   llmctl start <name> [slot] [--proxy] [--compact] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--temp F] [--top-p F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec]  start server (+ proxy with --proxy) in background (slot N, default 1)
 #   llmctl preset <name> [--dry-run] [--force] [--wait N] [--proxy] [--public] [--host ADDR] [--clear-logs] [--verbose] [--gpu-priority L]  bring the machine to a whole configuration from presets.conf: keep what already matches, stop the rest, start what is missing
 #   llmctl preset-save <name> [--label TEXT] [--dry-run] [--force]  write the running configuration to presets.conf as a preset
 #   llmctl presets                             list the defined presets
@@ -18,7 +18,7 @@
 #         Slots are not a fixed set — any N the ports have room for works.
 
 PROG=llmctl
-LLMCTL_VERSION=1.0.1
+LLMCTL_VERSION=1.1.0
 
 # ── Where things live ───────────────────────────────────────
 # The program itself (this file, proxy.py, templates, example configs) is
@@ -126,7 +126,7 @@ _PRESETS=()
 _resolve_model() {
     local name="$1"
     for entry in "${_MODELS[@]}"; do
-        IFS='|' read -r m_name m_binary m_model m_mmproj m_alias m_label m_args m_client m_rocm_env m_hf_repo m_hf_includes m_hf_dir m_no_reasoning_args m_ctx m_reasoning m_reasoning_levels m_spec_args m_hf_draft m_hf_mmproj <<< "$entry"
+        IFS='|' read -r m_name m_binary m_model m_mmproj m_alias m_label m_args m_client m_rocm_env m_hf_repo m_hf_includes m_hf_dir m_no_reasoning_args m_ctx m_reasoning m_reasoning_levels m_spec_args m_hf_draft m_hf_mmproj m_backend <<< "$entry"
         if [[ "$m_name" == "$name" ]]; then
             _r_name="$m_name"
             _r_binary="$m_binary"
@@ -147,6 +147,7 @@ _resolve_model() {
             _r_spec_args=($m_spec_args)
             _r_hf_draft="${m_hf_draft:-}"
             _r_hf_mmproj="${m_hf_mmproj:-}"
+            _r_backend="${m_backend:-llama}"
             return 0
         fi
     done
@@ -218,6 +219,93 @@ _check_deps() {
         echo "Error: missing dependencies: ${missing[*]}"
         return 1
     fi
+}
+
+# ── halogen backend ─────────────────────────────────────────
+#
+# models.conf entries with _model_backend="halogen" run halogen-flash-server, a
+# closed-source engine for Qwen3.8-Flash-Next on Strix Halo, shipped as a
+# container. It fills the slot model like llama-server does — server :800N,
+# proxy :808N, one PID file per process — with these differences:
+#
+#   - The server is `podman run` in the foreground under _spawn_detached, so the
+#     PID file names the podman client, its argv is the full start command (what
+#     preset and preset-save compare against), and the container's output is the
+#     server log. The container is named llmctl-halogen-<slot>.
+#   - It holds most of the machine: ~68 GiB of weights pinned, ~30 GiB of KV pool
+#     and working memory. So it runs exclusively — it will not start beside any
+#     other slot, and no other slot starts beside it.
+#   - It speaks OpenAI Chat Completions and Responses, not Anthropic Messages, so
+#     its proxy is not optional: it translates /v1/messages for Claude Code.
+#   - Settings are environment variables of the container: models.conf's
+#     extra_args hold KEY=VAL pairs, and start options map onto them.
+HALOGEN_NATIVE_CTX=262144        # Qwen3.8-Flash-Next's trained context; more takes YaRN
+HALOGEN_API_PORT=8731            # the API port inside the container
+HALOGEN_CONTAINER_PREFIX="llmctl-halogen-"
+HALOGEN_MAX_TOKENS_CAP=65536     # the server's own cap on a request's token budget
+HALOGEN_PROXY_TIMEOUT=3600       # a full 256K prefill alone takes ~4 minutes
+# Besides the weights, which it takes over from the file cache, the server
+# reserves ~30 GiB in 2 MiB pieces. With less than this free in such pieces the
+# kernel compacts memory on the fly, which stalls startup and later prefills for
+# minutes (see --compact).
+HALOGEN_MIN_CONTIG_GIB=40
+
+_halogen_container() { echo "${HALOGEN_CONTAINER_PREFIX}$1"; }
+
+# Slots with a halogen container, running or not, ascending.
+_halogen_slots() {
+    command -v podman > /dev/null || return 0
+    podman ps -a --format '{{.Names}}' 2>/dev/null |
+        sed -n "s/^${HALOGEN_CONTAINER_PREFIX}\([1-9][0-9]*\)\$/\1/p" | sort -un
+}
+
+_slot_is_halogen() {
+    command -v podman > /dev/null && podman container exists "$(_halogen_container "$1")" 2>/dev/null
+}
+
+# The value of `-e KEY=VAL` in a halogen server's argv ($_ARGV), or nothing.
+_argv_env() {
+    local key="$1" i
+    for (( i=0; i < ${#_ARGV[@]} - 1; i++ )); do
+        [[ "${_ARGV[i]}" == "-e" && "${_ARGV[i+1]}" == "$key="* ]] && { echo "${_ARGV[i+1]#*=}"; return 0; }
+    done
+    return 1
+}
+
+# The host model path a halogen server's argv carries in its llmctl.model label.
+_argv_halogen_model() {
+    local i
+    for (( i=0; i < ${#_ARGV[@]} - 1; i++ )); do
+        [[ "${_ARGV[i]}" == "--label" && "${_ARGV[i+1]}" == llmctl.model=* ]] && { echo "${_ARGV[i+1]#*=}"; return 0; }
+    done
+    return 1
+}
+
+_is_halogen_argv() {
+    [[ "${#_ARGV[@]}" -gt 0 && "$(basename "${_ARGV[0]}")" == podman && " ${_ARGV[*]} " == *" --name ${HALOGEN_CONTAINER_PREFIX}"* ]]
+}
+
+# Free host memory in blocks of 2 MiB or larger (buddy orders 9 and 10), in GiB.
+_contig_gib() {
+    awk '/zone +(DMA32|Normal)/ { mib += $14 * 2 + $15 * 4 } END { printf "%d", mib / 1024 }' /proc/buddyinfo
+}
+
+# --compact: have the kernel defragment free memory now, rather than on the fly
+# while a server reserves it.
+_compact_memory() {
+    echo "Defragmenting host memory (needs sudo) ..."
+    echo "  free in 2 MiB blocks before: $(_contig_gib) GiB"
+    sudo sh -c 'sync; echo 1 > /proc/sys/vm/compact_memory' || return 1
+    echo "  free in 2 MiB blocks after:  $(_contig_gib) GiB"
+}
+
+# The token cap a halogen slot runs with — what its proxy clamps budgets to.
+_halogen_cap_of_slot() {
+    local pid="" cap=""
+    if pid=$(_slot_server_pid "$1") && _read_argv "$pid"; then
+        cap=$(_argv_env HALOGEN_MAX_TOKENS_CAP)
+    fi
+    echo "${cap:-$HALOGEN_MAX_TOKENS_CAP}"
 }
 
 # ── Commands ────────────────────────────────────────────────
@@ -398,7 +486,7 @@ _check_public_prereqs() {
 # client holding a certificate from our own CA (i.e. the VPS) can complete the
 # handshake — a scanner hitting the port never gets past the TLS layer.
 _write_stunnel_conf() {
-    local slot="$1" with_proxy="$2" conf="$3"
+    local slot="$1" with_proxy="$2" conf="$3" with_server="${4:-true}"
     local port_server=$(( PORT_BASE_SERVER + slot ))
     local port_proxy=$(( PORT_BASE_PROXY + slot ))
     local tls_server=$(( PORT_BASE_TLS_SERVER + slot ))
@@ -409,14 +497,16 @@ _write_stunnel_conf() {
         echo "pid ="
         echo "sslVersionMin = TLSv1.2"
         echo "TIMEOUTidle = 900"
-        echo ""
-        echo "[server-${slot}]"
-        echo "accept = 0.0.0.0:${tls_server}"
-        echo "connect = 127.0.0.1:${port_server}"
-        echo "cert = $TLS_DIR/server.pem"
-        echo "key = $TLS_DIR/server.key"
-        echo "CAfile = $TLS_DIR/ca.pem"
-        echo "verifyPeer = yes"
+        if [[ "$with_server" == true ]]; then
+            echo ""
+            echo "[server-${slot}]"
+            echo "accept = 0.0.0.0:${tls_server}"
+            echo "connect = 127.0.0.1:${port_server}"
+            echo "cert = $TLS_DIR/server.pem"
+            echo "key = $TLS_DIR/server.key"
+            echo "CAfile = $TLS_DIR/ca.pem"
+            echo "verifyPeer = yes"
+        fi
         if [[ "$with_proxy" == true ]]; then
             echo ""
             echo "[proxy-${slot}]"
@@ -440,17 +530,30 @@ _start_proxy() {
     local proxy_log="$LOG_DIR/proxy-${slot}.log"
     mkdir -p "$PID_DIR" "$LOG_DIR"
 
+    # A halogen slot passes its cap explicitly while its server is still being
+    # created; otherwise it is read from the server that runs there.
+    local halogen_cap="${4:-}"
+    local -a backend_env=()
+    if [[ -n "$halogen_cap" ]] || _slot_is_halogen "$slot"; then
+        [[ -z "$halogen_cap" ]] && halogen_cap=$(_halogen_cap_of_slot "$slot")
+        backend_env=(LLM_TRANSLATE_MESSAGES=1 LLM_PROXY_TIMEOUT="$HALOGEN_PROXY_TIMEOUT"
+                     LLM_MAX_TOKENS_CAP="$halogen_cap")
+    fi
+
     echo "Starting proxy [slot $slot] on port $port_proxy..."
     # -u: unbuffered stdout/stderr so every log line lands in $proxy_log
     # immediately (and nothing is lost when the proxy is killed on stop).
     # LLM_TOKEN_FILE switches the proxy into hardened mode: token check,
     # path allowlist, concurrency and body-size caps. Unset = pass-through.
+    # 127.0.0.1 rather than localhost: rootless podman publishes on IPv4 only,
+    # and localhost may resolve to ::1 first.
     local proxy_pid=""
     proxy_pid=$(_spawn_detached "$PID_DIR/proxy-${slot}.pid" "$proxy_log" truncate \
-        env LLM_BACKEND_URL="http://localhost:${port_server}" \
+        env LLM_BACKEND_URL="http://127.0.0.1:${port_server}" \
             LLM_PROXY_HOST="${host:-127.0.0.1}" \
             LLM_PROXY_PORT="${port_proxy}" \
             LLM_TOKEN_FILE="$([[ "$public" == true ]] && echo "$TOKEN_FILE")" \
+            "${backend_env[@]}" \
             python3 -u "$PROXY_SCRIPT")
     if [[ -z "$proxy_pid" ]]; then
         echo "Error: the proxy did not report a PID. See $proxy_log"
@@ -491,6 +594,221 @@ _stop_proxy() {
     return 1
 }
 
+# cmd_start for a halogen model. Runs inside cmd_start and reads its locals
+# (bash scoping is dynamic): the options are parsed and checked there already.
+_start_halogen() {
+    local -a refused=()
+    [[ -n "$cache_ram" && "$cache_ram" != "0" ]] && refused+=("--cache-ram $cache_ram (only 0 = prompt cache off)")
+    [[ -n "$similarity" ]] && refused+=("--similarity")
+    [[ -n "$gpu_priority" ]] && refused+=("--gpu-priority")
+    [[ "$verbose" == true ]] && refused+=("--verbose")
+    [[ "$spec" == "off" ]] && refused+=("--spec off (its MTP draft is byte-identical to plain decoding)")
+    if (( ${#refused[@]} )); then
+        echo "Error: not available with the halogen backend: ${refused[*]}"
+        exit 1
+    fi
+    local lan=false
+    [[ -n "$host" && "$host" != "127.0.0.1" && "$host" != "localhost" ]] && lan=true
+    if [[ "$public" == true && "$lan" == true ]]; then
+        echo "Error: --public with --host $host would publish halogen on the LAN without a token —"
+        echo "       the server has no authentication of its own. Leave --host out: --public"
+        echo "       reaches it through the proxy, which checks the token."
+        exit 1
+    fi
+    _check_deps podman python3 || exit 1
+
+    local model_path="${_r_model//\~/$HOME}"
+    local model_dir; model_dir="$(dirname "$model_path")"
+
+    # The container's environment, in a fixed order so that the same options
+    # always produce the same command — preset compares it word for word.
+    local -a keys=()
+    local -A val=()
+    _henv() { [[ -v "val[$1]" ]] || keys+=("$1"); val[$1]="$2"; }
+
+    _henv HALOGEN_CHECKPOINT "/models/$(basename "$model_path")"
+    _henv HALOGEN_MODEL_ID "$_r_client"
+    local kv
+    for kv in "${_r_args[@]}"; do
+        [[ "$kv" == HALOGEN_*=* ]] || { echo "Error: extra_args of '$_r_name' must be HALOGEN_*=VALUE pairs (got '$kv')"; exit 1; }
+        _henv "${kv%%=*}" "${kv#*=}"
+    done
+
+    local ctx_n="${ctx:-${_r_ctx:-$HALOGEN_NATIVE_CTX}}"
+    _henv HALOGEN_CTX "$ctx_n"
+    local yarn=""
+    if (( ctx_n > HALOGEN_NATIVE_CTX )); then
+        yarn=$(( (ctx_n + HALOGEN_NATIVE_CTX - 1) / HALOGEN_NATIVE_CTX ))
+        _henv HALOGEN_ROPE_YARN "$yarn"
+    fi
+    # The pool holds every running conversation's KV; one request must fit.
+    if [[ -z "${val[HALOGEN_KV_POOL_POSITIONS]:-}" ]] || (( val[HALOGEN_KV_POOL_POSITIONS] < ctx_n )); then
+        _henv HALOGEN_KV_POOL_POSITIONS "$ctx_n"
+    fi
+    [[ -n "$parallel" ]] && _henv HALOGEN_KV_SLOTS "$parallel"
+
+    if [[ -n "$reasoning" ]]; then
+        local r="$reasoning"
+        [[ "$r" == "0" ]] && r=off
+        if [[ "$r" == off ]]; then
+            _henv HALOGEN_ENABLE_THINKING 0
+        elif [[ " $REASONING_LEVELS " == *" $r "* ]]; then
+            local pair mapped=""
+            for pair in $_r_reasoning_levels; do [[ "${pair%%=*}" == "$r" ]] && mapped="${pair#*=}"; done
+            _henv HALOGEN_REASONING_EFFORT "$mapped"
+        elif [[ "$r" =~ ^[1-9][0-9]*$ ]]; then
+            _henv HALOGEN_MAX_THINKING_TOKENS "$r"
+        fi
+        # on and -1: the server's own default (thinking on, effort xhigh).
+    fi
+    [[ -n "$temp" ]]  && _henv HALOGEN_TEMPERATURE "$temp"
+    [[ -n "$top_p" ]] && _henv HALOGEN_TOP_P "$top_p"
+    [[ "$cache_ram" == "0" ]] && _henv HALOGEN_PROMPT_CACHE 0
+    local cap="$HALOGEN_MAX_TOKENS_CAP"
+    if [[ -n "$max_predict" && "$max_predict" != "-1" ]]; then
+        cap="$max_predict"
+        _henv HALOGEN_MAX_TOKENS_CAP "$cap"
+    fi
+    if [[ "$use_mmproj" == true ]]; then
+        if [[ -z "$_r_mmproj" ]]; then
+            echo "Error: --mmproj requested but model '$name' defines no mmproj"; exit 1
+        fi
+        # The engine looks for its vision tower beside the checkpoint.
+        if [[ "$(dirname "${_r_mmproj//\~/$HOME}")" != "$model_dir" ]]; then
+            echo "Error: halogen loads the vision file from beside the checkpoint; mmproj of '$name' is elsewhere"; exit 1
+        fi
+        _henv HALOGEN_VISION_TOWER 1
+    fi
+
+    local -a env_args=()
+    local k
+    for k in "${keys[@]}"; do env_args+=(-e "$k=${val[$k]}"); done
+
+    local -a cmd=(podman run --rm --name "$(_halogen_container "$slot")"
+        --label "llmctl.model=$model_path"
+        -p "${host:-127.0.0.1}:${port_server}:${HALOGEN_API_PORT}"
+        --device /dev/kfd --device /dev/dri --group-add keep-groups
+        --ipc=host --ulimit memlock=-1:-1
+        "${env_args[@]}"
+        -v "$model_dir:/models:ro"
+        "$_r_binary")
+
+    if [[ "$print_cmd" == true ]]; then
+        printf '%s\n' "${cmd[*]}"
+        return 0
+    fi
+
+    # ── Exclusive: nothing else may run while halogen holds the machine ──
+    local -a others=()
+    local s
+    for s in $(_active_slots); do
+        [[ "$s" == "$slot" ]] && continue
+        if _slot_server_pid "$s" > /dev/null || _slot_proxy_pid "$s" > /dev/null; then others+=("$s"); fi
+    done
+    if (( ${#others[@]} )); then
+        echo "Error: halogen runs exclusively — it holds most of this machine's memory — and"
+        echo "       slot(s) ${others[*]} are running. Stop them first: $PROG stop"
+        exit 1
+    fi
+    local container; container=$(_halogen_container "$slot")
+    if podman container exists "$container" 2>/dev/null; then
+        # Left behind by a podman client that died without cleaning up; the port
+        # check above already proved nothing is serving from it.
+        podman rm -f "$container" > /dev/null 2>&1
+    fi
+    if [[ ! -f "$model_path" ]]; then
+        echo "Error: checkpoint not found: $model_path — run: $PROG download $_r_name"; exit 1
+    fi
+
+    [[ "$compact" == true ]] && { _compact_memory || exit 1; }
+    local contig; contig=$(_contig_gib)
+    if (( contig < HALOGEN_MIN_CONTIG_GIB )); then
+        echo "Note: only $contig GiB of host memory are free in 2 MiB blocks (want >= $HALOGEN_MIN_CONTIG_GIB)."
+        if [[ "$compact" == true ]]; then
+            echo "      Stop other large programs (a VM, ComfyUI, …) or reboot, or prefill may stall for minutes."
+        else
+            echo "      Prefill may stall for minutes; consider: $PROG start $name $slot --compact"
+        fi
+    fi
+
+    _render_halogen_config() {
+        echo "Model:    $_r_label ($_r_client)"
+        echo "Backend:  halogen — $_r_binary (podman, container $container)"
+        echo "Checkpoint: $model_path"
+        if [[ "$use_mmproj" == true ]]; then
+            echo "Vision:   on (--mmproj)"
+        elif [[ -n "$_r_mmproj" ]]; then
+            echo "Vision:   available but not loaded (pass --mmproj)"
+        fi
+        echo "Host:     ${host:-127.0.0.1 (default)}"
+        [[ "$lan" == true ]] && echo "  WARNING: published beyond localhost ($host) without authentication — trusted networks only."
+        if [[ "$public" == true ]]; then
+            echo "Public:   enabled (--public) — TLS front for the proxy only: 0.0.0.0:$(( PORT_BASE_TLS_PROXY + slot )) → :$port_proxy"
+            echo "  Tokens:  $(_token_count) from $TOKEN_FILE; token budgets capped at $cap"
+        else
+            echo "Public:   disabled — reachable only via localhost/LAN (pass --public to expose via the VPS)"
+        fi
+        echo "Proxy:    always on :$port_proxy — translates /v1/messages (Claude Code), normalizes time stamps,"
+        echo "          clamps token budgets to $cap"
+        echo "Context:  $ctx_n${yarn:+ (YaRN x$yarn over the native $HALOGEN_NATIVE_CTX)}"
+        echo "Parallel: ${val[HALOGEN_KV_SLOTS]:-4 (server default)} over a pool of ${val[HALOGEN_KV_POOL_POSITIONS]} positions"
+        case "${val[HALOGEN_PROMPT_CACHE]:-}" in
+            0) echo "PromptCache: off (--cache-ram 0)" ;;
+            *) echo "PromptCache: on (server default)" ;;
+        esac
+        if [[ -n "$reasoning" ]]; then
+            echo "Reasoning: $reasoning — ${val[HALOGEN_ENABLE_THINKING]:+thinking off by default}${val[HALOGEN_REASONING_EFFORT]:+default effort ${val[HALOGEN_REASONING_EFFORT]}}${val[HALOGEN_MAX_THINKING_TOKENS]:+thinking budget ${val[HALOGEN_MAX_THINKING_TOKENS]} tokens}"
+        else
+            echo "Reasoning: server default (thinking on, effort xhigh; requests may override)"
+        fi
+        echo "Speculative: on (MTP head, byte-identical to plain decoding)"
+        [[ -n "$temp$top_p" ]] && echo "Samplers: ${temp:+temp $temp}${temp:+${top_p:+, }}${top_p:+top-p $top_p} (server defaults; requests may override)"
+        echo "----- effective config -----"
+        echo "Command:"
+        printf '  %s\n' "${cmd[*]}"
+        echo "----------------------------"
+    }
+    local config_text; config_text="$(_render_halogen_config)"
+    echo "$config_text"
+
+    : > "$server_log"
+    printf '%s\n\n' "$config_text" >> "$server_log"
+    echo "Starting halogen [slot $slot] on port $port_server..."
+    local server_pid=""
+    server_pid=$(_spawn_detached "$PID_DIR/server-${slot}.pid" "$server_log" append "${cmd[@]}")
+    if [[ -z "$server_pid" ]]; then
+        echo "Error: podman did not report a PID. See $server_log" >&2
+        exit 1
+    fi
+    echo "Server running (PID: $server_pid, detached) — loading takes ~15-30 s with the"
+    echo "weights in the file cache, a few minutes from disk."
+
+    _start_proxy "$slot" "$host" "$public" "$cap" || { _stop_slot "$slot" > /dev/null; exit 1; }
+
+    local stunnel_log="$LOG_DIR/stunnel-${slot}.log"
+    if [[ "$public" == true ]]; then
+        mkdir -p "$STUNNEL_DIR"
+        local stunnel_conf="$STUNNEL_DIR/slot-${slot}.conf"
+        _write_stunnel_conf "$slot" true "$stunnel_conf" false
+        local stunnel_pid=""
+        stunnel_pid=$(_spawn_detached "$PID_DIR/stunnel-${slot}.pid" "$stunnel_log" truncate \
+            stunnel "$stunnel_conf")
+        sleep 1
+        if [[ -z "$stunnel_pid" ]] || ! ps -p "$stunnel_pid" > /dev/null 2>&1; then
+            echo "Error: stunnel failed to start. See $stunnel_log"
+            exit 1
+        fi
+        echo "TLS front running (PID: $stunnel_pid) on :$(( PORT_BASE_TLS_PROXY + slot ))"
+    fi
+
+    echo ""
+    echo "  Logs:  tail -f $server_log"
+    echo "         tail -f $proxy_log"
+    [[ "$public" == true ]] && echo "         tail -f $stunnel_log"
+    echo "  Env:   $PROG env $_r_name $slot"
+    echo "  Stop:  $PROG stop $slot"
+}
+
 cmd_start() {
     local name=""
     local slot="1"
@@ -517,10 +835,12 @@ cmd_start() {
     # and starts nothing. `preset` uses it to compare a slot's target state against
     # the argv of what is actually running there.
     local print_cmd=false
+    local compact=false         # true = defragment host memory first (sudo)
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --proxy) start_proxy=true; shift ;;
+            --compact) compact=true; shift ;;
             --public) public=true; shift ;;
             --max-predict) _need_value "$@" || exit 1; max_predict="$2"; shift 2 ;;
             --reasoning) _need_value "$@" || exit 1; reasoning="$2"; shift 2 ;;
@@ -589,7 +909,23 @@ cmd_start() {
     local port_proxy=$(( PORT_BASE_PROXY + slot ))
 
     _resolve_model "$name" || { echo "Unknown model: $name"; cmd_list; exit 1; }
+    case "$_r_backend" in
+        llama) ;;
+        # Its proxy is what speaks the Messages API, so it always runs.
+        halogen) start_proxy=true ;;
+        *) echo "Error: model '$name' names an unknown backend '$_r_backend' in models.conf (llama or halogen)"; exit 1 ;;
+    esac
     [[ "$start_proxy" == true ]] && { _check_deps python3 || exit 1; }
+    if [[ "$print_cmd" != true && "$_r_backend" == llama ]]; then
+        local hs
+        hs=$(_halogen_slots | head -1)
+        if [[ -n "$hs" ]]; then
+            echo "Error: a halogen server runs on slot $hs, and halogen runs exclusively — it holds"
+            echo "       most of this machine's memory. Stop it first: $PROG stop $hs"
+            exit 1
+        fi
+        [[ "$compact" == true ]] && { _compact_memory || exit 1; }
+    fi
 
     # Needs the resolved model, since what --reasoning can mean depends on it.
     _reasoning_args=(); _reasoning_note=""
@@ -623,6 +959,11 @@ cmd_start() {
         : > "$server_log"
         : > "$proxy_log"
         echo "Cleared logs for slot $slot"
+    fi
+
+    if [[ "$_r_backend" == halogen ]]; then
+        _start_halogen
+        return
     fi
 
     # Expand tilde in model paths
@@ -899,7 +1240,8 @@ _slot_proxy_pid() {
 _is_llmctl_process() {
     local pid="$1" cmdline=""
     cmdline=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null) || return 1
-    [[ "$cmdline" == *"--slot-save-path $SLOT_STATE_DIR/"* || "$cmdline" == *"$PROXY_SCRIPT"* ]]
+    [[ "$cmdline" == *"--slot-save-path $SLOT_STATE_DIR/"* || "$cmdline" == *"$PROXY_SCRIPT"* ||
+       "$cmdline" == *"--name $HALOGEN_CONTAINER_PREFIX"* ]]
 }
 
 # The slots this machine currently has something on, ascending. Nothing keeps a
@@ -928,6 +1270,9 @@ _active_slots() {
     done < <(ss -tlnp 2>/dev/null | awk 'NR > 1 { n = split($4, a, ":"); p = ""
                                                  if (match($0, /pid=[0-9]+/)) p = substr($0, RSTART + 4, RLENGTH - 4)
                                                  print a[n], p }')
+    # A halogen port is held by podman's network helper, not by anything of ours;
+    # its container name is what gives the slot away.
+    for n in $(_halogen_slots); do slots+=("$n"); done
     (( ${#slots[@]} )) || return 0
     printf '%s\n' "${slots[@]}" | sort -un
 }
@@ -953,6 +1298,12 @@ _slot_model_label() {
     local slot="$1" pid="" i
     pid=$(_slot_server_pid "$slot") || { echo "unknown"; return 1; }
     _read_argv "$pid" || { echo "unknown"; return 1; }
+    if _is_halogen_argv; then
+        local path label
+        path=$(_argv_halogen_model) || { echo "unknown"; return 1; }
+        label=$(_label_for_model_path "$path") || label="$(basename "$path")"
+        echo "$label"; return 0
+    fi
     for (( i=0; i < ${#_ARGV[@]} - 1; i++ )); do
         case "${_ARGV[i]}" in
             -m|--model)
@@ -979,7 +1330,17 @@ _stop_slot() {
     local stopped=0
 
     local server_pid=""
-    if server_pid=$(_slot_server_pid "$slot"); then
+    if _slot_is_halogen "$slot"; then
+        # podman stop, not a signal to the client: it waits for the container to
+        # exit and removes it (--rm), so the name is free for the next start.
+        _stop_proxy "$slot" && stopped=$(( stopped + 1 ))
+        server_pid=$(_slot_server_pid "$slot") || server_pid=""
+        podman stop -t 30 "$(_halogen_container "$slot")" > /dev/null 2>&1
+        podman rm -f "$(_halogen_container "$slot")" > /dev/null 2>&1
+        [[ -n "$server_pid" ]] && kill "$server_pid" 2>/dev/null
+        echo "Slot $slot: halogen (container $(_halogen_container "$slot")) stopped."
+        stopped=$(( stopped + 1 ))
+    elif server_pid=$(_slot_server_pid "$slot"); then
         kill "$server_pid" 2>/dev/null
         echo "Slot $slot: llama-server (PID: $server_pid) stopped."
         stopped=$(( stopped + 1 ))
@@ -1085,7 +1446,8 @@ _wait_for_slot() {
         (( size < offset )) && offset=0
         fresh=$(tail -c "+$(( offset + 1 ))" "$log" 2>/dev/null)
 
-        if grep -Eq "(llama_server:|server is) listening on http://[^[:space:]]*:${port}([^0-9]|\$)" <<< "$fresh"; then
+        # halogen: uvicorn announces the API once the engine behind it answers.
+        if grep -Eq "(llama_server:|server is) listening on http://[^[:space:]]*:${port}([^0-9]|\$)|Uvicorn running on http://" <<< "$fresh"; then
             echo "  loaded after ${waited}s — listening on :$port"
             return 0
         fi
@@ -1183,9 +1545,15 @@ cmd_preset() {
             exit 1
         fi
 
+        if [[ "$_r_backend" == halogen && ${#_p_entries[@]} -gt 1 ]]; then
+            echo "Error: preset '$name': '$m' is a halogen model, which runs exclusively —"
+            echo "       a preset with it can name no other model."
+            exit 1
+        fi
         e_model+=("$m"); e_slot+=("$s"); e_flags+=("${eff[*]}"); e_label+=("$_r_label")
         e_cmd+=("$out")
-        [[ " ${eff[*]} " == *" --proxy "* ]] && e_proxy+=(true) || e_proxy+=(false)
+        # A halogen slot always has its proxy, asked for or not.
+        if [[ " ${eff[*]} " == *" --proxy "* || "$_r_backend" == halogen ]]; then e_proxy+=(true); else e_proxy+=(false); fi
         [[ " ${eff[*]} " == *" --public "* ]] && e_public+=(true) || e_public+=(false)
         # The host a reconciled proxy has to bind, read from the same effective flags.
         local eh="" prev=""
@@ -1429,6 +1797,10 @@ _capture_slot() {
     local pid=""
     pid=$(_slot_server_pid "$slot") || { echo "slot $slot: nothing is running there" >&2; return 1; }
     _read_argv "$pid" || { echo "slot $slot: cannot read /proc/$pid/cmdline" >&2; return 1; }
+    if _is_halogen_argv; then
+        _capture_halogen_slot "$slot"
+        return
+    fi
 
     local model="" mmproj="" ctx="" parallel="" predict="" cache_ram="" similarity="" host=""
     local spec_type="" reason="" reason_effort="" reason_budget=""
@@ -1562,6 +1934,80 @@ _capture_slot() {
         echo "    ${_ARGV[*]}" >&2
     fi
     echo "  it was probably started by hand with flags llmctl does not offer." >&2
+    return 1
+}
+
+# _capture_slot for a halogen server: its settings are the container's
+# environment, read back into the start options that produce them.
+_capture_halogen_slot() {
+    local slot="$1" model
+    model=$(_argv_halogen_model) || { echo "slot $slot: the container carries no llmctl.model label" >&2; return 1; }
+    local -a candidates=()
+    mapfile -t candidates < <(_names_for_model_path "$model")
+    if (( ${#candidates[@]} == 0 )); then
+        echo "slot $slot: $(basename "$model") is not in models.conf — add it there first" >&2
+        return 1
+    fi
+    local host="" i
+    for (( i=0; i < ${#_ARGV[@]} - 1; i++ )); do
+        [[ "${_ARGV[i]}" == "-p" ]] && host="${_ARGV[i+1]%%:*}"
+    done
+    [[ "$host" == "127.0.0.1" ]] && host=""
+    local ctx slots think effort budget temp top_p cap cache vision
+    ctx=$(_argv_env HALOGEN_CTX); slots=$(_argv_env HALOGEN_KV_SLOTS)
+    think=$(_argv_env HALOGEN_ENABLE_THINKING); effort=$(_argv_env HALOGEN_REASONING_EFFORT)
+    budget=$(_argv_env HALOGEN_MAX_THINKING_TOKENS)
+    temp=$(_argv_env HALOGEN_TEMPERATURE); top_p=$(_argv_env HALOGEN_TOP_P)
+    cap=$(_argv_env HALOGEN_MAX_TOKENS_CAP); cache=$(_argv_env HALOGEN_PROMPT_CACHE)
+    vision=$(_argv_env HALOGEN_VISION_TOWER)
+    local public=false
+    [[ -f "$PID_DIR/stunnel-${slot}.pid" ]] && ps -p "$(cat "$PID_DIR/stunnel-${slot}.pid")" > /dev/null 2>&1 && public=true
+
+    local name
+    for name in "${candidates[@]}"; do
+        _resolve_model "$name" || continue
+        local -a flags=()
+        [[ "$public" == true ]] && flags+=(--public)
+        # --public implies a cap of its own; only a different one needs saying.
+        if [[ -n "$cap" ]] && ! [[ "$public" == true && "$cap" == "$PUBLIC_MAX_PREDICT_DEFAULT" ]]; then
+            flags+=(--max-predict "$cap")
+        fi
+        if [[ "$think" == "0" ]]; then
+            flags+=(--reasoning off)
+        elif [[ -n "$effort" ]]; then
+            local level=""
+            level=$(_level_for_effort "$effort" "$_r_reasoning_levels") || continue
+            flags+=(--reasoning "$level")
+        elif [[ -n "$budget" ]]; then
+            flags+=(--reasoning "$budget")
+        fi
+        # The entry's own extra_args may set the slots; only a change is a flag.
+        local own_slots="" kv
+        for kv in "${_r_args[@]}"; do [[ "$kv" == HALOGEN_KV_SLOTS=* ]] && own_slots="${kv#*=}"; done
+        [[ -n "$slots" && "$slots" != "$own_slots" ]] && flags+=(--parallel "$slots")
+        [[ -n "$ctx" && "$ctx" != "${_r_ctx:-$HALOGEN_NATIVE_CTX}" ]] && flags+=(--ctx "$ctx")
+        [[ "$cache" == "0" ]] && flags+=(--cache-ram 0)
+        [[ -n "$vision" ]] && flags+=(--mmproj)
+        [[ -n "$host" ]] && flags+=(--host "$host")
+        [[ -n "$temp" ]] && flags+=(--temp "$temp")
+        [[ -n "$top_p" ]] && flags+=(--top-p "$top_p")
+
+        local built=""
+        built=$( cmd_start "$name" "$slot" "${flags[@]}" --print-cmd 2>/dev/null ) || continue
+        if [[ "$built" == "${_ARGV[*]}" ]]; then
+            _cap_entry="$name $slot ${flags[*]}"
+            _cap_label="$_r_label"
+            return 0
+        fi
+        _cap_diff_name="$name"; _cap_diff_built="$built"
+    done
+    echo "slot $slot: cannot express the running halogen server as start options." >&2
+    if [[ -n "${_cap_diff_built:-}" ]]; then
+        echo "  closest is '$_cap_diff_name', which would run:" >&2
+        echo "    $_cap_diff_built" >&2
+        echo "  while the process runs:" >&2
+        echo "    ${_ARGV[*]}" >&2
+    fi
     return 1
 }
 
@@ -1726,6 +2172,10 @@ _describe_server() {
         echo "${indent}Model:     unknown (cannot read /proc/$pid/cmdline)"
         return 0
     fi
+    if _is_halogen_argv; then
+        _describe_halogen "$indent"
+        return 0
+    fi
 
     local model="" served="" ctx="" parallel="" predict="" cache_ram="" mmproj="" host="" similarity=""
     local spec_type="" spec_draft="" spec_n=""
@@ -1803,6 +2253,55 @@ _describe_server() {
     fi
 }
 
+# _describe_server for a halogen server, from the container environment in $_ARGV.
+_describe_halogen() {
+    local indent="$1" model label host="" i
+    model=$(_argv_halogen_model) || model=""
+    label=$(_label_for_model_path "$model") || label="$(basename "${model:-unknown}")"
+    for (( i=0; i < ${#_ARGV[@]} - 1; i++ )); do
+        [[ "${_ARGV[i]}" == "-p" ]] && host="${_ARGV[i+1]%%:*}"
+    done
+    echo "${indent}Model:     $label ($(_argv_env HALOGEN_MODEL_ID || echo "?"))"
+    local ctx yarn
+    ctx=$(_argv_env HALOGEN_CTX); yarn=$(_argv_env HALOGEN_ROPE_YARN)
+    local -a params=("ctx ${ctx:-$HALOGEN_NATIVE_CTX}${yarn:+ (YaRN x$yarn)}"
+                     "parallel $(_argv_env HALOGEN_KV_SLOTS || echo 4)"
+                     "pool $(_argv_env HALOGEN_KV_POOL_POSITIONS || echo default)")
+    local v
+    v=$(_argv_env HALOGEN_MAX_TOKENS_CAP) && params+=("token cap $v")
+    [[ "$(_argv_env HALOGEN_PROMPT_CACHE)" == "0" ]] && params+=("prompt-cache off")
+    _argv_env HALOGEN_VISION_TOWER > /dev/null && params+=("vision")
+    [[ -n "$host" && "$host" != "127.0.0.1" ]] && params+=("host $host")
+    local joined="" p
+    for p in "${params[@]}"; do joined+="${joined:+, }$p"; done
+    echo "${indent}Params:    $joined"
+    if [[ "$(_argv_env HALOGEN_ENABLE_THINKING)" == "0" ]]; then
+        echo "${indent}Reasoning: off by default"
+    elif v=$(_argv_env HALOGEN_REASONING_EFFORT); then
+        echo "${indent}Reasoning: default effort $v"
+    elif v=$(_argv_env HALOGEN_MAX_THINKING_TOKENS); then
+        echo "${indent}Reasoning: budget $v"
+    else
+        echo "${indent}Reasoning: server default (effort xhigh)"
+    fi
+    echo "${indent}Spec:      MTP (always on)"
+    echo "${indent}Memory:    real use — free(1) counts the pinned weights as cache:"
+    echo "${indent}           $(_halogen_mem_line "$LOG_DIR/server-${slot}.log")"
+}
+
+# What is really left: MemAvailable minus the weights halogen pinned, which the
+# kernel files under reclaimable page cache although nothing can reclaim them.
+_halogen_mem_line() {
+    local log="$1" weights gtt
+    weights=$(sed -n 's/.*memory: \([0-9.]*\) GiB of weights locked.*/\1/p' "$log" 2>/dev/null | tail -1)
+    gtt=$(cat /sys/class/drm/card*/device/mem_info_gtt_used 2>/dev/null | head -1)
+    awk -v w="${weights:-0}" -v gtt="${gtt:-0}" '
+        /^MemAvailable:/ { avail = $2 / 1048576 }
+        END { real = avail - w; if (real < 0) real = 0
+              printf "weights %.1f GiB pinned, GPU (GTT) %.1f GiB, really available %.1f GiB (free(1): %.1f)",
+                     w, gtt / 1073741824, real, avail }' /proc/meminfo
+}
+
 cmd_status() {
     local found=0
     for slot in $(_active_slots); do
@@ -1823,7 +2322,9 @@ cmd_status() {
         local indent
         printf -v indent '%*s' $(( 9 + ${#slot} - 1 )) ''
         if [[ -n "$server_pid" ]] && ps -p "$server_pid" > /dev/null 2>&1; then
-            echo "Slot $slot: llama-server (PID: $server_pid) on :$port_server$preset_note"
+            local kind="llama-server"
+            _slot_is_halogen "$slot" && kind="halogen     "
+            echo "Slot $slot: $kind (PID: $server_pid) on :$port_server$preset_note"
             _describe_server "$server_pid" "$indent"
             echo "${indent}Log: tail -f $LOG_DIR/server-${slot}.log"
             slot_active=1; found=1
@@ -1864,6 +2365,20 @@ cmd_cache_stats() {
         local f="$LOG_DIR/server-${slot}.log"
         [[ -f "$f" ]] || continue
         found=1
+        if _slot_is_halogen "$slot"; then
+            # Its log has no per-task token counts; the server keeps its own tally.
+            echo "Slot $slot: halogen, from :$(( PORT_BASE_SERVER + slot ))/cache"
+            curl -sf "http://127.0.0.1:$(( PORT_BASE_SERVER + slot ))/cache" | python3 -c '
+import json, sys
+c = json.load(sys.stdin)
+hits, misses = c.get("hits", 0), c.get("misses", 0)
+rate = 100 * hits / (hits + misses) if hits + misses else 0
+entries, cap, saved = c.get("entries"), c.get("max_entries"), c.get("prompt_tokens_saved", 0)
+print(f"  entries={entries}/{cap}  hits={hits}  misses={misses}  "
+      f"hit_rate={rate:.1f}%  prompt_tokens_saved={saved}")
+' || echo "  the server does not answer (still loading?)"
+            continue
+        fi
         echo "Slot $slot: $f"
         python3 - "$f" <<'PY'
 import re, sys
@@ -1921,6 +2436,12 @@ cmd_clear_kv() {
         [[ -f "$PID_DIR/server-${slot}.pid" ]] && server_pid=$(cat "$PID_DIR/server-${slot}.pid")
         [[ -n "$server_pid" ]] && ps -p "$server_pid" > /dev/null 2>&1 || continue
         found=1
+        if _slot_is_halogen "$slot"; then
+            echo "Slot $slot: halogen has no endpoint to erase its KV; a request's region is freed when it"
+            echo "        ends, and only the prompt cache keeps anything. For a hard reset: $PROG stop $slot"
+            echo "        and start it again with --cache-ram 0 (prompt cache off)."
+            continue
+        fi
 
         echo "Slot $slot: clearing KV on :$(( PORT_BASE_SERVER + slot ))"
         LLM_KV_TOKEN="$token" python3 - "$(( PORT_BASE_SERVER + slot ))" <<'KVPY'
@@ -2026,6 +2547,9 @@ cmd_probe_reasoning() {
             [[ "$prev" == "--chat-template-file" ]] && { tmpl_file="$word"; break; }
             prev="$word"
         done
+        # A halogen checkpoint is no GGUF; its template ships beside it.
+        _resolve_model "$m_name" && [[ "$_r_backend" == halogen ]] && \
+            tmpl_file="$(dirname "$path")/tokenizer/chat_template.jinja"
         GGUF_PY="$gguf_py" python3 - "$m_name" "$m_reasoning" "$path" "$tmpl_file" <<'PROBEPY'
 import os, sys
 if os.environ.get("GGUF_PY"):
@@ -2074,7 +2598,7 @@ _ENV_VARS=(CLAUDE_CONFIG_DIR ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN
     ANTHROPIC_MODEL ANTHROPIC_SMALL_FAST_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL
     ANTHROPIC_DEFAULT_OPUS_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL API_TIMEOUT_MS
     PI_STREAM_FIRST_EVENT_TIMEOUT_MS PI_OPENAI_STREAM_IDLE_TIMEOUT_MS
-    OPENAI_BASE_URL OPENAI_API_KEY)
+    OPENAI_BASE_URL OPENAI_API_KEY CLAUDE_CODE_MAX_CONTEXT_TOKENS)
 
 # A child process cannot change its caller's environment, so env and clear print
 # shell code on stdout for the caller to eval, and talk to the user on stderr
@@ -2109,7 +2633,14 @@ cmd_env() {
     # Since the proxy is opt-in (start --proxy), point at whichever endpoint is
     # actually up: the proxy when it listens, the server otherwise. --proxy /
     # --direct force the choice (e.g. to set env before starting the slot).
+    _resolve_model "$name" || { echo "Unknown model: $name" >&2; cmd_list >&2; return 1; }
+
     local port_target="$port_server" via="server"
+    # halogen speaks no Messages API; only its proxy does, and it always runs.
+    if [[ "$_r_backend" == halogen ]]; then
+        [[ "$want" == direct ]] && echo "Note: halogen is reached through its proxy only — it translates the Messages API." >&2
+        want="proxy"
+    fi
     case "$want" in
         proxy)  port_target="$port_proxy"; via="proxy" ;;
         direct) port_target="$port_server"; via="server" ;;
@@ -2117,8 +2648,6 @@ cmd_env() {
                     port_target="$port_proxy"; via="proxy"
                 fi ;;
     esac
-
-    _resolve_model "$name" || { echo "Unknown model: $name" >&2; cmd_list >&2; return 1; }
 
     # Absolute, so the Claude Code profile does not depend on the directory the
     # command happens to be run from.
@@ -2150,10 +2679,26 @@ cmd_env() {
         [PI_OPENAI_STREAM_IDLE_TIMEOUT_MS]="600000"
         [OPENAI_BASE_URL]="http://localhost:$port_target/v1"
         [OPENAI_API_KEY]="$token"
+        # Claude Code knows no window for a model name outside its catalog and
+        # assumes 200K. halogen serves one request up to its full context — the
+        # running slot's, else the model's — so auto-compact can use all of it.
+        # (A llama-server slot divides its context by --parallel; left unset.)
+        [CLAUDE_CODE_MAX_CONTEXT_TOKENS]=""
     )
+    if [[ "$_r_backend" == halogen ]]; then
+        local ctx_now="" spid=""
+        if spid=$(_slot_server_pid "$slot") && _read_argv "$spid" && _is_halogen_argv; then
+            ctx_now=$(_argv_env HALOGEN_CTX)
+        fi
+        val[CLAUDE_CODE_MAX_CONTEXT_TOKENS]="${ctx_now:-${_r_ctx:-$HALOGEN_NATIVE_CTX}}"
+    fi
     local var
     for var in "${_ENV_VARS[@]}"; do
-        printf 'export %s=%q\n' "$var" "${val[$var]}"
+        if [[ -n "${val[$var]}" ]]; then
+            printf 'export %s=%q\n' "$var" "${val[$var]}"
+        else
+            printf 'unset %s\n' "$var"
+        fi
     done
 
     {
@@ -2163,6 +2708,7 @@ cmd_env() {
         echo "  ANTHROPIC_BASE_URL=http://localhost:$port_target"
         echo "  OPENAI_BASE_URL=http://localhost:$port_target/v1"
         echo "  ANTHROPIC_MODEL=$_r_client"
+        [[ -n "${val[CLAUDE_CODE_MAX_CONTEXT_TOKENS]}" ]] && echo "  CLAUDE_CODE_MAX_CONTEXT_TOKENS=${val[CLAUDE_CODE_MAX_CONTEXT_TOKENS]}"
     } >&2
     _eval_hint "$args"
 }
@@ -2355,6 +2901,10 @@ bench_model() {
         echo "  Skipping $m_label: model file not found"
         return
     fi
+    if _resolve_model "$m_name" && [[ "$_r_backend" == halogen ]]; then
+        echo "  Skipping $m_label: a halogen checkpoint is no GGUF, llama-bench cannot read it"
+        return
+    fi
 
     echo "  $m_label"
     if [[ "$full_mode" == "full" ]]; then
@@ -2471,6 +3021,9 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  --clear-logs: truncate this slot's server/proxy log before starting"
     printf "  %-20s %s\n" ""                      "  --public: token auth + hardening + mTLS front for the VPS (needs gen-certs)"
     printf "  %-20s %s\n" ""                      "  --max-predict N: cap tokens per generation (-1=no limit; --public defaults to 8192)"
+    printf "  %-20s %s\n" ""                      "  --compact: defragment host memory first (sudo) — for models that need large pinned blocks"
+    printf "  %-20s %s\n" ""                      "  halogen models (backend=halogen) run in podman, exclusively, always with their proxy;"
+    printf "  %-20s %s\n" ""                      "    --ctx above 262144 turns on YaRN, --mmproj the vision tower, --cache-ram only takes 0"
     printf "  %-20s %s\n" "preset <name>"          "bring the machine to the configuration presets.conf names (several models at once)"
     printf "  %-20s %s\n" ""                      "  keeps every slot that already runs exactly what the preset asks for,"
     printf "  %-20s %s\n" ""                      "  stops what differs or is not part of it, starts only what is missing"
@@ -2603,7 +3156,7 @@ cmd_download() {
     if [[ "$target" == "all" ]]; then
         echo "Downloading all models..."
         for entry in "${_MODELS[@]}"; do
-            IFS='|' read -r m_name _ m_model m_mmproj _ m_label _ _ _ m_hf_repo m_hf_includes m_hf_dir _ _ _ _ m_spec_args m_hf_draft m_hf_mmproj <<< "$entry"
+            IFS='|' read -r m_name _ m_model m_mmproj _ m_label _ _ _ m_hf_repo m_hf_includes m_hf_dir _ _ _ _ m_spec_args m_hf_draft m_hf_mmproj _ <<< "$entry"
             if [[ -z "$m_hf_repo" ]]; then
                 echo "  Skipping $m_label: no download info configured"
                 continue

@@ -21,6 +21,7 @@ DOCDIR    = $(DESTDIR)$(PREFIX)/share/doc/llmctl
 install:
 	install -Dm755 llmctl $(BINDIR)/llmctl
 	install -Dm644 proxy.py $(LIBDIR)/proxy.py
+	install -Dm644 anthropic_compat.py $(LIBDIR)/anthropic_compat.py
 	install -Dm644 -t $(SHAREDIR)/templates templates/*
 	install -Dm644 -t $(SHAREDIR)/examples examples/*.conf
 	install -Dm644 README.md $(DOCDIR)/README.md
