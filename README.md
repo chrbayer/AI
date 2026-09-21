@@ -623,7 +623,12 @@ reading its own `.hgn` weights. The slot model stays the same — `start`, `stop
   thinking, streaming with pings during prefill. It also clamps token budgets to
   the server's cap — halogen answers a larger `max_tokens` with HTTP 400 instead
   of shortening it, and Claude Code asks for 32000 — and waits up to an hour for
-  the backend, since a full 256K prefill alone takes minutes. `env` always points
+  the backend, since a full 256K prefill alone takes minutes. Images given as
+  http(s) URLs — which halogen refuses — are fetched by the proxy and passed on
+  inline (Messages, Chat Completions and Responses alike; images only, at most
+  20 MiB). Under `--public` only hosts that resolve to public addresses are
+  fetched, redirects included, so a token cannot reach this machine or the LAN
+  through it. `env` always points
   at the proxy, and also exports `CLAUDE_CODE_MAX_CONTEXT_TOKENS` with the slot's
   context, which Claude Code cannot know for a model outside its catalog.
 - **Settings are container environment variables.** `extra_args` holds
@@ -730,7 +735,7 @@ them are served by the Vulkan build — the ROCm build is opt-in per model
 - **mistral** — Mistral-Medium-3.5-128B, UD-Q5_K_XL, 32K ctx
 - **diamond** — L3.3-70B Magnum Diamond, i1-Q5_K_M, 32K ctx; drafted by the same Llama-3.2-1B (~2.0×)
 - **magnum** — Magnum-v4-72B, Q6_K, 32K ctx; a Qwen2.5-72B fulltune, drafted by Qwen2.5-1.5B-Instruct Q4_K_M (~2.0×)
-- **flash** — Qwen3.8-Flash-Next 125B MoE on the [halogen backend](#the-halogen-backend), 4-bit `.hgn`, 256K ctx (512K with YaRN via `--ctx 524288`), vision file available; runs exclusively
+- **flash** — Qwen3.8-Flash-Next 125B MoE on the [halogen backend](#the-halogen-backend), 4-bit `.hgn`, 256K ctx (512K with YaRN via `--ctx 524288`), vision via `--mmproj` (on in preset `flash`); runs exclusively
 
 Multimodal projectors are only loaded on an explicit `--mmproj`.
 

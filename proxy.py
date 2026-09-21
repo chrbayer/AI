@@ -1,9 +1,13 @@
+import base64
 import hmac
+import ipaddress
 import json
 import logging
 import os
 import queue
+import socket
 import threading
+import urllib.parse
 import requests
 from flask import Flask, request, Response
 import re
@@ -30,6 +34,11 @@ TRANSLATE_MESSAGES = os.environ.get('LLM_TRANSLATE_MESSAGES', '') == '1'
 # cap outright (HTTP 400) instead of shortening it, and Claude Code asks for
 # 32000 as a matter of course; clamping here keeps such requests alive.
 MAX_TOKENS_CAP = int(os.environ.get('LLM_MAX_TOKENS_CAP', '0')) or None
+# Backends that take images only inline (halogen refuses http(s) URLs): fetch
+# such images here and pass them on as data: URLs.
+INLINE_IMAGE_URLS = os.environ.get('LLM_INLINE_IMAGE_URLS', '') == '1'
+IMAGE_MAX_BYTES = 20 * 1024 * 1024
+IMAGE_FETCH_TIMEOUT = 20
 # While the backend prefills, a streamed Messages answer sends a ping this often,
 # so neither the client nor anything in between takes the silence for a hang.
 PING_INTERVAL = 10
@@ -175,6 +184,98 @@ def _relay(resp):
         _sem.release()
 
 
+class ImageFetchError(Exception):
+    pass
+
+
+def _check_public_host(url):
+    """In public mode the proxy must not become a way into this machine or its
+    network: a token holder could otherwise have it fetch http://127.0.0.1:8001
+    or a LAN address. Every address the host resolves to has to be global."""
+    host = urllib.parse.urlsplit(url).hostname
+    if not host:
+        raise ImageFetchError(f"no host in image URL {url!r}")
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror as e:
+        raise ImageFetchError(f"cannot resolve {host}: {e}")
+    for info in infos:
+        addr = ipaddress.ip_address(info[4][0].split("%")[0])
+        if not addr.is_global:
+            raise ImageFetchError(f"image host {host} resolves to a non-public address ({addr})")
+
+
+def _fetch_image(url):
+    """Download an http(s) image and return it as a data: URL."""
+    for _ in range(5):                  # redirects, each hop checked on its own
+        if urllib.parse.urlsplit(url).scheme not in ("http", "https"):
+            raise ImageFetchError(f"unsupported image URL scheme: {url[:40]!r}")
+        if TOKENS:
+            _check_public_host(url)
+        try:
+            resp = requests.get(url, stream=True, timeout=IMAGE_FETCH_TIMEOUT, allow_redirects=False,
+                                headers={"User-Agent": "llmctl-proxy/1 (image fetch)"})
+        except requests.RequestException as e:
+            raise ImageFetchError(f"cannot fetch image {url}: {e}")
+        with resp:
+            if resp.is_redirect:
+                url = urllib.parse.urljoin(url, resp.headers.get("Location", ""))
+                continue
+            if resp.status_code != 200:
+                raise ImageFetchError(f"image {url} answered HTTP {resp.status_code}")
+            ctype = resp.headers.get("Content-Type", "").split(";")[0].strip().lower()
+            if not ctype.startswith("image/"):
+                raise ImageFetchError(f"{url} is not an image (Content-Type {ctype or 'missing'})")
+            data = bytearray()
+            for chunk in resp.iter_content(65536):
+                data += chunk
+                if len(data) > IMAGE_MAX_BYTES:
+                    raise ImageFetchError(f"image {url} is larger than {IMAGE_MAX_BYTES // (1024 * 1024)} MiB")
+        log.info("Inlined image %s (%s, %d KiB)", url, ctype, len(data) // 1024)
+        return f"data:{ctype};base64,{base64.b64encode(bytes(data)).decode()}"
+    raise ImageFetchError(f"too many redirects for image {url}")
+
+
+def _inline(url, cache):
+    if not isinstance(url, str) or not url.lower().startswith(("http://", "https://")):
+        return url
+    if url not in cache:
+        cache[url] = _fetch_image(url)
+    return cache[url]
+
+
+def inline_image_urls(data):
+    """Replace http(s) image URLs by data: URLs, in Chat Completions messages
+    (image_url parts) and Responses input (input_image items). Raises
+    ImageFetchError when an image cannot be fetched."""
+    cache = {}
+
+    def parts(content):
+        if not isinstance(content, list):
+            return
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") == "image_url":
+                iu = part.get("image_url")
+                if isinstance(iu, dict):
+                    iu["url"] = _inline(iu.get("url"), cache)
+                else:
+                    part["image_url"] = _inline(iu, cache)
+            elif part.get("type") == "input_image":
+                part["image_url"] = _inline(part.get("image_url"), cache)
+
+    for msg in data.get("messages") or []:
+        if isinstance(msg, dict):
+            parts(msg.get("content"))
+    inp = data.get("input")
+    if isinstance(inp, list):
+        parts(inp)
+        for item in inp:
+            if isinstance(item, dict):
+                parts(item.get("content"))
+
+
 def _json_response(status, body):
     return Response(json.dumps(body, ensure_ascii=False), status=status,
                     content_type="application/json")
@@ -242,6 +343,13 @@ def _messages(path, data):
 
     model = data.get("model") or "unknown"
     chat = ac.messages_to_chat(data, MAX_TOKENS_CAP)
+    if INLINE_IMAGE_URLS:
+        try:
+            inline_image_urls(chat)
+        except ImageFetchError as e:
+            _sem.release()
+            log.warning("Rejected request from %s: %s", _client_addr(), e)
+            return _json_response(400, ac.error_body(400, str(e)))
     stream = bool(chat.get("stream"))
     try:
         resp = requests.post(f"{TARGET_URL}/v1/chat/completions", json=chat, stream=stream,
@@ -310,6 +418,14 @@ def proxy(path):
     if TRANSLATE_MESSAGES and request.method == "POST" and path in ("v1/messages", "v1/messages/count_tokens"):
         return _messages(path, data)
 
+    if INLINE_IMAGE_URLS and isinstance(data, dict):
+        try:
+            inline_image_urls(data)
+        except ImageFetchError as e:
+            _sem.release()
+            log.warning("Rejected request from %s: %s", _client_addr(), e)
+            return _deny(400, str(e))
+
     try:
         if data is not None:
             resp = requests.request(
@@ -345,6 +461,9 @@ if __name__ == '__main__':
         log.info("Translating /v1/messages to /v1/chat/completions (backend has no Messages API)")
     if MAX_TOKENS_CAP:
         log.info("Token budgets above %d are clamped to it", MAX_TOKENS_CAP)
+    if INLINE_IMAGE_URLS:
+        log.info("Fetching http(s) image URLs and passing them on inline%s",
+                 " (public hosts only)" if TOKENS else "")
     if TOKENS:
         log.info("Public mode: %d token(s) from %s, max %d concurrent requests, "
                  "body limit %d MiB, %d allowlisted paths",

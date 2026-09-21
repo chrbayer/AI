@@ -537,7 +537,7 @@ _start_proxy() {
     if [[ -n "$halogen_cap" ]] || _slot_is_halogen "$slot"; then
         [[ -z "$halogen_cap" ]] && halogen_cap=$(_halogen_cap_of_slot "$slot")
         backend_env=(LLM_TRANSLATE_MESSAGES=1 LLM_PROXY_TIMEOUT="$HALOGEN_PROXY_TIMEOUT"
-                     LLM_MAX_TOKENS_CAP="$halogen_cap")
+                     LLM_MAX_TOKENS_CAP="$halogen_cap" LLM_INLINE_IMAGE_URLS=1)
     fi
 
     echo "Starting proxy [slot $slot] on port $port_proxy..."
@@ -749,7 +749,7 @@ _start_halogen() {
             echo "Public:   disabled — reachable only via localhost/LAN (pass --public to expose via the VPS)"
         fi
         echo "Proxy:    always on :$port_proxy — translates /v1/messages (Claude Code), normalizes time stamps,"
-        echo "          clamps token budgets to $cap"
+        echo "          clamps token budgets to $cap, fetches http(s) image URLs and passes them inline"
         echo "Context:  $ctx_n${yarn:+ (YaRN x$yarn over the native $HALOGEN_NATIVE_CTX)}"
         echo "Parallel: ${val[HALOGEN_KV_SLOTS]:-4 (server default)} over a pool of ${val[HALOGEN_KV_POOL_POSITIONS]} positions"
         case "${val[HALOGEN_PROMPT_CACHE]:-}" in
