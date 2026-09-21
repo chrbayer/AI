@@ -1421,7 +1421,7 @@ cmd_presets() {
 # It prints that line after 'model loaded', so it marks the end of the load and
 # not the moment the socket exists. Nothing else is as reliable: the port alone
 # could be an older server that never went away, and the process being alive
-# says nothing about how far it has got. Waiting for the line serializes VRAM
+# says nothing about how far it has got. Waiting for the line serializes GPU memory
 # allocation across a preset's models — the next one may only start allocating
 # once this one has all it needs — and it makes the last model in a preset
 # finish loading before the shell prompt comes back.
@@ -1671,7 +1671,7 @@ cmd_preset() {
 
     # ── Stop first, start second ────────────────────────────────────────────
     # Everything that has to go goes before the first model loads: the new weights
-    # need the VRAM the old ones are holding.
+    # need the GPU memory the old ones are holding.
     echo ""
     for s in "${foreign[@]}"; do
         local running=""
@@ -1719,7 +1719,7 @@ cmd_preset() {
         fi
 
         # Rolling back what this run started: a half-loaded preset is a
-        # configuration nobody asked for, and its slots hold VRAM the next
+        # configuration nobody asked for, and its slots hold GPU memory the next
         # attempt needs. Slots that were already running and matched are left
         # alone — stopping a good model to tidy up would help no one.
         echo ""

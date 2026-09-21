@@ -222,10 +222,10 @@ Preset 'c4f' — Llama-3.3-70B with Qwen3-VL-8B next to it for images
 ```
 
 Everything that has to go is stopped before the first new model loads — the new
-weights need the VRAM the old ones hold. The models are then started one after
+weights need the GPU memory the old ones hold. The models are then started one after
 another, and each one is waited for until llama-server writes its own
 `listening on http://…:800N` line — the line it prints after `model loaded`. That
-serializes VRAM allocation, and it makes the command return only once the last
+serializes GPU memory allocation, and it makes the command return only once the last
 model is actually ready to answer. The wait ends early if the server reports an
 error (a severity `E` line) or exits, and gives up after `--wait N` seconds
 (default 300). The limit is there for a server that hangs, not for one that is
@@ -234,9 +234,11 @@ load, so a big set stays well inside it.
 If one does not come up, the slots *this run* started are stopped again; slots
 that were already running and matched are left alone.
 
-What a preset does not do is check that its models fit into VRAM together. An
+What a preset does not do is check that its models fit into GPU memory together. An
 over-committed set fails on the model that no longer fits; the sizes are yours to
-add up.
+add up. On this machine that memory is GTT: the BIOS reserves only 1 GiB of VRAM,
+and the GPU takes up to 104 GiB (`ttm.pages_limit=27262976`) out of the 124.4 GiB
+the system has — the same pool the system and the host-RAM prompt caches live in.
 
 ### Recording what runs as a preset
 
@@ -385,7 +387,7 @@ It is on by default wherever it is declared; `--spec off` (or `--no-spec`) turns
 it off, `--spec on` errors out on a model that has no draft head. Measured on
 qwen at its production context size:
 
-| | tokens/s | acceptance | VRAM |
+| | tokens/s | acceptance | GPU memory |
 | --- | --- | --- | --- |
 | off | 7.22 | — | 33.4 GB |
 | on | **15.48** | 58 % | 36.9 GB |
