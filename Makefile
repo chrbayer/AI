@@ -24,11 +24,14 @@ install:
 	install -Dm644 anthropic_compat.py $(LIBDIR)/anthropic_compat.py
 	install -Dm644 halogen_bench.py $(LIBDIR)/halogen_bench.py
 	install -Dm644 comfyui_models.py $(LIBDIR)/comfyui_models.py
+	install -Dm644 tts_server.py $(LIBDIR)/tts_server.py
+	install -Dm644 tts_voice_design.py $(LIBDIR)/tts_voice_design.py
 	install -Dm644 -t $(SHAREDIR)/templates templates/*
 	install -Dm644 -t $(SHAREDIR)/examples examples/*.conf
 	install -Dm644 -t $(SHAREDIR)/comfyui/workflows comfyui/workflows/*.json
 	install -Dm644 -t $(SHAREDIR)/comfyui/patches comfyui/patches/*.patch
 	install -Dm644 comfyui/sources.json $(SHAREDIR)/comfyui/sources.json
+	install -Dm644 -t $(SHAREDIR)/tts/voices tts/voices/*
 	install -Dm644 README.md $(DOCDIR)/README.md
 
 install-link:

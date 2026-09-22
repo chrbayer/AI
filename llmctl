@@ -11,6 +11,7 @@
 #   llmctl clear-kv [slot]                     drop the KV cache without restarting (all slots, or one); ComfyUI: unload its models
 #   llmctl download <name|all> [PATTERN] [--from DIR]  fetch models; for ComfyUI set it up and fetch what its workflows name
 #   llmctl update <comfyui-model> [--torch]    pull ComfyUI and its Python dependencies forward
+#   llmctl voice list|add|design|rm            voices for speech (tts) slots
 #   llmctl probe-reasoning [model]             show what each model's chat template supports
 #   llmctl gen-certs <public-hostname>         create CA + certificates for --public
 #   eval "$(llmctl env <name> [slot] [--proxy|--direct])"   export Claude Code env vars in this shell
@@ -217,9 +218,9 @@ _need_value() {
 
 # Check that required commands exist; prints error and returns 1 if any are missing.
 _check_deps() {
-    local missing=()
-    for cmd in "$@"; do
-        command -v "$cmd" > /dev/null 2>&1 || missing+=("$cmd")
+    local missing=() c
+    for c in "$@"; do
+        command -v "$c" > /dev/null 2>&1 || missing+=("$c")
     done
     if (( ${#missing[@]} > 0 )); then
         echo "Error: missing dependencies: ${missing[*]}"
@@ -428,6 +429,170 @@ _comfyui_unload_slot() {
 _comfyui_unload() {
     local s
     for s in $(_comfyui_slots); do _comfyui_unload_slot "$s"; done
+}
+
+# ── tts backend ─────────────────────────────────────────────
+#
+# models.conf entries with _model_backend="tts" speak: Qwen3-TTS through
+# llama.cpp's llama-tts, behind tts_server.py, which answers the OpenAI speech
+# API (POST /v1/audio/speech) on the slot's server port. llama-server has no
+# speech endpoint yet, so the server runs llama-tts once per request; the model
+# is on the GPU only while it speaks (~4 GB), which is why this slot never needs
+# unloading and runs beside anything.
+#
+# A voice is a short reference recording: Qwen3-TTS Base speaks in its voice,
+# and in accent-free German, which its English and Chinese preset speakers do
+# not manage. `llmctl voice design` makes such a recording from a description
+# (Qwen3-TTS VoiceDesign, PyTorch, in its own venv); `llmctl voice add` takes one
+# of your own.
+#
+#   binary       llama-tts (the llama.cpp build that has Qwen3-TTS, Aug 2026+)
+#   model        the Base GGUF;  mmproj  its mmproj GGUF
+#   client_name  the model id /v1/models reports
+#   extra_args   further llama-tts flags (e.g. -ngl 99)
+TTS_SERVER_SCRIPT="$LIB_DIR/tts_server.py"
+TTS_DESIGN_SCRIPT="$LIB_DIR/tts_voice_design.py"
+TTS_DIR="$DATA_DIR/tts"                     # venv/ for designing, voices/
+TTS_VOICES="$TTS_DIR/voices"
+TTS_SHARE="$SHARE_DIR/tts"                  # bundled starter voices
+TTS_DESIGN_REPO="Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign"
+TTS_DESIGN_DIR="$MODELS_DIR/qwen3-tts/Qwen3-TTS-12Hz-1.7B-VoiceDesign"
+TTS_DEFAULT_LANG="de"
+
+_is_tts_argv() { [[ " ${_ARGV[*]} " == *" $TTS_SERVER_SCRIPT "* ]]; }
+
+_slot_is_tts() {
+    local pid
+    pid=$(_slot_server_pid "$1") && _read_argv "$pid" && _is_tts_argv
+}
+
+_start_tts() {
+    local -a refused=()
+    [[ -n "$reasoning" ]] && refused+=("--reasoning")
+    [[ -n "$ctx" ]] && refused+=("--ctx")
+    [[ -n "$parallel" ]] && refused+=("--parallel")
+    [[ -n "$cache_ram" ]] && refused+=("--cache-ram")
+    [[ -n "$similarity" ]] && refused+=("--similarity")
+    [[ -n "$spec" ]] && refused+=("--spec")
+    [[ "$use_mmproj" == true ]] && refused+=("--mmproj")
+    [[ -n "$temp" ]] && refused+=("--temp")
+    [[ -n "$top_p" ]] && refused+=("--top-p")
+    [[ -n "$max_predict" ]] && refused+=("--max-predict")
+    [[ "$start_proxy" == true ]] && refused+=("--proxy")
+    [[ "$public" == true ]] && refused+=("--public")
+    [[ -n "$gpu_priority" ]] && refused+=("--gpu-priority")
+    [[ "$compact" == true ]] && refused+=("--compact")
+    [[ "$verbose" == true ]] && refused+=("--verbose")
+    [[ -n "$output_dir" ]] && refused+=("--output")
+    if (( ${#refused[@]} )); then
+        echo "Error: '$name' is a speech model — these options have no meaning for it: ${refused[*]}"
+        exit 1
+    fi
+    local l="${lang:-$TTS_DEFAULT_LANG}"
+    if [[ ! " zh en de it pt es ja ko fr ru " == *" $l "* ]]; then
+        echo "Error: --lang takes zh, en, de, it, pt, es, ja, ko, fr or ru (got '$l')"; exit 1
+    fi
+
+    local model="${_r_model//\~/$HOME}" mm="${_r_mmproj//\~/$HOME}"
+    # The interpreter's own path, as Python rewrites argv[0] to it — and preset
+    # compares this command against the running process's argv. Asked of Python
+    # itself, since `command -v` may name a pyenv shim instead.
+    local py; py=$(python3 -c 'import sys; print(sys.executable)' 2>/dev/null) || py=python3
+    local -a cmd=("$py" "$TTS_SERVER_SCRIPT" --host "${host:-127.0.0.1}" --port "$port_server"
+        --model "$model" --mmproj "$mm" --voices "$TTS_VOICES" --llama-tts "$_r_binary"
+        --lang "$l" --alias "$_r_client")
+    (( ${#_r_args[@]} )) && cmd+=(-- "${_r_args[@]}")
+
+    if [[ "$print_cmd" == true ]]; then
+        printf '%s\n' "${cmd[*]}"
+        return 0
+    fi
+
+    _check_deps python3 "$_r_binary" || exit 1
+    local f
+    for f in "$model" "$mm"; do
+        [[ -f "$f" ]] || { echo "Error: $f is missing — run: $PROG download $_r_name"; exit 1; }
+    done
+    local n_voices
+    n_voices=$(find "$TTS_VOICES" -maxdepth 1 \( -name '*.wav' -o -name '*.mp3' -o -name '*.flac' \) 2>/dev/null | wc -l)
+    (( n_voices > 0 )) || echo "Note: no voices in $TTS_VOICES yet — $PROG download $_r_name brings two, $PROG voice adds more."
+
+    local url="http://${host:-127.0.0.1}:$port_server"
+    local config_text
+    config_text="$(
+        echo "Model:    $_r_label ($_r_client)"
+        echo "Backend:  tts — $_r_binary behind tts_server.py, one llama-tts run per request"
+        echo "Weights:  $model"
+        echo "          $mm"
+        echo "Voices:   $TTS_VOICES ($n_voices)"
+        echo "Language: $l (a request may name another)"
+        echo "Host:     ${host:-127.0.0.1 (default)}"
+        echo "API:      POST $url/v1/audio/speech  {\"input\": \"…\", \"voice\": \"<name>\"}"
+        echo "----- effective config -----"
+        echo "Command:"
+        printf '  %s\n' "${cmd[*]}"
+        echo "----------------------------"
+    )"
+    echo "$config_text"
+    : > "$server_log"
+    printf '%s\n\n' "$config_text" >> "$server_log"
+    echo "Starting speech server [slot $slot] on port $port_server..."
+    local server_pid=""
+    server_pid=$(_spawn_detached "$PID_DIR/server-${slot}.pid" "$server_log" append "${cmd[@]}")
+    if [[ -z "$server_pid" ]]; then
+        echo "Error: the speech server did not report a PID. See $server_log" >&2
+        exit 1
+    fi
+    echo "Server running (PID: $server_pid, detached)"
+    echo ""
+    echo "  Try:   curl -s $url/v1/audio/speech -H 'Content-Type: application/json' \\"
+    echo "           -d '{\"input\": \"Hallo!\", \"voice\": \"frau\"}' -o hallo.wav"
+    echo "  Logs:  tail -f $server_log"
+    echo "  Stop:  $PROG stop $slot"
+}
+
+# status for a speech slot.
+_describe_tts() {
+    local indent="$1" model host port lang label names
+    model=$(_argv_flag --model) || model=""
+    host=$(_argv_flag --host) || host="127.0.0.1"
+    port=$(_argv_flag --port) || port="?"
+    lang=$(_argv_flag --lang) || lang="$TTS_DEFAULT_LANG"
+    label=$(_label_for_model_path "$model") || label="$(basename "$model")"
+    names=$(curl -sf -m 3 "http://127.0.0.1:$port/v1/audio/voices" | python3 -c 'import json,sys; print(", ".join(json.load(sys.stdin)["voices"]))' 2>/dev/null)
+    echo "${indent}Model:     $label"
+    echo "${indent}API:       http://$host:$port/v1/audio/speech  (language $lang)"
+    echo "${indent}Voices:    ${names:-no answer (still starting?)}"
+}
+
+# preset-save for a speech slot: the entry by its model file, plus --host and --lang.
+_capture_tts_slot() {
+    local slot="$1" model host lang name
+    model=$(_argv_flag --model) || { echo "slot $slot: the speech server carries no --model" >&2; return 1; }
+    local -a candidates=()
+    mapfile -t candidates < <(_names_for_model_path "$model")
+    (( ${#candidates[@]} )) || { echo "slot $slot: $(basename "$model") is not in models.conf" >&2; return 1; }
+    host=$(_argv_flag --host) || host=""
+    [[ "$host" == "127.0.0.1" ]] && host=""
+    lang=$(_argv_flag --lang) || lang=""
+    [[ "$lang" == "$TTS_DEFAULT_LANG" ]] && lang=""
+    local -a flags=()
+    [[ -n "$host" ]] && flags+=(--host "$host")
+    [[ -n "$lang" ]] && flags+=(--lang "$lang")
+    for name in "${candidates[@]}"; do
+        _resolve_model "$name" || continue
+        local built=""
+        built=$( cmd_start "$name" "$slot" "${flags[@]}" --print-cmd 2>/dev/null ) || continue
+        if [[ "$built" == "${_ARGV[*]}" ]]; then
+            _cap_entry="$name $slot${flags[*]:+ ${flags[*]}}"
+            _cap_label="$_r_label"
+            return 0
+        fi
+        _cap_diff_name="$name"; _cap_diff_built="$built"
+    done
+    echo "slot $slot: cannot express the running speech server as start options." >&2
+    [[ -n "${_cap_diff_built:-}" ]] && printf '  closest: %s\n  running: %s\n' "$_cap_diff_built" "${_ARGV[*]}" >&2
+    return 1
 }
 
 _start_comfyui() {
@@ -1074,6 +1239,7 @@ cmd_start() {
     local print_cmd=false
     local compact=false         # true = defragment host memory first (sudo)
     local output_dir=""         # comfyui: where generated images go (default <base>/output)
+    local lang=""               # tts: default language of the speech slot (ISO 639-1)
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -1099,6 +1265,7 @@ cmd_start() {
             --no-spec) spec=off; shift ;;                     # alias for --spec off
             --print-cmd) print_cmd=true; shift ;;
             --output) _need_value "$@" || exit 1; output_dir="$2"; shift 2 ;;
+            --lang) _need_value "$@" || exit 1; lang="$2"; shift 2 ;;
             -*) echo "Unknown option: $1"; exit 1 ;;
             *) if [[ -z "$name" ]]; then name="$1"; elif [[ "$slot" == "1" ]]; then slot="$1"; fi; shift ;;
         esac
@@ -1152,11 +1319,14 @@ cmd_start() {
         llama) ;;
         # Its proxy is what speaks the Messages API, so it always runs.
         halogen) start_proxy=true ;;
-        comfyui) ;;
-        *) echo "Error: model '$name' names an unknown backend '$_r_backend' in models.conf (llama, halogen or comfyui)"; exit 1 ;;
+        comfyui|tts) ;;
+        *) echo "Error: model '$name' names an unknown backend '$_r_backend' in models.conf (llama, halogen, comfyui or tts)"; exit 1 ;;
     esac
     if [[ -n "$output_dir" && "$_r_backend" != comfyui ]]; then
         echo "Error: --output is for comfyui models — '$name' generates no images"; exit 1
+    fi
+    if [[ -n "$lang" && "$_r_backend" != tts ]]; then
+        echo "Error: --lang is for speech (tts) models; '$name' is not one"; exit 1
     fi
     [[ "$start_proxy" == true ]] && { _check_deps python3 || exit 1; }
     if [[ "$print_cmd" != true && "$_r_backend" == llama ]]; then
@@ -1172,7 +1342,7 @@ cmd_start() {
 
     # Needs the resolved model, since what --reasoning can mean depends on it.
     _reasoning_args=(); _reasoning_note=""
-    if [[ -n "$reasoning" && "$_r_backend" != comfyui ]]; then
+    if [[ -n "$reasoning" && "$_r_backend" != comfyui && "$_r_backend" != tts ]]; then
         _translate_reasoning "$reasoning" "$_r_reasoning" "$_r_reasoning_levels" || exit 1
     fi
 
@@ -1215,6 +1385,10 @@ cmd_start() {
     fi
     if [[ "$_r_backend" == comfyui ]]; then
         _start_comfyui
+        return
+    fi
+    if [[ "$_r_backend" == tts ]]; then
+        _start_tts
         return
     fi
 
@@ -1495,7 +1669,8 @@ _is_llmctl_process() {
     cmdline=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null) || return 1
     [[ "$cmdline" == *"--slot-save-path $SLOT_STATE_DIR/"* || "$cmdline" == *"$PROXY_SCRIPT"* ||
        "$cmdline" == *"--name $HALOGEN_CONTAINER_PREFIX"* ||
-       "$cmdline" == *"/main.py --listen "*" --base-directory "* ]]
+       "$cmdline" == *"/main.py --listen "*" --base-directory "* ||
+       "$cmdline" == *"$TTS_SERVER_SCRIPT"* ]]
 }
 
 # The slots this machine currently has something on, ascending. Nothing keeps a
@@ -1552,6 +1727,12 @@ _slot_model_label() {
     local slot="$1" pid="" i
     pid=$(_slot_server_pid "$slot") || { echo "unknown"; return 1; }
     _read_argv "$pid" || { echo "unknown"; return 1; }
+    if _is_tts_argv; then
+        local path label
+        path=$(_argv_flag --model) || { echo "unknown"; return 1; }
+        label=$(_label_for_model_path "$path") || label="$(basename "$path")"
+        echo "$label"; return 0
+    fi
     if _is_comfyui_argv; then
         local path label
         path=$(_argv_flag --models-directory) || { echo "unknown"; return 1; }
@@ -1603,6 +1784,7 @@ _stop_slot() {
     elif server_pid=$(_slot_server_pid "$slot"); then
         local kind="llama-server"
         _read_argv "$server_pid" && _is_comfyui_argv && kind="ComfyUI"
+        _read_argv "$server_pid" && _is_tts_argv && kind="speech server"
         kill "$server_pid" 2>/dev/null
         # Until it is gone: a restart on the same slot needs the port free, and
         # ComfyUI takes a moment to let go of it. SIGKILL after 15 s.
@@ -1718,7 +1900,7 @@ _wait_for_slot() {
 
         # halogen: uvicorn announces the API once the engine behind it answers.
         # ComfyUI: the address of its web UI, once the server is up.
-        if grep -Eq "(llama_server:|server is) listening on http://[^[:space:]]*:${port}([^0-9]|\$)|Uvicorn running on http://|To see the GUI go to: https?://[^[:space:]]*:${port}([^0-9]|\$)" <<< "$fresh"; then
+        if grep -Eq "(llama_server:|server is) listening on http://[^[:space:]]*:${port}([^0-9]|\$)|Uvicorn running on http://|To see the GUI go to: https?://[^[:space:]]*:${port}([^0-9]|\$)|tts_server listening on http://[^[:space:]]*:${port}([^0-9]|\$)" <<< "$fresh"; then
             echo "  loaded after ${waited}s — listening on :$port"
             return 0
         fi
@@ -1816,17 +1998,18 @@ cmd_preset() {
         # Each backend gets the ones that mean something to it: ComfyUI has no
         # proxy, no public front and no Vulkan queue, and only it takes --output.
         local -a eff=("${w[@]:2}")
-        if [[ "$_r_backend" == comfyui ]]; then
+        if [[ "$_r_backend" == comfyui || "$_r_backend" == tts ]]; then
             local k=0
             while (( k < ${#extra[@]} )); do
                 case "${extra[k]}" in
                     --proxy|--public) k=$(( k + 1 )) ;;
+                    --verbose)        [[ "$_r_backend" == tts ]] || eff+=("${extra[k]}"); k=$(( k + 1 )) ;;
                     --gpu-priority)   k=$(( k + 2 )) ;;
                     --host)           eff+=("${extra[k]}" "${extra[k+1]}"); k=$(( k + 2 )) ;;
                     *)                eff+=("${extra[k]}"); k=$(( k + 1 )) ;;
                 esac
             done
-            [[ -n "$output_dir" ]] && eff+=(--output "$output_dir")
+            [[ -n "$output_dir" && "$_r_backend" == comfyui ]] && eff+=(--output "$output_dir")
         else
             eff+=("${extra[@]}")
         fi
@@ -2173,6 +2356,7 @@ _preset_memory_check() {
             estimated=1
         fi
         _resolve_model "${e_model[i]}" && [[ "$_r_backend" == comfyui ]] && { comfy="${e_model[i]}"; how="idle; workflows load on top"; }
+        _resolve_model "${e_model[i]}" && [[ "$_r_backend" == tts ]] && how="only while it speaks"
         sum=$(( sum + mib ))
         printf "  slot %-3s %-14s %9s  (%s)\n" "${e_slot[i]}" "${e_model[i]}" "$(_gib "$mib")" "$how"
     done
@@ -2254,6 +2438,10 @@ _capture_slot() {
     fi
     if _is_comfyui_argv; then
         _capture_comfyui_slot "$slot"
+        return
+    fi
+    if _is_tts_argv; then
+        _capture_tts_slot "$slot"
         return
     fi
 
@@ -2674,6 +2862,10 @@ _describe_server() {
         _describe_comfyui "$pid" "$indent"
         return 0
     fi
+    if _is_tts_argv; then
+        _describe_tts "$indent"
+        return 0
+    fi
 
     local model="" served="" ctx="" parallel="" predict="" cache_ram="" mmproj="" host="" similarity=""
     local spec_type="" spec_draft="" spec_n=""
@@ -2840,10 +3032,11 @@ cmd_status() {
             local kind="llama-server"
             _slot_is_halogen "$slot" && kind="halogen     "
             _read_argv "$server_pid" && _is_comfyui_argv && kind="comfyui     "
+            _read_argv "$server_pid" && _is_tts_argv && kind="tts         "
             echo "Slot $slot: $kind (PID: $server_pid) on :$port_server$preset_note"
             # A loaded server's footprint, for preset's memory balance. Not
             # ComfyUI's: it swings with every workflow; preset records it idle.
-            [[ "$kind" != comfyui* ]] && _record_footprint "$slot"
+            [[ "$kind" != comfyui* && "$kind" != tts* ]] && _record_footprint "$slot"
             _describe_server "$server_pid" "$indent"
             echo "${indent}Log: tail -f $LOG_DIR/server-${slot}.log"
             slot_active=1; found=1
@@ -2886,6 +3079,10 @@ cmd_cache_stats() {
         found=1
         if grep -q '^Backend:  ComfyUI' "$f"; then
             echo "Slot $slot: ComfyUI — no prompt cache"
+            continue
+        fi
+        if grep -q '^Backend:  tts' "$f"; then
+            echo "Slot $slot: speech — no prompt cache"
             continue
         fi
         if _slot_is_halogen "$slot"; then
@@ -2962,6 +3159,10 @@ cmd_clear_kv() {
         if _slot_is_comfyui "$slot"; then
             # Its counterpart of a KV cache: the models and cached node outputs.
             _comfyui_unload_slot "$slot"
+            continue
+        fi
+        if _slot_is_tts "$slot"; then
+            echo "Slot $slot: speech holds nothing between requests — each one loads and frees its model."
             continue
         fi
         if _slot_is_halogen "$slot"; then
@@ -3057,7 +3258,7 @@ cmd_probe_reasoning() {
     for entry in "${_MODELS[@]}"; do
         IFS='|' read -r m_name _ m_model _ _ _ m_args _ _ _ _ _ _ _ m_reasoning _ <<< "$entry"
         [[ -n "$want" && "$m_name" != "$want" ]] && continue
-        _resolve_model "$m_name" && [[ "$_r_backend" == comfyui ]] && continue
+        _resolve_model "$m_name" && [[ "$_r_backend" == comfyui || "$_r_backend" == tts ]] && continue
         local path="${m_model//\~/$HOME}"
 
         if [[ ! -f "$path" ]]; then
@@ -3167,6 +3368,11 @@ cmd_env() {
     if [[ "$_r_backend" == comfyui ]]; then
         echo "Error: '$name' is ComfyUI, not an LLM — there is nothing to point Claude Code at." >&2
         echo "       Its UI: http://127.0.0.1:$port_server" >&2
+        return 1
+    fi
+    if [[ "$_r_backend" == tts ]]; then
+        echo "Error: '$name' is a speech model, not an LLM — there is nothing to point Claude Code at." >&2
+        echo "       Its API: POST http://127.0.0.1:$port_server/v1/audio/speech" >&2
         return 1
     fi
 
@@ -3432,8 +3638,8 @@ bench_model() {
     local result_file="$5"
 
     local model_path="${m_model//\~/$HOME}"
-    if _resolve_model "$m_name" && [[ "$_r_backend" == comfyui ]]; then
-        echo "  Skipping $m_label: ComfyUI is no LLM"
+    if _resolve_model "$m_name" && [[ "$_r_backend" == comfyui || "$_r_backend" == tts ]]; then
+        echo "  Skipping $m_label: not an LLM"
         return
     fi
     if [[ ! -f "$model_path" ]]; then
@@ -3608,6 +3814,8 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  comfyui models (backend=comfyui) run ComfyUI with its web UI on the server port;"
     printf "  %-20s %s\n" ""                      "    only --host, --verbose, --clear-logs and --output DIR (where images go) apply."
     printf "  %-20s %s\n" ""                      "    Every llama start unloads its models first"
+    printf "  %-20s %s\n" ""                      "  tts models (backend=tts) serve POST /v1/audio/speech on the server port; --lang CODE sets"
+    printf "  %-20s %s\n" ""                      "    the default language (de); only --host and --clear-logs apply besides"
     printf "  %-20s %s\n" "preset <name>"          "bring the machine to the configuration presets.conf names (several models at once)"
     printf "  %-20s %s\n" ""                      "  keeps every slot that already runs exactly what the preset asks for,"
     printf "  %-20s %s\n" ""                      "  stops what differs or is not part of it, starts only what is missing"
@@ -3638,6 +3846,7 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  models its workflows name; PATTERN: only workflows whose name contains it;"
     printf "  %-20s %s\n" ""                      "  --from DIR: move an existing ComfyUI checkout into place instead"
     printf "  %-20s %s\n" "update <m> [--torch]"   "comfyui: git pull (patches kept), Python dependencies, workflows; --torch: torch too"
+    printf "  %-20s %s\n" "voice list|add|design|rm" "voices the speech (tts) slots speak in: design one from a description, or add a recording"
     printf "  %-20s %s\n" "version"                "print the version"
     echo ""
     echo "  Ports:  slot N → server :$(( PORT_BASE_SERVER + 1 ))-$(( PORT_BASE_SERVER + SLOT_MAX ))  proxy :$(( PORT_BASE_PROXY + 1 ))-$(( PORT_BASE_PROXY + SLOT_MAX ))  (N added to the base)"
@@ -3898,9 +4107,9 @@ _comfyui_migrate() {
 # A fresh checkout and venv. COMFYUI_PYTHON picks the interpreter — it needs to be
 # one the ROCm torch wheels are built for.
 _comfyui_install() {
-    local py="${COMFYUI_PYTHON:-python3.13}"
-    command -v "$py" > /dev/null || py=python3
-    _check_deps git "$py" || return 1
+    local py
+    py=$(_find_python "${COMFYUI_PYTHON:-}") || { echo "Error: no working Python 3 found (set COMFYUI_PYTHON)"; return 1; }
+    _check_deps git || return 1
     echo "  git clone $COMFYUI_GIT"
     mkdir -p "$c_base"
     git clone -q "$COMFYUI_GIT" "$c_app" || return 1
@@ -3940,6 +4149,119 @@ _download_comfyui() {
         export CIVITAI_TOKEN
     fi
     python3 -u "$COMFYUI_MODELS_SCRIPT" download "$c_wf" "$c_models" ${pattern:+"$pattern"} --sources "$COMFYUI_SHARE/sources.json"
+}
+
+# An interpreter the ROCm torch wheels are built for. `command -v` is no test:
+# a pyenv shim for a version that is installed but not selected exists and
+# fails when run. $1 is an explicit choice, tried first.
+_find_python() {
+    local py
+    for py in ${1:+"$1"} python3.13 "$HOME"/.pyenv/versions/3.13*/bin/python3.13 python3; do
+        "$py" -c 'import sys; sys.exit(0)' 2>/dev/null && { echo "$py"; return 0; }
+    done
+    return 1
+}
+
+# ── Speech setup ────────────────────────────────────────────
+#
+# download for a tts entry fetches its GGUFs the usual way (hf_repo); this adds
+# what `voice design` needs — a venv with ROCm torch and qwen-tts, and the
+# VoiceDesign model — and the bundled starter voices.
+_tts_setup() {
+    mkdir -p "$TTS_VOICES"
+    local f n=0
+    for f in "$TTS_SHARE"/voices/*; do
+        [[ -f "$f" && ! -e "$TTS_VOICES/$(basename "$f")" ]] && { cp "$f" "$TTS_VOICES/"; n=$(( n + 1 )); }
+    done
+    echo "  voices: $n file(s) added to $TTS_VOICES"
+    if [[ ! -x "$TTS_DIR/venv/bin/python" ]]; then
+        local py
+        py=$(_find_python "${TTS_PYTHON:-}") || { echo "Error: no working Python 3 found (set TTS_PYTHON)"; return 1; }
+        echo "  venv for voice design with $("$py" --version 2>&1)"
+        "$py" -m venv "$TTS_DIR/venv" || return 1
+        mkdir -p "$COMFYUI_TMP"
+        echo "  torch, torchaudio from $COMFYUI_TORCH_INDEX"
+        TMPDIR="$COMFYUI_TMP" "$TTS_DIR/venv/bin/python" -m pip install -q --disable-pip-version-check \
+            torch torchaudio --index-url "$COMFYUI_TORCH_INDEX" || return 1
+        echo "  qwen-tts"
+        TMPDIR="$COMFYUI_TMP" "$TTS_DIR/venv/bin/python" -m pip install -q --disable-pip-version-check qwen-tts || return 1
+    else
+        echo "  venv for voice design in $TTS_DIR/venv"
+    fi
+    if [[ ! -f "$TTS_DESIGN_DIR/model.safetensors" ]]; then
+        echo "  VoiceDesign model ($TTS_DESIGN_REPO)"
+        hf download "$TTS_DESIGN_REPO" --local-dir "$TTS_DESIGN_DIR" > /dev/null || return 1
+    fi
+    echo "  VoiceDesign model in $TTS_DESIGN_DIR"
+}
+
+# llmctl voice list|add|design|rm — the reference recordings speech slots speak in.
+cmd_voice() {
+    local sub="${1:-list}"; shift 2>/dev/null || true
+    mkdir -p "$TTS_VOICES"
+    case "$sub" in
+        list)
+            local f any=0
+            printf "\n\033[1mVoices\033[0m (%s)\n\n" "$TTS_VOICES"
+            for f in "$TTS_VOICES"/*.wav "$TTS_VOICES"/*.mp3 "$TTS_VOICES"/*.flac; do
+                [[ -f "$f" ]] || continue
+                any=1
+                local n="${f##*/}"; n="${n%.*}"
+                local desc=""
+                [[ -f "$TTS_VOICES/$n.txt" ]] && desc=$(head -1 "$TTS_VOICES/$n.txt")
+                printf "  \033[36m%-12s\033[0m %s\n" "$n" "${desc:-(${f##*.} recording)}"
+            done
+            (( any )) || echo "  none yet — $PROG voice design <name> \"<description>\"  or  $PROG voice add <name> <file>"
+            echo ""
+            ;;
+        add)
+            local name="${1:-}" file="${2:-}" desc="${3:-}"
+            [[ -n "$name" && -f "$file" ]] || { echo "Usage: $PROG voice add <name> <file.wav|.mp3|.flac> [\"description\"]"; return 1; }
+            [[ "$name" =~ ^[a-z0-9_-]+$ ]] || { echo "Error: a voice name is lowercase letters, digits, - and _"; return 1; }
+            local ext="${file##*.}"; ext="${ext,,}"
+            [[ " wav mp3 flac " == *" $ext "* ]] || { echo "Error: llama-tts reads wav, mp3 or flac"; return 1; }
+            rm -f "$TTS_VOICES/$name".{wav,mp3,flac}
+            cp "$file" "$TTS_VOICES/$name.$ext"
+            printf '%s\n' "${desc:-recording: $(basename "$file")}" > "$TTS_VOICES/$name.txt"
+            echo "Voice '$name' added. A few seconds of clean speech are enough; the clone keeps its timbre."
+            ;;
+        design)
+            local name="${1:-}" desc="${2:-}"; shift 2 2>/dev/null || true
+            local language="German" text=""
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    --language) language="$2"; shift 2 ;;
+                    --text) text="$2"; shift 2 ;;
+                    *) echo "Unknown option: $1"; return 1 ;;
+                esac
+            done
+            if [[ -z "$name" || -z "$desc" ]]; then
+                echo "Usage: $PROG voice design <name> \"<description>\" [--language German] [--text \"sample sentence\"]"
+                echo "  Describe the speaker as a native speaker of the language — the clone keeps any accent."
+                return 1
+            fi
+            [[ "$name" =~ ^[a-z0-9_-]+$ ]] || { echo "Error: a voice name is lowercase letters, digits, - and _"; return 1; }
+            if [[ ! -x "$TTS_DIR/venv/bin/python" || ! -f "$TTS_DESIGN_DIR/model.safetensors" ]]; then
+                echo "Error: voice design is not set up — run: $PROG download <speech model>"; return 1
+            fi
+            echo "Designing '$name' (Qwen3-TTS VoiceDesign, ~15 s) ..."
+            local -a targs=("$TTS_DESIGN_DIR" "$TTS_VOICES/$name.wav" "$desc" --language "$language")
+            [[ -n "$text" ]] && targs+=(--text "$text")
+            TMPDIR="$COMFYUI_TMP" "$TTS_DIR/venv/bin/python" "$TTS_DESIGN_SCRIPT" "${targs[@]}" 2>&1 |
+                grep -vE 'SoX|sox|flash-attn|^\*+$|If you do|double-check|path variables|- - -|MIOpen|pad_token|^\s*$|\(null\)' || true
+            [[ -f "$TTS_VOICES/$name.wav" ]] || { echo "Error: no recording was written"; return 1; }
+            rm -f "$TTS_VOICES/$name".{mp3,flac}
+            printf '%s\n' "$desc" > "$TTS_VOICES/$name.txt"
+            echo "Voice '$name' ready. Listen: $TTS_VOICES/$name.wav"
+            ;;
+        rm)
+            local name="${1:-}"
+            ls "$TTS_VOICES/$name".{wav,mp3,flac} > /dev/null 2>&1 || { echo "No voice '$name'."; return 1; }
+            rm -f "$TTS_VOICES/$name".{wav,mp3,flac,txt}
+            echo "Voice '$name' removed."
+            ;;
+        *) echo "Usage: $PROG voice list | add <name> <file> | design <name> \"<description>\" | rm <name>"; return 1 ;;
+    esac
 }
 
 cmd_update() {
@@ -4051,6 +4373,7 @@ cmd_download() {
             fi
             [[ -n "$m_hf_mmproj" ]] && _download_mmproj "$m_hf_mmproj" "$m_mmproj" "$force"
             [[ "$_r_backend" == halogen ]] && _pull_halogen_image
+            [[ "$_r_backend" == tts ]] && _tts_setup
         done
         return
     fi
@@ -4079,6 +4402,7 @@ cmd_download() {
     [[ -n "$_r_hf_draft" ]] && _download_draft "$_r_hf_draft" "$force" "${_r_spec_args[@]}"
     [[ -n "$_r_hf_mmproj" ]] && _download_mmproj "$_r_hf_mmproj" "$_r_mmproj" "$force"
     [[ "$_r_backend" == halogen ]] && _pull_halogen_image
+    [[ "$_r_backend" == tts ]] && _tts_setup
     return 0
 }
 
@@ -4147,5 +4471,6 @@ case "${1:-}" in
     shell-init) cmd_shell_init ;;
     download)   shift; cmd_download "$@" ;;
     update)     shift; cmd_update "$@" ;;
+    voice)      shift; cmd_voice "$@" ;;
     *)          cmd_help; cmd_list ;;
 esac

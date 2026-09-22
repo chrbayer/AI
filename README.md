@@ -20,7 +20,7 @@ your home directory:
 | --- | --- | --- |
 | `~/.config/llmctl/` | `models.conf`, `presets.conf`, `tokens`, `tls/` | `LLMCTL_CONFIG_DIR` (tokens/tls also `LLM_CONF_DIR`, `LLM_TOKEN_FILE`) |
 | `~/.local/share/llmctl/models/` | the GGUF files (`$MODELS_DIR` in `models.conf`), ComfyUI's models in `comfyui/` | `LLMCTL_MODELS_DIR`, or set `MODELS_DIR` in `models.conf` |
-| `~/.local/share/llmctl/` | `benchmarks/`, `claude/<model>[-<slot>]` (Claude Code profiles set by `env`), `comfyui/` (ComfyUI's checkout in `app/`, its workflows, input and output) | `LLMCTL_DATA_DIR` |
+| `~/.local/share/llmctl/` | `benchmarks/`, `claude/<model>[-<slot>]` (Claude Code profiles set by `env`), `comfyui/` (ComfyUI's checkout in `app/`, its workflows, input and output), `tts/` (voices, voice-design venv) | `LLMCTL_DATA_DIR` |
 | `~/.local/state/llmctl/` | `logs/`, `pids/`, `slots/`, `stunnel/` | `LLMCTL_STATE_DIR` |
 
 `examples/` holds a complete `models.conf` and `presets.conf`. Copy them to edit
@@ -816,6 +816,51 @@ llmctl update comfy --torch           # …and torch itself
   and `--output` apply; everything else is refused. `env`, `bench`, `cache-stats` and
   `probe-reasoning` have nothing to do for it. ComfyUI has no authentication, so
   `--host` beyond localhost warns.
+
+## The tts backend (speech)
+
+A models.conf entry with `_model_backend="tts"` (`speech` in the examples)
+speaks: [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) 1.7B through llama.cpp's
+`llama-tts`, behind `tts_server.py`, which answers the OpenAI speech API on the
+slot's server port.
+
+```bash
+llmctl download speech        # GGUFs, voice-design venv and model, two voices
+llmctl start speech 5
+curl -s localhost:8005/v1/audio/speech -H 'Content-Type: application/json' \
+     -d '{"input": "Guten Morgen!", "voice": "frau"}' -o morgen.wav
+```
+
+- **API.** `POST /v1/audio/speech` takes `input` (up to 4096 characters),
+  `voice`, `response_format` (`wav` or `pcm`: 24 kHz mono, 16 bit) and, as an
+  extension, `language` (ISO 639-1: de, en, fr, es, it, pt, ru, zh, ja, ko).
+  `GET /v1/audio/voices` lists the voices. `--lang` sets the slot's default
+  (`de`); `--host` and `--clear-logs` apply too, nothing else.
+- **Speed.** llama-server has no speech endpoint yet (llama.cpp PR #26603), so
+  the server runs `llama-tts` once per request. Loading takes ~1.5 s, generation
+  runs at about twice real time (Vulkan, 22 frames/s for 12 frames/s of audio):
+  7.8 s of speech in 5.7 s per request, all in. The model sits on the GPU (~4 GB)
+  only while it speaks, so the slot runs beside anything and never needs
+  unloading. The same model in PyTorch ran at 1.56× real time — slower than
+  real time: it is bound by 90,000 kernel launches per sentence, not by compute.
+- **Voices.** Qwen3-TTS Base speaks in the voice of a short reference recording,
+  kept in `~/.local/share/llmctl/tts/voices/`, one file per voice, named by
+  the file. The clone keeps the timbre and speaks accent-free German. Qwen3-TTS'
+  own preset speakers (PyTorch CustomVoice) are English and Chinese speakers
+  and keep their accent in German, so they are not used.
+
+```bash
+llmctl voice list
+llmctl voice design erzaehler "Ein deutscher Muttersprachler um die sechzig, warme Stimme, ruhiges Erzähltempo, hochdeutsch ohne Akzent"
+llmctl voice add ich ~/aufnahme.wav "meine eigene Stimme"
+llmctl voice rm erzaehler
+```
+
+  `voice design` runs Qwen3-TTS VoiceDesign (PyTorch, in its own venv under
+  `~/.local/share/llmctl/tts/venv`) once to speak a sample in the described
+  voice, ~15 s; describe the speaker as a native speaker of the language, since
+  the clone keeps any accent. `voice add` takes a recording of your own (wav,
+  mp3 or flac); a few seconds of clean speech are enough.
 
 ## Exposing models on the internet (`--public`)
 
