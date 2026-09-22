@@ -4345,8 +4345,11 @@ cmd_voice() {
             echo "Voice '$name' ready. Listen: $TTS_VOICES/$name.wav"
             ;;
         rm)
-            local name="${1:-}"
-            ls "$TTS_VOICES/$name".{wav,mp3,flac} > /dev/null 2>&1 || { echo "No voice '$name'."; return 1; }
+            local name="${1:-}" ext found=0
+            [[ -n "$name" ]] || { echo "Usage: $PROG voice rm <name>"; return 1; }
+            # A voice has one of these; ls on all three would fail for the two it lacks.
+            for ext in wav mp3 flac; do [[ -f "$TTS_VOICES/$name.$ext" ]] && found=1; done
+            (( found )) || { echo "No voice '$name'."; return 1; }
             rm -f "$TTS_VOICES/$name".{wav,mp3,flac,txt}
             _comfyui_voice_links_all
             echo "Voice '$name' removed."
