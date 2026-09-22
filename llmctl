@@ -3948,6 +3948,7 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  --from DIR: move an existing ComfyUI checkout into place instead"
     printf "  %-20s %s\n" "update <m> [--torch]"   "comfyui: git pull (patches kept), Python dependencies, workflows; --torch: torch too"
     printf "  %-20s %s\n" "voice list|add|design|rm" "voices the speech (tts) slots speak in: design one from a description, or add a recording"
+    printf "  %-20s %s\n" ""                      "  voice export [FILE] / import FILE [--force]: they live nowhere else — back them up"
     printf "  %-20s %s\n" "version"                "print the version"
     echo ""
     echo "  Ports:  slot N → server :$(( PORT_BASE_SERVER + 1 ))-$(( PORT_BASE_SERVER + SLOT_MAX ))  proxy :$(( PORT_BASE_PROXY + 1 ))-$(( PORT_BASE_PROXY + SLOT_MAX ))  (N added to the base)"
@@ -4416,6 +4417,43 @@ cmd_voice() {
             _comfyui_voice_links_all
             echo "Voice '$name' ready. Listen: $TTS_VOICES/$name.wav"
             ;;
+        export)
+            # The voices exist nowhere else: a lost home directory means
+            # recording and designing them again.
+            local out="${1:-$HOME/llmctl-voices-$(date +%Y%m%d).tar.gz}"
+            local -a files=()
+            local f
+            for f in "$TTS_VOICES"/*.{wav,mp3,flac,txt}; do [[ -f "$f" ]] && files+=("${f##*/}"); done
+            (( ${#files[@]} )) || { echo "No voices in $TTS_VOICES."; return 1; }
+            tar -czf "$out" -C "$TTS_VOICES" "${files[@]}" || return 1
+            printf 'Wrote %s (%s, %d voice file(s)).\n' "$out" "$(du -h "$out" | cut -f1)" "${#files[@]}"
+            ;;
+        import)
+            local archive="${1:-}" force=false
+            [[ "${2:-}" == --force || "$archive" == --force ]] && force=true
+            [[ "$archive" == --force ]] && archive="${2:-}"
+            [[ -f "$archive" ]] || { echo "Usage: $PROG voice import <archive.tar.gz> [--force]"; return 1; }
+            mkdir -p "$TTS_VOICES"
+            local tmp; tmp=$(mktemp -d)
+            tar -xzf "$archive" -C "$tmp" || { rm -rf "$tmp"; return 1; }
+            local n=0 kept=0 base stem
+            for f in "$tmp"/*; do
+                [[ -f "$f" ]] || continue
+                base="${f##*/}"; stem="${base%.*}"
+                # A voice is its audio file; its .txt follows whatever happens to it.
+                if [[ "$base" != *.txt && -e "$TTS_VOICES/$base" && "$force" != true ]]; then
+                    kept=$(( kept + 1 )); continue
+                fi
+                [[ "$base" == *.txt && ! -e "$tmp/$stem".{wav,mp3,flac} && -e "$TTS_VOICES/$base" && "$force" != true ]] && continue
+                cp "$f" "$TTS_VOICES/$base"
+                [[ "$base" == *.txt ]] || n=$(( n + 1 ))
+            done
+            rm -rf "$tmp"
+            _comfyui_voice_links_all
+            local note=""
+            (( kept )) && note=", kept $kept already here (--force replaces them)"
+            echo "Imported $n voice(s)$note."
+            ;;
         rm)
             local name="${1:-}" ext found=0
             [[ -n "$name" ]] || { echo "Usage: $PROG voice rm <name>"; return 1; }
@@ -4433,7 +4471,8 @@ cmd_voice() {
             _comfyui_voice_links_all
             echo "Voice '$name' removed."
             ;;
-        *) echo "Usage: $PROG voice list | add <name> <file> | design <name> \"<description>\" | rm <name>"; return 1 ;;
+        *) echo "Usage: $PROG voice list | add <name> <file> | design <name> \"<description>\" | rm <name>"
+           echo "       $PROG voice export [archive.tar.gz] | import <archive.tar.gz> [--force]"; return 1 ;;
     esac
 }
 

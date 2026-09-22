@@ -853,6 +853,13 @@ llmctl update comfy --torch           # …and torch itself
 - **Images** go to `~/.local/share/llmctl/comfyui/output/`, or wherever
   `--output DIR` says (`llmctl start comfy 9 --output ~/Bilder/comfy`; also in a
   preset entry, where `~` is expanded too). `preset-save` records it.
+- **No authentication.** ComfyUI has none of its own, and llmctl adds none, so
+  `--host` beyond localhost hands anyone on that network the ability to run
+  workflows, read the input and output directories and install nodes. The same
+  holds for the speech (`tts`) and speech-recognition (`asr`) slots: their
+  servers answer whoever reaches them. Keep them on 127.0.0.1, or put something
+  in front that authenticates — `--public` does that for LLM slots (token plus
+  mTLS), but it does not cover these.
 - **No LLM options.** `--host`, `--verbose` (`--verbose DEBUG`), `--clear-logs`
   and `--output` apply; everything else is refused. `env`, `bench`, `cache-stats` and
   `probe-reasoning` have nothing to do for it. ComfyUI has no authentication, so
@@ -993,6 +1000,12 @@ llmctl voice rm erzaehler
   voice, ~15 s; describe the speaker as a native speaker of the language, since
   the clone keeps any accent. `voice add` takes a recording of your own (wav,
   mp3 or flac); a few seconds of clean speech are enough.
+- **Backing them up.** The voices live in `~/.local/share/llmctl/tts/voices/`
+  and nowhere else (the two bundled ones aside), so a lost home directory means
+  recording and designing them again. `llmctl voice export [FILE]` writes them
+  all into one archive (default `~/llmctl-voices-<date>.tar.gz`), `llmctl voice
+  import FILE` brings them back — existing voices of the same name stay unless
+  `--force`.
 - **Loudness.** A clone speaks as loud as its reference was recorded — a quiet
   recording measured 11 dB below the designed voices, and so did its clone.
   `voice add` and `voice design` therefore store every voice as mono 16-bit WAV
@@ -1013,7 +1026,8 @@ llmctl does not contain an agent, but everything one needs to listen and speak:
 | speak | `speech` (Qwen3-TTS 1.7B) | `POST :8005/v1/audio/speech` (`stream`) |
 
 `llmctl preset voice` starts the two speech slots (~10 GB together); add the
-LLM to a preset of your own. The endpoints follow OpenAI's API, so its client
+LLM to a preset of your own. All three listen on 127.0.0.1 without
+authentication — an agent runs beside them, not across a network. The endpoints follow OpenAI's API, so its client
 libraries work unchanged:
 
 ```python
@@ -1118,5 +1132,27 @@ Multimodal projectors are only loaded on an explicit `--mmproj`.
 - `examples/models.conf` — Model definitions (paths, binaries, ROCm env vars); read from `~/.config/llmctl/`
 - `examples/presets.conf` — Named configurations: which models run together, on which slots, with which flags (`llmctl preset <name>`)
 - `templates/` — chat templates referenced from `models.conf` as `$SHARE_DIR/templates/…`
-- `Makefile` — `install`, `install-link`, `uninstall`
+- `Makefile` — `install`, `install-link`, `uninstall`, `test`
+- `tests/` — `smoke.sh` and `test_python.py`, see [Tests](#tests)
 - `deploy/vps-llm-vhost.conf` — Apache vhost for the VPS in front of `--public`
+
+## Tests
+
+    make test                    # both suites
+    tests/smoke.sh voice         # only the smoke cases whose name contains "voice"
+    tests/test_python.py -k Loudness
+
+Neither needs a GPU, a model or the network, and neither touches your
+installation. `tests/smoke.sh` runs `llmctl` against a sandbox — its own
+config, data, state and models directories through the `LLMCTL_*_DIR`
+overrides, empty stand-ins for the model files `examples/models.conf` names, and
+stub binaries on the `PATH` — and checks what each command prints: the command
+lines `--print-cmd` builds for every backend, the options each backend refuses,
+slots, presets, `env`, and voices from `add` to `export`/`import`.
+`tests/test_python.py` covers the Python helpers' own rules: which models a
+workflow needs, how text is split into pieces to speak, loudness levelling, the
+streamed WAV header and the transcript clean-up in the proxy. A helper whose
+imports (flask, numpy, requests) are missing is skipped, not failed.
+
+What they cannot reach is everything that needs the real thing: a server that
+starts and answers, a download, `update comfy`. Those are checked by hand.

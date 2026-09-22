@@ -16,7 +16,12 @@ LIBDIR    = $(DESTDIR)$(PREFIX)/lib/llmctl
 SHAREDIR  = $(DESTDIR)$(PREFIX)/share/llmctl
 DOCDIR    = $(DESTDIR)$(PREFIX)/share/doc/llmctl
 
-.PHONY: install install-link uninstall
+.PHONY: install install-link uninstall test
+
+# Everything that answers without a GPU, a model or the network.
+test:
+	tests/smoke.sh
+	python3 tests/test_python.py
 
 install:
 	install -Dm755 llmctl $(BINDIR)/llmctl
