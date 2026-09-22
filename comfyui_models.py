@@ -14,14 +14,22 @@ once. The same file may also be named with different URLs; they are tried in
 the order they appear, and the disagreement is reported.
 
     comfyui_models.py list     WORKFLOWS_DIR MODELS_DIR
-    comfyui_models.py download WORKFLOWS_DIR MODELS_DIR [PATTERN]
+    comfyui_models.py download WORKFLOWS_DIR MODELS_DIR [PATTERN] [--sources FILE]
 
 PATTERN restricts download to the workflows whose file name contains it
 (case-insensitive). Files already present are never fetched again, and nothing
 is ever deleted: `list` only reports files no workflow names any more.
+
+Some files exist nowhere in the form ComfyUI loads — a checkpoint published only
+in the transformers layout, say. --sources names a JSON file of recipes for
+them (comfyui/sources.json): the repo and commit to take the shards from, and
+how to rename the tensors. Such a file is built rather than fetched: the shards
+are downloaded, then written out as one safetensors file with the new names.
+The tensor data is copied byte for byte, so nothing is converted or rounded.
 """
 import json
 import os
+import struct
 import re
 import shutil
 import subprocess
@@ -149,13 +157,83 @@ def fetch_plain(url, dest):
     return True
 
 
-def cmd_download(wf_dir, models_dir, pattern=None):
+def read_header(path):
+    """(header dict without __metadata__, byte offset where the data starts)."""
+    with open(path, "rb") as f:
+        n = struct.unpack("<Q", f.read(8))[0]
+        header = json.loads(f.read(n))
+    header.pop("__metadata__", None)
+    return header, 8 + n
+
+
+def build(key, recipe, dest, staging):
+    """Download a recipe's shards and write them out as one renamed file."""
+    local = staging / recipe["repo"]
+    print(f"    built from {recipe['repo']}@{recipe['revision'][:12]} "
+          f"({len(recipe['shards'])} shards, tensors renamed)")
+    cmd = ["hf", "download", recipe["repo"], *recipe["shards"],
+           "--revision", recipe["revision"], "--local-dir", str(local)]
+    if subprocess.run(cmd).returncode != 0:
+        return False
+
+    def renamed(name):
+        for old, new in recipe.get("rename", []):
+            if name.startswith(old):
+                return new + name[len(old):]
+        return name
+
+    # Every tensor: new name, source shard, source byte range.
+    tensors = []
+    for shard in recipe["shards"]:
+        header, start = read_header(local / shard)
+        for name, t in header.items():
+            a, b = t["data_offsets"]
+            tensors.append((renamed(name), t["dtype"], t["shape"], local / shard, start + a, b - a))
+    tensors.sort()
+    names = [t[0] for t in tensors]
+    total = sum(t[5] for t in tensors)
+    if len(set(names)) != len(names):
+        print("    two tensors end up with the same name — the recipe's rename is wrong", file=sys.stderr)
+        return False
+    if len(tensors) != recipe["tensors"] or total != recipe["bytes"]:
+        print(f"    expected {recipe['tensors']} tensors / {recipe['bytes']} bytes, the shards hold "
+              f"{len(tensors)} / {total} — not building it", file=sys.stderr)
+        return False
+
+    header, offset = {"__metadata__": {"format": "pt"}}, 0
+    for name, dtype, shape, _, _, size in tensors:
+        header[name] = {"dtype": dtype, "shape": shape, "data_offsets": [offset, offset + size]}
+        offset += size
+    raw = json.dumps(header, separators=(",", ":")).encode()
+    raw += b" " * (-len(raw) % 8)       # the data starts 8-byte aligned
+    part = dest.with_name(dest.name + ".part")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    print(f"    writing {dest.name} ({gib(total)})")
+    with open(part, "wb") as out:
+        out.write(struct.pack("<Q", len(raw)))
+        out.write(raw)
+        for _, _, _, src, pos, size in tensors:
+            with open(src, "rb") as f:
+                f.seek(pos)
+                while size:
+                    chunk = f.read(min(size, 64 * 2**20))
+                    out.write(chunk)
+                    size -= len(chunk)
+    os.replace(part, dest)
+    shutil.rmtree(local, ignore_errors=True)
+    return True
+
+
+def cmd_download(wf_dir, models_dir, pattern=None, sources=None):
     wfs = workflows(wf_dir, pattern)
     if not wfs:
         print(f"  no workflow in {wf_dir}" + (f" matches '{pattern}'" if pattern else ""))
         return 1
     print(f"  workflows: {', '.join(n.removesuffix('.json') for n, _ in wfs)}")
     urls, users = collect(wfs)
+    recipes = {}
+    if sources and Path(sources).is_file():
+        recipes = {k: v for k, v in json.loads(Path(sources).read_text()).items() if not k.startswith("_")}
     models = Path(models_dir)
     staging = models / STAGING
     failed, fetched, present = [], 0, 0
@@ -163,6 +241,13 @@ def cmd_download(wf_dir, models_dir, pattern=None):
         dest = models / key
         if dest.is_file():
             present += 1
+            continue
+        if key in recipes:
+            print(f"  {key}")
+            if build(key, recipes[key], dest, staging):
+                fetched += 1
+            else:
+                failed.append(key)
             continue
         if not u:
             print(f"  {key}: no URL in the workflow ({', '.join(users[key])}) — place it by hand")
@@ -189,13 +274,19 @@ def cmd_download(wf_dir, models_dir, pattern=None):
 
 
 def main(argv):
+    sources = None
+    if "--sources" in argv:
+        i = argv.index("--sources")
+        sources = argv[i + 1] if i + 1 < len(argv) else None
+        del argv[i:i + 2]
     if len(argv) < 3 or argv[0] not in ("list", "download"):
         print("usage: comfyui_models.py list WORKFLOWS_DIR MODELS_DIR\n"
-              "       comfyui_models.py download WORKFLOWS_DIR MODELS_DIR [PATTERN]", file=sys.stderr)
+              "       comfyui_models.py download WORKFLOWS_DIR MODELS_DIR [PATTERN] [--sources FILE]",
+              file=sys.stderr)
         return 2
     if argv[0] == "list":
         return cmd_list(argv[1], argv[2])
-    return cmd_download(argv[1], argv[2], argv[3] if len(argv) > 3 else None)
+    return cmd_download(argv[1], argv[2], argv[3] if len(argv) > 3 else None, sources)
 
 
 if __name__ == "__main__":

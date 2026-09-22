@@ -739,6 +739,14 @@ llmctl update comfy --torch           # …and torch itself
   (black-forest-labs) need their licence accepted and `hf auth login`. `list`
   shows per workflow how many of its models are present, and the files no
   workflow names any more; nothing is ever deleted.
+- **Models that exist only in another layout** are built instead of fetched.
+  `comfyui/sources.json` holds a recipe for each: the repo pinned to a commit,
+  its safetensors shards, and how to rename the tensors. `download` fetches the
+  shards and writes one file with the new names, copying the tensor data byte
+  for byte; tensor count and size are checked first. The Heretic text encoder
+  for Qwen-Image 2.1 is such a case: its repo is a `transformers` checkpoint,
+  and dropping the `language_model` level gives a file whose header is
+  byte-identical to Comfy-Org's `qwen3vl_8b_bf16.safetensors`.
 - **Patches.** `comfyui/patches/qwen35-rocm-conv3d.patch` works around a
   segfault of PyTorch's Conv3d fallback on ROCm in the Qwen3-VL vision encoder
   (the Qwen-Image 2.1 edit workflow). `update` takes the patches out before

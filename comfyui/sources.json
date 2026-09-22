@@ -1,0 +1,25 @@
+{
+  "_comment": [
+    "Models a workflow names that exist nowhere as the single file ComfyUI loads.",
+    "comfyui_models.py builds them from the repo given here instead of fetching the",
+    "workflow's URL. Keyed by <directory>/<name>, as the workflows name them.",
+    "  repo, revision   the Hugging Face repo, pinned to a commit",
+    "  shards           safetensors files in the repo, in order",
+    "  rename           [from, to] prefix pairs applied to every tensor name",
+    "  tensors, bytes   what the result must hold; anything else aborts the build"
+  ],
+  "text_encoders/qwen3vl_8b_bf16_heretic.safetensors": {
+    "about": "Qwen-Image 2.1's text encoder (Qwen3-VL-8B) with refusals ablated by Heretic, bf16. The repo is a transformers checkpoint; ComfyUI's layout drops the language_model level. Nothing else differs: names, shapes and dtypes then match Comfy-Org's qwen3vl_8b_bf16.safetensors exactly.",
+    "repo": "pottokao/Qwen-Image-2.1-Text-Encoder-Heretic",
+    "revision": "3b14000988529eaa376380e1ed3056b945d098bc",
+    "shards": [
+      "model-00001-of-00004.safetensors",
+      "model-00002-of-00004.safetensors",
+      "model-00003-of-00004.safetensors",
+      "model-00004-of-00004.safetensors"
+    ],
+    "rename": [["model.language_model.", "model."]],
+    "tensors": 750,
+    "bytes": 17534247392
+  }
+}
