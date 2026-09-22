@@ -879,7 +879,32 @@ curl -s localhost:8005/v1/audio/speech -H 'Content-Type: application/json' \
   reseeding, `patches/llama.cpp-pr26603-reseed-per-generation.patch` fixes.
   Qwen3-TTS' cloning with the reference's transcript (ICL, PyTorch only) was
   no closer than the speaker embedding llama.cpp uses: 0.842 against 0.851.
-  What helps is the reference itself: 10–15 s of clean speech.
+  What helps is the reference itself: 10–15 s of clean speech. Replacing a
+  7.6 s recording with a 21.6 s one raised the resemblance of its clones from
+  0.866 to 0.898 (best draw 0.932).
+- **Comparing two recordings** is worth measuring rather than guessing. A
+  speaker model scores how close a clone comes to its reference; nothing of
+  this belongs to llmctl, so it lives in a venv of its own:
+
+  ```bash
+  python3 -m venv ~/.cache/spk && ~/.cache/spk/bin/pip install \
+      torch --index-url https://download.pytorch.org/whl/cpu
+  ~/.cache/spk/bin/pip install resemblyzer soundfile
+  ```
+
+  Speak the same text with each voice (`curl … -o clone-<voice>.wav`), then:
+
+  ```python
+  import numpy as np
+  from resemblyzer import VoiceEncoder, preprocess_wav
+  enc = VoiceEncoder("cpu")
+  ref = enc.embed_utterance(preprocess_wav("aufnahme.wav"))
+  for f in ("clone-a.wav", "clone-b.wav"):
+      print(f, float(np.dot(ref, enc.embed_utterance(preprocess_wav(f)))))
+  ```
+
+  Scores here: 0.85–0.93 for a clone of the speaker, 0.47–0.54 for a
+  different voice. Take several draws per voice — one says little.
 - **Chunking.** Each sentence is generated without the ones before it, so
   tone and pace can shift a little at sentence boundaries. `"chunking": false`
   (or the slot server's `--no-chunking`) speaks groups of sentences up to
@@ -913,6 +938,23 @@ curl -s localhost:8005/v1/audio/speech -H 'Content-Type: application/json' \
   rebuild, remove the worktree (`git worktree remove --force
   ~/.local/share/llmctl/llama.cpp-tts`) and run it again; once the PR is
   merged, the ordinary llama-server does all this.
+- **Moving to a newer PR or llama.cpp.** Both commits are pinned in
+  `patches/build-tts-server.sh` (`PR_COMMIT`, `BASE_COMMIT`), so a rebuild
+  reproduces the same thing until they are changed. To follow the PR:
+
+  ```bash
+  gh pr view 26603 -R ggml-org/llama.cpp --json headRefOid -q .headRefOid   # its commit now
+  git -C ~/src/llama.cpp log -1 --format=%H                                 # a llama.cpp to build on
+  ```
+
+  Put them into the script, remove the worktree and run it. Three things can
+  go wrong, each with an obvious answer: the merge conflicts (the PR is too
+  far behind that llama.cpp — pin an older `BASE_COMMIT`, e.g. the merge
+  base), a `llama.cpp-pr26603-*.patch` no longer applies (the PR took the fix
+  over — drop that patch file), or the build fails on an API that moved
+  (adjust the call and regenerate the patch with `git -C
+  ~/.local/share/llmctl/llama.cpp-tts diff`). After building, restart the
+  speech slot: it runs the binary it started with.
 - **Voices.** Qwen3-TTS Base speaks in the voice of a short reference recording,
   kept in `~/.local/share/llmctl/tts/voices/`, one file per voice, named by
   the file. The clone keeps the timbre and speaks accent-free German. Qwen3-TTS'
