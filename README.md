@@ -242,12 +242,33 @@ load, so a big set stays well inside it.
 If one does not come up, the slots *this run* started are stopped again; slots
 that were already running and matched are left alone.
 
-What a preset does not do is check that its models fit into GPU memory together
-(ComfyUI's are unloaded before each LLM start, see [the comfyui backend](#the-comfyui-backend)). An
-over-committed set fails on the model that no longer fits; the sizes are yours to
-add up. On this machine that memory is GTT: the BIOS reserves only 1 GiB of VRAM,
-and the GPU takes up to 104 GiB (`ttm.pages_limit=27262976`) out of the 124.4 GiB
-the system has — the same pool the system and the host-RAM prompt caches live in.
+Before it loads anything, a preset adds up the GPU memory its set needs and
+prints the balance under the plan, `--dry-run` included:
+
+```
+GPU memory (GTT pool 104.0 GiB, 0.0 GiB used outside llmctl, 2.0 GiB kept free):
+  slot 2   llama3.3        54.9 GiB  (weights only — not measured yet)
+  slot 3   qwen-vl         10.3 GiB  (measured)
+  total                    65.2 GiB  of 102.0 GiB available
+```
+
+The numbers are measured, not modelled: KV cache per context and slot, hybrid
+and sliding-window layers, cache types, drafts and projectors make a formula
+unreliable. Once a slot has loaded, what its server holds on the GPU (from its
+DRM fdinfo; for halogen, which runs alone, the GTT total) is written to
+`~/.local/state/llmctl/footprints.tsv` under its exact start command. `preset`
+records it after each load and `status` refreshes it. A command never measured
+counts with the size of the files it loads — a lower bound, and marked as one;
+halogen counts ~98 GiB until measured. The budget is the GTT pool minus what
+other programs hold on the GPU and 2 GiB of headroom. When the set does not fit,
+`preset` warns and loads anyway: an estimate can be off, and a model that fails
+to load is rolled back as before. With ComfyUI in the set it also says which
+workflows fit into what is left, by the size of their weights (ComfyUI's models
+are unloaded before each LLM start, see [the comfyui backend](#the-comfyui-backend)).
+
+On this machine that memory is GTT: the BIOS reserves only 1 GiB of VRAM, and
+the GPU takes up to 104 GiB (`ttm.pages_limit=27262976`) out of the 124.4 GiB the
+system has — the same pool the system and the host-RAM prompt caches live in.
 
 ### Recording what runs as a preset
 
@@ -665,6 +686,9 @@ reading its own `.hgn` weights. The slot model stays the same — `start`, `stop
   pieces; with fewer free, the kernel compacts on the fly and startup and
   every prefill can stall for minutes. `start` measures this and suggests
   `--compact` below 40 GiB.
+- `download` also pulls the container image, and offers to remove older tags of
+  it that no models.conf entry names and no container runs (a few GB each);
+  without a terminal it prints the `podman rmi` command instead.
 - `clear-kv` has nothing to call (restart with `--cache-ram 0` for a hard reset),
   `cache-stats` reads the server's own `/cache` counters, `probe-reasoning` reads
   `tokenizer/chat_template.jinja` beside the checkpoint, and `bench` measures

@@ -1907,6 +1907,8 @@ cmd_preset() {
         echo "      $keep_n slot(s) keep running, and keep their logs."
     fi
 
+    _preset_memory_check
+
     if [[ "$dry_run" == true ]]; then
         if (( start_n + restart_n > 0 )); then
             echo ""
@@ -1976,6 +1978,7 @@ cmd_preset() {
         local off=0
         [[ -f "$LOG_DIR/server-${sl}.log" ]] && off=$(stat -c%s "$LOG_DIR/server-${sl}.log" 2>/dev/null || echo 0)
         if ( cmd_start "$m" "$sl" "${flags[@]}" ) && _wait_for_slot "$sl" "$wait_limit" "$off"; then
+            _record_footprint "$sl"
             echo "$_p_name" > "$PID_DIR/preset-${sl}"
             started+=("$sl")
             continue
@@ -2026,6 +2029,148 @@ cmd_preset() {
     echo "  Stop:   $PROG stop"
     echo ""
 }
+
+# ── GPU memory a configuration needs ────────────────────────
+#
+# What a model takes on the GPU depends on far more than its file: KV cache per
+# context and slot, hybrid and sliding-window layers that hold no KV, the cache
+# type, the draft, the vision projector, compute buffers. Rather than model all
+# of that, llmctl measures: once a slot has loaded, what its process holds on
+# the GPU is written down under its exact start command, and `preset` adds those
+# numbers up before it loads anything. A command never measured counts with the
+# size of its weight files — a lower bound, and said as such.
+FOOTPRINT_FILE="$STATE_DIR/footprints.tsv"   # sha1 of the command, MiB, date, label
+GTT_RESERVE_MIB=2048                        # headroom kept free beside the models
+
+_footprint_key() { printf '%s' "$1" | sha1sum | cut -c1-16; }
+
+# GPU memory of whatever runs on a slot, in MiB. A halogen container runs its
+# engine outside our process tree, but it runs alone, so the GPU total is its.
+_slot_gpu_mib() {
+    local pid
+    pid=$(_slot_server_pid "$1") || return 1
+    if _slot_is_halogen "$1"; then
+        echo $(( $(_gtt_used_bytes) / 1048576 ))
+    else
+        _proc_gpu_mib "$pid"
+    fi
+}
+
+# The GPU with the largest GTT pool: its total and what is in use, in bytes.
+_gtt_card() { ls -d /sys/class/drm/card*/device 2>/dev/null | while read -r d; do
+    [[ -r "$d/mem_info_gtt_total" ]] && echo "$(cat "$d/mem_info_gtt_total") $d"; done | sort -n | tail -1 | cut -d' ' -f2; }
+_gtt_total_bytes() { local d; d=$(_gtt_card); cat "$d/mem_info_gtt_total" 2>/dev/null || echo 0; }
+_gtt_used_bytes()  { local d; d=$(_gtt_card); cat "$d/mem_info_gtt_used" 2>/dev/null || echo 0; }
+
+# Write down what the slot's server holds now, under its command line. Below
+# 256 MiB it has not loaded anything worth recording.
+_record_footprint() {
+    local slot="$1" pid mib key label
+    pid=$(_slot_server_pid "$slot") || return 0
+    _read_argv "$pid" || return 0
+    mib=$(_slot_gpu_mib "$slot") || return 0
+    (( mib >= 256 )) || return 0
+    key=$(_footprint_key "${_ARGV[*]}")
+    label=$(_slot_model_label "$slot")
+    mkdir -p "$STATE_DIR"
+    { grep -v "^$key	" "$FOOTPRINT_FILE" 2>/dev/null
+      printf '%s\t%s\t%s\t%s\n' "$key" "$mib" "$(date +%F)" "$label"; } > "$FOOTPRINT_FILE.new" &&
+        mv "$FOOTPRINT_FILE.new" "$FOOTPRINT_FILE"
+}
+
+_lookup_footprint() {
+    local key
+    key=$(_footprint_key "$1")
+    awk -F'\t' -v k="$key" '$1 == k { print $2; exit }' "$FOOTPRINT_FILE" 2>/dev/null
+}
+
+# Lower bound for a command never measured: the size of the files it loads.
+_estimate_cmd_mib() {
+    local -a w; read -ra w <<< "$1"
+    local i bytes=0 f
+    if [[ "${w[1]:-}" == */main.py ]]; then
+        echo 1024; return          # ComfyUI idle; its workflows load later
+    fi
+    for (( i=0; i < ${#w[@]} - 1; i++ )); do
+        case "${w[i]}" in
+            -m|--model|--mmproj|-md|--model-draft)
+                f="${w[i+1]}"
+                # A split GGUF loads all of its parts.
+                if [[ "$f" =~ -00001-of-[0-9]+\.gguf$ ]]; then
+                    for f in "${f%-00001-of-*}"-*-of-*.gguf; do bytes=$(( bytes + $(stat -c%s "$f" 2>/dev/null || echo 0) )); done
+                else
+                    bytes=$(( bytes + $(stat -c%s "$f" 2>/dev/null || echo 0) ))
+                fi ;;
+        esac
+    done
+    # halogen: its files are no guide — the n-gram table beside the weights is
+    # read through the page cache, not loaded. ~68 GiB pinned weights and ~30 GiB
+    # of KV pool and working memory, as models.conf describes it.
+    [[ " ${w[*]} " == *" --name $HALOGEN_CONTAINER_PREFIX"* ]] && { echo $(( 98 * 1024 )); return; }
+    echo $(( bytes / 1048576 ))
+}
+
+# The memory balance of a preset's target set, printed under its plan.
+# Expects e_cmd, e_slot, e_model, e_label from cmd_preset.
+_preset_memory_check() {
+    local total_mib=$(( $(_gtt_total_bytes) / 1048576 ))
+    (( total_mib > 0 )) || return 0
+    # Whatever else is on the GPU now (desktop, programs outside llmctl): the
+    # pool minus what our running slots hold.
+    local ours=0 s m
+    for s in $(_active_slots); do
+        m=$(_slot_gpu_mib "$s" 2>/dev/null) && ours=$(( ours + m ))
+    done
+    local others=$(( $(_gtt_used_bytes) / 1048576 - ours ))
+    (( others < 0 )) && others=0
+    local budget=$(( total_mib - others - GTT_RESERVE_MIB ))
+
+    echo ""
+    echo "GPU memory (GTT pool $(_gib "$total_mib"), $(_gib "$others") used outside llmctl, $(_gib "$GTT_RESERVE_MIB") kept free):"
+    local i sum=0 estimated=0 comfy=""
+    for (( i=0; i < ${#e_cmd[@]}; i++ )); do
+        local mib how
+        mib=$(_lookup_footprint "${e_cmd[i]}")
+        if [[ -n "$mib" ]]; then
+            how="measured"
+        else
+            mib=$(_estimate_cmd_mib "${e_cmd[i]}"); how="weights only — not measured yet"
+            [[ " ${e_cmd[i]} " == *" --name $HALOGEN_CONTAINER_PREFIX"* ]] && how="estimate — not measured yet"
+            estimated=1
+        fi
+        _resolve_model "${e_model[i]}" && [[ "$_r_backend" == comfyui ]] && { comfy="${e_model[i]}"; how="idle; workflows load on top"; }
+        sum=$(( sum + mib ))
+        printf "  slot %-3s %-14s %9s  (%s)\n" "${e_slot[i]}" "${e_model[i]}" "$(_gib "$mib")" "$how"
+    done
+    printf "  %-23s %9s  of %s available\n" "total" "$(_gib "$sum")" "$(_gib "$budget")"
+    if (( sum > budget )); then
+        echo "  WARNING: this set needs more than the GPU has free — a model will likely fail"
+        echo "           to load. Loading anyway; what fails is rolled back."
+    elif (( estimated )); then
+        echo "  (estimates are lower bounds: KV cache and buffers come on top)"
+    fi
+    if [[ -n "$comfy" ]]; then
+        local left=$(( budget - sum )) bytes wf n_fit=0 biggest="" 
+        local -a too=()
+        _resolve_model "$comfy"
+        _comfyui_paths
+        while IFS=$'\t' read -r bytes wf; do
+            if (( bytes / 1048576 <= left )); then
+                n_fit=$(( n_fit + 1 )); biggest="$wf, $(_gib $(( bytes / 1048576 )))"
+            else
+                too+=("$wf ($(_gib $(( bytes / 1048576 ))))")
+            fi
+        done < <(python3 "$COMFYUI_MODELS_SCRIPT" sizes "$c_wf" "$c_models" 2>/dev/null | sort -n)
+        if (( ${#too[@]} == 0 )); then
+            echo "  ComfyUI has $(_gib "$left") left: all $n_fit workflows fit (largest: $biggest of weights)"
+        else
+            echo "  ComfyUI has $(_gib "$left") left: $n_fit workflows fit, these do not (weights):"
+            printf '    %s\n' "${too[@]}"
+        fi
+    fi
+}
+
+_gib() { awk -v m="$1" 'BEGIN { printf "%.1f GiB", m / 1024 }'; }
 
 # ── Capturing a running configuration ───────────────────────
 #
@@ -2662,6 +2807,9 @@ cmd_status() {
             _slot_is_halogen "$slot" && kind="halogen     "
             _read_argv "$server_pid" && _is_comfyui_argv && kind="comfyui     "
             echo "Slot $slot: $kind (PID: $server_pid) on :$port_server$preset_note"
+            # A loaded server's footprint, for preset's memory balance. Not
+            # ComfyUI's: it swings with every workflow; preset records it idle.
+            [[ "$kind" != comfyui* ]] && _record_footprint "$slot"
             _describe_server "$server_pid" "$indent"
             echo "${indent}Log: tail -f $LOG_DIR/server-${slot}.log"
             slot_active=1; found=1
@@ -3905,6 +4053,42 @@ _pull_halogen_image() {
     _check_deps podman || return 1
     echo "  Container image $_r_binary:"
     podman pull -q "$_r_binary" > /dev/null && echo "  present"
+    _prune_halogen_images "$_r_binary"
+}
+
+# Older tags of an image stay behind when models.conf moves to a new one, a few
+# GB each. Offer to remove those that no halogen entry names and no container
+# runs; without a terminal, only say how.
+_prune_halogen_images() {
+    local repo="${1%:*}" keep="$_r_name" entry img
+    local -a wanted=() stale=()
+    for entry in "${_MODELS[@]}"; do
+        IFS='|' read -r m_name _ <<< "$entry"
+        _resolve_model "$m_name" && [[ "$_r_backend" == halogen ]] && wanted+=("$_r_binary")
+    done
+    _resolve_model "$keep"      # leave _r_* as the caller had them
+    local running
+    running=" $(podman ps --format '{{.Image}}' 2>/dev/null | tr '\n' ' ') "
+    while read -r img; do
+        [[ " ${wanted[*]} " == *" $img "* || "$running" == *" $img "* ]] && continue
+        stale+=("$img")
+    done < <(podman images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep "^$repo:" | grep -v ':<none>$')
+    (( ${#stale[@]} )) || return 0
+    echo "  Older images no models.conf entry uses any more:"
+    local size
+    for img in "${stale[@]}"; do
+        size=$(podman image inspect --format '{{.Size}}' "$img" 2>/dev/null)
+        printf '    %s (%s GB)\n' "$img" "$(awk -v b="${size:-0}" 'BEGIN { printf "%.1f", b / 1e9 }')"
+    done
+    if [[ -t 0 ]]; then
+        local answer=""
+        read -r -p "  Remove them? [y/N] " answer
+        if [[ "$answer" =~ ^[yYjJ] ]]; then
+            podman rmi "${stale[@]}" > /dev/null && echo "  removed"
+        fi
+    else
+        echo "  Remove with: podman rmi ${stale[*]}"
+    fi
 }
 
 # ── Dispatch ────────────────────────────────────────────────

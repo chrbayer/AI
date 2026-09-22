@@ -14,6 +14,7 @@ once. The same file may also be named with different URLs; they are tried in
 the order they appear, and the disagreement is reported.
 
     comfyui_models.py list     WORKFLOWS_DIR MODELS_DIR
+    comfyui_models.py sizes    WORKFLOWS_DIR MODELS_DIR
     comfyui_models.py download WORKFLOWS_DIR MODELS_DIR [PATTERN] [--sources FILE]
 
 PATTERN restricts download to the workflows whose file name contains it
@@ -124,6 +125,17 @@ def cmd_list(wf_dir, models_dir):
     for key, u in urls.items():
         if len(u) > 1:
             print(f"    note: {key} has {len(u)} sources: " + ", ".join(u))
+    return 0
+
+
+def cmd_sizes(wf_dir, models_dir):
+    """<bytes>\t<workflow> for every workflow whose models are all present —
+    what `llmctl preset` weighs against the memory ComfyUI would have left."""
+    models = Path(models_dir)
+    for name, wf in workflows(wf_dir):
+        r = refs(wf)
+        if r and all((models / k).is_file() for k in r):
+            print(f"{sum((models / k).stat().st_size for k in r)}\t{name.removesuffix('.json')}")
     return 0
 
 
@@ -274,13 +286,15 @@ def main(argv):
         i = argv.index("--sources")
         sources = argv[i + 1] if i + 1 < len(argv) else None
         del argv[i:i + 2]
-    if len(argv) < 3 or argv[0] not in ("list", "download"):
-        print("usage: comfyui_models.py list WORKFLOWS_DIR MODELS_DIR\n"
+    if len(argv) < 3 or argv[0] not in ("list", "sizes", "download"):
+        print("usage: comfyui_models.py list|sizes WORKFLOWS_DIR MODELS_DIR\n"
               "       comfyui_models.py download WORKFLOWS_DIR MODELS_DIR [PATTERN] [--sources FILE]",
               file=sys.stderr)
         return 2
     if argv[0] == "list":
         return cmd_list(argv[1], argv[2])
+    if argv[0] == "sizes":
+        return cmd_sizes(argv[1], argv[2])
     return cmd_download(argv[1], argv[2], argv[3] if len(argv) > 3 else None, sources)
 
 
