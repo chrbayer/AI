@@ -14,12 +14,16 @@ Either way the text is spoken sentence by sentence: the first sound comes after
 the first sentence rather than after the whole text, and no single generation
 runs into llama.cpp's frame limit (512 frames, ~42 s). Each piece is generated
 without the ones before it, so tone and pace can shift a little at sentence
-boundaries; "chunking": false speaks groups of sentences up to ~280 characters
-instead — smoother, but the first sound waits for the whole first group.
+boundaries; "chunking": false (or the server's --no-chunking) speaks groups of
+sentences up to ~280 characters instead — smoother, but the first sound waits
+for the whole first group.
 
-Generation samples, so the same text sounds a little different every time
-unless the seed is fixed. It is, by default (--seed, 1234); a request's
-"seed" overrides it, and -1 means a random one each time.
+Generation samples, so the same text sounds a little different every time.
+A request's "seed" (or the server's --seed) fixes it; -1, the default, draws
+a new one each time. The default is random on purpose: how much a clone
+sounds like its reference varies from draw to draw (0.78-0.89 by a speaker
+model here), a fixed seed keeps one draw for good, and the best seed for one
+text is no better than any other for the next.
 
 Qwen3-TTS "Base" speaks in the voice of a short reference recording, and with
 it, accent-free German: a voice is nothing but an audio file in the voices
@@ -27,7 +31,7 @@ directory (`llmctl voice …` manages them), selected by its file name.
 
     POST /v1/audio/speech   {"input": "...", "voice": "mann",
                              "response_format": "wav"|"pcm", "stream": true,
-                             "language": "de", "seed": 1234, "chunking": true}
+                             "language": "de", "seed": -1, "chunking": true}
                                                    → 24 kHz mono 16-bit audio
     GET  /v1/audio/voices   {"voices": ["frau", "mann", ...]}
     GET  /v1/models         the one model this slot serves
@@ -263,7 +267,7 @@ def speech():
     seed = body.get("seed", args.seed)
     if not isinstance(seed, int) or seed < -1:
         return error(400, "'seed' must be an integer, -1 for a random one")
-    first_alone = bool(body.get("chunking", True))
+    first_alone = bool(body.get("chunking", args.chunking))
     t0 = time.time()
 
     if body.get("stream", True):
@@ -317,8 +321,11 @@ def main():
     p.add_argument("--default-voice", default="")
     p.add_argument("--alias", default="qwen3-tts")
     p.add_argument("--timeout", type=int, default=600)
-    p.add_argument("--seed", type=int, default=1234,
-                   help="sampling seed when a request names none; -1 = random every time")
+    p.add_argument("--chunking", action=argparse.BooleanOptionalAction, default=True,
+                   help="speak the first sentence on its own when a request does not say "
+                        "(earlier first sound, but tone may shift between sentences)")
+    p.add_argument("--seed", type=int, default=-1,
+                   help="sampling seed when a request names none; -1 (default) = random every time")
     p.add_argument("--loudness", default="-20",
                    type=lambda v: None if v == "off" else float(v),
                    help="RMS level of every whole answer in dBFS, or off (default -20)")

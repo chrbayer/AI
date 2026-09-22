@@ -867,21 +867,24 @@ curl -s localhost:8005/v1/audio/speech -H 'Content-Type: application/json' \
   plays. Qwen3-TTS' vocoder works in windows of 72 frames (6 s), so a single
   long sentence arrives in 6 s pieces.
 - **Variation.** Generation samples, so the same text sounds a little
-  different each time. Two things shape that:
-  - `seed` (per request; the slot's `--seed`, 1234 by default; `-1` = random
-    each time). Through `llama-tts` a fixed seed gives the same audio every
-    time. The streaming engine is only reproducible as a sequence — the first
-    request after a start always sounds the same, and so does the second, but
-    they differ from each other: some state inside the PR's server outlives a
-    request. One cause was the audio RNG, which did not reseed when a
-    generation reused a seed (fixed by
-    `patches/llama.cpp-pr26603-reseed-per-generation.patch`); the rest is not
-    found yet. KV cache, sampler and audio buffers are reset correctly.
-  - `chunking` (per request, default `true`): each sentence is generated
-    without the ones before it, so tone and pace can shift at sentence
-    boundaries. `"chunking": false` speaks groups of sentences up to ~280
-    characters — smoother, but the first sound waits for the whole first
-    group: 3.3 s instead of 1.5 s for two sentences here.
+  different each time, and so does how much the clone sounds like its
+  reference: 0.78–0.89 by a speaker model (Resemblyzer) for one voice here,
+  from draw to draw. The seed is therefore random by default. A request's
+  `seed`, or the slot's `--seed N`, fixes it for output that must repeat.
+  Measured and ruled out: a fixed seed keeps one draw for good (1234 happened
+  to be a below-average one), and a "best seed per voice" does not carry over
+  — the seeds best for one text were no better, or worse, for the next. The
+  streaming engine is also only reproducible as a sequence: some state inside
+  the PR's server outlives a request, one cause of which, the audio RNG not
+  reseeding, `patches/llama.cpp-pr26603-reseed-per-generation.patch` fixes.
+  Qwen3-TTS' cloning with the reference's transcript (ICL, PyTorch only) was
+  no closer than the speaker embedding llama.cpp uses: 0.842 against 0.851.
+  What helps is the reference itself: 10–15 s of clean speech.
+- **Chunking.** Each sentence is generated without the ones before it, so
+  tone and pace can shift a little at sentence boundaries. `"chunking": false`
+  (or the slot server's `--no-chunking`) speaks groups of sentences up to
+  ~280 characters instead — smoother, but the first sound waits for the whole
+  first group: 3.3 s instead of 1.5 s for two sentences here.
 - **Engine.** Streaming needs llama-server with a `/tts` endpoint, which is
   llama.cpp PR #26603, not merged yet. `tts_server.py` starts it as a child on
   a private port that dies with it; the model stays loaded (5.0 GiB with one

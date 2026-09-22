@@ -3885,7 +3885,7 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "    only --host, --verbose, --clear-logs and --output DIR (where images go) apply."
     printf "  %-20s %s\n" ""                      "    Every llama start unloads its models first"
     printf "  %-20s %s\n" ""                      "  tts models (backend=tts) serve POST /v1/audio/speech on the server port; --lang CODE sets"
-    printf "  %-20s %s\n" ""                      "    the default language (de), --seed N the sampling seed (1234; -1 = random each time);"
+    printf "  %-20s %s\n" ""                      "    the default language (de), --seed N a fixed sampling seed (default -1: random each time);"
     printf "  %-20s %s\n" ""                      "    only --host and --clear-logs apply besides"
     printf "  %-20s %s\n" "preset <name>"          "bring the machine to the configuration presets.conf names (several models at once)"
     printf "  %-20s %s\n" ""                      "  keeps every slot that already runs exactly what the preset asks for,"
