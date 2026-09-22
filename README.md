@@ -193,8 +193,11 @@ llmctl preset wrs --host 0.0.0.0 --public      # …with token auth and the TLS 
 llmctl preset wrs --clear-logs --verbose       # a fresh, loud run of the same set
 ```
 
-`--proxy`, `--public`, `--host ADDR`, `--clear-logs`, `--verbose` and
-`--gpu-priority L` are the set. They come after the entry's own flags, so a
+`--proxy`, `--public`, `--host ADDR`, `--clear-logs`, `--verbose`,
+`--gpu-priority L` and `--output DIR` are the set. Each entry gets those that
+mean something to its backend: a ComfyUI entry takes `--output` (where its
+images go) but no proxy, public front or GPU priority, and `--output` reaches
+ComfyUI entries only — a preset without one refuses it. They come after the entry's own flags, so a
 `--host` given here overrides one written into the entry. Everything that shapes
 the model itself — `--ctx`, `--reasoning`, `--temp`, `--parallel`, `--cache-ram`,
 `--spec` — belongs to its entry in `presets.conf` and is refused here, since it

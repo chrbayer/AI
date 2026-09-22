@@ -3,7 +3,7 @@
 # Usage:
 #   llmctl                                     list available models
 #   llmctl start <name> [slot] [--proxy] [--compact] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--temp F] [--top-p F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec] [--output DIR]  start server (+ proxy with --proxy) in background (slot N, default 1)
-#   llmctl preset <name> [--dry-run] [--force] [--wait N] [--proxy] [--public] [--host ADDR] [--clear-logs] [--verbose] [--gpu-priority L]  bring the machine to a whole configuration from presets.conf: keep what already matches, stop the rest, start what is missing
+#   llmctl preset <name> [--dry-run] [--force] [--wait N] [--proxy] [--public] [--host ADDR] [--clear-logs] [--verbose] [--gpu-priority L] [--output DIR]  bring the machine to a whole configuration from presets.conf: keep what already matches, stop the rest, start what is missing
 #   llmctl preset-save <name> [--label TEXT] [--dry-run] [--force]  write the running configuration to presets.conf as a preset
 #   llmctl presets                             list the defined presets
 #   llmctl stop [slot]                         stop slot (or all if omitted)
@@ -1604,6 +1604,14 @@ _stop_slot() {
         local kind="llama-server"
         _read_argv "$server_pid" && _is_comfyui_argv && kind="ComfyUI"
         kill "$server_pid" 2>/dev/null
+        # Until it is gone: a restart on the same slot needs the port free, and
+        # ComfyUI takes a moment to let go of it. SIGKILL after 15 s.
+        local t
+        for (( t=0; t < 75; t++ )); do
+            ps -p "$server_pid" > /dev/null 2>&1 || break
+            sleep 0.2
+        done
+        ps -p "$server_pid" > /dev/null 2>&1 && kill -9 "$server_pid" 2>/dev/null
         echo "Slot $slot: $kind (PID: $server_pid) stopped."
         stopped=$(( stopped + 1 ))
     fi
@@ -1745,10 +1753,12 @@ cmd_preset() {
     # (--ctx, --reasoning, --temp, --parallel, …) stays with its entry in
     # presets.conf, where it belongs to one model and not to the set.
     local -a extra=()
+    local output_dir=""         # --output: where ComfyUI entries put their images
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --dry-run) dry_run=true; shift ;;
+            --output) _need_value "$@" || exit 1; output_dir="$2"; shift 2 ;;
             --force) force=true; shift ;;
             --wait) _need_value "$@" || exit 1; wait_limit="$2"; shift 2 ;;
             --proxy|--public|--clear-logs|--verbose) extra+=("$1"); shift ;;
@@ -1757,6 +1767,7 @@ cmd_preset() {
                 echo "  preset takes --dry-run, --force, --wait N, and the start options that"
                 echo "  apply to the whole configuration:"
                 echo "    --proxy  --public  --host ADDR  --clear-logs  --verbose  --gpu-priority L"
+                echo "    --output DIR  (ComfyUI entries only)"
                 echo "  They are appended to every entry, so they win over what the entry itself"
                 echo "  says. Per-model options such as --ctx or --reasoning belong in the entry."
                 exit 1 ;;
@@ -1770,6 +1781,13 @@ cmd_preset() {
     fi
     _resolve_preset "$name" || { echo "Unknown preset: $name"; cmd_presets; exit 1; }
     (( ${#_p_entries[@]} == 0 )) && { echo "Error: preset '$name' lists no models."; exit 1; }
+    if [[ -n "$output_dir" ]]; then
+        local has_comfy=false l
+        for l in "${_p_entries[@]}"; do
+            _resolve_model "${l%% *}" && [[ "$_r_backend" == comfyui ]] && has_comfy=true
+        done
+        [[ "$has_comfy" == true ]] || { echo "Error: --output is for ComfyUI, and preset '$name' has no ComfyUI entry."; exit 1; }
+    fi
 
     # ── Read the preset, and ask start what each entry would run ────────────
     # Everything is checked before anything is touched: a name typo or an
@@ -1795,7 +1813,23 @@ cmd_preset() {
 
         # The entry's own flags first, the command-level ones after, so a --host
         # given here overrides one written into the entry rather than the reverse.
-        local -a eff=("${w[@]:2}" "${extra[@]}")
+        # Each backend gets the ones that mean something to it: ComfyUI has no
+        # proxy, no public front and no Vulkan queue, and only it takes --output.
+        local -a eff=("${w[@]:2}")
+        if [[ "$_r_backend" == comfyui ]]; then
+            local k=0
+            while (( k < ${#extra[@]} )); do
+                case "${extra[k]}" in
+                    --proxy|--public) k=$(( k + 1 )) ;;
+                    --gpu-priority)   k=$(( k + 2 )) ;;
+                    --host)           eff+=("${extra[k]}" "${extra[k+1]}"); k=$(( k + 2 )) ;;
+                    *)                eff+=("${extra[k]}"); k=$(( k + 1 )) ;;
+                esac
+            done
+            [[ -n "$output_dir" ]] && eff+=(--output "$output_dir")
+        else
+            eff+=("${extra[@]}")
+        fi
 
         # start itself is the authority on what this entry means — flags, samplers,
         # reasoning translation, speculation and all. Asking it beats re-deriving
@@ -3579,6 +3613,7 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  stops what differs or is not part of it, starts only what is missing"
     printf "  %-20s %s\n" ""                      "  --dry-run: show the plan (keep / stop / start), change nothing"
     printf "  %-20s %s\n" ""                      "  --force: reload every model, even one that already matches"
+    printf "  %-20s %s\n" ""                      "  --output DIR: where ComfyUI entries put their images"
     printf "  %-20s %s\n" ""                      "  --proxy --public --host ADDR --clear-logs --verbose --gpu-priority L:"
     printf "  %-20s %s\n" ""                      "    start options describing how the slots are run and reached, applied to"
     printf "  %-20s %s\n" ""                      "    every entry and winning over what the entry itself says"
