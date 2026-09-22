@@ -3164,6 +3164,86 @@ cmd_status() {
     return 0
 }
 
+# Candidates for the word being completed, one per line; the shell filters them
+# by what is typed so far. The completion scripts in completions/ only hand over
+# the words and print this, so both shells complete the same thing.
+# "@files" asks the shell for file names instead.
+# Usage: _complete <words after llmctl, the last being the one completed>
+_complete_models() {   # [backend...]: only models on these backends
+    local entry name backend
+    local -a f
+    for entry in "${_MODELS[@]}"; do
+        IFS='|' read -r -a f <<< "$entry"
+        name="${f[0]}" backend="${f[19]:-llama}"
+        (( $# == 0 )) || [[ " $* " == *" $backend "* ]] && echo "$name"
+    done
+}
+cmd__complete() {
+    local -a w=("$@")
+    (( ${#w[@]} )) || w=("")
+    local n=${#w[@]} sub="${w[0]}" prev=""
+    (( n >= 2 )) && prev="${w[n-2]}"
+    if (( n == 1 )); then
+        printf '%s\n' start preset preset-save presets stop status logs cache-stats clear-kv \
+            probe-reasoning gen-certs bench list env clear shell-init download update voice help version
+        return 0
+    fi
+    # Positional words before the one completed, options and their values left out.
+    local -a pos=()
+    local i
+    for (( i=1; i < n-1; i++ )); do
+        case "${w[i]}" in
+            --reasoning|--reasoning-budget|--max-predict|--parallel|--ctx|--cache-ram|--similarity|\
+            --host|--gpu-priority|--spec|--temp|--top-p|--output|--lang|--seed|--wait|--label|--from|-n)
+                (( i++ )) ;;
+            -*) ;;
+            *) pos+=("${w[i]}") ;;
+        esac
+    done
+    local k=${#pos[@]}
+    case "$prev" in
+        --reasoning)    printf '%s\n' off on low medium high max; return 0 ;;
+        --spec)         printf '%s\n' on off; return 0 ;;
+        --gpu-priority) printf '%s\n' low medium high realtime; return 0 ;;
+        --lang)         printf '%s\n' de en zh ja ko fr es it pt ru; return 0 ;;
+        --output|--from) echo @files; return 0 ;;
+        --reasoning-budget|--max-predict|--parallel|--ctx|--cache-ram|--similarity|--host|\
+        --temp|--top-p|--seed|--wait|--label|-n) return 0 ;;
+    esac
+    local slot_nums; slot_nums=$(seq 1 $(( SLOT_MAX < 9 ? SLOT_MAX : 9 )))
+    case "$sub" in
+        start)
+            case $k in 0) _complete_models ;; 1) echo "$slot_nums" ;; esac
+            printf '%s\n' --proxy --public --compact --max-predict --reasoning --no-reasoning --reasoning-budget \
+                --parallel --ctx --cache-ram --similarity --verbose --clear-logs --host --gpu-priority --mmproj \
+                --spec --no-spec --temp --top-p --print-cmd --output --lang --seed ;;
+        preset)
+            (( k == 0 )) && { local e; for e in "${_PRESETS[@]}"; do echo "${e%%|*}"; done; }
+            printf '%s\n' --dry-run --force --wait --output --proxy --public --host --clear-logs --verbose --gpu-priority ;;
+        preset-save) printf '%s\n' --dry-run --force --label ;;
+        stop|clear-kv) (( k == 0 )) && _active_slots ;;
+        cache-stats)   (( k == 0 )) && _log_slots ;;
+        logs) (( k == 0 )) && _log_slots; printf '%s\n' --proxy --tls -f -n ;;
+        env)
+            case $k in 0) _complete_models llama halogen ;; 1) echo "$slot_nums" ;; esac
+            printf '%s\n' --proxy --direct ;;
+        download) (( k == 0 )) && { _complete_models; echo all; }; printf '%s\n' --force --from ;;
+        update)   (( k == 0 )) && _complete_models comfyui; echo --torch ;;
+        bench)    (( k == 0 )) && { _complete_models; echo all; }; echo --full ;;
+        probe-reasoning) (( k == 0 )) && _complete_models llama ;;
+        voice)
+            case "${pos[0]:-}" in
+                "") (( k == 0 )) && printf '%s\n' list add design rm export import ;;
+                rm) (( k == 1 )) && { local v; for v in "$TTS_VOICES"/*.{wav,mp3,flac}; do
+                        [[ -f "$v" ]] && { v="${v##*/}"; echo "${v%.*}"; }; done; } ;;
+                add)    (( k == 2 )) && echo @files ;;
+                export) (( k == 1 )) && echo @files ;;
+                import) (( k == 1 )) && echo @files; echo --force ;;
+            esac ;;
+    esac
+    return 0
+}
+
 # Show a slot's log without knowing where it lives.
 # Usage: logs [slot] [--proxy|--tls] [-f] [-n N]
 #   no slot: every log there is, with size and last change
@@ -4730,6 +4810,7 @@ case "${1:-}" in
     status)     cmd_status ;;
     cache-stats) shift; cmd_cache_stats "$@" ;;
     logs)        shift; cmd_logs "$@" ;;
+    _complete)   shift; cmd__complete "$@" 2>/dev/null ;;
     clear-kv)   shift; cmd_clear_kv "$@" ;;
     probe-reasoning) shift; cmd_probe_reasoning "$@" ;;
     gen-certs)  shift; cmd_gen_certs "$@" ;;

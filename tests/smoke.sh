@@ -143,6 +143,16 @@ check "voice import --force takes the text too" "new text"       -- sh -c "'$L' 
 check "voice import fills a missing text" "lonely"               -- cat "$V/solo.txt"
 check "voice import replaces another format" "!test.mp3"         -- sh -c "mv '$V/test.wav' '$V/test.mp3'; '$L' voice import '$SANDBOX/two.tar.gz' --force >/dev/null; ls '$V'"
 
+# ── completion ───────────────────────────────────────────────
+check "complete offers the commands"     "preset-save"           -- "$L" _complete ""
+check "complete offers the models"       "speech"                -- "$L" _complete start ""
+check "complete offers the presets"      "voice"                 -- "$L" _complete preset ""
+check "complete offers option values"    "realtime"              -- "$L" _complete start qwen --gpu-priority ""
+check "complete skips option values"     "--proxy"               -- "$L" _complete start qwen --ctx 4096 1 ""
+check "complete env leaves out ComfyUI"  "!comfy"                -- "$L" _complete env ""
+check "complete update offers ComfyUI"   "comfy"                 -- "$L" _complete update ""
+check "complete asks for files"          "@files"                -- "$L" _complete voice import ""
+
 # ── things that must not happen ──────────────────────────────
 check "no command leaks the sandbox"     "!$HOME/.local/share/llmctl/tts" -- "$L" start speech 5 --print-cmd
 check "cache-stats without logs says so" "No server logs yet"  -- "$L" cache-stats

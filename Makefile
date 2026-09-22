@@ -15,12 +15,14 @@ BINDIR    = $(DESTDIR)$(PREFIX)/bin
 LIBDIR    = $(DESTDIR)$(PREFIX)/lib/llmctl
 SHAREDIR  = $(DESTDIR)$(PREFIX)/share/llmctl
 DOCDIR    = $(DESTDIR)$(PREFIX)/share/doc/llmctl
+BASHCOMP  = $(DESTDIR)$(PREFIX)/share/bash-completion/completions
+ZSHCOMP   = $(DESTDIR)$(PREFIX)/share/zsh/site-functions
 
 .PHONY: install install-link uninstall test
 
 # Everything that answers without a GPU, a model or the network.
 test:
-	shellcheck -S warning llmctl patches/build-tts-server.sh tests/smoke.sh
+	shellcheck -S warning llmctl patches/build-tts-server.sh tests/smoke.sh completions/llmctl.bash
 	tests/smoke.sh
 	python3 tests/test_python.py
 
@@ -42,11 +44,15 @@ install:
 	install -Dm755 patches/build-tts-server.sh $(SHAREDIR)/patches/build-tts-server.sh
 	install -Dm644 -t $(SHAREDIR)/patches patches/llama.cpp-pr26603-*.patch
 	install -Dm644 README.md $(DOCDIR)/README.md
+	install -Dm644 completions/llmctl.bash $(BASHCOMP)/llmctl
+	install -Dm644 completions/_llmctl $(ZSHCOMP)/_llmctl
 
 install-link:
-	install -d $(BINDIR)
+	install -d $(BINDIR) $(BASHCOMP) $(ZSHCOMP)
 	ln -sfn $(CURDIR)/llmctl $(BINDIR)/llmctl
+	ln -sfn $(CURDIR)/completions/llmctl.bash $(BASHCOMP)/llmctl
+	ln -sfn $(CURDIR)/completions/_llmctl $(ZSHCOMP)/_llmctl
 
 uninstall:
-	rm -f $(BINDIR)/llmctl
+	rm -f $(BINDIR)/llmctl $(BASHCOMP)/llmctl $(ZSHCOMP)/_llmctl
 	rm -rf $(LIBDIR) $(SHAREDIR) $(DOCDIR)

@@ -1,0 +1,12 @@
+#compdef llmctl
+# zsh completion for llmctl. llmctl works the candidates out itself
+# (`llmctl _complete`), so this only hands over the words typed so far.
+local -a c
+c=("${(@f)$(llmctl _complete "${(@)words[2,CURRENT]}" 2>/dev/null)}")
+c=(${c:#})
+if (( ${c[(I)@files]} )); then
+    c=(${c:#@files})
+    _files
+fi
+(( ${#c} )) && compadd -a c
+return 0

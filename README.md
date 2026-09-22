@@ -73,6 +73,12 @@ llmctl download <model>                # Download model(s)
 llmctl version                         # Print the version
 ```
 
+`make install` also installs completion for bash and zsh: commands, model
+and preset names, slots, voices and option values complete with Tab. zsh picks
+it up from `/usr/local/share/zsh/site-functions` once `compinit` runs (a new
+shell; `rm ~/.zcompdump*` if an old cache hides it), bash through the
+bash-completion package.
+
 ### `start` options
 
 | Option | Effect |
