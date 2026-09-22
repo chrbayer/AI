@@ -747,6 +747,26 @@ llmctl update comfy --torch           # …and torch itself
   for Qwen-Image 2.1 is such a case: its repo is a `transformers` checkpoint,
   and dropping the `language_model` level gives a file whose header is
   byte-identical to Comfy-Org's `qwen3vl_8b_bf16.safetensors`.
+- **Civitai.** Workflows can name models on civitai.com, which hands most files
+  out only to a logged-in account. `download` takes the API key from
+  `~/.config/llmctl/civitai-token` (or `CIVITAI_TOKEN`). When there is none, or
+  Civitai refuses it, `download` asks for one on the terminal, saying where to
+  create it (civitai.com → Account settings → API Keys), and stores it there
+  with mode 600. The key goes into the download URL's query and is masked in
+  every message.
+- **NSFW workflows.** `FLUX.2 klein 9B NSFW T2I/Edit` and `FLUX.2 dev NSFW
+  T2I/Edit` add a LoRA. For klein it is what makes nudity possible at all:
+  without it klein dresses a figure the prompt describes as nude. FLUX.2 dev
+  renders nudity on its own; there the LoRA shapes the style — a warmer film
+  look, different poses and bodies. klein uses
+  [Flux Klein – NSFW v2](https://huggingface.co/diroverflo/FLux_Klein_9B_NSFW)
+  (Hugging Face), dev
+  [SexGod Flux.2 D Female Nudity](https://civitai.com/models/2604891)
+  (Civitai; trigger word `femalenudestyle`). Each LoRA sits in the subgraph
+  right after the model loader, at strength 1.0; in the dev workflows it comes
+  before the Turbo switch, so Turbo still toggles. An abliterated klein text
+  encoder was measured too and left out: on its own it changes nothing, since
+  the reluctance lives in the image model, not in the encoder. Adults only.
 - **Patches.** `comfyui/patches/qwen35-rocm-conv3d.patch` works around a
   segfault of PyTorch's Conv3d fallback on ROCm in the Qwen3-VL vision encoder
   (the Qwen-Image 2.1 edit workflow). `update` takes the patches out before

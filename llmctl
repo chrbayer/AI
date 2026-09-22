@@ -3749,12 +3749,14 @@ _download_comfyui() {
     # --models-directory looks for them beside the models.
     [[ -d "$c_models/configs" || ! -d "$c_app/models/configs" ]] || cp -r "$c_app/models/configs" "$c_models/"
     _check_deps hf python3 || return 1
-    # Civitai's API token, for workflows whose models come from there.
-    if [[ -z "${CIVITAI_TOKEN:-}" && -r "$CONFIG_DIR/civitai-token" ]]; then
-        CIVITAI_TOKEN="$(< "$CONFIG_DIR/civitai-token")"
+    # Civitai's API key, for workflows whose models come from there; the helper
+    # asks for one (and stores it here) when it is missing or refused.
+    export LLMCTL_CIVITAI_TOKEN_FILE="$CONFIG_DIR/civitai-token"
+    if [[ -z "${CIVITAI_TOKEN:-}" && -r "$LLMCTL_CIVITAI_TOKEN_FILE" ]]; then
+        CIVITAI_TOKEN="$(< "$LLMCTL_CIVITAI_TOKEN_FILE")"
         export CIVITAI_TOKEN
     fi
-    python3 -u "$COMFYUI_MODELS_SCRIPT" download "$c_wf" "$c_models" $pattern --sources "$COMFYUI_SHARE/sources.json"
+    python3 -u "$COMFYUI_MODELS_SCRIPT" download "$c_wf" "$c_models" ${pattern:+"$pattern"} --sources "$COMFYUI_SHARE/sources.json"
 }
 
 cmd_update() {

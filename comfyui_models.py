@@ -145,26 +145,47 @@ def fetch_hf(url, dest, staging):
     return True
 
 
-def civitai_url(url):
-    """Civitai hands out most files only to a logged-in account: its API token
-    goes into the query (the documented way; a header would not survive the
-    redirect to its storage). None when there is no token."""
-    token = os.environ.get("CIVITAI_TOKEN", "").strip()
-    if not token:
-        print("      Civitai needs an API token: create one under civitai.com → Account settings →"
-              " API Keys, and put it into ~/.config/llmctl/civitai-token (or CIVITAI_TOKEN).",
-              file=sys.stderr)
+CIVITAI_HELP = ("Civitai hands most files out only to a logged-in account. Create an API key at\n"
+                "https://civitai.com/user/account → API Keys → Add API key, and paste it here.")
+
+
+def civitai_token_file():
+    return Path(os.environ.get("LLMCTL_CIVITAI_TOKEN_FILE",
+                               os.path.expanduser("~/.config/llmctl/civitai-token")))
+
+
+def ask_civitai_token(reason):
+    """Ask for a key on the terminal, store it for next time. None when nobody
+    can answer (no terminal) or the answer is empty."""
+    print(f"      {reason}", file=sys.stderr)
+    if not sys.stdin.isatty():
+        print("      " + CIVITAI_HELP.replace("\n", "\n      ").replace("paste it here",
+              f"put it into {civitai_token_file()}"), file=sys.stderr)
         return None
+    import getpass
+    print("      " + CIVITAI_HELP.replace("\n", "\n      "), file=sys.stderr)
+    token = getpass.getpass("      Civitai API key (empty to skip): ").strip()
+    if not token:
+        return None
+    f = civitai_token_file()
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.touch(mode=0o600)
+    f.write_text(token)
+    os.chmod(f, 0o600)
+    print(f"      stored in {f}", file=sys.stderr)
+    os.environ["CIVITAI_TOKEN"] = token
+    return token
+
+
+def with_token(url, token):
+    """The key goes into the query — the documented way; a header would not
+    survive the redirect to Civitai's storage."""
     parts = urllib.parse.urlsplit(url)
     query = urllib.parse.parse_qsl(parts.query) + [("token", token)]
     return urllib.parse.urlunsplit(parts._replace(query=urllib.parse.urlencode(query)))
 
 
-def fetch_plain(url, dest):
-    if urllib.parse.urlsplit(url).hostname in ("civitai.com", "civitai.red"):
-        url = civitai_url(url)
-        if url is None:
-            return False
+def fetch_url(url, dest, secret=None):
     part = dest.with_name(dest.name + ".part")
     dest.parent.mkdir(parents=True, exist_ok=True)
     req = urllib.request.Request(url, headers={"User-Agent": "llmctl"})
@@ -172,82 +193,30 @@ def fetch_plain(url, dest):
         with urllib.request.urlopen(req, timeout=60) as r, open(part, "wb") as f:
             shutil.copyfileobj(r, f, 16 * 2**20)
     except OSError as e:
-        # The error text can carry the URL, and with it the token.
-        msg = str(e)
-        if os.environ.get("CIVITAI_TOKEN"):
-            msg = msg.replace(os.environ["CIVITAI_TOKEN"].strip(), "***")
-        print(f"      {msg}", file=sys.stderr)
         part.unlink(missing_ok=True)
-        return False
+        # The error text can carry the URL, and with it the key.
+        msg = str(e).replace(secret, "***") if secret else str(e)
+        print(f"      {msg}", file=sys.stderr)
+        return getattr(e, "code", None) or False
     os.replace(part, dest)
     return True
 
 
-def read_header(path):
-    """(header dict without __metadata__, byte offset where the data starts)."""
-    with open(path, "rb") as f:
-        n = struct.unpack("<Q", f.read(8))[0]
-        header = json.loads(f.read(n))
-    header.pop("__metadata__", None)
-    return header, 8 + n
-
-
-def build(key, recipe, dest, staging):
-    """Download a recipe's shards and write them out as one renamed file."""
-    local = staging / recipe["repo"]
-    print(f"    built from {recipe['repo']}@{recipe['revision'][:12]} "
-          f"({len(recipe['shards'])} shards, tensors renamed)")
-    cmd = ["hf", "download", recipe["repo"], *recipe["shards"],
-           "--revision", recipe["revision"], "--local-dir", str(local)]
-    if subprocess.run(cmd).returncode != 0:
-        return False
-
-    def renamed(name):
-        for old, new in recipe.get("rename", []):
-            if name.startswith(old):
-                return new + name[len(old):]
-        return name
-
-    # Every tensor: new name, source shard, source byte range.
-    tensors = []
-    for shard in recipe["shards"]:
-        header, start = read_header(local / shard)
-        for name, t in header.items():
-            a, b = t["data_offsets"]
-            tensors.append((renamed(name), t["dtype"], t["shape"], local / shard, start + a, b - a))
-    tensors.sort()
-    names = [t[0] for t in tensors]
-    total = sum(t[5] for t in tensors)
-    if len(set(names)) != len(names):
-        print("    two tensors end up with the same name — the recipe's rename is wrong", file=sys.stderr)
-        return False
-    if len(tensors) != recipe["tensors"] or total != recipe["bytes"]:
-        print(f"    expected {recipe['tensors']} tensors / {recipe['bytes']} bytes, the shards hold "
-              f"{len(tensors)} / {total} — not building it", file=sys.stderr)
-        return False
-
-    header, offset = {"__metadata__": {"format": "pt"}}, 0
-    for name, dtype, shape, _, _, size in tensors:
-        header[name] = {"dtype": dtype, "shape": shape, "data_offsets": [offset, offset + size]}
-        offset += size
-    raw = json.dumps(header, separators=(",", ":")).encode()
-    raw += b" " * (-len(raw) % 8)       # the data starts 8-byte aligned
-    part = dest.with_name(dest.name + ".part")
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    print(f"    writing {dest.name} ({gib(total)})")
-    with open(part, "wb") as out:
-        out.write(struct.pack("<Q", len(raw)))
-        out.write(raw)
-        for _, _, _, src, pos, size in tensors:
-            with open(src, "rb") as f:
-                f.seek(pos)
-                while size:
-                    chunk = f.read(min(size, 64 * 2**20))
-                    out.write(chunk)
-                    size -= len(chunk)
-    os.replace(part, dest)
-    shutil.rmtree(local, ignore_errors=True)
-    return True
+def fetch_plain(url, dest):
+    if urllib.parse.urlsplit(url).hostname not in ("civitai.com", "civitai.red"):
+        return fetch_url(url, dest) is True
+    token = os.environ.get("CIVITAI_TOKEN", "").strip()
+    if not token:
+        token = ask_civitai_token("no Civitai API key yet")
+        if not token:
+            return False
+    result = fetch_url(with_token(url, token), dest, token)
+    if result in (401, 403):
+        token = ask_civitai_token(f"Civitai refused the key (HTTP {result})")
+        if not token:
+            return False
+        result = fetch_url(with_token(url, token), dest, token)
+    return result is True
 
 
 def cmd_download(wf_dir, models_dir, pattern=None, sources=None):
