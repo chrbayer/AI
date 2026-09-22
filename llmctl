@@ -3749,7 +3749,7 @@ _download_comfyui() {
     # --models-directory looks for them beside the models.
     [[ -d "$c_models/configs" || ! -d "$c_app/models/configs" ]] || cp -r "$c_app/models/configs" "$c_models/"
     _check_deps hf python3 || return 1
-    python3 "$COMFYUI_MODELS_SCRIPT" download "$c_wf" "$c_models" $pattern
+    python3 -u "$COMFYUI_MODELS_SCRIPT" download "$c_wf" "$c_models" $pattern
 }
 
 cmd_update() {
