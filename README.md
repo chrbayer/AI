@@ -19,8 +19,8 @@ your home directory:
 | Where | What | Override |
 | --- | --- | --- |
 | `~/.config/llmctl/` | `models.conf`, `presets.conf`, `tokens`, `tls/` | `LLMCTL_CONFIG_DIR` (tokens/tls also `LLM_CONF_DIR`, `LLM_TOKEN_FILE`) |
-| `~/.local/share/llmctl/models/` | the GGUF files (`$MODELS_DIR` in `models.conf`) | `LLMCTL_MODELS_DIR`, or set `MODELS_DIR` in `models.conf` |
-| `~/.local/share/llmctl/` | `benchmarks/`, `claude/<model>[-<slot>]` (Claude Code profiles set by `env`) | `LLMCTL_DATA_DIR` |
+| `~/.local/share/llmctl/models/` | the GGUF files (`$MODELS_DIR` in `models.conf`), ComfyUI's models in `comfyui/` | `LLMCTL_MODELS_DIR`, or set `MODELS_DIR` in `models.conf` |
+| `~/.local/share/llmctl/` | `benchmarks/`, `claude/<model>[-<slot>]` (Claude Code profiles set by `env`), `comfyui/` (ComfyUI's checkout in `app/`, its workflows, input and output) | `LLMCTL_DATA_DIR` |
 | `~/.local/state/llmctl/` | `logs/`, `pids/`, `slots/`, `stunnel/` | `LLMCTL_STATE_DIR` |
 
 `examples/` holds a complete `models.conf` and `presets.conf`. Copy them to edit
@@ -241,7 +241,8 @@ load, so a big set stays well inside it.
 If one does not come up, the slots *this run* started are stopped again; slots
 that were already running and matched are left alone.
 
-What a preset does not do is check that its models fit into GPU memory together. An
+What a preset does not do is check that its models fit into GPU memory together
+(ComfyUI's are unloaded before each LLM start, see [the comfyui backend](#the-comfyui-backend)). An
 over-committed set fails on the model that no longer fits; the sizes are yours to
 add up. On this machine that memory is GTT: the BIOS reserves only 1 GiB of VRAM,
 and the GPU takes up to 104 GiB (`ttm.pages_limit=27262976`) out of the 124.4 GiB
@@ -683,6 +684,77 @@ boot with `amd_iommu=off amdgpu.noretry=0` on the kernel line; the same server
 with fragmented memory managed 8–370 t/s of prefill, most requests stalling
 40–200 s in kernel compaction. Keep `vm.compaction_proactiveness` at the kernel
 default (20) — 0 does not prevent the stalls.
+
+## The comfyui backend
+
+[ComfyUI](https://github.com/Comfy-Org/ComfyUI) generates and edits images. It is
+no LLM, but it draws on the same GPU memory: FLUX.2 klein 9B or Qwen-Image 2.1
+need ~30 GB of weights, FLUX.2 dev took ~105 GB while it ran. So it takes a slot
+like any server, and `start`, `stop`, `status`, `preset` and `preset-save` all
+handle it. A models.conf entry with `_model_backend="comfyui"` describes it
+(`examples/models.conf` has `comfy`):
+
+| Field | For comfyui |
+| --- | --- |
+| `binary` | the ComfyUI checkout, with its `.venv` beside `main.py` (`~/.local/share/llmctl/comfyui/app`) |
+| `model` | the directory of the image models (`~/.local/share/llmctl/models/comfyui`) |
+| `extra_args` | additional ComfyUI flags (`--disable-pinned-memory --use-pytorch-cross-attention`) |
+| `rocm_env` | its environment (`TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL=1`) |
+
+The checkout's parent directory holds what ComfyUI writes: `user/` (settings,
+saved workflows), `input/`, `output/`, `temp/` and `custom_nodes/`
+(`--base-directory`).
+
+```bash
+llmctl download comfy                 # set it up, fetch every model its workflows name
+llmctl download comfy klein           # …only what the workflows with "klein" in the name need
+llmctl start comfy 9                  # web UI on http://127.0.0.1:8009
+llmctl update comfy                   # git pull, Python dependencies, new workflows
+llmctl update comfy --torch           # …and torch itself
+```
+
+- **Setup.** `download` does whatever is still missing: a git checkout of
+  ComfyUI, a venv with torch built for ROCm 7.2 (`COMFYUI_PYTHON` picks the
+  interpreter, default `python3.13`), `requirements.txt` held to that torch, the
+  CUDA packages a dependency drags in removed, the patches from
+  `comfyui/patches/` applied, the bundled workflows copied, and the models.
+  `--from DIR` moves an existing checkout into place instead of building a new
+  one: its models, `user/`, `input/` and `output/` go to where llmctl keeps
+  them, the checkout becomes `app/`, and the venv's scripts are rewritten to the
+  new path. On one filesystem all of it is a rename.
+- **Workflows.** `comfyui/workflows/` holds the workflows, and `download`/`update`
+  copy the ones ComfyUI does not have yet into
+  `~/.local/share/llmctl/comfyui/user/default/workflows/`. A workflow you
+  changed in the UI stays as it is; they only report that it differs. To keep
+  the workflows under version control instead, link the directory to a checkout
+  — what the UI saves then lands there:
+  `ln -sfn ~/AI/comfyui/workflows ~/.local/share/llmctl/comfyui/user/default/workflows`
+- **Models come from the workflows.** Each loader node in a saved workflow names
+  its file with source and folder (`properties.models`: name, url, directory).
+  `download` collects these from every workflow, fetches each file once — the
+  FLUX.2 dev text encoder serves all four dev workflows — and never fetches a
+  file that is there. Where workflows name one file with different URLs, the
+  URLs are tried in order and `list` reports the disagreement. Gated repos
+  (black-forest-labs) need their licence accepted and `hf auth login`. `list`
+  shows per workflow how many of its models are present, and the files no
+  workflow names any more; nothing is ever deleted.
+- **Patches.** `comfyui/patches/qwen35-rocm-conv3d.patch` works around a
+  segfault of PyTorch's Conv3d fallback on ROCm in the Qwen3-VL vision encoder
+  (the Qwen-Image 2.1 edit workflow). `update` takes the patches out before
+  pulling and puts them back after; one that no longer applies is reported, and
+  ComfyUI runs without it.
+- **Memory.** ComfyUI loads models per workflow and keeps them until something
+  inside it needs the room — it cannot see an LLM coming. So every llama
+  `start`, a preset's included, first asks each running ComfyUI to unload
+  (`POST /free`) and waits until the memory is gone. A ComfyUI with a job in its
+  queue is left alone, with a warning. `clear-kv` on its slot unloads too.
+  `status` shows the GPU and RAM the process holds, read from its DRM fdinfo.
+- **Exclusive with halogen**, as every other slot is: a preset that switches to
+  halogen stops ComfyUI.
+- **No LLM options.** `--host`, `--verbose` (`--verbose DEBUG`) and `--clear-logs`
+  apply; everything else is refused. `env`, `bench`, `cache-stats` and
+  `probe-reasoning` have nothing to do for it. ComfyUI has no authentication, so
+  `--host` beyond localhost warns.
 
 ## Exposing models on the internet (`--public`)
 

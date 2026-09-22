@@ -1,0 +1,15 @@
+diff --git a/comfy/text_encoders/qwen35.py b/comfy/text_encoders/qwen35.py
+index 29b5d469..13e6e2f5 100644
+--- a/comfy/text_encoders/qwen35.py
++++ b/comfy/text_encoders/qwen35.py
+@@ -468,6 +468,10 @@ class Qwen35VisionPatchEmbed(nn.Module):
+         self.proj = ops.Conv3d(self.in_channels, self.embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=True, device=device, dtype=dtype)
+ 
+     def forward(self, x):
++        if comfy.model_management.is_amd():
++            # kernel == stride, so the conv is a matmul; PyTorch's non-MIOpen Conv3d fallback segfaults on ROCm
++            with comfy.ops.CastBiasWeightContext(self.proj, x, offloadable=True) as (weight, bias):
++                return F.linear(x.reshape(-1, weight[0].numel()), weight.reshape(self.embed_dim, -1), bias)
+         x = x.view(-1, self.in_channels, self.temporal_patch_size, self.patch_size, self.patch_size)
+         return self.proj(x).view(-1, self.embed_dim)
+ 
