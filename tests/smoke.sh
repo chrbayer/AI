@@ -20,12 +20,13 @@ export LLMCTL_CONFIG_DIR="$SANDBOX/config"
 export LLMCTL_DATA_DIR="$SANDBOX/data"
 export LLMCTL_STATE_DIR="$SANDBOX/state"
 export LLMCTL_MODELS_DIR="$SANDBOX/models"
+export XDG_CONFIG_HOME="$SANDBOX/xdg"      # service writes its units under here
 mkdir -p "$LLMCTL_CONFIG_DIR" "$LLMCTL_DATA_DIR" "$LLMCTL_MODELS_DIR" "$SANDBOX/bin"
 cp "$ROOT/examples/models.conf" "$ROOT/examples/presets.conf" "$LLMCTL_CONFIG_DIR/"
 
 # Stubs: the commands llmctl checks for before it builds anything. podman
 # answers "no such container", so no slot looks like a running halogen.
-for b in llama-server llama-tts hf stunnel git cmake; do
+for b in llama-server llama-tts hf stunnel git cmake systemctl loginctl journalctl; do
     printf '#!/bin/sh\nexit 0\n' > "$SANDBOX/bin/$b"
 done
 printf '#!/bin/sh\nexit 1\n' > "$SANDBOX/bin/podman"
@@ -149,6 +150,16 @@ check "voice import skips a bad name"    "Skipped 'Bad Name'"    -- "$L" voice i
 check "voice import --force takes the text too" "new text"       -- sh -c "'$L' voice import '$SANDBOX/two.tar.gz' --force >/dev/null; cat '$V/test.txt'"
 check "voice import fills a missing text" "lonely"               -- cat "$V/solo.txt"
 check "voice import replaces another format" "!test.mp3"         -- sh -c "mv '$V/test.wav' '$V/test.mp3'; '$L' voice import '$SANDBOX/two.tar.gz' --force >/dev/null; ls '$V'"
+
+# ── service ──────────────────────────────────────────────────
+U="$XDG_CONFIG_HOME/systemd/user"
+check "service status before enable"     "No service set up"     -- "$L" service status
+check "service enable refuses a typo"    "Unknown preset"        -- "$L" service enable nosuch
+check "service enable writes the units"  "next login"            -- "$L" service enable voice
+check "the service runs the preset"      "preset voice"          -- cat "$U/llmctl.service"
+check "the service repairs on reload"    "preset voice --repair" -- cat "$U/llmctl.service"
+check "the timer only reloads a running service" "is-active"     -- cat "$U/llmctl-repair.service"
+check "preset --repair leaves others alone" "nothing to repair"  -- "$L" preset voice --repair
 
 # ── completion ───────────────────────────────────────────────
 check "complete offers the commands"     "preset-save"           -- "$L" _complete ""

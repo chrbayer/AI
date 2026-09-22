@@ -58,6 +58,7 @@ llmctl presets                         # Show the defined presets
 llmctl preset <name>                   # Bring the machine to a whole configuration (see below)
 llmctl preset-save <name>              # Record what is running now as a preset
 llmctl stop [slot]                     # Stop slot, or all if omitted
+llmctl service enable <preset>         # Run a preset at login, restart dead slots
 llmctl status                          # Running state, model and key parameters (all slots)
 llmctl cache-stats [slot]              # Prompt-cache hit rate, read from the server log
 llmctl logs [slot] [-f] [--proxy|--tls] # A slot's log (last 50 lines, -n N); no slot: all logs
@@ -279,6 +280,35 @@ are unloaded before each LLM start, see [the comfyui backend](#the-comfyui-backe
 On this machine that memory is GTT: the BIOS reserves only 1 GiB of VRAM, and
 the GPU takes up to 104 GiB (`ttm.pages_limit=27262976`) out of the 124.4 GiB the
 system has — the same pool the system and the host-RAM prompt caches live in.
+
+### A preset as a service
+
+```bash
+llmctl service enable voice     # at every login: llmctl preset voice
+llmctl service start            # now, without logging in again
+llmctl service status           # preset, state, next repair, last log lines
+llmctl service stop             # stop the slots the service holds
+llmctl service disable          # no more at login; what runs keeps running
+```
+
+`enable` writes three systemd user units to `~/.config/systemd/user/`:
+`llmctl.service` runs the preset (and stops its slots at logout),
+`llmctl-repair.timer` looks every two minutes for a slot whose server died and
+starts it again. The repair is `llmctl preset <name> --repair`, which only
+restarts slots this preset still holds: `start`, `stop` and another preset
+take a slot away from it, so a machine switched to something else by hand is
+never switched back behind your back. It stops nothing.
+
+- The servers run inside the service (systemd's cgroup for it), the repaired
+  ones too — the timer asks for them through `systemctl reload`, not as a
+  process of its own that systemd would clean up after.
+- A user service starts at login. For boot, before anyone logs in:
+  `loginctl enable-linger $USER`.
+- `enable` records the `PATH` and any `LLMCTL_*_DIR` of the shell it runs in,
+  since a service does not see your shell's environment; run it again after
+  changing those.
+- Use `llmctl service start|stop` rather than `systemctl` — an alias such as
+  `systemctl='sudo systemctl'` would send `--user` to root's service manager.
 
 ### Recording what runs as a preset
 
