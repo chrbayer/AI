@@ -1,58 +1,81 @@
 #!/usr/bin/env python3
 """Speech for a llmctl slot — an OpenAI-compatible /v1/audio/speech in front of
-llama.cpp's llama-tts.
+llama.cpp's Qwen3-TTS.
 
-llama.cpp runs Qwen3-TTS (since August 2026) but only in its llama-tts binary;
-llama-server has no speech endpoint yet (PR #26603). So this server takes the
-request, runs llama-tts once per request, and returns the WAV it writes. Loading
-costs ~1.5 s per request on top of generation, which runs at about twice real
-time on this machine. When llama-server gains the endpoint, the backend can
-move there.
+Two engines, chosen by the binary llmctl hands over:
+
+  server  llama-server with a /tts endpoint (llama.cpp PR #26603, not merged
+          yet): started once as a child on a private port, model resident,
+          audio streamed as it is generated.
+  cli     llama-tts, run once per request: ~1.5 s of loading each time, and the
+          audio only when the whole utterance is done.
+
+Either way the text is spoken sentence by sentence: the first sound comes after
+the first sentence rather than after the whole text, and no single generation
+runs into llama.cpp's frame limit (512 frames, ~42 s).
 
 Qwen3-TTS "Base" speaks in the voice of a short reference recording, and with
 it, accent-free German: a voice is nothing but an audio file in the voices
 directory (`llmctl voice …` manages them), selected by its file name.
 
-    POST /v1/audio/speech   {"input": "...", "voice": "mann", "response_format": "wav"|"pcm",
-                             "language": "de"}          → audio (24 kHz mono, 16 bit)
+    POST /v1/audio/speech   {"input": "...", "voice": "mann",
+                             "response_format": "wav"|"pcm", "stream": true,
+                             "language": "de"}     → 24 kHz mono 16-bit audio
     GET  /v1/audio/voices   {"voices": ["frau", "mann", ...]}
     GET  /v1/models         the one model this slot serves
     GET  /health
 
-`language` is an extension (ISO 639-1; the slot's --lang otherwise). `model` is
-accepted and ignored, as a slot serves one model; `speed` other than 1 is refused
-rather than ignored.
+`pcm` is raw little-endian 16-bit, as OpenAI's API has it. Like OpenAI's, the
+audio is streamed as it is generated unless the request says "stream": false —
+clients such as the openai package expect that and send no flag; a streamed
+`wav` carries an unknown length in its header, which players read to the end.
+`stream_format` "audio" is that; "sse" is not offered. `language` is an extension (ISO
+639-1; the slot's --lang otherwise). `model` is accepted and ignored; `speed`
+other than 1 is refused rather than ignored.
 
-The clone speaks as loud as its reference was recorded — a quiet recording
-gives a quiet voice, 11 dB apart between two voices here. So every answer is
-brought to one loudness (--loudness, -20 dBFS RMS by default), with its peaks
-held below -1 dBFS; --loudness off leaves llama-tts's output as it is.
+The clone speaks as loud as its reference was recorded, so every whole answer
+("stream": false) is brought to one loudness (--loudness, -20 dBFS RMS, peaks
+below -1 dBFS; off to disable). A stream cannot be levelled without knowing its end; the voices are
+stored at that level already (`llmctl voice`), and their clones land within a
+few dB of it.
 """
 import argparse
-import io
+import base64
+import ctypes
+import json
 import logging
 import os
+import re
+import signal
+import socket
+import struct
 import subprocess
 import tempfile
 import threading
 import time
+import urllib.request
 import wave
 from pathlib import Path
 
 import numpy as np
-
-from flask import Flask, Response, jsonify, request
+from flask import Flask, Response, jsonify, request, stream_with_context
 
 AUDIO_SUFFIXES = (".wav", ".mp3", ".flac")
 LANGUAGES = {"zh", "en", "de", "it", "pt", "es", "ja", "ko", "fr", "ru"}
 MAX_INPUT = 4096            # characters per request, as OpenAI's API has it
+SAMPLE_RATE = 24000
+PEAK_CEILING_DBFS = -1.0
+CHUNK_CHARS = 280           # a sentence group per generation; far below the frame limit
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("tts_server")
 app = Flask(__name__)
 args = argparse.Namespace()     # filled in by main()
-gpu = threading.Lock()      # one generation at a time: they would only fight over the GPU
+gpu = threading.Lock()          # one generation at a time: they would only fight over the GPU
+engine = None
 
+
+# ── voices, text, audio ─────────────────────────────────────
 
 def voices():
     d = Path(args.voices)
@@ -61,19 +84,129 @@ def voices():
     return {p.stem: p for p in sorted(d.iterdir()) if p.suffix.lower() in AUDIO_SUFFIXES}
 
 
-PEAK_CEILING_DBFS = -1.0
+def sentences(text):
+    """Groups of whole sentences, each at most CHUNK_CHARS unless one sentence is
+    longer; the first is a single sentence, so the first sound comes early."""
+    parts = [p.strip() for p in re.split(r"(?<=[.!?…:;])\s+|\n+", text) if p.strip()]
+    if not parts:
+        return []
+    chunks, cur = [parts[0]], ""
+    for p in parts[1:]:
+        if cur and len(cur) + 1 + len(p) > CHUNK_CHARS:
+            chunks.append(cur)
+            cur = p
+        else:
+            cur = f"{cur} {p}" if cur else p
+    if cur:
+        chunks.append(cur)
+    return chunks
 
 
-def normalize(pcm, target_dbfs):
-    """16-bit mono PCM at target_dbfs RMS, peaks at most PEAK_CEILING_DBFS."""
-    x = np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32768.0
-    rms, peak = float(np.sqrt(np.mean(x ** 2))), float(np.abs(x).max()) if x.size else 0.0
+def to_int16(samples):
+    return (np.clip(samples, -1.0, 32767 / 32768) * 32768).astype("<i2")
+
+
+def normalize(x, target_dbfs):
+    """float32 mono at target_dbfs RMS, peaks at most PEAK_CEILING_DBFS."""
+    if x.size == 0:
+        return x, 0.0
+    rms, peak = float(np.sqrt(np.mean(x ** 2))), float(np.abs(x).max())
     if rms < 1e-6:
-        return pcm, 0.0
+        return x, 0.0
     gain = min(10 ** (target_dbfs / 20) / rms, 10 ** (PEAK_CEILING_DBFS / 20) / peak)
-    y = np.clip(x * gain, -1.0, 32767 / 32768)
-    return (y * 32768).astype("<i2").tobytes(), 20 * np.log10(gain)
+    return x * gain, 20 * np.log10(gain)
 
+
+def wav_header(n_bytes=None):
+    """16-bit mono WAV header; without a length, one that says "unknown" (0xFFFFFFFF)."""
+    data = 0xFFFFFFFF if n_bytes is None else n_bytes
+    riff = 0xFFFFFFFF if n_bytes is None else 36 + n_bytes
+    return (b"RIFF" + struct.pack("<I", riff) + b"WAVEfmt " +
+            struct.pack("<IHHIIHH", 16, 1, 1, SAMPLE_RATE, SAMPLE_RATE * 2, 2, 16) +
+            b"data" + struct.pack("<I", data))
+
+
+# ── engines ─────────────────────────────────────────────────
+
+class CliEngine:
+    """llama-tts once per piece of text."""
+
+    def pieces(self, text, lang, voice):
+        for chunk in sentences(text):
+            with tempfile.TemporaryDirectory(prefix="llmctl-tts-") as tmp:
+                out = Path(tmp) / "out.wav"
+                cmd = [args.binary, "-m", args.model, "-mm", args.mmproj, "-p", chunk,
+                       "--tts-lang", lang, "--tts-speaker-file", str(voice), "-o", str(out), *args.extra]
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=args.timeout)
+                if r.returncode != 0 or not out.is_file():
+                    tail = (r.stderr or r.stdout).strip().splitlines()[-3:]
+                    raise RuntimeError("llama-tts failed: " + (tail[-1] if tail else f"exit {r.returncode}"))
+                with wave.open(str(out)) as w:
+                    pcm = np.frombuffer(w.readframes(w.getnframes()), dtype="<i2")
+            yield pcm.astype(np.float32) / 32768.0
+
+
+class ServerEngine:
+    """llama-server with /tts, started as a child that dies with this process."""
+
+    def __init__(self):
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            self.port = s.getsockname()[1]
+        cmd = [args.binary, "-m", args.model, "--mmproj", args.mmproj, "--host", "127.0.0.1",
+               "--port", str(self.port), *args.extra]
+        libc = ctypes.CDLL("libc.so.6", use_errno=True)
+
+        def die_with_parent():          # PR_SET_PDEATHSIG: gone when we are, even on SIGKILL
+            libc.prctl(1, signal.SIGTERM)
+        log.info("engine: %s", " ".join(cmd))
+        self.proc = subprocess.Popen(cmd, preexec_fn=die_with_parent)
+        self.refs = {}
+        deadline = time.time() + args.timeout
+        while time.time() < deadline:
+            if self.proc.poll() is not None:
+                raise RuntimeError(f"llama-server exited with {self.proc.returncode} while loading")
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/health", timeout=2) as r:
+                    if r.status == 200:
+                        return
+            except OSError:
+                pass
+            time.sleep(0.5)
+        raise RuntimeError("llama-server did not come up")
+
+    def ref(self, voice):
+        st = voice.stat().st_mtime
+        cached = self.refs.get(voice)
+        if not cached or cached[0] != st:
+            self.refs[voice] = (st, base64.b64encode(voice.read_bytes()).decode())
+        return self.refs[voice][1]
+
+    def pieces(self, text, lang, voice):
+        """float32 blocks as the engine streams them, piece by piece."""
+        for chunk in sentences(text):
+            body = json.dumps({"input": chunk, "lang": lang, "speaker_ref_b64": self.ref(voice),
+                               "response_format": "pcm", "stream": True}).encode()
+            req = urllib.request.Request(f"http://127.0.0.1:{self.port}/tts", data=body,
+                                         headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=args.timeout) as r:
+                rest = b""
+                while True:
+                    block = r.read1(16384)
+                    if not block:
+                        break
+                    block = rest + block
+                    cut = len(block) - len(block) % 4
+                    rest = block[cut:]
+                    if cut:
+                        yield np.frombuffer(block[:cut], dtype="<f4")
+
+    def stop(self):
+        if self.proc.poll() is None:
+            self.proc.terminate()
+
+
+# ── API ─────────────────────────────────────────────────────
 
 def error(status, message, kind="invalid_request_error"):
     return jsonify({"error": {"message": message, "type": kind}}), status
@@ -81,7 +214,7 @@ def error(status, message, kind="invalid_request_error"):
 
 @app.get("/health")
 def health():
-    return jsonify({"status": "ok", "voices": len(voices())})
+    return jsonify({"status": "ok", "engine": args.engine, "voices": len(voices())})
 
 
 @app.get("/v1/models")
@@ -114,64 +247,77 @@ def speech():
     name = body.get("voice") or args.default_voice or next(iter(known), "")
     if name not in known:
         return error(400, f"unknown voice '{name}'; known: {', '.join(known) or 'none — add one with llmctl voice'}")
+    voice = known[name]
+    if body.get("stream_format", "audio") != "audio":
+        return error(400, "stream_format 'sse' is not supported; audio is streamed as it is")
+    t0 = time.time()
 
-    with tempfile.TemporaryDirectory(prefix="llmctl-tts-") as tmp:
-        out = Path(tmp) / "out.wav"
-        cmd = [args.llama_tts, "-m", args.model, "-mm", args.mmproj, "-p", text,
-               "--tts-lang", lang, "--tts-speaker-file", str(known[name]), "-o", str(out),
-               *args.extra]
+    if body.get("stream", True):
+        def gen():
+            first, n = None, 0
+            with gpu:
+                if fmt == "wav":
+                    yield wav_header()
+                try:
+                    for block in engine.pieces(text, lang, voice):
+                        if first is None:
+                            first = time.time() - t0
+                        n += block.size
+                        yield to_int16(block).tobytes()
+                except Exception as e:           # headers are gone; the log has to say it
+                    log.error("stream broke off: %s", e)
+            log.info("voice=%s lang=%s chars=%d audio=%.1fs first_audio=%.2fs took=%.1fs (stream)",
+                     name, lang, len(text), n / SAMPLE_RATE, first or 0, time.time() - t0)
+        mime = "audio/wav" if fmt == "wav" else "audio/pcm"
+        return Response(stream_with_context(gen()), mimetype=mime)
+
+    try:
         with gpu:
-            t = time.time()
-            try:
-                r = subprocess.run(cmd, capture_output=True, text=True, timeout=args.timeout)
-            except subprocess.TimeoutExpired:
-                return error(504, f"generation took longer than {args.timeout} s", "server_error")
-            dt = time.time() - t
-        if r.returncode != 0 or not out.is_file():
-            tail = (r.stderr or r.stdout).strip().splitlines()[-5:]
-            log.error("llama-tts failed (%s): %s", r.returncode, " | ".join(tail))
-            return error(500, "llama-tts failed: " + (tail[-1] if tail else f"exit {r.returncode}"), "server_error")
-        data = out.read_bytes()
-
-    with wave.open(io.BytesIO(data)) as w:
-        params = w.getparams()
-        seconds = w.getnframes() / w.getframerate()
-        pcm = w.readframes(w.getnframes())
+            x = np.concatenate(list(engine.pieces(text, lang, voice)) or [np.zeros(0, np.float32)])
+    except Exception as e:
+        log.error("%s", e)
+        return error(500, str(e), "server_error")
+    dt = time.time() - t0
     gain = 0.0
-    if args.loudness is not None and params.sampwidth == 2 and params.nchannels == 1:
-        pcm, gain = normalize(pcm, args.loudness)
-        buf = io.BytesIO()
-        with wave.open(buf, "wb") as w:
-            w.setparams(params)
-            w.writeframes(pcm)
-        data = buf.getvalue()
+    if args.loudness is not None:
+        x, gain = normalize(x, args.loudness)
+    pcm = to_int16(x).tobytes()
     log.info("voice=%s lang=%s chars=%d audio=%.1fs took=%.1fs (%.2fx real time) gain=%+.1f dB",
-             name, lang, len(text), seconds, dt, seconds / dt if dt else 0, gain)
+             name, lang, len(text), x.size / SAMPLE_RATE, dt, x.size / SAMPLE_RATE / dt if dt else 0, gain)
     if fmt == "pcm":
         return Response(pcm, mimetype="audio/pcm")
-    return Response(data, mimetype="audio/wav")
+    return Response(wav_header(len(pcm)) + pcm, mimetype="audio/wav")
 
 
 def main():
-    global args
+    global args, engine
     p = argparse.ArgumentParser(description=(__doc__ or "").split("\n\n")[0])
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, required=True)
     p.add_argument("--model", required=True, help="Qwen3-TTS Base GGUF")
     p.add_argument("--mmproj", required=True, help="its mmproj GGUF (speaker encoder, code predictor, vocoder)")
     p.add_argument("--voices", required=True, help="directory of reference recordings, one voice per file")
-    p.add_argument("--llama-tts", default="llama-tts")
+    p.add_argument("--binary", default="llama-tts",
+                   help="llama-tts, or a llama-server that has /tts (the engine follows the name)")
     p.add_argument("--lang", default="de")
     p.add_argument("--default-voice", default="")
     p.add_argument("--alias", default="qwen3-tts")
     p.add_argument("--timeout", type=int, default=600)
     p.add_argument("--loudness", default="-20",
                    type=lambda v: None if v == "off" else float(v),
-                   help="RMS level of every answer in dBFS, or off (default -20)")
-    p.add_argument("extra", nargs="*", help="further llama-tts arguments (after --)")
+                   help="RMS level of every whole answer in dBFS, or off (default -20)")
+    p.add_argument("extra", nargs="*", help="further llama-tts / llama-server arguments (after --)")
     args = p.parse_args()
-    log.info("model %s, voices in %s (%d), language %s", os.path.basename(args.model), args.voices,
-             len(voices()), args.lang)
+    args.engine = "server" if os.path.basename(args.binary).startswith("llama-server") else "cli"
+    log.info("model %s, voices in %s (%d), language %s, engine %s", os.path.basename(args.model),
+             args.voices, len(voices()), args.lang, args.engine)
+    engine = ServerEngine() if args.engine == "server" else CliEngine()
+
+    def on_term(*_):
+        if isinstance(engine, ServerEngine):
+            engine.stop()
+        os._exit(0)
+    signal.signal(signal.SIGTERM, on_term)
     # llmctl waits for this line before it calls the slot up.
     log.info("tts_server listening on http://%s:%d", args.host, args.port)
     try:

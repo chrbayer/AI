@@ -184,6 +184,72 @@ def _relay(resp):
         _sem.release()
 
 
+# Speech recognition models write their result as "language German<asr_text>…"
+# (Qwen3-ASR), and llama-server's /v1/audio/transcriptions passes that on. A
+# client wants the text; the language goes into its own field, where OpenAI's
+# verbose_json has it.
+ASR_PREFIX = re.compile(r"^\s*language\s+([A-Za-z]+)\s*<asr_text>")
+
+
+def _split_transcript(text):
+    m = ASR_PREFIX.match(text or "")
+    if not m:
+        return text, None
+    lang = m.group(1)
+    return text[m.end():], (None if lang.lower() == "none" else lang)
+
+
+def _clean_transcription(resp):
+    """A transcription answer without the model's language header."""
+    ctype = resp.headers.get("Content-Type", "")
+    try:
+        if "text/event-stream" not in ctype:
+            body = resp.content
+            try:
+                obj = json.loads(body)
+                if isinstance(obj, dict) and isinstance(obj.get("text"), str):
+                    obj["text"], lang = _split_transcript(obj["text"])
+                    if lang:
+                        obj["language"] = lang
+                    body = json.dumps(obj, ensure_ascii=False).encode()
+            except ValueError:
+                pass
+            yield body
+            return
+        # Streamed: hold the deltas back until the header is complete, then pass
+        # the rest on as it comes.
+        held, open_ = "", False
+        resp.encoding = "utf-8"          # requests would guess ISO-8859-1 for event streams
+        for line in resp.iter_lines(decode_unicode=True):
+            if not line.startswith("data: "):
+                yield (line + "\n").encode()
+                continue
+            try:
+                ev = json.loads(line[6:])
+            except ValueError:
+                yield (line + "\n").encode()
+                continue
+            if ev.get("type") == "transcript.text.delta" and not open_:
+                held += ev.get("delta", "")
+                if "<asr_text>" not in held and len(held) < 64:
+                    continue
+                rest, lang = _split_transcript(held)
+                open_ = True
+                if lang:
+                    yield f"data: {json.dumps({'type': 'transcript.language', 'language': lang})}\n\n".encode()
+                if not rest:
+                    continue
+                ev["delta"] = rest
+            elif ev.get("type") == "transcript.text.done" and isinstance(ev.get("text"), str):
+                ev["text"], lang = _split_transcript(ev["text"])
+                if lang:
+                    ev["language"] = lang
+            yield f"data: {json.dumps(ev, ensure_ascii=False)}\n".encode()
+    finally:
+        resp.close()
+        _sem.release()
+
+
 class ImageFetchError(Exception):
     pass
 
@@ -463,6 +529,9 @@ def proxy(path):
 
     # From here on _relay owns the slot and releases it when the stream ends.
     resp_headers = _filter_headers(resp.headers.items())
+    if path == "v1/audio/transcriptions" and resp.status_code == 200:
+        resp_headers = {k: v for k, v in dict(resp_headers).items() if k.lower() != "content-length"}
+        return Response(_clean_transcription(resp), status=200, headers=resp_headers)
     return Response(_relay(resp), status=resp.status_code, headers=resp_headers)
 
 

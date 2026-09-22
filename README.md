@@ -841,9 +841,9 @@ llmctl update comfy --torch           # …and torch itself
 ## The tts backend (speech)
 
 A models.conf entry with `_model_backend="tts"` (`speech` in the examples)
-speaks: [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) 1.7B through llama.cpp's
-`llama-tts`, behind `tts_server.py`, which answers the OpenAI speech API on the
-slot's server port.
+speaks: [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) 1.7B through llama.cpp,
+behind `tts_server.py`, which answers the OpenAI speech API on the slot's server
+port.
 
 ```bash
 llmctl download speech        # GGUFs, voice-design venv and model, two voices
@@ -853,17 +853,31 @@ curl -s localhost:8005/v1/audio/speech -H 'Content-Type: application/json' \
 ```
 
 - **API.** `POST /v1/audio/speech` takes `input` (up to 4096 characters),
-  `voice`, `response_format` (`wav` or `pcm`: 24 kHz mono, 16 bit) and, as an
-  extension, `language` (ISO 639-1: de, en, fr, es, it, pt, ru, zh, ja, ko).
-  `GET /v1/audio/voices` lists the voices. `--lang` sets the slot's default
-  (`de`); `--host` and `--clear-logs` apply too, nothing else.
-- **Speed.** llama-server has no speech endpoint yet (llama.cpp PR #26603), so
-  the server runs `llama-tts` once per request. Loading takes ~1.5 s, generation
-  runs at about twice real time (Vulkan, 22 frames/s for 12 frames/s of audio):
-  7.8 s of speech in 5.7 s per request, all in. The model sits on the GPU (~4 GB)
-  only while it speaks, so the slot runs beside anything and never needs
-  unloading. The same model in PyTorch ran at 1.56× real time — slower than
-  real time: it is bound by 90,000 kernel launches per sentence, not by compute.
+  `voice`, `response_format` (`wav` or `pcm`: 24 kHz mono, 16 bit), `stream`
+  and, as an extension, `language` (ISO 639-1: de, en, fr, es, it, pt, ru, zh,
+  ja, ko). `GET /v1/audio/voices` lists the voices. `--lang` sets the slot's
+  default (`de`); `--host` and `--clear-logs` apply too, nothing else.
+- **Streaming.** As with OpenAI's API, the audio is sent as it is generated
+  unless the request says `"stream": false` — the openai package expects that
+  and sends no flag. A streamed `wav` has an unknown length in its header,
+  which players read to the end, and `pcm` is raw. `"stream": false` returns one
+  whole file, levelled to −20 dBFS. The text is spoken sentence by sentence, the first
+  sentence on its own, so the first sound comes after that sentence: 1.0 s for
+  a 16 s answer here, the rest generated at 1.7× real time, faster than it
+  plays. Qwen3-TTS' vocoder works in windows of 72 frames (6 s), so a single
+  long sentence arrives in 6 s pieces.
+- **Engine.** Streaming needs llama-server with a `/tts` endpoint, which is
+  llama.cpp PR #26603, not merged yet. `patches/build-tts-server.sh` builds it
+  into `~/src/llama.cpp-tts`: a worktree of your checkout with the pinned PR
+  merged and a one-line fix for an API change since
+  (`patches/llama.cpp-pr26603-mtmd-init-opt.patch`), built like the Vulkan build;
+  models.conf points `speech` at it. `tts_server.py` starts it as a child on a
+  private port that dies with it; the model stays loaded (5.0 GiB with one slot
+  of 4096 tokens). Without that build, llmctl falls back to `llama-tts`, run
+  once per request: ~1.5 s of loading each time, no streaming, the model on the
+  GPU only while it speaks. For comparison, the same model in PyTorch ran at
+  1.56× real time — slower than real time, bound by 90,000 kernel launches per
+  sentence.
 - **Voices.** Qwen3-TTS Base speaks in the voice of a short reference recording,
   kept in `~/.local/share/llmctl/tts/voices/`, one file per voice, named by
   the file. The clone keeps the timbre and speaks accent-free German. Qwen3-TTS'
@@ -886,8 +900,49 @@ llmctl voice rm erzaehler
   recording measured 11 dB below the designed voices, and so did its clone.
   `voice add` and `voice design` therefore store every voice as mono 16-bit WAV
   at −20 dBFS RMS, and the speech server brings every answer to the same level
-  (`--loudness`, −20 by default, `off` to disable). Both hold peaks below
-  −1 dBFS, so a recording with strong plosives ends up a little quieter.
+  (`--loudness`, −20 by default, `off` to disable) when it is not streamed.
+  Both hold peaks below −1 dBFS, so a recording with strong plosives ends up a
+  little quieter; a stream cannot be levelled, but clones of the stored voices
+  land within a few dB of that level.
+
+## Building blocks for a voice agent
+
+llmctl does not contain an agent, but everything one needs to listen and speak:
+
+| Step | Slot | Endpoint |
+| --- | --- | --- |
+| hear | `asr` (Qwen3-ASR 1.7B, `--mmproj --proxy`) | `POST :8086/v1/audio/transcriptions` |
+| think | any LLM, e.g. `qwen-moe --proxy` | `POST :808N/v1/chat/completions` (`stream`) |
+| speak | `speech` (Qwen3-TTS 1.7B) | `POST :8005/v1/audio/speech` (`stream`) |
+
+`llmctl preset voice` starts the two speech slots (~10 GB together); add the
+LLM to a preset of your own. The endpoints follow OpenAI's API, so its client
+libraries work unchanged:
+
+```python
+from openai import OpenAI
+asr = OpenAI(base_url="http://localhost:8086/v1", api_key="-")
+tts = OpenAI(base_url="http://localhost:8005/v1", api_key="-")
+text = asr.audio.transcriptions.create(model="asr", file=open("frage.wav", "rb")).text
+with tts.audio.speech.with_streaming_response.create(
+        model="qwen3-tts", voice="frau", input=answer, response_format="pcm") as r:
+    for chunk in r.iter_bytes():          # 24 kHz mono s16le, as it is generated
+        player.write(chunk)
+```
+
+- **Speech recognition.** Qwen3-ASR recognizes 30 languages including German
+  and names the language. It writes "language German<asr_text>…" before the
+  text; the proxy of the `asr` slot strips that and returns `language` as a
+  field of its own (streamed: a `transcript.language` event first). Measured:
+  a 7.6 s recording in 1.0 s, word for word. With `stream=true` the text comes
+  as `transcript.text.delta` events. The recording has to be complete — cutting
+  the microphone into utterances (voice activity detection) is the agent's job.
+- **Latency.** From the end of an utterance: ~1 s to its text, then the LLM's
+  time to its first sentence, then ~1 s to the first sound of that sentence.
+  Feed the LLM's streamed answer to `/v1/audio/speech` sentence by sentence, or
+  wait for the first sentence and send the rest as one request.
+- **Round trip.** A German question spoken by a cloned voice and transcribed
+  back came out identical, punctuation included.
 
 ## Exposing models on the internet (`--public`)
 

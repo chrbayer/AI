@@ -494,12 +494,18 @@ _start_tts() {
     fi
 
     local model="${_r_model//\~/$HOME}" mm="${_r_mmproj//\~/$HOME}"
+    # The streaming llama-server is a separate build (patches/build-tts-server.sh);
+    # without it, llama-tts does the same job slower.
+    if [[ "$(basename "$_r_binary")" == llama-server* && ! -x "${_r_binary//\~/$HOME}" ]]; then
+        [[ "$print_cmd" == true ]] || echo "Note: $_r_binary is not built — using llama-tts (no streaming). Build it: $SHARE_DIR/patches/build-tts-server.sh"
+        _r_binary="llama-tts"
+    fi
     # The interpreter's own path, as Python rewrites argv[0] to it — and preset
     # compares this command against the running process's argv. Asked of Python
     # itself, since `command -v` may name a pyenv shim instead.
     local py; py=$(python3 -c 'import sys; print(sys.executable)' 2>/dev/null) || py=python3
     local -a cmd=("$py" "$TTS_SERVER_SCRIPT" --host "${host:-127.0.0.1}" --port "$port_server"
-        --model "$model" --mmproj "$mm" --voices "$TTS_VOICES" --llama-tts "$_r_binary"
+        --model "$model" --mmproj "$mm" --voices "$TTS_VOICES" --binary "$_r_binary"
         --lang "$l" --alias "$_r_client")
     (( ${#_r_args[@]} )) && cmd+=(-- "${_r_args[@]}")
 
@@ -521,7 +527,11 @@ _start_tts() {
     local config_text
     config_text="$(
         echo "Model:    $_r_label ($_r_client)"
-        echo "Backend:  tts — $_r_binary behind tts_server.py, one llama-tts run per request"
+        if [[ "$(basename "$_r_binary")" == llama-server* ]]; then
+            echo "Backend:  tts — $_r_binary (model resident, streaming) behind tts_server.py"
+        else
+            echo "Backend:  tts — $_r_binary behind tts_server.py, one run per request"
+        fi
         echo "Weights:  $model"
         echo "          $mm"
         echo "Voices:   $TTS_VOICES ($n_voices)"
@@ -563,6 +573,13 @@ _describe_tts() {
     echo "${indent}Model:     $label"
     echo "${indent}API:       http://$host:$port/v1/audio/speech  (language $lang)"
     echo "${indent}Voices:    ${names:-no answer (still starting?)}"
+    local bin; bin=$(_argv_flag --binary) || bin=""
+    if [[ "$(basename "$bin")" == llama-server* ]]; then
+        awk -v g="$(_slot_gpu_mib "$slot" 2>/dev/null || echo 0)" -v i="$indent" 'BEGIN {
+            printf "%sEngine:    llama-server, model resident (%.1f GiB), streaming\n", i, g / 1024 }'
+    else
+        echo "${indent}Engine:    llama-tts, loaded per request"
+    fi
 }
 
 # preset-save for a speech slot: the entry by its model file, plus --host and --lang.
@@ -2305,13 +2322,16 @@ _footprint_key() { printf '%s' "$1" | sha1sum | cut -c1-16; }
 
 # GPU memory of whatever runs on a slot, in MiB. A halogen container runs its
 # engine outside our process tree, but it runs alone, so the GPU total is its.
+# A speech slot's model lives in the engine it started as a child.
 _slot_gpu_mib() {
-    local pid
+    local pid c sum
     pid=$(_slot_server_pid "$1") || return 1
     if _slot_is_halogen "$1"; then
         echo $(( $(_gtt_used_bytes) / 1048576 ))
     else
-        _proc_gpu_mib "$pid"
+        sum=$(_proc_gpu_mib "$pid")
+        for c in $(pgrep -P "$pid"); do sum=$(( sum + $(_proc_gpu_mib "$c") )); done
+        echo "$sum"
     fi
 }
 
@@ -2398,7 +2418,7 @@ _preset_memory_check() {
             estimated=1
         fi
         _resolve_model "${e_model[i]}" && [[ "$_r_backend" == comfyui ]] && { comfy="${e_model[i]}"; how="idle; workflows load on top"; }
-        _resolve_model "${e_model[i]}" && [[ "$_r_backend" == tts ]] && how="only while it speaks"
+        _resolve_model "${e_model[i]}" && [[ "$_r_backend" == tts && "$(basename "$_r_binary")" != llama-server* ]] && how="only while it speaks"
         sum=$(( sum + mib ))
         printf "  slot %-3s %-14s %9s  (%s)\n" "${e_slot[i]}" "${e_model[i]}" "$(_gib "$mib")" "$how"
     done
@@ -3078,7 +3098,7 @@ cmd_status() {
             echo "Slot $slot: $kind (PID: $server_pid) on :$port_server$preset_note"
             # A loaded server's footprint, for preset's memory balance. Not
             # ComfyUI's: it swings with every workflow; preset records it idle.
-            [[ "$kind" != comfyui* && "$kind" != tts* ]] && _record_footprint "$slot"
+            [[ "$kind" != comfyui* ]] && _record_footprint "$slot"
             _describe_server "$server_pid" "$indent"
             echo "${indent}Log: tail -f $LOG_DIR/server-${slot}.log"
             slot_active=1; found=1

@@ -1,0 +1,13 @@
+diff --git a/tools/server/server-context.cpp b/tools/server/server-context.cpp
+index 8b7bf77b2..0fa1db31e 100644
+--- a/tools/server/server-context.cpp
++++ b/tools/server/server-context.cpp
+@@ -5477,7 +5477,7 @@ void server_routes::init_routes() {
+         }
+ 
+         if (speaker_ref_len > 0) {
+-            auto wrapper = mtmd_helper_bitmap_init_from_buf(ctx_server.mctx, speaker_ref_data, speaker_ref_len, false);
++            auto wrapper = mtmd_helper_bitmap_init_from_buf(ctx_server.mctx, speaker_ref_data, speaker_ref_len, false, mtmd_helper_init_opt_default());
+             if (!wrapper.bitmap) {
+                 res->error(format_error_response("failed to decode \"speaker_ref\"", ERROR_TYPE_INVALID_REQUEST));
+                 return res;
