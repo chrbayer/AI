@@ -713,9 +713,12 @@ By default the GPU driver pins them straight out of the file cache without
 "available" while ~13 GiB really are, and `status` prints the real figure.
 `HALOGEN_WEIGHTS_LOCK=1` (0.13.2, in models.conf here) `mlock`s them instead:
 the kernel can no longer reclaim weight pages while the 47.7 GiB lookup table
-streams through the same file cache — the cycle behind the prefill stalls
-`--compact` works around — and `free` then tells the truth, which `status`
-follows. The price is that a co-tenant asking for more than the host has left
+streams through the same file cache, and `free` then tells the truth, which
+`status` follows. Upstream reads the known prefill stalls as that reclaim
+cycle, so this may well cover them; it does not replace `--compact`, which is
+about something else — having enough *contiguous* 2 MiB blocks for the ~30 GiB
+the server reserves. Both stay, and `start` still measures the free blocks and
+suggests `--compact` below 40 GiB. The price is that a co-tenant asking for more than the host has left
 makes the kernel kill this server (exit 137) rather than starve it slowly.
 
 **The host matters more than for llama-server.** Measured on this machine:
