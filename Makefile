@@ -20,6 +20,7 @@ DOCDIR    = $(DESTDIR)$(PREFIX)/share/doc/llmctl
 
 # Everything that answers without a GPU, a model or the network.
 test:
+	shellcheck -S warning llmctl patches/build-tts-server.sh tests/smoke.sh
 	tests/smoke.sh
 	python3 tests/test_python.py
 

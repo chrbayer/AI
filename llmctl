@@ -141,16 +141,20 @@ _resolve_model() {
             _r_mmproj="$m_mmproj"
             _r_alias="$m_alias"
             _r_label="$m_label"
+            # models.conf writes these as one string; splitting it into words is the point.
+            # shellcheck disable=SC2206
             _r_args=($m_args)
             _r_client="${m_client:-$m_name}"
             _r_rocm_env="${m_rocm_env:-}"
             _r_hf_repo="${m_hf_repo:-}"
             _r_hf_includes="${m_hf_includes:-}"
             _r_hf_dir="${m_hf_dir:-}"
+            # shellcheck disable=SC2206
             _r_no_reasoning_args=($m_no_reasoning_args)
             _r_ctx="${m_ctx:-}"
             _r_reasoning="${m_reasoning:-unknown}"
             _r_reasoning_levels="${m_reasoning_levels:-}"
+            # shellcheck disable=SC2206
             _r_spec_args=($m_spec_args)
             _r_hf_draft="${m_hf_draft:-}"
             _r_hf_mmproj="${m_hf_mmproj:-}"
@@ -2424,12 +2428,12 @@ _preset_memory_check() {
     for s in $(_active_slots); do
         m=$(_slot_gpu_mib "$s" 2>/dev/null) && ours=$(( ours + m ))
     done
-    local others=$(( $(_gtt_used_bytes) / 1048576 - ours ))
-    (( others < 0 )) && others=0
-    local budget=$(( total_mib - others - GTT_RESERVE_MIB ))
+    local outside_mib=$(( $(_gtt_used_bytes) / 1048576 - ours ))
+    (( outside_mib < 0 )) && outside_mib=0
+    local budget=$(( total_mib - outside_mib - GTT_RESERVE_MIB ))
 
     echo ""
-    echo "GPU memory (GTT pool $(_gib "$total_mib"), $(_gib "$others") used outside llmctl, $(_gib "$GTT_RESERVE_MIB") kept free):"
+    echo "GPU memory (GTT pool $(_gib "$total_mib"), $(_gib "$outside_mib") used outside llmctl, $(_gib "$GTT_RESERVE_MIB") kept free):"
     local i sum=0 estimated=0 comfy=""
     for (( i=0; i < ${#e_cmd[@]}; i++ )); do
         local mib how
@@ -3112,7 +3116,6 @@ cmd_status() {
         server_pid=$(_slot_server_pid "$slot") || server_pid=""
         proxy_pid=$(_slot_proxy_pid "$slot") || proxy_pid=""
 
-        local slot_active=0
         # Written by `preset`, removed by `start` and `stop` — so it only ever
         # names a slot this machine still holds for that preset.
         local preset_note=""
@@ -3139,11 +3142,11 @@ cmd_status() {
             [[ "$kind" != comfyui* ]] && _record_footprint "$slot"
             _describe_server "$server_pid" "$indent"
             echo "${indent}Log: tail -f $LOG_DIR/server-${slot}.log"
-            slot_active=1; found=1
+            found=1
         fi
         if [[ -n "$proxy_pid" ]] && ps -p "$proxy_pid" > /dev/null 2>&1; then
             echo "Slot $slot: proxy       (PID: $proxy_pid) on :$port_proxy"
-            slot_active=1; found=1
+            found=1
         fi
 
         local stunnel_pid=""
@@ -3153,7 +3156,7 @@ cmd_status() {
             ss -tlnp 2>/dev/null | grep -q ":$(( PORT_BASE_TLS_PROXY + slot )) " && \
                 tls_ports="$tls_ports, :$(( PORT_BASE_TLS_PROXY + slot ))"
             echo "Slot $slot: stunnel     (PID: $stunnel_pid) on $tls_ports  [public, mTLS]"
-            slot_active=1; found=1
+            found=1
         fi
     done
     [[ "$found" -eq 0 ]] && echo "Nothing running."
@@ -3174,14 +3177,14 @@ cmd_cache_stats() {
     [[ -n "$want_slot" ]] && { _check_slot "$want_slot" || return 1; }
     local found=0
     for slot in ${want_slot:-$(_log_slots)}; do
-        local f="$LOG_DIR/server-${slot}.log"
-        [[ -f "$f" ]] || continue
+        local log="$LOG_DIR/server-${slot}.log"
+        [[ -f "$log" ]] || continue
         found=1
-        if grep -q '^Backend:  ComfyUI' "$f"; then
+        if grep -q '^Backend:  ComfyUI' "$log"; then
             echo "Slot $slot: ComfyUI — no prompt cache"
             continue
         fi
-        if grep -q '^Backend:  tts' "$f"; then
+        if grep -q '^Backend:  tts' "$log"; then
             echo "Slot $slot: speech — no prompt cache"
             continue
         fi
@@ -3199,8 +3202,8 @@ print(f"  entries={entries}/{cap}  hits={hits}  misses={misses}  "
 ' || echo "  the server does not answer (still loading?)"
             continue
         fi
-        echo "Slot $slot: $f"
-        python3 - "$f" <<'PY'
+        echo "Slot $slot: $log"
+        python3 - "$log" <<'PY'
 import re, sys
 proc, gen, total = {}, {}, {}
 re_pe = re.compile(r"task\s+(\d+) \| prompt eval time =.*?/\s*(\d+) tokens")
@@ -3845,7 +3848,8 @@ cmd_benchmark() {
 
     _check_deps jq || return 1
 
-    local result_file="$DATA_DIR/benchmarks/benchmark-${target}-$(date +%Y%m%d-%H%M%S).jsonl"
+    local result_file
+    result_file="$DATA_DIR/benchmarks/benchmark-${target}-$(date +%Y%m%d-%H%M%S).jsonl"
     mkdir -p "$(dirname "$result_file")"
     echo "Results → $result_file"
     echo ""
@@ -4282,7 +4286,8 @@ _download_comfyui() {
     _comfyui_links "$c_base" "$c_models"
     # The VoiceDesign model `voice design` already has: a reflink costs no space
     # on btrfs, and an ordinary copy elsewhere.
-    local qd="$c_models/qwen-tts/$(basename "$TTS_DESIGN_DIR")"
+    local qd
+    qd="$c_models/qwen-tts/$(basename "$TTS_DESIGN_DIR")"
     if [[ -f "$TTS_DESIGN_DIR/model.safetensors" && ! -e "$qd" ]]; then
         mkdir -p "$(dirname "$qd")" && cp -r --reflink=auto "$TTS_DESIGN_DIR" "$qd"
     fi
@@ -4436,17 +4441,31 @@ cmd_voice() {
             mkdir -p "$TTS_VOICES"
             local tmp; tmp=$(mktemp -d)
             tar -xzf "$archive" -C "$tmp" || { rm -rf "$tmp"; return 1; }
-            local n=0 kept=0 base stem
-            for f in "$tmp"/*; do
-                [[ -f "$f" ]] || continue
-                base="${f##*/}"; stem="${base%.*}"
-                # A voice is its audio file; its .txt follows whatever happens to it.
-                if [[ "$base" != *.txt && -e "$TTS_VOICES/$base" && "$force" != true ]]; then
-                    kept=$(( kept + 1 )); continue
+            # Decided per voice, not per file: a voice is its audio in any of the
+            # three formats, and its .txt goes wherever the audio goes.
+            local n=0 kept=0 stem ext here audio
+            local -a stems
+            mapfile -t stems < <(cd "$tmp" && for f in *.{wav,mp3,flac,txt}; do
+                [[ -f "$f" ]] && echo "${f%.*}"; done | sort -u)
+            for stem in "${stems[@]}"; do
+                [[ "$stem" =~ ^[a-z0-9_-]+$ ]] || { echo "Skipped '$stem': not a voice name."; continue; }
+                here=false audio=""
+                for ext in wav mp3 flac; do
+                    [[ -f "$TTS_VOICES/$stem.$ext" ]] && here=true
+                    [[ -f "$tmp/$stem.$ext" ]] && audio="$stem.$ext"
+                done
+                if [[ "$here" == true && "$force" != true ]]; then
+                    [[ -n "$audio" ]] && kept=$(( kept + 1 ))
+                    continue
                 fi
-                [[ "$base" == *.txt && ! -e "$tmp/$stem".{wav,mp3,flac} && -e "$TTS_VOICES/$base" && "$force" != true ]] && continue
-                cp "$f" "$TTS_VOICES/$base"
-                [[ "$base" == *.txt ]] || n=$(( n + 1 ))
+                if [[ -n "$audio" ]]; then
+                    rm -f "$TTS_VOICES/$stem".{wav,mp3,flac}
+                    cp "$tmp/$audio" "$TTS_VOICES/$audio"
+                    n=$(( n + 1 ))
+                fi
+                # A description without audio only fills a gap.
+                [[ -f "$tmp/$stem.txt" ]] && { [[ -n "$audio" || ! -e "$TTS_VOICES/$stem.txt" ]]; } \
+                    && cp "$tmp/$stem.txt" "$TTS_VOICES/$stem.txt"
             done
             rm -rf "$tmp"
             _comfyui_voice_links_all

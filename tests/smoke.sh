@@ -126,8 +126,21 @@ check "voice rm says when there is none" "No voice"              -- "$L" voice r
 check "voice import brings them back"    "Imported 1 voice"      -- "$L" voice import "$SANDBOX/voices.tar.gz"
 check "voice import keeps what is there" "kept 1"                -- "$L" voice import "$SANDBOX/voices.tar.gz"
 
+# Import decides per voice: the .txt follows its audio, whatever the format here.
+mkdir -p "$SANDBOX/arc"
+printf 'RIFFxxxxWAVE' > "$SANDBOX/arc/test.wav"; echo "new text" > "$SANDBOX/arc/test.txt"
+echo "lonely" > "$SANDBOX/arc/solo.txt"; printf 'x' > "$SANDBOX/arc/Bad Name.wav"
+tar -czf "$SANDBOX/two.tar.gz" -C "$SANDBOX/arc" .
+V="$LLMCTL_DATA_DIR/tts/voices"
+check "voice import keeps a kept voice's text" "a test"          -- sh -c "'$L' voice import '$SANDBOX/two.tar.gz' >/dev/null; cat '$V/test.txt'"
+check "voice import skips a bad name"    "Skipped 'Bad Name'"    -- "$L" voice import "$SANDBOX/two.tar.gz"
+check "voice import --force takes the text too" "new text"       -- sh -c "'$L' voice import '$SANDBOX/two.tar.gz' --force >/dev/null; cat '$V/test.txt'"
+check "voice import fills a missing text" "lonely"               -- cat "$V/solo.txt"
+check "voice import replaces another format" "!test.mp3"         -- sh -c "mv '$V/test.wav' '$V/test.mp3'; '$L' voice import '$SANDBOX/two.tar.gz' --force >/dev/null; ls '$V'"
+
 # ── things that must not happen ──────────────────────────────
 check "no command leaks the sandbox"     "!$HOME/.local/share/llmctl/tts" -- "$L" start speech 5 --print-cmd
+check "cache-stats without logs says so" "No server logs yet"  -- "$L" cache-stats
 check "update refuses a non-comfyui"     "nothing to update"     -- "$L" update qwen
 
 echo ""
