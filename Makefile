@@ -33,10 +33,12 @@ install:
 	install -Dm644 halogen_bench.py $(LIBDIR)/halogen_bench.py
 	install -Dm644 comfyui_models.py $(LIBDIR)/comfyui_models.py
 	install -Dm644 tts_server.py $(LIBDIR)/tts_server.py
+	install -Dm644 images_server.py $(LIBDIR)/images_server.py
 	install -Dm644 tts_voice_design.py $(LIBDIR)/tts_voice_design.py
 	install -Dm644 -t $(SHAREDIR)/templates templates/*
 	install -Dm644 -t $(SHAREDIR)/examples examples/*.conf
 	install -Dm644 -t $(SHAREDIR)/comfyui/workflows comfyui/workflows/*.json
+	install -Dm644 -t $(SHAREDIR)/comfyui/api comfyui/api/*.json
 	install -Dm644 -t $(SHAREDIR)/comfyui/patches comfyui/patches/*.patch
 	install -Dm644 comfyui/sources.json $(SHAREDIR)/comfyui/sources.json
 	install -Dm644 comfyui/custom_nodes.txt $(SHAREDIR)/comfyui/custom_nodes.txt

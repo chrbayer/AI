@@ -867,10 +867,55 @@ llmctl update comfy --torch           # …and torch itself
   servers answer whoever reaches them. Keep them on 127.0.0.1, or put something
   in front that authenticates — `--public` does that for LLM slots (token plus
   mTLS), but it does not cover these.
-- **No LLM options.** `--host`, `--verbose` (`--verbose DEBUG`), `--clear-logs`
-  and `--output` apply; everything else is refused. `env`, `bench`, `cache-stats` and
+- **No LLM options.** `--host`, `--verbose` (`--verbose DEBUG`), `--clear-logs`,
+  `--output` and `--proxy` (the image API, below) apply; everything else is refused. `env`, `bench`, `cache-stats` and
   `probe-reasoning` have nothing to do for it. ComfyUI has no authentication, so
   `--host` beyond localhost warns.
+
+### The image API (`--proxy`)
+
+`llmctl start comfy 9 --proxy` also starts `images_server.py` on the slot's
+proxy port (:8089): OpenAI's image API, so an agent makes and edits images
+without knowing a ComfyUI workflow.
+
+```python
+from openai import OpenAI
+img = OpenAI(base_url="http://localhost:8089/v1", api_key="-")
+r = img.images.generate(model="flux2-klein-9b", prompt="Ein roter Leuchtturm bei Sonnenuntergang",
+                        size="1024x768", extra_body={"seed": 42})
+png = base64.b64decode(r.data[0].b64_json)
+r = img.images.edit(model="flux2-klein-9b", image=open("turm.png", "rb"),
+                    prompt="Mache den Leuchtturm blau-weiß gestreift")
+```
+
+- **Models are the bundled workflows**, named after them: `flux2-klein-9b`,
+  `flux2-klein-9b-nsfw`, `flux2-dev`, `flux2-dev-turbo`, `flux2-dev-nsfw`,
+  `qwen-image-21`, `qwen-image-21-heretic` for generations and edits, and
+  `seedvr2-7b-upscale` for edits (4× upscaling, no prompt). `GET /v1/models`
+  lists those whose model files ComfyUI has, with the endpoints each serves.
+  Without `model`, it is klein.
+- **What a request sets:** `prompt`, `size` (generations; `WxH` rounded to 16,
+  256–2048, or `auto` for the workflow's own), `n` (1–8, one after another),
+  `seed` (not in OpenAI's API; the response names the one used, so a result
+  can be made again) and `response_format` (`b64_json`, or `url` — a ComfyUI
+  `/view` link, valid until ComfyUI restarts). Always PNG. Edits take one
+  image per reference the workflow has (klein 1, dev and Qwen-Image 2), as
+  `image`/`image[]` form fields or as data URLs in a JSON `images` list;
+  fewer are fine — the unused references drop out of the workflow. An edit's
+  size follows its first image.
+- **Results stay out of the gallery.** They go to ComfyUI's temp directory,
+  not to `output/`; the caller has them.
+- **Measured** (klein, beside a 70B and an 8B LLM, 37 GB free): a 1024×768
+  image in 39–55 s including loading the model, an edit in 62 s — and once in
+  350 s, when klein's ~33 GB met that memory and the system went into zram.
+  The official `openai` Python client works unchanged for both.
+- **The API format.** POST /prompt takes a workflow in ComfyUI's API format,
+  which only its frontend can make from a saved one. `comfyui/api/` holds the
+  bundled workflows in that format, made by `comfyui/export_api.py`: it opens
+  the UI of a running ComfyUI in Chrome without a window and exports each
+  workflow as "Export (API)" would. After changing a workflow, run it again
+  (`comfyui/export_api.py 8009`) and commit what it writes; `make test` fails
+  while a workflow has no API version.
 
 ## The tts backend (speech)
 
@@ -1182,6 +1227,7 @@ Multimodal projectors are only loaded on an explicit `--mmproj`.
 - `proxy.py` — optional Flask proxy (`start --proxy`) that forwards requests to the local llama-server and optimizes prompts for caching; port and backend configurable via `LLM_PROXY_PORT` / `LLM_BACKEND_URL`. For halogen it also answers `/v1/messages` (`LLM_TRANSLATE_MESSAGES=1`), clamps token budgets (`LLM_MAX_TOKENS_CAP`) and waits longer (`LLM_PROXY_TIMEOUT`)
 - `anthropic_compat.py` — the Messages ↔ Chat Completions translation `proxy.py` uses for backends without a Messages API
 - `halogen_bench.py` — `bench` for halogen models: prefill and decode speed of a running slot
+- `images_server.py` — OpenAI image API in front of a ComfyUI slot (`start comfy N --proxy`); `comfyui/export_api.py` makes the API-format workflows in `comfyui/api/` it runs
 - `examples/models.conf` — Model definitions (paths, binaries, ROCm env vars); read from `~/.config/llmctl/`
 - `examples/presets.conf` — Named configurations: which models run together, on which slots, with which flags (`llmctl preset <name>`)
 - `templates/` — chat templates referenced from `models.conf` as `$SHARE_DIR/templates/…`

@@ -24,6 +24,11 @@ import comfyui_models as cm                                        # stdlib only
 
 ts: Any = None          # typed loosely: a missing import skips its tests below
 proxy: Any = None
+images: Any = None
+try:
+    import images_server as images                                 # flask, requests
+except ImportError:
+    pass
 try:
     import tts_server as ts                                        # flask, numpy
 except ImportError:
@@ -205,6 +210,95 @@ class Sources(unittest.TestCase):
                 self.assertTrue(cm.refs(wf), "names no models at all")
                 for key, urls in cm.refs(wf).items():
                     self.assertTrue(urls, f"{key} has no URL")
+
+
+API = ROOT / "comfyui" / "api"
+
+
+def api(name):
+    return json.loads((API / name).read_text())
+
+
+@unittest.skipIf(images is None, "images_server needs flask and requests")
+class ImageApi(unittest.TestCase):
+    def test_every_image_workflow_has_an_api_version(self):
+        for path in sorted((ROOT / "comfyui" / "workflows").glob("*.json")):
+            if "TTS" in path.name:
+                continue
+            with self.subTest(workflow=path.name):
+                self.assertTrue((API / path.name).exists(),
+                                "run comfyui/export_api.py and commit what it writes")
+
+    def test_workflow_names(self):
+        self.assertEqual(images.slug("FLUX.2 klein 9B T2I (bf16, 4 Schritte)"), ("flux2-klein-9b", "generations"))
+        self.assertEqual(images.slug("FLUX.2 klein 9B NSFW Edit (bf16)"), ("flux2-klein-9b-nsfw", "edits"))
+        self.assertEqual(images.slug("Qwen-Image 2.1 Heretic T2I (bf16, dpmpp_2m 14)"),
+                         ("qwen-image-21-heretic", "generations"))
+        self.assertEqual(images.slug("SeedVR2 7B Upscale (fp16)"), ("seedvr2-7b-upscale", "edits"))
+
+    def test_each_generation_takes_prompt_size_and_seed(self):
+        for path in sorted(API.glob("*T2I*.json")):
+            with self.subTest(workflow=path.name):
+                g = json.loads(path.read_text())
+                self.assertTrue(images.set_prompt(g, "PROMPT"))
+                images.set_size(g, "1000x600")
+                images.set_seed(g, 1234)
+                text = json.dumps(g)
+                self.assertIn("PROMPT", text)
+                self.assertIn("1008", text)           # rounded to 16
+                self.assertIn("608", text)
+                self.assertIn(": 1234", text)
+
+    def test_a_size_that_is_no_size_is_refused(self):
+        with self.assertRaises(images.Refused):
+            images.set_size({}, "large")
+
+    def _prepared(self, name, n_images):
+        g = api(name)
+        images.upload = lambda data: "llmctl-api/x.png"          # no ComfyUI here
+        images.prepare(g, "PROMPT", None, [b"png"] * n_images)
+        return g
+
+    def _refs_ok(self, g):
+        for key, node in g.items():
+            for value in node["inputs"].values():
+                if isinstance(value, list) and len(value) == 2 and isinstance(value[0], str):
+                    self.assertIn(value[0], g, f"{key} points at a node that is gone")
+
+    def test_a_missing_reference_drops_out_of_a_reference_chain(self):
+        g = self._prepared("FLUX.2 dev Edit (fp8, 20 Schritte).json", 1)
+        self.assertEqual(sum(n["class_type"] == "LoadImage" for n in g.values()), 1)
+        self.assertEqual(sum(n["class_type"] == "ReferenceLatent" for n in g.values()), 1)
+        self._refs_ok(g)
+
+    def test_a_missing_reference_drops_out_of_qwen_images(self):
+        g = self._prepared("Qwen-Image 2.1 Edit (bf16, dpmpp_2m 14).json", 1)
+        enc = next(n for n in g.values() if n["class_type"] == "TextEncodeQwenImage21")
+        self.assertIn("images.image_1", enc["inputs"])
+        self.assertNotIn("images.image_2", enc["inputs"])
+        self._refs_ok(g)
+
+    def test_all_references_used_leaves_the_chain_whole(self):
+        g = self._prepared("FLUX.2 dev Edit (fp8, 20 Schritte).json", 2)
+        self.assertEqual(sum(n["class_type"] == "ReferenceLatent" for n in g.values()), 2)
+        self._refs_ok(g)
+
+    def test_too_many_images_are_refused(self):
+        with self.assertRaises(images.Refused):
+            self._prepared("FLUX.2 klein 9B Edit (bf16).json", 5)
+
+    def test_results_go_to_temp_not_the_gallery(self):
+        for path in sorted(API.glob("*.json")):
+            with self.subTest(workflow=path.name):
+                g = json.loads(path.read_text())
+                n = len(images.image_nodes(g))
+                images.upload = lambda data: "llmctl-api/x.png"
+                images.prepare(g, "PROMPT", None, [b"png"] * n if n else None)
+                kinds = {x["class_type"] for x in g.values()}
+                self.assertIn("PreviewImage", kinds)
+                self.assertFalse(kinds & images.SAVE)
+                self.assertFalse(kinds & (images.UI_ONLY - {"PreviewImage"}))
+                self._refs_ok(g)
 
 
 if __name__ == "__main__":

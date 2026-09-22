@@ -366,6 +366,7 @@ COMFYUI_GIT="https://github.com/Comfy-Org/ComfyUI.git"
 COMFYUI_TORCH_INDEX="https://download.pytorch.org/whl/rocm7.2"
 COMFYUI_MODELS_SCRIPT="$LIB_DIR/comfyui_models.py"
 COMFYUI_SHARE="$SHARE_DIR/comfyui"      # bundled workflows/ and patches/
+IMAGES_SERVER_SCRIPT="$LIB_DIR/images_server.py"   # OpenAI image API, a comfyui slot's --proxy
 # Not /tmp: that is a small tmpfs here, and pip unpacks multi-GB torch wheels.
 COMFYUI_TMP="${XDG_CACHE_HOME:-$HOME/.cache}/llmctl/comfyui-tmp"
 
@@ -694,7 +695,6 @@ _start_comfyui() {
     [[ -n "$temp" ]] && refused+=("--temp")
     [[ -n "$top_p" ]] && refused+=("--top-p")
     [[ -n "$max_predict" ]] && refused+=("--max-predict")
-    [[ "$start_proxy" == true ]] && refused+=("--proxy")
     [[ "$public" == true ]] && refused+=("--public")
     [[ -n "$gpu_priority" ]] && refused+=("--gpu-priority")
     [[ "$compact" == true ]] && refused+=("--compact")
@@ -773,8 +773,13 @@ _start_comfyui() {
         exit 1
     fi
     echo "Server running (PID: $server_pid, detached) — up in ~10-20 s; models load per workflow."
+    if [[ "$start_proxy" == true ]]; then
+        _start_images_server "$slot" "$host" || { _stop_slot "$slot" > /dev/null; exit 1; }
+    fi
     echo ""
     echo "  UI:    $url"
+    [[ "$start_proxy" == true ]] && \
+        echo "  API:   http://${host:-127.0.0.1}:$port_proxy/v1/images/generations (and /edits, /v1/models)"
     echo "  Logs:  tail -f $server_log"
     echo "  Stop:  $PROG stop $slot"
 }
@@ -1003,11 +1008,42 @@ _write_stunnel_conf() {
     } > "$conf"
 }
 
+# The image API in front of a ComfyUI slot, on the slot's proxy port. The pid
+# and log files are the proxy's, so stop, status and preset treat it as one.
+_start_images_server() {
+    local slot="$1" host="$2"
+    local port_server=$(( PORT_BASE_SERVER + slot ))
+    local port_proxy=$(( PORT_BASE_PROXY + slot ))
+    local log="$LOG_DIR/proxy-${slot}.log" pid="" i
+    mkdir -p "$PID_DIR" "$LOG_DIR"
+    echo "Starting the image API [slot $slot] on port $port_proxy..."
+    pid=$(_spawn_detached "$PID_DIR/proxy-${slot}.pid" "$log" truncate \
+        python3 -u "$IMAGES_SERVER_SCRIPT" --comfy "http://127.0.0.1:$port_server" \
+            --public-comfy "http://${host:-127.0.0.1}:$port_server" \
+            --api "$COMFYUI_SHARE/api" --host "${host:-127.0.0.1}" --port "$port_proxy")
+    [[ -n "$pid" ]] || { echo "Error: the image API did not report a PID. See $log"; return 1; }
+    for (( i=0; i<10; i++ )); do
+        sleep 1
+        ps -p "$pid" > /dev/null 2>&1 || { echo "Error: the image API failed to start. See $log"; return 1; }
+        if ss -tlnp 2>/dev/null | grep -q ":${port_proxy} "; then
+            echo "Image API running (PID: $pid)"
+            return 0
+        fi
+    done
+    echo "Error: the image API did not listen on port $port_proxy within 10 s. See $log"
+    return 1
+}
+
 # Start proxy.py for one slot and wait until it listens. Its own function so
 # `preset` can add a missing proxy to a slot whose model already matches —
 # reloading 70B of weights for a process that starts in a second would be absurd.
 _start_proxy() {
     local slot="$1" host="$2" public="$3"
+    # A ComfyUI slot's proxy is the image API, not proxy.py.
+    if _slot_is_comfyui "$slot"; then
+        _start_images_server "$slot" "$host"
+        return
+    fi
     local port_server=$(( PORT_BASE_SERVER + slot ))
     local port_proxy=$(( PORT_BASE_PROXY + slot ))
     local proxy_log="$LOG_DIR/proxy-${slot}.log"
@@ -1767,7 +1803,7 @@ _is_llmctl_process() {
     [[ "$cmdline" == *"--slot-save-path $SLOT_STATE_DIR/"* || "$cmdline" == *"$PROXY_SCRIPT"* ||
        "$cmdline" == *"--name $HALOGEN_CONTAINER_PREFIX"* ||
        "$cmdline" == *"/main.py --listen "*" --base-directory "* ||
-       "$cmdline" == *"$TTS_SERVER_SCRIPT"* ]]
+       "$cmdline" == *"$TTS_SERVER_SCRIPT"* || "$cmdline" == *"$IMAGES_SERVER_SCRIPT"* ]]
 }
 
 # The slots this machine currently has something on, ascending. Nothing keeps a
@@ -2773,6 +2809,7 @@ _capture_comfyui_slot() {
     local out
     out=$(_argv_flag --output-directory) && flags+=(--output "$out")
     [[ "$(_argv_flag --verbose)" == DEBUG ]] && flags+=(--verbose)
+    _slot_proxy_pid "$slot" > /dev/null && flags+=(--proxy)
     for name in "${candidates[@]}"; do
         _resolve_model "$name" || continue
         local built=""
@@ -3166,7 +3203,11 @@ cmd_status() {
             found=1
         fi
         if [[ -n "$proxy_pid" ]] && ps -p "$proxy_pid" > /dev/null 2>&1; then
-            echo "Slot $slot: proxy       (PID: $proxy_pid) on :$port_proxy"
+            if [[ "$(tr '\0' ' ' < "/proc/$proxy_pid/cmdline" 2>/dev/null)" == *"$IMAGES_SERVER_SCRIPT"* ]]; then
+                echo "Slot $slot: image API   (PID: $proxy_pid) on :$port_proxy  POST /v1/images/generations, /v1/images/edits"
+            else
+                echo "Slot $slot: proxy       (PID: $proxy_pid) on :$port_proxy"
+            fi
             found=1
         fi
 
@@ -4068,7 +4109,8 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  halogen models (backend=halogen) run in podman, exclusively, always with their proxy;"
     printf "  %-20s %s\n" ""                      "    --ctx above 262144 turns on YaRN, --mmproj the vision tower, --cache-ram only takes 0"
     printf "  %-20s %s\n" ""                      "  comfyui models (backend=comfyui) run ComfyUI with its web UI on the server port;"
-    printf "  %-20s %s\n" ""                      "    only --host, --verbose, --clear-logs and --output DIR (where images go) apply."
+    printf "  %-20s %s\n" ""                      "    only --host, --verbose, --clear-logs, --output DIR (where images go) and --proxy apply;"
+    printf "  %-20s %s\n" ""                      "    --proxy: OpenAI image API (/v1/images/generations, /edits) on the proxy port"
     printf "  %-20s %s\n" ""                      "    Every llama start unloads its models first"
     printf "  %-20s %s\n" ""                      "  tts models (backend=tts) serve POST /v1/audio/speech on the server port; --lang CODE sets"
     printf "  %-20s %s\n" ""                      "    the default language (de), --seed N a fixed sampling seed (default -1: random each time);"

@@ -96,6 +96,7 @@ check "halogen start maps --mmproj"     "HALOGEN_VISION_TOWER=1"                
 # ── comfyui backend ──────────────────────────────────────────
 check "comfyui start names its dirs"    "--base-directory"       -- "$L" start comfy 9 --print-cmd
 check "comfyui start takes --output"    "--output-directory /tmp/x" -- "$L" start comfy 9 --output /tmp/x --print-cmd
+check "comfyui start takes --proxy"     "--base-directory"       -- "$L" start comfy 9 --proxy --print-cmd
 check "comfyui start refuses --ctx"     "not an LLM"             -- "$L" start comfy 9 --ctx 4096 --print-cmd
 
 # ── tts backend ──────────────────────────────────────────────
