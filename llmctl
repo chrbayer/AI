@@ -21,7 +21,7 @@
 #         Slots are not a fixed set — any N the ports have room for works.
 
 PROG=llmctl
-LLMCTL_VERSION=1.6.0
+LLMCTL_VERSION=1.7.0
 
 # ── Where things live ───────────────────────────────────────
 # The program itself (this file, proxy.py, templates, example configs) is
