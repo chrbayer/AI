@@ -12,7 +12,14 @@ Two engines, chosen by the binary llmctl hands over:
 
 Either way the text is spoken sentence by sentence: the first sound comes after
 the first sentence rather than after the whole text, and no single generation
-runs into llama.cpp's frame limit (512 frames, ~42 s).
+runs into llama.cpp's frame limit (512 frames, ~42 s). Each piece is generated
+without the ones before it, so tone and pace can shift a little at sentence
+boundaries; "chunking": false speaks groups of sentences up to ~280 characters
+instead — smoother, but the first sound waits for the whole first group.
+
+Generation samples, so the same text sounds a little different every time
+unless the seed is fixed. It is, by default (--seed, 1234); a request's
+"seed" overrides it, and -1 means a random one each time.
 
 Qwen3-TTS "Base" speaks in the voice of a short reference recording, and with
 it, accent-free German: a voice is nothing but an audio file in the voices
@@ -20,7 +27,8 @@ directory (`llmctl voice …` manages them), selected by its file name.
 
     POST /v1/audio/speech   {"input": "...", "voice": "mann",
                              "response_format": "wav"|"pcm", "stream": true,
-                             "language": "de"}     → 24 kHz mono 16-bit audio
+                             "language": "de", "seed": 1234, "chunking": true}
+                                                   → 24 kHz mono 16-bit audio
     GET  /v1/audio/voices   {"voices": ["frau", "mann", ...]}
     GET  /v1/models         the one model this slot serves
     GET  /health
@@ -84,14 +92,15 @@ def voices():
     return {p.stem: p for p in sorted(d.iterdir()) if p.suffix.lower() in AUDIO_SUFFIXES}
 
 
-def sentences(text):
+def sentences(text, first_alone=True):
     """Groups of whole sentences, each at most CHUNK_CHARS unless one sentence is
-    longer; the first is a single sentence, so the first sound comes early."""
+    longer; with first_alone, the first is a single sentence, so the first sound
+    comes early."""
     parts = [p.strip() for p in re.split(r"(?<=[.!?…:;])\s+|\n+", text) if p.strip()]
     if not parts:
         return []
-    chunks, cur = [parts[0]], ""
-    for p in parts[1:]:
+    chunks, cur = ([parts[0]], "") if first_alone else ([], "")
+    for p in (parts[1:] if first_alone else parts):
         if cur and len(cur) + 1 + len(p) > CHUNK_CHARS:
             chunks.append(cur)
             cur = p
@@ -131,12 +140,13 @@ def wav_header(n_bytes=None):
 class CliEngine:
     """llama-tts once per piece of text."""
 
-    def pieces(self, text, lang, voice):
-        for chunk in sentences(text):
+    def pieces(self, text, lang, voice, seed, first_alone):
+        for chunk in sentences(text, first_alone):
             with tempfile.TemporaryDirectory(prefix="llmctl-tts-") as tmp:
                 out = Path(tmp) / "out.wav"
                 cmd = [args.binary, "-m", args.model, "-mm", args.mmproj, "-p", chunk,
-                       "--tts-lang", lang, "--tts-speaker-file", str(voice), "-o", str(out), *args.extra]
+                       "--tts-lang", lang, "--tts-speaker-file", str(voice), "-o", str(out),
+                       "--seed", str(seed), *args.extra]
                 r = subprocess.run(cmd, capture_output=True, text=True, timeout=args.timeout)
                 if r.returncode != 0 or not out.is_file():
                     tail = (r.stderr or r.stdout).strip().splitlines()[-3:]
@@ -182,11 +192,11 @@ class ServerEngine:
             self.refs[voice] = (st, base64.b64encode(voice.read_bytes()).decode())
         return self.refs[voice][1]
 
-    def pieces(self, text, lang, voice):
+    def pieces(self, text, lang, voice, seed, first_alone):
         """float32 blocks as the engine streams them, piece by piece."""
-        for chunk in sentences(text):
+        for chunk in sentences(text, first_alone):
             body = json.dumps({"input": chunk, "lang": lang, "speaker_ref_b64": self.ref(voice),
-                               "response_format": "pcm", "stream": True}).encode()
+                               "response_format": "pcm", "stream": True, "seed": seed}).encode()
             req = urllib.request.Request(f"http://127.0.0.1:{self.port}/tts", data=body,
                                          headers={"Content-Type": "application/json"})
             with urllib.request.urlopen(req, timeout=args.timeout) as r:
@@ -250,6 +260,10 @@ def speech():
     voice = known[name]
     if body.get("stream_format", "audio") != "audio":
         return error(400, "stream_format 'sse' is not supported; audio is streamed as it is")
+    seed = body.get("seed", args.seed)
+    if not isinstance(seed, int) or seed < -1:
+        return error(400, "'seed' must be an integer, -1 for a random one")
+    first_alone = bool(body.get("chunking", True))
     t0 = time.time()
 
     if body.get("stream", True):
@@ -259,7 +273,7 @@ def speech():
                 if fmt == "wav":
                     yield wav_header()
                 try:
-                    for block in engine.pieces(text, lang, voice):
+                    for block in engine.pieces(text, lang, voice, seed, first_alone):
                         if first is None:
                             first = time.time() - t0
                         n += block.size
@@ -273,7 +287,7 @@ def speech():
 
     try:
         with gpu:
-            x = np.concatenate(list(engine.pieces(text, lang, voice)) or [np.zeros(0, np.float32)])
+            x = np.concatenate(list(engine.pieces(text, lang, voice, seed, first_alone)) or [np.zeros(0, np.float32)])
     except Exception as e:
         log.error("%s", e)
         return error(500, str(e), "server_error")
@@ -303,6 +317,8 @@ def main():
     p.add_argument("--default-voice", default="")
     p.add_argument("--alias", default="qwen3-tts")
     p.add_argument("--timeout", type=int, default=600)
+    p.add_argument("--seed", type=int, default=1234,
+                   help="sampling seed when a request names none; -1 = random every time")
     p.add_argument("--loudness", default="-20",
                    type=lambda v: None if v == "off" else float(v),
                    help="RMS level of every whole answer in dBFS, or off (default -20)")

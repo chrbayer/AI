@@ -1,0 +1,77 @@
+diff --git a/tools/mtmd/clip.cpp b/tools/mtmd/clip.cpp
+index 7990bdeab..ec8ae5d87 100644
+--- a/tools/mtmd/clip.cpp
++++ b/tools/mtmd/clip.cpp
+@@ -6070,3 +6070,7 @@ std::map<ggml_backend_dev_t, size_t> clip_get_mem_usage(const struct clip_ctx *
+ void clip_set_debug_output_embeddings(clip_ctx * ctx, bool enable) {
+     ctx->debug_output_embeddings = enable;
+ }
++
++void clip_gen_reset_rng(struct clip_ctx * ctx) {
++    ctx->rng_seed = UINT32_MAX; // any fixed seed differs from it, so the next call reseeds
++}
+diff --git a/tools/mtmd/clip.h b/tools/mtmd/clip.h
+index 25712fe20..ad7391b1f 100644
+--- a/tools/mtmd/clip.h
++++ b/tools/mtmd/clip.h
+@@ -119,6 +119,9 @@ struct clip_encode_params {
+ };
+ bool clip_encode(struct clip_ctx * ctx, struct clip_encode_params * params);
+ 
++// audio gen: forget the RNG's seed, so the next clip_encode reseeds even when the seed is the same
++void clip_gen_reset_rng(struct clip_ctx * ctx);
++
+ bool clip_is_llava(const struct clip_ctx * ctx);
+ // note for contributor: this clip_is_(model) pattern is deprecated
+ //                       do NOT add new functions like this
+diff --git a/tools/mtmd/mtmd-helper-gen.cpp b/tools/mtmd/mtmd-helper-gen.cpp
+index 1baac9a66..690287ab4 100644
+--- a/tools/mtmd/mtmd-helper-gen.cpp
++++ b/tools/mtmd/mtmd-helper-gen.cpp
+@@ -221,6 +221,7 @@ public:
+         top_k = inp->top_k > 0 ? inp->top_k : def.top_k;
+         top_p = inp->top_p > 0 ? inp->top_p : def.top_p;
+         seed  = inp->seed;
++        mtmd_gen_audio_reset_rng(mctx); // a server reuses the context: same seed, same audio
+         out_type = inp->out_type;
+         stream = inp->stream;
+ 
+@@ -625,6 +626,7 @@ public:
+         prompt_pos = 0;
+ 
+         seed     = inp->seed;
++        mtmd_gen_audio_reset_rng(mctx);
+         out_type = inp->out_type;
+         stream   = inp->stream;
+ 
+diff --git a/tools/mtmd/mtmd.cpp b/tools/mtmd/mtmd.cpp
+index 037886797..62ecbc77a 100644
+--- a/tools/mtmd/mtmd.cpp
++++ b/tools/mtmd/mtmd.cpp
+@@ -2030,6 +2030,12 @@ static int32_t mtmd_gen_audio_process_impl(mtmd_context * ctx, const mtmd_gen_in
+     return 0;
+ }
+ 
++void mtmd_gen_audio_reset_rng(mtmd_context * ctx) {
++    if (ctx->ctx_gen_a) {
++        clip_gen_reset_rng(ctx->ctx_gen_a);
++    }
++}
++
+ int32_t mtmd_gen_audio_process(mtmd_context * ctx, const struct mtmd_gen_inp * inp, struct mtmd_gen_out * out) {
+     try {
+         return mtmd_gen_audio_process_impl(ctx, inp, out);
+diff --git a/tools/mtmd/mtmd.h b/tools/mtmd/mtmd.h
+index 744db06a2..8ba76cc77 100644
+--- a/tools/mtmd/mtmd.h
++++ b/tools/mtmd/mtmd.h
+@@ -434,6 +434,9 @@ struct mtmd_gen_out {
+ MTMD_API struct mtmd_gen_inp mtmd_gen_inp_default(const mtmd_context * ctx);
+ 
+ // note: this API is stateless, caller must handle state management and audio frame accumulation
++// start a new generation: its fixed seed takes effect again, even if the last one used it too
++MTMD_API void mtmd_gen_audio_reset_rng(mtmd_context * ctx);
++
+ MTMD_API int32_t mtmd_gen_audio_process(mtmd_context * ctx,
+                                 const struct mtmd_gen_inp * inp,
+                                 struct mtmd_gen_out * out);

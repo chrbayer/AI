@@ -8,8 +8,9 @@
 # No llama.cpp checkout needed. It uses ~/src/llama.cpp (or $LLAMA_SRC) when
 # that is one, and otherwise clones llama.cpp into ~/.local/share/llmctl/llama.cpp.
 # From there it makes a git worktree at a pinned, tested llama.cpp commit, merges
-# the pinned PR commit, applies llama.cpp-pr26603-mtmd-init-opt.patch (the PR
-# predates an extra argument to mtmd_helper_bitmap_init_from_buf) and builds
+# the pinned PR commit, applies the llama.cpp-pr26603-*.patch fixes (the PR
+# predates an extra argument to mtmd_helper_bitmap_init_from_buf; its audio RNG
+# kept running instead of reseeding when a generation reused a seed) and builds
 # llama-server and llama-tts with Vulkan. Nothing is installed, and a checkout
 # it uses is not changed: the worktree has files of its own and shares only the
 # git objects.
@@ -59,8 +60,8 @@ else
     mkdir -p "$(dirname "$DST")"
     git -C "$SRC" worktree add -q --detach "$DST" "$base"
     git -C "$DST" -c user.name=llmctl -c user.email=llmctl@localhost merge -q --no-edit "$PR_COMMIT"
-    git -C "$DST" apply "$PATCH_DIR/llama.cpp-pr26603-mtmd-init-opt.patch"
-    echo "$DST: llama.cpp ${base:0:9} + PR #$PR (${PR_COMMIT:0:9}) + fix"
+    for p in "$PATCH_DIR"/llama.cpp-pr26603-*.patch; do git -C "$DST" apply "$p"; done
+    echo "$DST: llama.cpp ${base:0:9} + PR #$PR (${PR_COMMIT:0:9}) + fixes"
 fi
 
 cmake -S "$DST" -B "$DST/build" -DGGML_VULKAN=ON -DGGML_NATIVE=ON -DCMAKE_BUILD_TYPE=Release \

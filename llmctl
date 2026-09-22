@@ -507,6 +507,7 @@ _start_tts() {
     local -a cmd=("$py" "$TTS_SERVER_SCRIPT" --host "${host:-127.0.0.1}" --port "$port_server"
         --model "$model" --mmproj "$mm" --voices "$TTS_VOICES" --binary "$_r_binary"
         --lang "$l" --alias "$_r_client")
+    [[ -n "$seed" ]] && cmd+=(--seed "$seed")
     (( ${#_r_args[@]} )) && cmd+=(-- "${_r_args[@]}")
 
     if [[ "$print_cmd" == true ]]; then
@@ -593,9 +594,11 @@ _capture_tts_slot() {
     [[ "$host" == "127.0.0.1" ]] && host=""
     lang=$(_argv_flag --lang) || lang=""
     [[ "$lang" == "$TTS_DEFAULT_LANG" ]] && lang=""
+    local seed; seed=$(_argv_flag --seed) || seed=""
     local -a flags=()
     [[ -n "$host" ]] && flags+=(--host "$host")
     [[ -n "$lang" ]] && flags+=(--lang "$lang")
+    [[ -n "$seed" ]] && flags+=(--seed "$seed")
     for name in "${candidates[@]}"; do
         _resolve_model "$name" || continue
         local built=""
@@ -1299,6 +1302,7 @@ cmd_start() {
     local compact=false         # true = defragment host memory first (sudo)
     local output_dir=""         # comfyui: where generated images go (default <base>/output)
     local lang=""               # tts: default language of the speech slot (ISO 639-1)
+    local seed=""               # tts: sampling seed when a request names none (-1 = random)
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -1325,6 +1329,7 @@ cmd_start() {
             --print-cmd) print_cmd=true; shift ;;
             --output) _need_value "$@" || exit 1; output_dir="$2"; shift 2 ;;
             --lang) _need_value "$@" || exit 1; lang="$2"; shift 2 ;;
+            --seed) _need_value "$@" || exit 1; seed="$2"; shift 2 ;;
             -*) echo "Unknown option: $1"; exit 1 ;;
             *) if [[ -z "$name" ]]; then name="$1"; elif [[ "$slot" == "1" ]]; then slot="$1"; fi; shift ;;
         esac
@@ -1384,8 +1389,11 @@ cmd_start() {
     if [[ -n "$output_dir" && "$_r_backend" != comfyui ]]; then
         echo "Error: --output is for comfyui models — '$name' generates no images"; exit 1
     fi
-    if [[ -n "$lang" && "$_r_backend" != tts ]]; then
-        echo "Error: --lang is for speech (tts) models; '$name' is not one"; exit 1
+    if [[ -n "$lang$seed" && "$_r_backend" != tts ]]; then
+        echo "Error: --lang and --seed are for speech (tts) models; '$name' is not one"; exit 1
+    fi
+    if [[ -n "$seed" && ! "$seed" =~ ^(-1|[0-9]+)$ ]]; then
+        echo "Error: --seed takes a number, or -1 for a random one each time (got '$seed')"; exit 1
     fi
     [[ "$start_proxy" == true ]] && { _check_deps python3 || exit 1; }
     if [[ "$print_cmd" != true && "$_r_backend" == llama ]]; then
@@ -3877,7 +3885,8 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "    only --host, --verbose, --clear-logs and --output DIR (where images go) apply."
     printf "  %-20s %s\n" ""                      "    Every llama start unloads its models first"
     printf "  %-20s %s\n" ""                      "  tts models (backend=tts) serve POST /v1/audio/speech on the server port; --lang CODE sets"
-    printf "  %-20s %s\n" ""                      "    the default language (de); only --host and --clear-logs apply besides"
+    printf "  %-20s %s\n" ""                      "    the default language (de), --seed N the sampling seed (1234; -1 = random each time);"
+    printf "  %-20s %s\n" ""                      "    only --host and --clear-logs apply besides"
     printf "  %-20s %s\n" "preset <name>"          "bring the machine to the configuration presets.conf names (several models at once)"
     printf "  %-20s %s\n" ""                      "  keeps every slot that already runs exactly what the preset asks for,"
     printf "  %-20s %s\n" ""                      "  stops what differs or is not part of it, starts only what is missing"

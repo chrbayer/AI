@@ -866,6 +866,22 @@ curl -s localhost:8005/v1/audio/speech -H 'Content-Type: application/json' \
   a 16 s answer here, the rest generated at 1.7× real time, faster than it
   plays. Qwen3-TTS' vocoder works in windows of 72 frames (6 s), so a single
   long sentence arrives in 6 s pieces.
+- **Variation.** Generation samples, so the same text sounds a little
+  different each time. Two things shape that:
+  - `seed` (per request; the slot's `--seed`, 1234 by default; `-1` = random
+    each time). Through `llama-tts` a fixed seed gives the same audio every
+    time. The streaming engine is only reproducible as a sequence — the first
+    request after a start always sounds the same, and so does the second, but
+    they differ from each other: some state inside the PR's server outlives a
+    request. One cause was the audio RNG, which did not reseed when a
+    generation reused a seed (fixed by
+    `patches/llama.cpp-pr26603-reseed-per-generation.patch`); the rest is not
+    found yet. KV cache, sampler and audio buffers are reset correctly.
+  - `chunking` (per request, default `true`): each sentence is generated
+    without the ones before it, so tone and pace can shift at sentence
+    boundaries. `"chunking": false` speaks groups of sentences up to ~280
+    characters — smoother, but the first sound waits for the whole first
+    group: 3.3 s instead of 1.5 s for two sentences here.
 - **Engine.** Streaming needs llama-server with a `/tts` endpoint, which is
   llama.cpp PR #26603, not merged yet. `tts_server.py` starts it as a child on
   a private port that dies with it; the model stays loaded (5.0 GiB with one
@@ -884,8 +900,9 @@ curl -s localhost:8005/v1/audio/speech -H 'Content-Type: application/json' \
   and otherwise clones llama.cpp into `~/.local/share/llmctl/llama.cpp`. From
   there it makes a git worktree in `~/.local/share/llmctl/llama.cpp-tts` —
   where models.conf looks — at a pinned llama.cpp commit that is known to work,
-  merges the pinned PR commit, applies a one-line fix for an API change since
-  (`patches/llama.cpp-pr26603-mtmd-init-opt.patch`) and builds `llama-server`
+  merges the pinned PR commit, applies the fixes in
+  `patches/llama.cpp-pr26603-*.patch` (an API change since; the audio RNG's
+  reseeding) and builds `llama-server`
   and `llama-tts` with Vulkan. Nothing is installed, and a checkout it uses is
   left as it is: the worktree shares only its git objects. It checks for git,
   cmake, a C++ compiler and glslc first. `LLAMA_BASE=HEAD` builds on the

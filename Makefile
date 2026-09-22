@@ -34,7 +34,7 @@ install:
 	install -Dm644 comfyui/custom_nodes.txt $(SHAREDIR)/comfyui/custom_nodes.txt
 	install -Dm644 -t $(SHAREDIR)/tts/voices tts/voices/*
 	install -Dm755 patches/build-tts-server.sh $(SHAREDIR)/patches/build-tts-server.sh
-	install -Dm644 patches/llama.cpp-pr26603-mtmd-init-opt.patch $(SHAREDIR)/patches/llama.cpp-pr26603-mtmd-init-opt.patch
+	install -Dm644 -t $(SHAREDIR)/patches patches/llama.cpp-pr26603-*.patch
 	install -Dm644 README.md $(DOCDIR)/README.md
 
 install-link:
