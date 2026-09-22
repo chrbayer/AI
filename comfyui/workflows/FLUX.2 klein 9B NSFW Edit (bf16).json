@@ -1,8 +1,8 @@
 {
  "id": "9db7697c-b677-4e2d-83a6-e762f098ebe3",
  "revision": 0,
- "last_node_id": 150,
- "last_link_id": 220,
+ "last_node_id": 152,
+ "last_link_id": 248,
  "nodes": [
   {
    "id": 76,
@@ -18,9 +18,29 @@
    "flags": {},
    "order": 0,
    "mode": 0,
-   "inputs": [],
+   "inputs": [
+    {
+     "localized_name": "image",
+     "name": "image",
+     "type": "COMBO",
+     "widget": {
+      "name": "image"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "choose file to upload",
+     "name": "upload",
+     "type": "IMAGEUPLOAD",
+     "widget": {
+      "name": "upload"
+     },
+     "link": null
+    }
+   ],
    "outputs": [
     {
+     "localized_name": "IMAGE",
      "name": "IMAGE",
      "type": "IMAGE",
      "links": [
@@ -29,6 +49,7 @@
      ]
     },
     {
+     "localized_name": "MASK",
      "name": "MASK",
      "type": "MASK",
      "links": null
@@ -54,7 +75,11 @@
    "widgets_values": [
     "bold_outfit_woman.jpeg",
     "image"
-   ]
+   ],
+   "widgets_values_named": {
+    "image": "bold_outfit_woman.jpeg",
+    "upload": "image"
+   }
   },
   {
    "id": 9,
@@ -72,13 +97,24 @@
    "mode": 0,
    "inputs": [
     {
+     "localized_name": "images",
      "name": "images",
      "type": "IMAGE",
      "link": 154
+    },
+    {
+     "localized_name": "filename_prefix",
+     "name": "filename_prefix",
+     "type": "STRING",
+     "widget": {
+      "name": "filename_prefix"
+     },
+     "link": null
     }
    ],
    "outputs": [
     {
+     "localized_name": "images",
      "name": "images",
      "type": "IMAGE",
      "links": null
@@ -103,7 +139,10 @@
    },
    "widgets_values": [
     "Flux2-Klein"
-   ]
+   ],
+   "widgets_values_named": {
+    "filename_prefix": "Flux2-Klein"
+   }
   },
   {
    "id": 97,
@@ -129,8 +168,11 @@
     }
    },
    "widgets_values": [
-    "## NSFW LoRA\n\nThis variant loads [Flux Klein – NSFW v2](https://huggingface.co/diroverflo/FLux_Klein_9B_NSFW) (LoraLoaderModelOnly inside the subgraph, strength 1.0; 0.6–0.8 keeps more of the base model's look). Trained on FLUX.2 klein base 9B for nude solo figures, without faces in the data. Adults only — describe the subject as an adult.\n\n## Model Links\n\n**diffusion_models**\n\n- [flux-2-klein-9b-fp8.safetensors](https://huggingface.co/black-forest-labs/FLUX.2-klein-9b-fp8/resolve/main/flux-2-klein-9b-fp8.safetensors)\n\n**text_encoders**\n\n- [qwen_3_8b_fp8mixed.safetensors](https://huggingface.co/Comfy-Org/flux2-klein-9B/resolve/main/split_files/text_encoders/qwen_3_8b_fp8mixed.safetensors)\n\n**vae**\n\n- [full_encoder_small_decoder.safetensors](https://huggingface.co/black-forest-labs/FLUX.2-small-decoder/resolve/main/full_encoder_small_decoder.safetensors)\n\n\n## Model Storage Location\n\n```\n📂 ComfyUI/\n├── 📂 models/\n│   ├── 📂 diffusion_models/\n│   │   └── flux-2-klein-9b-fp8.safetensors\n│   ├── 📂 text_encoders/\n│   │   └── qwen_3_8b_fp8mixed.safetensors\n│   └── 📂 vae/\n│       └── full_encoder_small_decoder.safetensors\n```\n\n## Report Issue\n\nNote: Please update ComfyUI first ([guide](https://docs.comfy.org/installation/update_comfyui)) and prepare required models. Desktop/Cloud updates follow stable releases, so some nightly-supported models may not be available yet.\n\n- Cannot run / runtime errors: [ComfyUI/issues](https://github.com/comfyanonymous/ComfyUI/issues)\n- UI / frontend issues: [ComfyUI_frontend/issues](https://github.com/Comfy-Org/ComfyUI_frontend/issues)\n- Workflow issues: [workflow_templates/issues](https://github.com/Comfy-Org/workflow_templates/issues)\n"
+    "## NSFW LoRA\n\nThis variant loads [Flux Klein – NSFW v2](https://huggingface.co/diroverflo/FLux_Klein_9B_NSFW) (LoraLoaderModelOnly inside the subgraph; its strength is the **LoRA strength** slider on the node, 1.0 by default; 0.6–0.8 keeps more of the base model's look). Trained on FLUX.2 klein base 9B for nude solo figures, without faces in the data. Adults only — describe the subject as an adult.\n\n## Model Links\n\n**diffusion_models**\n\n- [flux-2-klein-9b-fp8.safetensors](https://huggingface.co/black-forest-labs/FLUX.2-klein-9b-fp8/resolve/main/flux-2-klein-9b-fp8.safetensors)\n\n**text_encoders**\n\n- [qwen_3_8b_fp8mixed.safetensors](https://huggingface.co/Comfy-Org/flux2-klein-9B/resolve/main/split_files/text_encoders/qwen_3_8b_fp8mixed.safetensors)\n\n**vae**\n\n- [full_encoder_small_decoder.safetensors](https://huggingface.co/black-forest-labs/FLUX.2-small-decoder/resolve/main/full_encoder_small_decoder.safetensors)\n\n\n## Model Storage Location\n\n```\n📂 ComfyUI/\n├── 📂 models/\n│   ├── 📂 diffusion_models/\n│   │   └── flux-2-klein-9b-fp8.safetensors\n│   ├── 📂 text_encoders/\n│   │   └── qwen_3_8b_fp8mixed.safetensors\n│   └── 📂 vae/\n│       └── full_encoder_small_decoder.safetensors\n```\n\n## Report Issue\n\nNote: Please update ComfyUI first ([guide](https://docs.comfy.org/installation/update_comfyui)) and prepare required models. Desktop/Cloud updates follow stable releases, so some nightly-supported models may not be available yet.\n\n- Cannot run / runtime errors: [ComfyUI/issues](https://github.com/comfyanonymous/ComfyUI/issues)\n- UI / frontend issues: [ComfyUI_frontend/issues](https://github.com/Comfy-Org/ComfyUI_frontend/issues)\n- Workflow issues: [workflow_templates/issues](https://github.com/Comfy-Org/workflow_templates/issues)\n"
    ],
+   "widgets_values_named": {
+    "text": "## NSFW LoRA\n\nThis variant loads [Flux Klein – NSFW v2](https://huggingface.co/diroverflo/FLux_Klein_9B_NSFW) (LoraLoaderModelOnly inside the subgraph, strength 1.0; 0.6–0.8 keeps more of the base model's look). Trained on FLUX.2 klein base 9B for nude solo figures, without faces in the data. Adults only — describe the subject as an adult.\n\n## Model Links\n\n**diffusion_models**\n\n- [flux-2-klein-9b-fp8.safetensors](https://huggingface.co/black-forest-labs/FLUX.2-klein-9b-fp8/resolve/main/flux-2-klein-9b-fp8.safetensors)\n\n**text_encoders**\n\n- [qwen_3_8b_fp8mixed.safetensors](https://huggingface.co/Comfy-Org/flux2-klein-9B/resolve/main/split_files/text_encoders/qwen_3_8b_fp8mixed.safetensors)\n\n**vae**\n\n- [full_encoder_small_decoder.safetensors](https://huggingface.co/black-forest-labs/FLUX.2-small-decoder/resolve/main/full_encoder_small_decoder.safetensors)\n\n\n## Model Storage Location\n\n```\n📂 ComfyUI/\n├── 📂 models/\n│   ├── 📂 diffusion_models/\n│   │   └── flux-2-klein-9b-fp8.safetensors\n│   ├── 📂 text_encoders/\n│   │   └── qwen_3_8b_fp8mixed.safetensors\n│   └── 📂 vae/\n│       └── full_encoder_small_decoder.safetensors\n```\n\n## Report Issue\n\nNote: Please update ComfyUI first ([guide](https://docs.comfy.org/installation/update_comfyui)) and prepare required models. Desktop/Cloud updates follow stable releases, so some nightly-supported models may not be available yet.\n\n- Cannot run / runtime errors: [ComfyUI/issues](https://github.com/comfyanonymous/ComfyUI/issues)\n- UI / frontend issues: [ComfyUI_frontend/issues](https://github.com/Comfy-Org/ComfyUI_frontend/issues)\n- Workflow issues: [workflow_templates/issues](https://github.com/Comfy-Org/workflow_templates/issues)\n"
+   },
    "color": "#222",
    "bgcolor": "#000"
   },
@@ -150,6 +192,30 @@
    "mode": 0,
    "inputs": [
     {
+     "name": "unet_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "unet_name"
+     },
+     "link": null
+    },
+    {
+     "name": "clip_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "clip_name"
+     },
+     "link": null
+    },
+    {
+     "name": "vae_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "vae_name"
+     },
+     "link": null
+    },
+    {
      "label": "prompt",
      "name": "text",
      "type": "STRING",
@@ -162,10 +228,28 @@
      "name": "image",
      "type": "IMAGE",
      "link": 155
+    },
+    {
+     "name": "noise_seed",
+     "type": "INT",
+     "widget": {
+      "name": "noise_seed"
+     },
+     "link": null
+    },
+    {
+     "label": "LoRA strength",
+     "name": "strength_model",
+     "type": "FLOAT",
+     "widget": {
+      "name": "strength_model"
+     },
+     "link": null
     }
    ],
    "outputs": [
     {
+     "localized_name": "IMAGE",
      "name": "IMAGE",
      "type": "IMAGE",
      "links": [
@@ -207,8 +291,17 @@
     "qwen_3_8b.safetensors",
     "full_encoder_small_decoder.safetensors",
     "Replace the background with a quiet coastal cliff at overcast sunset. Remove all buildings and streets. Add wind-shaped grass and a distant ocean horizon. Keep the subject’s pose and framing unchanged.",
-    26416064315367
-   ]
+    26416064315367,
+    1
+   ],
+   "widgets_values_named": {
+    "unet_name": "flux-2-klein-9b.safetensors",
+    "clip_name": "qwen_3_8b.safetensors",
+    "vae_name": "full_encoder_small_decoder.safetensors",
+    "text": "Replace the background with a quiet coastal cliff at overcast sunset. Remove all buildings and streets. Add wind-shaped grass and a distant ocean horizon. Keep the subject’s pose and framing unchanged.",
+    "noise_seed": 26416064315367,
+    "strength_model": 1
+   }
   },
   {
    "id": 122,
@@ -226,13 +319,24 @@
    "mode": 4,
    "inputs": [
     {
+     "localized_name": "images",
      "name": "images",
      "type": "IMAGE",
      "link": 191
+    },
+    {
+     "localized_name": "filename_prefix",
+     "name": "filename_prefix",
+     "type": "STRING",
+     "widget": {
+      "name": "filename_prefix"
+     },
+     "link": null
     }
    ],
    "outputs": [
     {
+     "localized_name": "images",
      "name": "images",
      "type": "IMAGE",
      "links": null
@@ -257,7 +361,10 @@
    },
    "widgets_values": [
     "ComfyUI"
-   ]
+   ],
+   "widgets_values_named": {
+    "filename_prefix": "ComfyUI"
+   }
   },
   {
    "id": 121,
@@ -273,9 +380,29 @@
    "flags": {},
    "order": 2,
    "mode": 0,
-   "inputs": [],
+   "inputs": [
+    {
+     "localized_name": "image",
+     "name": "image",
+     "type": "COMBO",
+     "widget": {
+      "name": "image"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "choose file to upload",
+     "name": "upload",
+     "type": "IMAGEUPLOAD",
+     "widget": {
+      "name": "upload"
+     },
+     "link": null
+    }
+   ],
    "outputs": [
     {
+     "localized_name": "IMAGE",
      "name": "IMAGE",
      "type": "IMAGE",
      "links": [
@@ -283,6 +410,7 @@
      ]
     },
     {
+     "localized_name": "MASK",
      "name": "MASK",
      "type": "MASK",
      "links": null
@@ -308,7 +436,11 @@
    "widgets_values": [
     "handbag_white.png",
     "image"
-   ]
+   ],
+   "widgets_values_named": {
+    "image": "handbag_white.png",
+    "upload": "image"
+   }
   },
   {
    "id": 92,
@@ -325,6 +457,30 @@
    "order": 4,
    "mode": 4,
    "inputs": [
+    {
+     "name": "unet_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "unet_name"
+     },
+     "link": null
+    },
+    {
+     "name": "clip_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "clip_name"
+     },
+     "link": null
+    },
+    {
+     "name": "vae_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "vae_name"
+     },
+     "link": null
+    },
     {
      "label": "prompt",
      "name": "text",
@@ -345,10 +501,28 @@
      "name": "image_1",
      "type": "IMAGE",
      "link": 189
+    },
+    {
+     "name": "noise_seed",
+     "type": "INT",
+     "widget": {
+      "name": "noise_seed"
+     },
+     "link": null
+    },
+    {
+     "label": "LoRA strength",
+     "name": "strength_model",
+     "type": "FLOAT",
+     "widget": {
+      "name": "strength_model"
+     },
+     "link": null
     }
    ],
    "outputs": [
     {
+     "localized_name": "IMAGE",
      "name": "IMAGE",
      "type": "IMAGE",
      "links": [
@@ -390,8 +564,17 @@
     "qwen_3_8b.safetensors",
     "full_encoder_small_decoder.safetensors",
     "Let this character hold the bag with both hands",
-    583453753589969
-   ]
+    583453753589969,
+    1
+   ],
+   "widgets_values_named": {
+    "unet_name": "flux-2-klein-9b.safetensors",
+    "clip_name": "qwen_3_8b.safetensors",
+    "vae_name": "full_encoder_small_decoder.safetensors",
+    "text": "Let this character hold the bag with both hands",
+    "noise_seed": 583453753589969,
+    "strength_model": 1
+   }
   }
  ],
  "links": [
@@ -404,11 +587,19 @@
    "IMAGE"
   ],
   [
+   191,
+   92,
+   0,
+   122,
+   0,
+   "IMAGE"
+  ],
+  [
    155,
    76,
    0,
    75,
-   1,
+   4,
    "IMAGE"
   ],
   [
@@ -416,7 +607,7 @@
    76,
    0,
    92,
-   1,
+   4,
    "IMAGE"
   ],
   [
@@ -424,15 +615,7 @@
    121,
    0,
    92,
-   2,
-   "IMAGE"
-  ],
-  [
-   191,
-   92,
-   0,
-   122,
-   0,
+   5,
    "IMAGE"
   ]
  ],
@@ -456,9 +639,9 @@
     "id": "7b34ab90-36f9-45ba-a665-71d418f0df18",
     "version": 1,
     "state": {
-     "lastGroupId": 7,
-     "lastNodeId": 151,
-     "lastLinkId": 221,
+     "lastGroupId": 10,
+     "lastNodeId": 152,
+     "lastLinkId": 248,
      "lastRerouteId": 0
     },
     "revision": 0,
@@ -555,6 +738,19 @@
        0,
        0
       ]
+     },
+     {
+      "id": "2d1f35d1-af77-4ce8-8338-6b09a865826e",
+      "name": "strength_model",
+      "type": "FLOAT",
+      "linkIds": [
+       247
+      ],
+      "label": "LoRA strength",
+      "pos": [
+       0,
+       0
+      ]
      }
     ],
     "outputs": [
@@ -588,7 +784,17 @@
       "flags": {},
       "order": 0,
       "mode": 0,
-      "inputs": [],
+      "inputs": [
+       {
+        "localized_name": "sampler_name",
+        "name": "sampler_name",
+        "type": "COMBO",
+        "widget": {
+         "name": "sampler_name"
+        },
+        "link": null
+       }
+      ],
       "outputs": [
        {
         "localized_name": "SAMPLER",
@@ -618,7 +824,10 @@
       },
       "widgets_values": [
        "euler"
-      ]
+      ],
+      "widgets_values_named": {
+       "sampler_name": "euler"
+      }
      },
      {
       "id": 64,
@@ -632,7 +841,7 @@
        170
       ],
       "flags": {},
-      "order": 4,
+      "order": 3,
       "mode": 0,
       "inputs": [
        {
@@ -698,8 +907,7 @@
         "version": "7.7",
         "input_ue_unconnectable": {}
        }
-      },
-      "widgets_values": []
+      }
      },
      {
       "id": 65,
@@ -713,7 +921,7 @@
        100
       ],
       "flags": {},
-      "order": 5,
+      "order": 4,
       "mode": 0,
       "inputs": [
        {
@@ -756,8 +964,7 @@
         "version": "7.7",
         "input_ue_unconnectable": {}
        }
-      },
-      "widgets_values": []
+      }
      },
      {
       "id": 73,
@@ -771,7 +978,7 @@
        110
       ],
       "flags": {},
-      "order": 1,
+      "order": 9,
       "mode": 0,
       "inputs": [
        {
@@ -814,7 +1021,11 @@
       "widgets_values": [
        26416064315367,
        "randomize"
-      ]
+      ],
+      "widgets_values_named": {
+       "noise_seed": 26416064315367,
+       "control_after_generate": "randomize"
+      }
      },
      {
       "id": 70,
@@ -828,7 +1039,7 @@
        110
       ],
       "flags": {},
-      "order": 7,
+      "order": 6,
       "mode": 0,
       "inputs": [
        {
@@ -839,6 +1050,15 @@
          "name": "unet_name"
         },
         "link": 159
+       },
+       {
+        "localized_name": "weight_dtype",
+        "name": "weight_dtype",
+        "type": "COMBO",
+        "widget": {
+         "name": "weight_dtype"
+        },
+        "link": null
        }
       ],
       "outputs": [
@@ -878,7 +1098,11 @@
       "widgets_values": [
        "flux-2-klein-9b.safetensors",
        "default"
-      ]
+      ],
+      "widgets_values_named": {
+       "unet_name": "flux-2-klein-9b.safetensors",
+       "weight_dtype": "default"
+      }
      },
      {
       "id": 71,
@@ -892,7 +1116,7 @@
        150
       ],
       "flags": {},
-      "order": 8,
+      "order": 7,
       "mode": 0,
       "inputs": [
        {
@@ -903,6 +1127,25 @@
          "name": "clip_name"
         },
         "link": 160
+       },
+       {
+        "localized_name": "type",
+        "name": "type",
+        "type": "COMBO",
+        "widget": {
+         "name": "type"
+        },
+        "link": null
+       },
+       {
+        "localized_name": "device",
+        "name": "device",
+        "shape": 7,
+        "type": "COMBO",
+        "widget": {
+         "name": "device"
+        },
+        "link": null
        }
       ],
       "outputs": [
@@ -943,7 +1186,12 @@
        "qwen_3_8b.safetensors",
        "flux2",
        "default"
-      ]
+      ],
+      "widgets_values_named": {
+       "clip_name": "qwen_3_8b.safetensors",
+       "type": "flux2",
+       "device": "default"
+      }
      },
      {
       "id": 66,
@@ -957,7 +1205,7 @@
        170
       ],
       "flags": {},
-      "order": 6,
+      "order": 5,
       "mode": 0,
       "inputs": [
        {
@@ -977,6 +1225,15 @@
          "name": "height"
         },
         "link": 174
+       },
+       {
+        "localized_name": "batch_size",
+        "name": "batch_size",
+        "type": "INT",
+        "widget": {
+         "name": "batch_size"
+        },
+        "link": null
        }
       ],
       "outputs": [
@@ -1010,7 +1267,12 @@
        1024,
        1024,
        1
-      ]
+      ],
+      "widgets_values_named": {
+       "width": 1024,
+       "height": 1024,
+       "batch_size": 1
+      }
      },
      {
       "id": 63,
@@ -1024,14 +1286,14 @@
        160
       ],
       "flags": {},
-      "order": 3,
+      "order": 2,
       "mode": 0,
       "inputs": [
        {
         "localized_name": "model",
         "name": "model",
         "type": "MODEL",
-        "link": 221
+        "link": 222
        },
        {
         "localized_name": "positive",
@@ -1044,6 +1306,15 @@
         "name": "negative",
         "type": "CONDITIONING",
         "link": 195
+       },
+       {
+        "localized_name": "cfg",
+        "name": "cfg",
+        "type": "FLOAT",
+        "widget": {
+         "name": "cfg"
+        },
+        "link": null
        }
       ],
       "outputs": [
@@ -1075,7 +1346,10 @@
       },
       "widgets_values": [
        1
-      ]
+      ],
+      "widgets_values_named": {
+       "cfg": 1
+      }
      },
      {
       "id": 62,
@@ -1089,9 +1363,18 @@
        170
       ],
       "flags": {},
-      "order": 2,
+      "order": 1,
       "mode": 0,
       "inputs": [
+       {
+        "localized_name": "steps",
+        "name": "steps",
+        "type": "INT",
+        "widget": {
+         "name": "steps"
+        },
+        "link": null
+       },
        {
         "localized_name": "width",
         "name": "width",
@@ -1142,7 +1425,12 @@
        4,
        1024,
        1024
-      ]
+      ],
+      "widgets_values_named": {
+       "steps": 4,
+       "width": 1024,
+       "height": 1024
+      }
      },
      {
       "id": 99,
@@ -1208,8 +1496,7 @@
         "version": "7.7",
         "input_ue_unconnectable": {}
        }
-      },
-      "widgets_values": []
+      }
      },
      {
       "id": 123,
@@ -1268,8 +1555,7 @@
         "version": "7.7",
         "input_ue_unconnectable": {}
        }
-      },
-      "widgets_values": []
+      }
      },
      {
       "id": 80,
@@ -1291,6 +1577,33 @@
         "name": "image",
         "type": "IMAGE",
         "link": 175
+       },
+       {
+        "localized_name": "upscale_method",
+        "name": "upscale_method",
+        "type": "COMBO",
+        "widget": {
+         "name": "upscale_method"
+        },
+        "link": null
+       },
+       {
+        "localized_name": "megapixels",
+        "name": "megapixels",
+        "type": "FLOAT",
+        "widget": {
+         "name": "megapixels"
+        },
+        "link": null
+       },
+       {
+        "localized_name": "resolution_steps",
+        "name": "resolution_steps",
+        "type": "INT",
+        "widget": {
+         "name": "resolution_steps"
+        },
+        "link": null
        }
       ],
       "outputs": [
@@ -1299,9 +1612,9 @@
         "name": "IMAGE",
         "type": "IMAGE",
         "links": [
-         169,
          170,
-         196
+         196,
+         221
         ]
        }
       ],
@@ -1326,7 +1639,12 @@
        "nearest-exact",
        1,
        1
-      ]
+      ],
+      "widgets_values_named": {
+       "upscale_method": "nearest-exact",
+       "megapixels": 1,
+       "resolution_steps": 1
+      }
      },
      {
       "id": 72,
@@ -1340,7 +1658,7 @@
        110
       ],
       "flags": {},
-      "order": 9,
+      "order": 8,
       "mode": 0,
       "inputs": [
        {
@@ -1391,7 +1709,10 @@
       },
       "widgets_values": [
        "full_encoder_small_decoder.safetensors"
-      ]
+      ],
+      "widgets_values_named": {
+       "vae_name": "full_encoder_small_decoder.safetensors"
+      }
      },
      {
       "id": 125,
@@ -1450,8 +1771,7 @@
         "version": "7.7",
         "input_ue_unconnectable": {}
        }
-      },
-      "widgets_values": []
+      }
      },
      {
       "id": 74,
@@ -1518,6 +1838,9 @@
       "widgets_values": [
        "Replace the background with a quiet coastal cliff at overcast sunset. Remove all buildings and streets. Add wind-shaped grass and a distant ocean horizon. Keep the subject’s pose and framing unchanged."
       ],
+      "widgets_values_named": {
+       "text": "Replace the background with a quiet coastal cliff at overcast sunset. Remove all buildings and streets. Add wind-shaped grass and a distant ocean horizon. Keep the subject’s pose and framing unchanged."
+      },
       "color": "#232",
       "bgcolor": "#353"
      },
@@ -1572,8 +1895,7 @@
         "version": "7.7",
         "input_ue_unconnectable": {}
        }
-      },
-      "widgets_values": []
+      }
      },
      {
       "id": 124,
@@ -1632,8 +1954,7 @@
         "version": "7.7",
         "input_ue_unconnectable": {}
        }
-      },
-      "widgets_values": []
+      }
      },
      {
       "id": 151,
@@ -1647,7 +1968,7 @@
        110
       ],
       "flags": {},
-      "order": 7,
+      "order": 17,
       "mode": 0,
       "inputs": [
        {
@@ -1655,6 +1976,24 @@
         "name": "model",
         "type": "MODEL",
         "link": 139
+       },
+       {
+        "localized_name": "lora_name",
+        "name": "lora_name",
+        "type": "COMBO",
+        "widget": {
+         "name": "lora_name"
+        },
+        "link": null
+       },
+       {
+        "localized_name": "strength_model",
+        "name": "strength_model",
+        "type": "FLOAT",
+        "widget": {
+         "name": "strength_model"
+        },
+        "link": 247
        }
       ],
       "outputs": [
@@ -1663,7 +2002,7 @@
         "name": "MODEL",
         "type": "MODEL",
         "links": [
-         221
+         222
         ]
        }
       ],
@@ -1681,8 +2020,12 @@
       },
       "widgets_values": [
        "flux2_klein_9b_nsfw_v2.safetensors",
-       1.0
-      ]
+       1
+      ],
+      "widgets_values_named": {
+       "lora_name": "flux2_klein_9b_nsfw_v2.safetensors",
+       "strength_model": 1
+      }
      }
     ],
     "groups": [
@@ -1711,7 +2054,7 @@
       "flags": {}
      },
      {
-      "id": 3,
+      "id": 4,
       "title": "Sampler",
       "bounding": [
        520,
@@ -1857,7 +2200,7 @@
       "type": "CONDITIONING"
      },
      {
-      "id": 169,
+      "id": 221,
       "origin_id": 80,
       "origin_slot": 0,
       "target_id": 79,
@@ -1873,27 +2216,11 @@
       "type": "IMAGE"
      },
      {
-      "id": 171,
-      "origin_id": 99,
-      "origin_slot": 0,
-      "target_id": 62,
-      "target_slot": 0,
-      "type": "INT"
-     },
-     {
       "id": 172,
       "origin_id": 99,
       "origin_slot": 0,
       "target_id": 66,
       "target_slot": 0,
-      "type": "INT"
-     },
-     {
-      "id": 173,
-      "origin_id": 99,
-      "origin_slot": 1,
-      "target_id": 62,
-      "target_slot": 1,
       "type": "INT"
      },
      {
@@ -2009,12 +2336,36 @@
       "type": "INT"
      },
      {
-      "id": 221,
+      "id": 222,
       "origin_id": 151,
       "origin_slot": 0,
       "target_id": 63,
       "target_slot": 0,
       "type": "MODEL"
+     },
+     {
+      "id": 171,
+      "origin_id": 99,
+      "origin_slot": 0,
+      "target_id": 62,
+      "target_slot": 1,
+      "type": "INT"
+     },
+     {
+      "id": 173,
+      "origin_id": 99,
+      "origin_slot": 1,
+      "target_id": 62,
+      "target_slot": 2,
+      "type": "INT"
+     },
+     {
+      "id": 247,
+      "origin_id": -10,
+      "origin_slot": 6,
+      "target_id": 151,
+      "target_slot": 2,
+      "type": "FLOAT"
      }
     ],
     "extra": {
@@ -2026,9 +2377,9 @@
     "id": "65c22b29-59aa-496b-89c6-55a603658670",
     "version": 1,
     "state": {
-     "lastGroupId": 7,
-     "lastNodeId": 151,
-     "lastLinkId": 221,
+     "lastGroupId": 10,
+     "lastNodeId": 152,
+     "lastLinkId": 248,
      "lastRerouteId": 0
     },
     "revision": 0,
@@ -2058,7 +2409,7 @@
       "name": "unet_name",
       "type": "COMBO",
       "linkIds": [
-       159
+       233
       ],
       "pos": [
        -607.63671875,
@@ -2070,7 +2421,7 @@
       "name": "clip_name",
       "type": "COMBO",
       "linkIds": [
-       160
+       234
       ],
       "pos": [
        -607.63671875,
@@ -2082,7 +2433,7 @@
       "name": "vae_name",
       "type": "COMBO",
       "linkIds": [
-       161
+       235
       ],
       "pos": [
        -607.63671875,
@@ -2094,7 +2445,7 @@
       "name": "text",
       "type": "STRING",
       "linkIds": [
-       162
+       236
       ],
       "label": "prompt",
       "pos": [
@@ -2107,7 +2458,7 @@
       "name": "image",
       "type": "IMAGE",
       "linkIds": [
-       175
+       244
       ],
       "label": "reference_image1",
       "pos": [
@@ -2139,6 +2490,19 @@
        0,
        0
       ]
+     },
+     {
+      "id": "5f674b5c-9701-47c3-ba1c-2894f45cfaee",
+      "name": "strength_model",
+      "type": "FLOAT",
+      "linkIds": [
+       248
+      ],
+      "label": "LoRA strength",
+      "pos": [
+       0,
+       0
+      ]
      }
     ],
     "outputs": [
@@ -2147,7 +2511,7 @@
       "name": "IMAGE",
       "type": "IMAGE",
       "linkIds": [
-       153
+       232
       ],
       "localized_name": "IMAGE",
       "pos": [
@@ -2172,14 +2536,24 @@
       "flags": {},
       "order": 0,
       "mode": 0,
-      "inputs": [],
+      "inputs": [
+       {
+        "localized_name": "sampler_name",
+        "name": "sampler_name",
+        "type": "COMBO",
+        "widget": {
+         "name": "sampler_name"
+        },
+        "link": null
+       }
+      ],
       "outputs": [
        {
         "localized_name": "SAMPLER",
         "name": "SAMPLER",
         "type": "SAMPLER",
         "links": [
-         144
+         226
         ]
        }
       ],
@@ -2202,7 +2576,10 @@
       },
       "widgets_values": [
        "euler"
-      ]
+      ],
+      "widgets_values_named": {
+       "sampler_name": "euler"
+      }
      },
      {
       "id": 102,
@@ -2216,9 +2593,18 @@
        170
       ],
       "flags": {},
-      "order": 4,
+      "order": 3,
       "mode": 0,
       "inputs": [
+       {
+        "localized_name": "steps",
+        "name": "steps",
+        "type": "INT",
+        "widget": {
+         "name": "steps"
+        },
+        "link": null
+       },
        {
         "localized_name": "width",
         "name": "width",
@@ -2226,7 +2612,7 @@
         "widget": {
          "name": "width"
         },
-        "link": 171
+        "link": 240
        },
        {
         "localized_name": "height",
@@ -2235,7 +2621,7 @@
         "widget": {
          "name": "height"
         },
-        "link": 173
+        "link": 242
        }
       ],
       "outputs": [
@@ -2244,7 +2630,7 @@
         "name": "SIGMAS",
         "type": "SIGMAS",
         "links": [
-         145
+         227
         ]
        }
       ],
@@ -2269,7 +2655,12 @@
        4,
        1024,
        1024
-      ]
+      ],
+      "widgets_values_named": {
+       "steps": 4,
+       "width": 1024,
+       "height": 1024
+      }
      },
      {
       "id": 103,
@@ -2283,14 +2674,14 @@
        160
       ],
       "flags": {},
-      "order": 5,
+      "order": 4,
       "mode": 0,
       "inputs": [
        {
         "localized_name": "model",
         "name": "model",
         "type": "MODEL",
-        "link": 221
+        "link": 246
        },
        {
         "localized_name": "positive",
@@ -2303,6 +2694,15 @@
         "name": "negative",
         "type": "CONDITIONING",
         "link": 212
+       },
+       {
+        "localized_name": "cfg",
+        "name": "cfg",
+        "type": "FLOAT",
+        "widget": {
+         "name": "cfg"
+        },
+        "link": null
        }
       ],
       "outputs": [
@@ -2311,7 +2711,7 @@
         "name": "GUIDER",
         "type": "GUIDER",
         "links": [
-         143
+         225
         ]
        }
       ],
@@ -2334,7 +2734,10 @@
       },
       "widgets_values": [
        1
-      ]
+      ],
+      "widgets_values_named": {
+       "cfg": 1
+      }
      },
      {
       "id": 104,
@@ -2348,38 +2751,38 @@
        170
       ],
       "flags": {},
-      "order": 6,
+      "order": 5,
       "mode": 0,
       "inputs": [
        {
         "localized_name": "noise",
         "name": "noise",
         "type": "NOISE",
-        "link": 142
+        "link": 224
        },
        {
         "localized_name": "guider",
         "name": "guider",
         "type": "GUIDER",
-        "link": 143
+        "link": 225
        },
        {
         "localized_name": "sampler",
         "name": "sampler",
         "type": "SAMPLER",
-        "link": 144
+        "link": 226
        },
        {
         "localized_name": "sigmas",
         "name": "sigmas",
         "type": "SIGMAS",
-        "link": 145
+        "link": 227
        },
        {
         "localized_name": "latent_image",
         "name": "latent_image",
         "type": "LATENT",
-        "link": 146
+        "link": 228
        }
       ],
       "outputs": [
@@ -2388,7 +2791,7 @@
         "name": "output",
         "type": "LATENT",
         "links": [
-         147
+         229
         ]
        },
        {
@@ -2414,8 +2817,7 @@
         "version": "7.7",
         "input_ue_unconnectable": {}
        }
-      },
-      "widgets_values": []
+      }
      },
      {
       "id": 105,
@@ -2429,20 +2831,20 @@
        100
       ],
       "flags": {},
-      "order": 7,
+      "order": 6,
       "mode": 0,
       "inputs": [
        {
         "localized_name": "samples",
         "name": "samples",
         "type": "LATENT",
-        "link": 147
+        "link": 229
        },
        {
         "localized_name": "vae",
         "name": "vae",
         "type": "VAE",
-        "link": 148
+        "link": 230
        }
       ],
       "outputs": [
@@ -2452,7 +2854,7 @@
         "type": "IMAGE",
         "slot_index": 0,
         "links": [
-         153
+         232
         ]
        }
       ],
@@ -2472,8 +2874,7 @@
         "version": "7.7",
         "input_ue_unconnectable": {}
        }
-      },
-      "widgets_values": []
+      }
      },
      {
       "id": 106,
@@ -2487,7 +2888,7 @@
        110
       ],
       "flags": {},
-      "order": 1,
+      "order": 7,
       "mode": 0,
       "inputs": [
        {
@@ -2506,7 +2907,7 @@
         "name": "NOISE",
         "type": "NOISE",
         "links": [
-         142
+         224
         ]
        }
       ],
@@ -2530,7 +2931,11 @@
       "widgets_values": [
        583453753589969,
        "randomize"
-      ]
+      ],
+      "widgets_values_named": {
+       "noise_seed": 583453753589969,
+       "control_after_generate": "randomize"
+      }
      },
      {
       "id": 107,
@@ -2554,7 +2959,16 @@
         "widget": {
          "name": "unet_name"
         },
-        "link": 159
+        "link": 233
+       },
+       {
+        "localized_name": "weight_dtype",
+        "name": "weight_dtype",
+        "type": "COMBO",
+        "widget": {
+         "name": "weight_dtype"
+        },
+        "link": null
        }
       ],
       "outputs": [
@@ -2563,7 +2977,7 @@
         "name": "MODEL",
         "type": "MODEL",
         "links": [
-         139
+         223
         ]
        }
       ],
@@ -2594,7 +3008,11 @@
       "widgets_values": [
        "flux-2-klein-9b.safetensors",
        "default"
-      ]
+      ],
+      "widgets_values_named": {
+       "unet_name": "flux-2-klein-9b.safetensors",
+       "weight_dtype": "default"
+      }
      },
      {
       "id": 108,
@@ -2618,7 +3036,26 @@
         "widget": {
          "name": "clip_name"
         },
-        "link": 160
+        "link": 234
+       },
+       {
+        "localized_name": "type",
+        "name": "type",
+        "type": "COMBO",
+        "widget": {
+         "name": "type"
+        },
+        "link": null
+       },
+       {
+        "localized_name": "device",
+        "name": "device",
+        "shape": 7,
+        "type": "COMBO",
+        "widget": {
+         "name": "device"
+        },
+        "link": null
        }
       ],
       "outputs": [
@@ -2627,7 +3064,7 @@
         "name": "CLIP",
         "type": "CLIP",
         "links": [
-         151
+         231
         ]
        }
       ],
@@ -2659,7 +3096,12 @@
        "qwen_3_8b.safetensors",
        "flux2",
        "default"
-      ]
+      ],
+      "widgets_values_named": {
+       "clip_name": "qwen_3_8b.safetensors",
+       "type": "flux2",
+       "device": "default"
+      }
      },
      {
       "id": 109,
@@ -2680,7 +3122,7 @@
         "localized_name": "clip",
         "name": "clip",
         "type": "CLIP",
-        "link": 151
+        "link": 231
        },
        {
         "localized_name": "text",
@@ -2689,7 +3131,7 @@
         "widget": {
          "name": "text"
         },
-        "link": 162
+        "link": 236
        }
       ],
       "outputs": [
@@ -2699,9 +3141,9 @@
         "type": "CONDITIONING",
         "slot_index": 0,
         "links": [
-         165,
          187,
-         207
+         207,
+         237
         ]
        }
       ],
@@ -2726,6 +3168,9 @@
       "widgets_values": [
        "Let this character hold the bag with both hands"
       ],
+      "widgets_values_named": {
+       "text": "Let this character hold the bag with both hands"
+      },
       "color": "#232",
       "bgcolor": "#353"
      },
@@ -2741,7 +3186,7 @@
        80
       ],
       "flags": {},
-      "order": 3,
+      "order": 2,
       "mode": 0,
       "inputs": [
        {
@@ -2778,8 +3223,7 @@
         "version": "7.7",
         "input_ue_unconnectable": {}
        }
-      },
-      "widgets_values": []
+      }
      },
      {
       "id": 113,
@@ -2803,7 +3247,7 @@
         "widget": {
          "name": "width"
         },
-        "link": 172
+        "link": 241
        },
        {
         "localized_name": "height",
@@ -2812,7 +3256,16 @@
         "widget": {
          "name": "height"
         },
-        "link": 174
+        "link": 243
+       },
+       {
+        "localized_name": "batch_size",
+        "name": "batch_size",
+        "type": "INT",
+        "widget": {
+         "name": "batch_size"
+        },
+        "link": null
        }
       ],
       "outputs": [
@@ -2821,7 +3274,7 @@
         "name": "LATENT",
         "type": "LATENT",
         "links": [
-         146
+         228
         ]
        }
       ],
@@ -2846,7 +3299,12 @@
        1024,
        1024,
        1
-      ]
+      ],
+      "widgets_values_named": {
+       "width": 1024,
+       "height": 1024,
+       "batch_size": 1
+      }
      },
      {
       "id": 114,
@@ -2867,7 +3325,7 @@
         "localized_name": "image",
         "name": "image",
         "type": "IMAGE",
-        "link": 170
+        "link": 239
        }
       ],
       "outputs": [
@@ -2876,8 +3334,8 @@
         "name": "width",
         "type": "INT",
         "links": [
-         171,
-         172
+         240,
+         241
         ]
        },
        {
@@ -2885,8 +3343,8 @@
         "name": "height",
         "type": "INT",
         "links": [
-         173,
-         174
+         242,
+         243
         ]
        },
        {
@@ -2912,8 +3370,7 @@
         "version": "7.7",
         "input_ue_unconnectable": {}
        }
-      },
-      "widgets_values": []
+      }
      },
      {
       "id": 127,
@@ -2972,8 +3429,7 @@
         "version": "7.7",
         "input_ue_unconnectable": {}
        }
-      },
-      "widgets_values": []
+      }
      },
      {
       "id": 129,
@@ -3032,8 +3488,7 @@
         "version": "7.7",
         "input_ue_unconnectable": {}
        }
-      },
-      "widgets_values": []
+      }
      },
      {
       "id": 131,
@@ -3092,8 +3547,7 @@
         "version": "7.7",
         "input_ue_unconnectable": {}
        }
-      },
-      "widgets_values": []
+      }
      },
      {
       "id": 130,
@@ -3152,8 +3606,7 @@
         "version": "7.7",
         "input_ue_unconnectable": {}
        }
-      },
-      "widgets_values": []
+      }
      },
      {
       "id": 110,
@@ -3177,7 +3630,7 @@
         "widget": {
          "name": "vae_name"
         },
-        "link": 161
+        "link": 235
        }
       ],
       "outputs": [
@@ -3186,11 +3639,11 @@
         "name": "VAE",
         "type": "VAE",
         "links": [
-         148,
-         176,
          181,
          206,
-         214
+         214,
+         230,
+         245
         ]
        }
       ],
@@ -3220,7 +3673,10 @@
       },
       "widgets_values": [
        "full_encoder_small_decoder.safetensors"
-      ]
+      ],
+      "widgets_values_named": {
+       "vae_name": "full_encoder_small_decoder.safetensors"
+      }
      },
      {
       "id": 128,
@@ -3280,8 +3736,7 @@
         "version": "7.7",
         "input_ue_unconnectable": {}
        }
-      },
-      "widgets_values": []
+      }
      },
      {
       "id": 126,
@@ -3341,8 +3796,7 @@
         "version": "7.7",
         "input_ue_unconnectable": {}
        }
-      },
-      "widgets_values": []
+      }
      },
      {
       "id": 111,
@@ -3363,7 +3817,34 @@
         "localized_name": "image",
         "name": "image",
         "type": "IMAGE",
-        "link": 175
+        "link": 244
+       },
+       {
+        "localized_name": "upscale_method",
+        "name": "upscale_method",
+        "type": "COMBO",
+        "widget": {
+         "name": "upscale_method"
+        },
+        "link": null
+       },
+       {
+        "localized_name": "megapixels",
+        "name": "megapixels",
+        "type": "FLOAT",
+        "widget": {
+         "name": "megapixels"
+        },
+        "link": null
+       },
+       {
+        "localized_name": "resolution_steps",
+        "name": "resolution_steps",
+        "type": "INT",
+        "widget": {
+         "name": "resolution_steps"
+        },
+        "link": null
        }
       ],
       "outputs": [
@@ -3372,9 +3853,9 @@
         "name": "IMAGE",
         "type": "IMAGE",
         "links": [
-         169,
-         170,
-         205
+         205,
+         238,
+         239
         ]
        }
       ],
@@ -3399,7 +3880,12 @@
        "lanczos",
        1,
        1
-      ]
+      ],
+      "widgets_values_named": {
+       "upscale_method": "lanczos",
+       "megapixels": 1,
+       "resolution_steps": 1
+      }
      },
      {
       "id": 85,
@@ -3413,7 +3899,7 @@
        140
       ],
       "flags": {},
-      "order": 2,
+      "order": 1,
       "mode": 0,
       "inputs": [
        {
@@ -3421,6 +3907,33 @@
         "name": "image",
         "type": "IMAGE",
         "link": 186
+       },
+       {
+        "localized_name": "upscale_method",
+        "name": "upscale_method",
+        "type": "COMBO",
+        "widget": {
+         "name": "upscale_method"
+        },
+        "link": null
+       },
+       {
+        "localized_name": "megapixels",
+        "name": "megapixels",
+        "type": "FLOAT",
+        "widget": {
+         "name": "megapixels"
+        },
+        "link": null
+       },
+       {
+        "localized_name": "resolution_steps",
+        "name": "resolution_steps",
+        "type": "INT",
+        "widget": {
+         "name": "resolution_steps"
+        },
+        "link": null
        }
       ],
       "outputs": [
@@ -3455,10 +3968,15 @@
        "lanczos",
        1,
        1
-      ]
+      ],
+      "widgets_values_named": {
+       "upscale_method": "lanczos",
+       "megapixels": 1,
+       "resolution_steps": 1
+      }
      },
      {
-      "id": 151,
+      "id": 152,
       "type": "LoraLoaderModelOnly",
       "pos": [
        -460,
@@ -3469,14 +3987,32 @@
        110
       ],
       "flags": {},
-      "order": 8,
+      "order": 21,
       "mode": 0,
       "inputs": [
        {
         "localized_name": "model",
         "name": "model",
         "type": "MODEL",
-        "link": 139
+        "link": 223
+       },
+       {
+        "localized_name": "lora_name",
+        "name": "lora_name",
+        "type": "COMBO",
+        "widget": {
+         "name": "lora_name"
+        },
+        "link": null
+       },
+       {
+        "localized_name": "strength_model",
+        "name": "strength_model",
+        "type": "FLOAT",
+        "widget": {
+         "name": "strength_model"
+        },
+        "link": 248
        }
       ],
       "outputs": [
@@ -3485,7 +4021,7 @@
         "name": "MODEL",
         "type": "MODEL",
         "links": [
-         221
+         246
         ]
        }
       ],
@@ -3503,13 +4039,17 @@
       },
       "widgets_values": [
        "flux2_klein_9b_nsfw_v2.safetensors",
-       1.0
-      ]
+       1
+      ],
+      "widgets_values_named": {
+       "lora_name": "flux2_klein_9b_nsfw_v2.safetensors",
+       "strength_model": 1
+      }
      }
     ],
     "groups": [
      {
-      "id": 1,
+      "id": 8,
       "title": "Models",
       "bounding": [
        -470,
@@ -3521,7 +4061,7 @@
       "flags": {}
      },
      {
-      "id": 2,
+      "id": 9,
       "title": "Prompt",
       "bounding": [
        -40,
@@ -3533,7 +4073,7 @@
       "flags": {}
      },
      {
-      "id": 3,
+      "id": 10,
       "title": "Sampler",
       "bounding": [
        460,
@@ -3571,15 +4111,15 @@
     ],
     "links": [
      {
-      "id": 139,
+      "id": 223,
       "origin_id": 107,
       "origin_slot": 0,
-      "target_id": 151,
+      "target_id": 152,
       "target_slot": 0,
       "type": "MODEL"
      },
      {
-      "id": 142,
+      "id": 224,
       "origin_id": 106,
       "origin_slot": 0,
       "target_id": 104,
@@ -3587,7 +4127,7 @@
       "type": "NOISE"
      },
      {
-      "id": 143,
+      "id": 225,
       "origin_id": 103,
       "origin_slot": 0,
       "target_id": 104,
@@ -3595,7 +4135,7 @@
       "type": "GUIDER"
      },
      {
-      "id": 144,
+      "id": 226,
       "origin_id": 101,
       "origin_slot": 0,
       "target_id": 104,
@@ -3603,7 +4143,7 @@
       "type": "SAMPLER"
      },
      {
-      "id": 145,
+      "id": 227,
       "origin_id": 102,
       "origin_slot": 0,
       "target_id": 104,
@@ -3611,7 +4151,7 @@
       "type": "SIGMAS"
      },
      {
-      "id": 146,
+      "id": 228,
       "origin_id": 113,
       "origin_slot": 0,
       "target_id": 104,
@@ -3619,7 +4159,7 @@
       "type": "LATENT"
      },
      {
-      "id": 147,
+      "id": 229,
       "origin_id": 104,
       "origin_slot": 0,
       "target_id": 105,
@@ -3627,7 +4167,7 @@
       "type": "LATENT"
      },
      {
-      "id": 148,
+      "id": 230,
       "origin_id": 110,
       "origin_slot": 0,
       "target_id": 105,
@@ -3635,7 +4175,7 @@
       "type": "VAE"
      },
      {
-      "id": 151,
+      "id": 231,
       "origin_id": 108,
       "origin_slot": 0,
       "target_id": 109,
@@ -3643,7 +4183,7 @@
       "type": "CLIP"
      },
      {
-      "id": 153,
+      "id": 232,
       "origin_id": 105,
       "origin_slot": 0,
       "target_id": -20,
@@ -3651,7 +4191,7 @@
       "type": "IMAGE"
      },
      {
-      "id": 159,
+      "id": 233,
       "origin_id": -10,
       "origin_slot": 0,
       "target_id": 107,
@@ -3659,7 +4199,7 @@
       "type": "COMBO"
      },
      {
-      "id": 160,
+      "id": 234,
       "origin_id": -10,
       "origin_slot": 1,
       "target_id": 108,
@@ -3667,7 +4207,7 @@
       "type": "COMBO"
      },
      {
-      "id": 161,
+      "id": 235,
       "origin_id": -10,
       "origin_slot": 2,
       "target_id": 110,
@@ -3675,7 +4215,7 @@
       "type": "COMBO"
      },
      {
-      "id": 162,
+      "id": 236,
       "origin_id": -10,
       "origin_slot": 3,
       "target_id": 109,
@@ -3683,7 +4223,7 @@
       "type": "STRING"
      },
      {
-      "id": 165,
+      "id": 237,
       "origin_id": 109,
       "origin_slot": 0,
       "target_id": 112,
@@ -3691,7 +4231,7 @@
       "type": "CONDITIONING"
      },
      {
-      "id": 169,
+      "id": 238,
       "origin_id": 111,
       "origin_slot": 0,
       "target_id": 112,
@@ -3699,7 +4239,7 @@
       "type": "IMAGE"
      },
      {
-      "id": 170,
+      "id": 239,
       "origin_id": 111,
       "origin_slot": 0,
       "target_id": 114,
@@ -3707,15 +4247,7 @@
       "type": "IMAGE"
      },
      {
-      "id": 171,
-      "origin_id": 114,
-      "origin_slot": 0,
-      "target_id": 102,
-      "target_slot": 0,
-      "type": "INT"
-     },
-     {
-      "id": 172,
+      "id": 241,
       "origin_id": 114,
       "origin_slot": 0,
       "target_id": 113,
@@ -3723,15 +4255,7 @@
       "type": "INT"
      },
      {
-      "id": 173,
-      "origin_id": 114,
-      "origin_slot": 1,
-      "target_id": 102,
-      "target_slot": 1,
-      "type": "INT"
-     },
-     {
-      "id": 174,
+      "id": 243,
       "origin_id": 114,
       "origin_slot": 1,
       "target_id": 113,
@@ -3739,7 +4263,7 @@
       "type": "INT"
      },
      {
-      "id": 175,
+      "id": 244,
       "origin_id": -10,
       "origin_slot": 4,
       "target_id": 111,
@@ -3747,7 +4271,7 @@
       "type": "IMAGE"
      },
      {
-      "id": 176,
+      "id": 245,
       "origin_id": 110,
       "origin_slot": 0,
       "target_id": 112,
@@ -3931,12 +4455,36 @@
       "type": "INT"
      },
      {
-      "id": 221,
-      "origin_id": 151,
+      "id": 246,
+      "origin_id": 152,
       "origin_slot": 0,
       "target_id": 103,
       "target_slot": 0,
       "type": "MODEL"
+     },
+     {
+      "id": 240,
+      "origin_id": 114,
+      "origin_slot": 0,
+      "target_id": 102,
+      "target_slot": 1,
+      "type": "INT"
+     },
+     {
+      "id": 242,
+      "origin_id": 114,
+      "origin_slot": 1,
+      "target_id": 102,
+      "target_slot": 2,
+      "type": "INT"
+     },
+     {
+      "id": 248,
+      "origin_id": -10,
+      "origin_slot": 7,
+      "target_id": 152,
+      "target_slot": 2,
+      "type": "FLOAT"
      }
     ],
     "extra": {

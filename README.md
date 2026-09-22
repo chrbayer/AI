@@ -790,8 +790,10 @@ llmctl update comfy --torch           # …and torch itself
   (Hugging Face), dev
   [SexGod Flux.2 D Female Nudity](https://civitai.com/models/2604891)
   (Civitai; trigger word `femalenudestyle`). Each LoRA sits in the subgraph
-  right after the model loader, at strength 1.0; in the dev workflows it comes
-  before the Turbo switch, so Turbo still toggles. An abliterated klein text
+  right after the model loader; its strength is the **LoRA strength** slider
+  on the workflow's node (1.0 by default, 0 to compare against the plain
+  model). In the dev workflows it comes before the Turbo switch, so Turbo
+  still toggles. An abliterated klein text
   encoder was measured too and left out: on its own it changes nothing, since
   the reluctance lives in the image model, not in the encoder. Adults only.
 - **Patches.** `comfyui/patches/qwen35-rocm-conv3d.patch` works around a

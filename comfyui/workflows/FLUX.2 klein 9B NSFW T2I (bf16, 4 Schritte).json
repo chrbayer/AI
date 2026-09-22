@@ -1,8 +1,8 @@
 {
  "id": "7b2942f1-4c20-4ea9-a38d-f95c318f5dd7",
  "revision": 0,
- "last_node_id": 113,
- "last_link_id": 174,
+ "last_node_id": 114,
+ "last_link_id": 176,
  "nodes": [
   {
    "id": 9,
@@ -20,13 +20,24 @@
    "mode": 0,
    "inputs": [
     {
+     "localized_name": "images",
      "name": "images",
      "type": "IMAGE",
      "link": 154
+    },
+    {
+     "localized_name": "filename_prefix",
+     "name": "filename_prefix",
+     "type": "STRING",
+     "widget": {
+      "name": "filename_prefix"
+     },
+     "link": null
     }
    ],
    "outputs": [
     {
+     "localized_name": "images",
      "name": "images",
      "type": "IMAGE",
      "links": null
@@ -51,7 +62,10 @@
    },
    "widgets_values": [
     "Flux2-Klein"
-   ]
+   ],
+   "widgets_values_named": {
+    "filename_prefix": "Flux2-Klein"
+   }
   },
   {
    "id": 79,
@@ -77,8 +91,11 @@
     }
    },
    "widgets_values": [
-    "## NSFW LoRA\n\nThis variant loads [Flux Klein – NSFW v2](https://huggingface.co/diroverflo/FLux_Klein_9B_NSFW) (LoraLoaderModelOnly inside the subgraph, strength 1.0; 0.6–0.8 keeps more of the base model's look). Trained on FLUX.2 klein base 9B for nude solo figures, without faces in the data. Adults only — describe the subject as an adult.\n\n## Model Links\n\n**diffusion_models**\n\n- [flux-2-klein-base-9b-fp8.safetensors](https://huggingface.co/black-forest-labs/FLUX.2-klein-base-9b-fp8/resolve/main/flux-2-klein-base-9b-fp8.safetensors)\n- [flux-2-klein-9b-fp8.safetensors](https://huggingface.co/black-forest-labs/FLUX.2-klein-9b-fp8/resolve/main/flux-2-klein-9b-fp8.safetensors)\n\n**text_encoders**\n\n- [qwen_3_8b_fp8mixed.safetensors](https://huggingface.co/Comfy-Org/flux2-klein-9B/resolve/main/split_files/text_encoders/qwen_3_8b_fp8mixed.safetensors)\n\n**vae**\n\n- [full_encoder_small_decoder.safetensors](https://huggingface.co/black-forest-labs/FLUX.2-small-decoder/resolve/main/full_encoder_small_decoder.safetensors)\n\n\n## Model Storage Location\n\n```\n📂 ComfyUI/\n├── 📂 models/\n│   ├── 📂 diffusion_models/\n│   │   ├── flux-2-klein-base-9b-fp8.safetensors\n│   │   └── flux-2-klein-9b-fp8.safetensors\n│   ├── 📂 text_encoders/\n│   │   └── qwen_3_8b_fp8mixed.safetensors\n│   └── 📂 vae/\n│       └── full_encoder_small_decoder.safetensors\n```\n\n## Report Issue\n\nNote: Please update ComfyUI first ([guide](https://docs.comfy.org/installation/update_comfyui)) and prepare required models. Desktop/Cloud updates follow stable releases, so some nightly-supported models may not be available yet.\n\n- Cannot run / runtime errors: [ComfyUI/issues](https://github.com/comfyanonymous/ComfyUI/issues)\n- UI / frontend issues: [ComfyUI_frontend/issues](https://github.com/Comfy-Org/ComfyUI_frontend/issues)\n- Workflow issues: [workflow_templates/issues](https://github.com/Comfy-Org/workflow_templates/issues)\n"
+    "## NSFW LoRA\n\nThis variant loads [Flux Klein – NSFW v2](https://huggingface.co/diroverflo/FLux_Klein_9B_NSFW) (LoraLoaderModelOnly inside the subgraph; its strength is the **LoRA strength** slider on the node, 1.0 by default; 0.6–0.8 keeps more of the base model's look). Trained on FLUX.2 klein base 9B for nude solo figures, without faces in the data. Adults only — describe the subject as an adult.\n\n## Model Links\n\n**diffusion_models**\n\n- [flux-2-klein-base-9b-fp8.safetensors](https://huggingface.co/black-forest-labs/FLUX.2-klein-base-9b-fp8/resolve/main/flux-2-klein-base-9b-fp8.safetensors)\n- [flux-2-klein-9b-fp8.safetensors](https://huggingface.co/black-forest-labs/FLUX.2-klein-9b-fp8/resolve/main/flux-2-klein-9b-fp8.safetensors)\n\n**text_encoders**\n\n- [qwen_3_8b_fp8mixed.safetensors](https://huggingface.co/Comfy-Org/flux2-klein-9B/resolve/main/split_files/text_encoders/qwen_3_8b_fp8mixed.safetensors)\n\n**vae**\n\n- [full_encoder_small_decoder.safetensors](https://huggingface.co/black-forest-labs/FLUX.2-small-decoder/resolve/main/full_encoder_small_decoder.safetensors)\n\n\n## Model Storage Location\n\n```\n📂 ComfyUI/\n├── 📂 models/\n│   ├── 📂 diffusion_models/\n│   │   ├── flux-2-klein-base-9b-fp8.safetensors\n│   │   └── flux-2-klein-9b-fp8.safetensors\n│   ├── 📂 text_encoders/\n│   │   └── qwen_3_8b_fp8mixed.safetensors\n│   └── 📂 vae/\n│       └── full_encoder_small_decoder.safetensors\n```\n\n## Report Issue\n\nNote: Please update ComfyUI first ([guide](https://docs.comfy.org/installation/update_comfyui)) and prepare required models. Desktop/Cloud updates follow stable releases, so some nightly-supported models may not be available yet.\n\n- Cannot run / runtime errors: [ComfyUI/issues](https://github.com/comfyanonymous/ComfyUI/issues)\n- UI / frontend issues: [ComfyUI_frontend/issues](https://github.com/Comfy-Org/ComfyUI_frontend/issues)\n- Workflow issues: [workflow_templates/issues](https://github.com/Comfy-Org/workflow_templates/issues)\n"
    ],
+   "widgets_values_named": {
+    "text": "## NSFW LoRA\n\nThis variant loads [Flux Klein – NSFW v2](https://huggingface.co/diroverflo/FLux_Klein_9B_NSFW) (LoraLoaderModelOnly inside the subgraph, strength 1.0; 0.6–0.8 keeps more of the base model's look). Trained on FLUX.2 klein base 9B for nude solo figures, without faces in the data. Adults only — describe the subject as an adult.\n\n## Model Links\n\n**diffusion_models**\n\n- [flux-2-klein-base-9b-fp8.safetensors](https://huggingface.co/black-forest-labs/FLUX.2-klein-base-9b-fp8/resolve/main/flux-2-klein-base-9b-fp8.safetensors)\n- [flux-2-klein-9b-fp8.safetensors](https://huggingface.co/black-forest-labs/FLUX.2-klein-9b-fp8/resolve/main/flux-2-klein-9b-fp8.safetensors)\n\n**text_encoders**\n\n- [qwen_3_8b_fp8mixed.safetensors](https://huggingface.co/Comfy-Org/flux2-klein-9B/resolve/main/split_files/text_encoders/qwen_3_8b_fp8mixed.safetensors)\n\n**vae**\n\n- [full_encoder_small_decoder.safetensors](https://huggingface.co/black-forest-labs/FLUX.2-small-decoder/resolve/main/full_encoder_small_decoder.safetensors)\n\n\n## Model Storage Location\n\n```\n📂 ComfyUI/\n├── 📂 models/\n│   ├── 📂 diffusion_models/\n│   │   ├── flux-2-klein-base-9b-fp8.safetensors\n│   │   └── flux-2-klein-9b-fp8.safetensors\n│   ├── 📂 text_encoders/\n│   │   └── qwen_3_8b_fp8mixed.safetensors\n│   └── 📂 vae/\n│       └── full_encoder_small_decoder.safetensors\n```\n\n## Report Issue\n\nNote: Please update ComfyUI first ([guide](https://docs.comfy.org/installation/update_comfyui)) and prepare required models. Desktop/Cloud updates follow stable releases, so some nightly-supported models may not be available yet.\n\n- Cannot run / runtime errors: [ComfyUI/issues](https://github.com/comfyanonymous/ComfyUI/issues)\n- UI / frontend issues: [ComfyUI_frontend/issues](https://github.com/Comfy-Org/ComfyUI_frontend/issues)\n- Workflow issues: [workflow_templates/issues](https://github.com/Comfy-Org/workflow_templates/issues)\n"
+   },
    "color": "#222",
    "bgcolor": "#000"
   },
@@ -123,10 +140,52 @@
       "name": "value_1"
      },
      "link": null
+    },
+    {
+     "name": "noise_seed",
+     "type": "INT",
+     "widget": {
+      "name": "noise_seed"
+     },
+     "link": null
+    },
+    {
+     "name": "unet_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "unet_name"
+     },
+     "link": null
+    },
+    {
+     "name": "clip_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "clip_name"
+     },
+     "link": null
+    },
+    {
+     "name": "vae_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "vae_name"
+     },
+     "link": null
+    },
+    {
+     "label": "LoRA strength",
+     "name": "strength_model",
+     "type": "FLOAT",
+     "widget": {
+      "name": "strength_model"
+     },
+     "link": null
     }
    ],
    "outputs": [
     {
+     "localized_name": "IMAGE",
      "name": "IMAGE",
      "type": "IMAGE",
      "links": [
@@ -168,8 +227,19 @@
     145965955694731,
     "flux-2-klein-9b.safetensors",
     "qwen_3_8b.safetensors",
-    "full_encoder_small_decoder.safetensors"
-   ]
+    "full_encoder_small_decoder.safetensors",
+    1
+   ],
+   "widgets_values_named": {
+    "text": "A vintage motorcycle parked in front of a retro diner at sunset, warm orange and pink sky, neon signs glowing, 80s vintage photo style, film grain, warm color cast",
+    "value": 1024,
+    "value_1": 1024,
+    "noise_seed": 145965955694731,
+    "unet_name": "flux-2-klein-9b.safetensors",
+    "clip_name": "qwen_3_8b.safetensors",
+    "vae_name": "full_encoder_small_decoder.safetensors",
+    "strength_model": 1
+   }
   }
  ],
  "links": [
@@ -191,7 +261,7 @@
     "state": {
      "lastGroupId": 4,
      "lastNodeId": 114,
-     "lastLinkId": 175,
+     "lastLinkId": 176,
      "lastRerouteId": 0
     },
     "revision": 0,
@@ -302,6 +372,19 @@
        -786,
        614
       ]
+     },
+     {
+      "id": "df62c7e0-985d-48b5-bfc9-703a78df582d",
+      "name": "strength_model",
+      "type": "FLOAT",
+      "linkIds": [
+       176
+      ],
+      "label": "LoRA strength",
+      "pos": [
+       0,
+       0
+      ]
      }
     ],
     "outputs": [
@@ -335,7 +418,17 @@
       "flags": {},
       "order": 0,
       "mode": 0,
-      "inputs": [],
+      "inputs": [
+       {
+        "localized_name": "sampler_name",
+        "name": "sampler_name",
+        "type": "COMBO",
+        "widget": {
+         "name": "sampler_name"
+        },
+        "link": null
+       }
+      ],
       "outputs": [
        {
         "localized_name": "SAMPLER",
@@ -365,7 +458,10 @@
       },
       "widgets_values": [
        "euler"
-      ]
+      ],
+      "widgets_values_named": {
+       "sampler_name": "euler"
+      }
      },
      {
       "id": 62,
@@ -382,6 +478,15 @@
       "order": 1,
       "mode": 0,
       "inputs": [
+       {
+        "localized_name": "steps",
+        "name": "steps",
+        "type": "INT",
+        "widget": {
+         "name": "steps"
+        },
+        "link": null
+       },
        {
         "localized_name": "width",
         "name": "width",
@@ -432,7 +537,12 @@
        4,
        1024,
        1024
-      ]
+      ],
+      "widgets_values_named": {
+       "steps": 4,
+       "width": 1024,
+       "height": 1024
+      }
      },
      {
       "id": 63,
@@ -466,6 +576,15 @@
         "name": "negative",
         "type": "CONDITIONING",
         "link": 141
+       },
+       {
+        "localized_name": "cfg",
+        "name": "cfg",
+        "type": "FLOAT",
+        "widget": {
+         "name": "cfg"
+        },
+        "link": null
        }
       ],
       "outputs": [
@@ -497,7 +616,10 @@
       },
       "widgets_values": [
        1
-      ]
+      ],
+      "widgets_values_named": {
+       "cfg": 1
+      }
      },
      {
       "id": 64,
@@ -577,8 +699,7 @@
         "version": "7.7",
         "input_ue_unconnectable": {}
        }
-      },
-      "widgets_values": []
+      }
      },
      {
       "id": 65,
@@ -635,8 +756,7 @@
         "version": "7.7",
         "input_ue_unconnectable": {}
        }
-      },
-      "widgets_values": []
+      }
      },
      {
       "id": 66,
@@ -670,6 +790,15 @@
          "name": "height"
         },
         "link": 150
+       },
+       {
+        "localized_name": "batch_size",
+        "name": "batch_size",
+        "type": "INT",
+        "widget": {
+         "name": "batch_size"
+        },
+        "link": null
        }
       ],
       "outputs": [
@@ -703,7 +832,12 @@
        1024,
        1024,
        1
-      ]
+      ],
+      "widgets_values_named": {
+       "width": 1024,
+       "height": 1024,
+       "batch_size": 1
+      }
      },
      {
       "id": 67,
@@ -725,6 +859,15 @@
         "name": "clip",
         "type": "CLIP",
         "link": 152
+       },
+       {
+        "localized_name": "text",
+        "name": "text",
+        "type": "STRING",
+        "widget": {
+         "name": "text"
+        },
+        "link": null
        }
       ],
       "outputs": [
@@ -759,6 +902,9 @@
       "widgets_values": [
        ""
       ],
+      "widgets_values_named": {
+       "text": ""
+      },
       "color": "#322",
       "bgcolor": "#533"
      },
@@ -819,7 +965,11 @@
       "widgets_values": [
        1024,
        "fixed"
-      ]
+      ],
+      "widgets_values_named": {
+       "value": 1024,
+       "fixed": "fixed"
+      }
      },
      {
       "id": 69,
@@ -878,7 +1028,11 @@
       "widgets_values": [
        1024,
        "fixed"
-      ]
+      ],
+      "widgets_values_named": {
+       "value": 1024,
+       "fixed": "fixed"
+      }
      },
      {
       "id": 73,
@@ -935,7 +1089,11 @@
       "widgets_values": [
        145965955694731,
        "randomize"
-      ]
+      ],
+      "widgets_values_named": {
+       "noise_seed": 145965955694731,
+       "control_after_generate": "randomize"
+      }
      },
      {
       "id": 70,
@@ -960,6 +1118,15 @@
          "name": "unet_name"
         },
         "link": 172
+       },
+       {
+        "localized_name": "weight_dtype",
+        "name": "weight_dtype",
+        "type": "COMBO",
+        "widget": {
+         "name": "weight_dtype"
+        },
+        "link": null
        }
       ],
       "outputs": [
@@ -999,7 +1166,11 @@
       "widgets_values": [
        "flux-2-klein-9b.safetensors",
        "default"
-      ]
+      ],
+      "widgets_values_named": {
+       "unet_name": "flux-2-klein-9b.safetensors",
+       "weight_dtype": "default"
+      }
      },
      {
       "id": 71,
@@ -1024,6 +1195,25 @@
          "name": "clip_name"
         },
         "link": 173
+       },
+       {
+        "localized_name": "type",
+        "name": "type",
+        "type": "COMBO",
+        "widget": {
+         "name": "type"
+        },
+        "link": null
+       },
+       {
+        "localized_name": "device",
+        "name": "device",
+        "shape": 7,
+        "type": "COMBO",
+        "widget": {
+         "name": "device"
+        },
+        "link": null
        }
       ],
       "outputs": [
@@ -1065,7 +1255,12 @@
        "qwen_3_8b.safetensors",
        "flux2",
        "default"
-      ]
+      ],
+      "widgets_values_named": {
+       "clip_name": "qwen_3_8b.safetensors",
+       "type": "flux2",
+       "device": "default"
+      }
      },
      {
       "id": 72,
@@ -1128,7 +1323,10 @@
       },
       "widgets_values": [
        "full_encoder_small_decoder.safetensors"
-      ]
+      ],
+      "widgets_values_named": {
+       "vae_name": "full_encoder_small_decoder.safetensors"
+      }
      },
      {
       "id": 74,
@@ -1193,6 +1391,9 @@
       "widgets_values": [
        "A vintage motorcycle parked in front of a retro diner at sunset, warm orange and pink sky, neon signs glowing, 80s vintage photo style, film grain, warm color cast"
       ],
+      "widgets_values_named": {
+       "text": "A vintage motorcycle parked in front of a retro diner at sunset, warm orange and pink sky, neon signs glowing, 80s vintage photo style, film grain, warm color cast"
+      },
       "color": "#232",
       "bgcolor": "#353"
      },
@@ -1208,7 +1409,7 @@
        110
       ],
       "flags": {},
-      "order": 9,
+      "order": 14,
       "mode": 0,
       "inputs": [
        {
@@ -1216,6 +1417,24 @@
         "name": "model",
         "type": "MODEL",
         "link": 139
+       },
+       {
+        "localized_name": "lora_name",
+        "name": "lora_name",
+        "type": "COMBO",
+        "widget": {
+         "name": "lora_name"
+        },
+        "link": null
+       },
+       {
+        "localized_name": "strength_model",
+        "name": "strength_model",
+        "type": "FLOAT",
+        "widget": {
+         "name": "strength_model"
+        },
+        "link": 176
        }
       ],
       "outputs": [
@@ -1242,8 +1461,12 @@
       },
       "widgets_values": [
        "flux2_klein_9b_nsfw_v2.safetensors",
-       1.0
-      ]
+       1
+      ],
+      "widgets_values_named": {
+       "lora_name": "flux2_klein_9b_nsfw_v2.safetensors",
+       "strength_model": 1
+      }
      }
     ],
     "groups": [
@@ -1297,22 +1520,6 @@
      }
     ],
     "links": [
-     {
-      "id": 137,
-      "origin_id": 68,
-      "origin_slot": 0,
-      "target_id": 62,
-      "target_slot": 0,
-      "type": "INT"
-     },
-     {
-      "id": 138,
-      "origin_id": 69,
-      "origin_slot": 0,
-      "target_id": 62,
-      "target_slot": 1,
-      "type": "INT"
-     },
      {
       "id": 139,
       "origin_id": 70,
@@ -1496,6 +1703,30 @@
       "target_id": 63,
       "target_slot": 0,
       "type": "MODEL"
+     },
+     {
+      "id": 137,
+      "origin_id": 68,
+      "origin_slot": 0,
+      "target_id": 62,
+      "target_slot": 1,
+      "type": "INT"
+     },
+     {
+      "id": 138,
+      "origin_id": 69,
+      "origin_slot": 0,
+      "target_id": 62,
+      "target_slot": 2,
+      "type": "INT"
+     },
+     {
+      "id": 176,
+      "origin_id": -10,
+      "origin_slot": 7,
+      "target_id": 114,
+      "target_slot": 2,
+      "type": "FLOAT"
      }
     ],
     "extra": {

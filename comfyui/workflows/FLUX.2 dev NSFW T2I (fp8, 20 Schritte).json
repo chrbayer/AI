@@ -1,8 +1,8 @@
 {
  "id": "dae21e75-b7c3-4c6f-8be2-1702d4c04f9b",
  "revision": 0,
- "last_node_id": 104,
- "last_link_id": 232,
+ "last_node_id": 105,
+ "last_link_id": 234,
  "nodes": [
   {
    "id": 9,
@@ -20,12 +20,29 @@
    "mode": 0,
    "inputs": [
     {
+     "localized_name": "images",
      "name": "images",
      "type": "IMAGE",
      "link": 203
+    },
+    {
+     "localized_name": "filename_prefix",
+     "name": "filename_prefix",
+     "type": "STRING",
+     "widget": {
+      "name": "filename_prefix"
+     },
+     "link": null
     }
    ],
-   "outputs": [],
+   "outputs": [
+    {
+     "localized_name": "images",
+     "name": "images",
+     "type": "IMAGE",
+     "links": null
+    }
+   ],
    "properties": {
     "enableTabs": false,
     "tabWidth": 65,
@@ -45,7 +62,10 @@
    },
    "widgets_values": [
     "Flux2_dev"
-   ]
+   ],
+   "widgets_values_named": {
+    "filename_prefix": "Flux2_dev"
+   }
   },
   {
    "id": 66,
@@ -74,8 +94,11 @@
     }
    },
    "widgets_values": [
-    "Guide: [Subgraph](https://docs.comfy.org/interface/features/subgraph)\n\n## NSFW LoRA\n\nThis variant loads [SexGod Flux.2 D Female Nudity v1.0](https://civitai.com/models/2604891) (LoraLoaderModelOnly right after the UNETLoader, before the Turbo switch, so it works with Turbo on or off; strength 1.0). Unlike klein, FLUX.2 dev renders nudity without it; here the LoRA shapes the style — a warmer film look, different poses and bodies. Set its strength to 0 to compare. Start the prompt with its trigger word **femalenudestyle**. It comes from Civitai: `llmctl download comfy` asks for a Civitai API key the first time. Adults only — describe the subject as an adult.\n\n## Model Links\n\n**vae**\n\n- [full_encoder_small_decoder.safetensors](https://huggingface.co/black-forest-labs/FLUX.2-small-decoder/resolve/main/full_encoder_small_decoder.safetensors)\n\n**text_encoders**\n\n- [mistral_3_small_flux2_bf16.safetensors](https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/text_encoders/mistral_3_small_flux2_bf16.safetensors)\n\n**loras**\n\n- [Flux_2-Turbo-LoRA_comfyui.safetensors](https://huggingface.co/ByteZSzn/Flux.2-Turbo-ComfyUI/resolve/main/Flux_2-Turbo-LoRA_comfyui.safetensors)\n\n**diffusion_models**\n\n- [flux2_dev_fp8mixed.safetensors](https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/diffusion_models/flux2_dev_fp8mixed.safetensors)\n\n\n## Model Storage Location\n\n```\n📂 ComfyUI/\n├── 📂 models/\n│   ├── 📂 vae/\n│   │   └── full_encoder_small_decoder.safetensors\n│   ├── 📂 text_encoders/\n│   │   └── mistral_3_small_flux2_bf16.safetensors\n│   ├── 📂 loras/\n│   │   └── Flux_2-Turbo-LoRA_comfyui.safetensors\n│   └── 📂 diffusion_models/\n│       └── flux2_dev_fp8mixed.safetensors\n```\n\n## Report Issue\n\nNote: Please update ComfyUI first ([guide](https://docs.comfy.org/installation/update_comfyui)) and prepare required models. Desktop/Cloud updates follow stable releases, so some nightly-supported models may not be available yet.\n\n- Cannot run / runtime errors: [ComfyUI/issues](https://github.com/comfyanonymous/ComfyUI/issues)\n- UI / frontend issues: [ComfyUI_frontend/issues](https://github.com/Comfy-Org/ComfyUI_frontend/issues)\n- Workflow issues: [workflow_templates/issues](https://github.com/Comfy-Org/workflow_templates/issues)\n"
+    "Guide: [Subgraph](https://docs.comfy.org/interface/features/subgraph)\n\n## NSFW LoRA\n\nThis variant loads [SexGod Flux.2 D Female Nudity v1.0](https://civitai.com/models/2604891) (LoraLoaderModelOnly right after the UNETLoader, before the Turbo switch, so it works with Turbo on or off; its strength is the **LoRA strength** slider on the node, 1.0 by default). Unlike klein, FLUX.2 dev renders nudity without it; here the LoRA shapes the style — a warmer film look, different poses and bodies. Set **LoRA strength** to 0 to compare. Start the prompt with its trigger word **femalenudestyle**. It comes from Civitai: `llmctl download comfy` asks for a Civitai API key the first time. Adults only — describe the subject as an adult.\n\n## Model Links\n\n**vae**\n\n- [full_encoder_small_decoder.safetensors](https://huggingface.co/black-forest-labs/FLUX.2-small-decoder/resolve/main/full_encoder_small_decoder.safetensors)\n\n**text_encoders**\n\n- [mistral_3_small_flux2_bf16.safetensors](https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/text_encoders/mistral_3_small_flux2_bf16.safetensors)\n\n**loras**\n\n- [Flux_2-Turbo-LoRA_comfyui.safetensors](https://huggingface.co/ByteZSzn/Flux.2-Turbo-ComfyUI/resolve/main/Flux_2-Turbo-LoRA_comfyui.safetensors)\n\n**diffusion_models**\n\n- [flux2_dev_fp8mixed.safetensors](https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/diffusion_models/flux2_dev_fp8mixed.safetensors)\n\n\n## Model Storage Location\n\n```\n📂 ComfyUI/\n├── 📂 models/\n│   ├── 📂 vae/\n│   │   └── full_encoder_small_decoder.safetensors\n│   ├── 📂 text_encoders/\n│   │   └── mistral_3_small_flux2_bf16.safetensors\n│   ├── 📂 loras/\n│   │   └── Flux_2-Turbo-LoRA_comfyui.safetensors\n│   └── 📂 diffusion_models/\n│       └── flux2_dev_fp8mixed.safetensors\n```\n\n## Report Issue\n\nNote: Please update ComfyUI first ([guide](https://docs.comfy.org/installation/update_comfyui)) and prepare required models. Desktop/Cloud updates follow stable releases, so some nightly-supported models may not be available yet.\n\n- Cannot run / runtime errors: [ComfyUI/issues](https://github.com/comfyanonymous/ComfyUI/issues)\n- UI / frontend issues: [ComfyUI_frontend/issues](https://github.com/Comfy-Org/ComfyUI_frontend/issues)\n- Workflow issues: [workflow_templates/issues](https://github.com/Comfy-Org/workflow_templates/issues)\n"
    ],
+   "widgets_values_named": {
+    "text": "Guide: [Subgraph](https://docs.comfy.org/interface/features/subgraph)\n\n## NSFW LoRA\n\nThis variant loads [SexGod Flux.2 D Female Nudity v1.0](https://civitai.com/models/2604891) (LoraLoaderModelOnly right after the UNETLoader, before the Turbo switch, so it works with Turbo on or off; strength 1.0). Unlike klein, FLUX.2 dev renders nudity without it; here the LoRA shapes the style — a warmer film look, different poses and bodies. Set its strength to 0 to compare. Start the prompt with its trigger word **femalenudestyle**. It comes from Civitai: `llmctl download comfy` asks for a Civitai API key the first time. Adults only — describe the subject as an adult.\n\n## Model Links\n\n**vae**\n\n- [full_encoder_small_decoder.safetensors](https://huggingface.co/black-forest-labs/FLUX.2-small-decoder/resolve/main/full_encoder_small_decoder.safetensors)\n\n**text_encoders**\n\n- [mistral_3_small_flux2_bf16.safetensors](https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/text_encoders/mistral_3_small_flux2_bf16.safetensors)\n\n**loras**\n\n- [Flux_2-Turbo-LoRA_comfyui.safetensors](https://huggingface.co/ByteZSzn/Flux.2-Turbo-ComfyUI/resolve/main/Flux_2-Turbo-LoRA_comfyui.safetensors)\n\n**diffusion_models**\n\n- [flux2_dev_fp8mixed.safetensors](https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/diffusion_models/flux2_dev_fp8mixed.safetensors)\n\n\n## Model Storage Location\n\n```\n📂 ComfyUI/\n├── 📂 models/\n│   ├── 📂 vae/\n│   │   └── full_encoder_small_decoder.safetensors\n│   ├── 📂 text_encoders/\n│   │   └── mistral_3_small_flux2_bf16.safetensors\n│   ├── 📂 loras/\n│   │   └── Flux_2-Turbo-LoRA_comfyui.safetensors\n│   └── 📂 diffusion_models/\n│       └── flux2_dev_fp8mixed.safetensors\n```\n\n## Report Issue\n\nNote: Please update ComfyUI first ([guide](https://docs.comfy.org/installation/update_comfyui)) and prepare required models. Desktop/Cloud updates follow stable releases, so some nightly-supported models may not be available yet.\n\n- Cannot run / runtime errors: [ComfyUI/issues](https://github.com/comfyanonymous/ComfyUI/issues)\n- UI / frontend issues: [ComfyUI_frontend/issues](https://github.com/Comfy-Org/ComfyUI_frontend/issues)\n- Workflow issues: [workflow_templates/issues](https://github.com/Comfy-Org/workflow_templates/issues)\n"
+   },
    "color": "#222",
    "bgcolor": "#000"
   },
@@ -104,6 +127,46 @@
      "link": null
     },
     {
+     "name": "width",
+     "type": "INT",
+     "widget": {
+      "name": "width"
+     },
+     "link": null
+    },
+    {
+     "name": "height",
+     "type": "INT",
+     "widget": {
+      "name": "height"
+     },
+     "link": null
+    },
+    {
+     "name": "unet_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "unet_name"
+     },
+     "link": null
+    },
+    {
+     "name": "clip_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "clip_name"
+     },
+     "link": null
+    },
+    {
+     "name": "vae_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "vae_name"
+     },
+     "link": null
+    },
+    {
      "label": "turbo_lora",
      "name": "lora_name",
      "type": "COMBO",
@@ -120,10 +183,28 @@
       "name": "value"
      },
      "link": null
+    },
+    {
+     "name": "noise_seed",
+     "type": "INT",
+     "widget": {
+      "name": "noise_seed"
+     },
+     "link": null
+    },
+    {
+     "label": "LoRA strength",
+     "name": "strength_model",
+     "type": "FLOAT",
+     "widget": {
+      "name": "strength_model"
+     },
+     "link": null
     }
    ],
    "outputs": [
     {
+     "localized_name": "IMAGE",
      "name": "IMAGE",
      "type": "IMAGE",
      "links": [
@@ -132,48 +213,6 @@
     }
    ],
    "properties": {
-    "proxyWidgets": [
-     [
-      "6",
-      "text"
-     ],
-     [
-      "47",
-      "width"
-     ],
-     [
-      "47",
-      "height"
-     ],
-     [
-      "12",
-      "unet_name"
-     ],
-     [
-      "38",
-      "clip_name"
-     ],
-     [
-      "10",
-      "vae_name"
-     ],
-     [
-      "101",
-      "lora_name"
-     ],
-     [
-      "104",
-      "value"
-     ],
-     [
-      "25",
-      "noise_seed"
-     ],
-     [
-      "25",
-      "control_after_generate"
-     ]
-    ],
     "enableTabs": false,
     "tabWidth": 65,
     "tabXOffset": 10,
@@ -190,9 +229,43 @@
      },
      "version": "7.7",
      "input_ue_unconnectable": {}
-    }
+    },
+    "proxyWidgetErrorQuarantine": [
+     {
+      "originalEntry": [
+       "25",
+       "control_after_generate"
+      ],
+      "reason": "missingSubgraphInput",
+      "attemptedAtVersion": 1
+     }
+    ],
+    "previewExposures": []
    },
-   "widgets_values": []
+   "widgets_values": [
+    "high fashion, vintage couture, street photography, luxury fashion shoot, neo brutalist architecture, pastel paints",
+    1024,
+    1024,
+    "flux2_dev_fp8mixed.safetensors",
+    "mistral_3_small_flux2_fp8.safetensors",
+    "full_encoder_small_decoder.safetensors",
+    "Flux_2-Turbo-LoRA_comfyui.safetensors",
+    false,
+    1027111520328378,
+    1
+   ],
+   "widgets_values_named": {
+    "text": "high fashion, vintage couture, street photography, luxury fashion shoot, neo brutalist architecture, pastel paints",
+    "width": 1024,
+    "height": 1024,
+    "unet_name": "flux2_dev_fp8mixed.safetensors",
+    "clip_name": "mistral_3_small_flux2_fp8.safetensors",
+    "vae_name": "full_encoder_small_decoder.safetensors",
+    "lora_name": "Flux_2-Turbo-LoRA_comfyui.safetensors",
+    "value": false,
+    "noise_seed": 1027111520328378,
+    "strength_model": 1
+   }
   }
  ],
  "links": [
@@ -214,7 +287,7 @@
     "state": {
      "lastGroupId": 6,
      "lastNodeId": 105,
-     "lastLinkId": 233,
+     "lastLinkId": 234,
      "lastRerouteId": 0
     },
     "revision": 0,
@@ -351,6 +424,19 @@
        -1368.255859375,
        430
       ]
+     },
+     {
+      "id": "a1668471-c8a2-4024-94b7-09757bf5bb8c",
+      "name": "strength_model",
+      "type": "FLOAT",
+      "linkIds": [
+       234
+      ],
+      "label": "LoRA strength",
+      "pos": [
+       0,
+       0
+      ]
      }
     ],
     "outputs": [
@@ -410,6 +496,7 @@
        }
       ],
       "properties": {
+       "Node name for S&R": "BasicGuider",
        "enableTabs": false,
        "tabWidth": 65,
        "tabXOffset": 10,
@@ -419,14 +506,12 @@
        "secondTabWidth": 65,
        "cnr_id": "comfy-core",
        "ver": "0.3.71",
-       "Node name for S&R": "BasicGuider",
        "ue_properties": {
         "widget_ue_connectable": {},
         "version": "7.7",
         "input_ue_unconnectable": {}
        }
-      },
-      "widgets_values": []
+      }
      },
      {
       "id": 26,
@@ -448,6 +533,15 @@
         "name": "conditioning",
         "type": "CONDITIONING",
         "link": 41
+       },
+       {
+        "localized_name": "guidance",
+        "name": "guidance",
+        "type": "FLOAT",
+        "widget": {
+         "name": "guidance"
+        },
+        "link": null
        }
       ],
       "outputs": [
@@ -462,6 +556,7 @@
        }
       ],
       "properties": {
+       "Node name for S&R": "FluxGuidance",
        "enableTabs": false,
        "tabWidth": 65,
        "tabXOffset": 10,
@@ -471,7 +566,6 @@
        "secondTabWidth": 65,
        "cnr_id": "comfy-core",
        "ver": "0.3.71",
-       "Node name for S&R": "FluxGuidance",
        "ue_properties": {
         "widget_ue_connectable": {},
         "version": "7.7",
@@ -481,6 +575,9 @@
       "widgets_values": [
        4
       ],
+      "widgets_values_named": {
+       "guidance": 4
+      },
       "color": "#233",
       "bgcolor": "#355"
      },
@@ -498,7 +595,17 @@
       "flags": {},
       "order": 0,
       "mode": 0,
-      "inputs": [],
+      "inputs": [
+       {
+        "localized_name": "sampler_name",
+        "name": "sampler_name",
+        "type": "COMBO",
+        "widget": {
+         "name": "sampler_name"
+        },
+        "link": null
+       }
+      ],
       "outputs": [
        {
         "localized_name": "SAMPLER",
@@ -510,6 +617,7 @@
        }
       ],
       "properties": {
+       "Node name for S&R": "KSamplerSelect",
        "enableTabs": false,
        "tabWidth": 65,
        "tabXOffset": 10,
@@ -519,7 +627,6 @@
        "secondTabWidth": 65,
        "cnr_id": "comfy-core",
        "ver": "0.3.71",
-       "Node name for S&R": "KSamplerSelect",
        "ue_properties": {
         "widget_ue_connectable": {},
         "version": "7.7",
@@ -528,7 +635,10 @@
       },
       "widgets_values": [
        "euler"
-      ]
+      ],
+      "widgets_values_named": {
+       "sampler_name": "euler"
+      }
      },
      {
       "id": 10,
@@ -567,6 +677,7 @@
        }
       ],
       "properties": {
+       "Node name for S&R": "VAELoader",
        "enableTabs": false,
        "tabWidth": 65,
        "tabXOffset": 10,
@@ -576,7 +687,6 @@
        "secondTabWidth": 65,
        "cnr_id": "comfy-core",
        "ver": "0.3.71",
-       "Node name for S&R": "VAELoader",
        "models": [
         {
          "name": "full_encoder_small_decoder.safetensors",
@@ -592,7 +702,10 @@
       },
       "widgets_values": [
        "full_encoder_small_decoder.safetensors"
-      ]
+      ],
+      "widgets_values_named": {
+       "vae_name": "full_encoder_small_decoder.safetensors"
+      }
      },
      {
       "id": 13,
@@ -658,6 +771,7 @@
        }
       ],
       "properties": {
+       "Node name for S&R": "SamplerCustomAdvanced",
        "enableTabs": false,
        "tabWidth": 65,
        "tabXOffset": 10,
@@ -667,14 +781,12 @@
        "secondTabWidth": 65,
        "cnr_id": "comfy-core",
        "ver": "0.3.71",
-       "Node name for S&R": "SamplerCustomAdvanced",
        "ue_properties": {
         "widget_ue_connectable": {},
         "version": "7.7",
         "input_ue_unconnectable": {}
        }
-      },
-      "widgets_values": []
+      }
      },
      {
       "id": 8,
@@ -716,6 +828,7 @@
        }
       ],
       "properties": {
+       "Node name for S&R": "VAEDecode",
        "enableTabs": false,
        "tabWidth": 65,
        "tabXOffset": 10,
@@ -725,14 +838,12 @@
        "secondTabWidth": 65,
        "cnr_id": "comfy-core",
        "ver": "0.3.71",
-       "Node name for S&R": "VAEDecode",
        "ue_properties": {
         "widget_ue_connectable": {},
         "version": "7.7",
         "input_ue_unconnectable": {}
        }
-      },
-      "widgets_values": []
+      }
      },
      {
       "id": 38,
@@ -757,6 +868,25 @@
          "name": "clip_name"
         },
         "link": 226
+       },
+       {
+        "localized_name": "type",
+        "name": "type",
+        "type": "COMBO",
+        "widget": {
+         "name": "type"
+        },
+        "link": null
+       },
+       {
+        "localized_name": "device",
+        "name": "device",
+        "shape": 7,
+        "type": "COMBO",
+        "widget": {
+         "name": "device"
+        },
+        "link": null
        }
       ],
       "outputs": [
@@ -770,6 +900,7 @@
        }
       ],
       "properties": {
+       "Node name for S&R": "CLIPLoader",
        "enableTabs": false,
        "tabWidth": 65,
        "tabXOffset": 10,
@@ -779,7 +910,6 @@
        "secondTabWidth": 65,
        "cnr_id": "comfy-core",
        "ver": "0.3.71",
-       "Node name for S&R": "CLIPLoader",
        "models": [
         {
          "name": "mistral_3_small_flux2_fp8.safetensors",
@@ -797,7 +927,12 @@
        "mistral_3_small_flux2_fp8.safetensors",
        "flux2",
        "default"
-      ]
+      ],
+      "widgets_values_named": {
+       "clip_name": "mistral_3_small_flux2_fp8.safetensors",
+       "type": "flux2",
+       "device": "default"
+      }
      },
      {
       "id": 48,
@@ -853,6 +988,7 @@
        }
       ],
       "properties": {
+       "Node name for S&R": "Flux2Scheduler",
        "enableTabs": false,
        "tabWidth": 65,
        "tabXOffset": 10,
@@ -862,7 +998,6 @@
        "secondTabWidth": 65,
        "cnr_id": "comfy-core",
        "ver": "0.3.71",
-       "Node name for S&R": "Flux2Scheduler",
        "ue_properties": {
         "widget_ue_connectable": {},
         "version": "7.7",
@@ -873,7 +1008,12 @@
        20,
        1024,
        1024
-      ]
+      ],
+      "widgets_values_named": {
+       "steps": 20,
+       "width": 1024,
+       "height": 1024
+      }
      },
      {
       "id": 47,
@@ -907,6 +1047,15 @@
          "name": "height"
         },
         "link": 223
+       },
+       {
+        "localized_name": "batch_size",
+        "name": "batch_size",
+        "type": "INT",
+        "widget": {
+         "name": "batch_size"
+        },
+        "link": null
        }
       ],
       "outputs": [
@@ -920,6 +1069,7 @@
        }
       ],
       "properties": {
+       "Node name for S&R": "EmptyFlux2LatentImage",
        "enableTabs": false,
        "tabWidth": 65,
        "tabXOffset": 10,
@@ -929,7 +1079,6 @@
        "secondTabWidth": 65,
        "cnr_id": "comfy-core",
        "ver": "0.3.71",
-       "Node name for S&R": "EmptyFlux2LatentImage",
        "ue_properties": {
         "widget_ue_connectable": {},
         "version": "7.7",
@@ -940,7 +1089,12 @@
        1024,
        1024,
        1
-      ]
+      ],
+      "widgets_values_named": {
+       "width": 1024,
+       "height": 1024,
+       "batch_size": 1
+      }
      },
      {
       "id": 25,
@@ -978,6 +1132,7 @@
        }
       ],
       "properties": {
+       "Node name for S&R": "RandomNoise",
        "enableTabs": false,
        "tabWidth": 65,
        "tabXOffset": 10,
@@ -987,7 +1142,6 @@
        "secondTabWidth": 65,
        "cnr_id": "comfy-core",
        "ver": "0.3.71",
-       "Node name for S&R": "RandomNoise",
        "ue_properties": {
         "widget_ue_connectable": {},
         "version": "7.7",
@@ -997,7 +1151,11 @@
       "widgets_values": [
        1027111520328378,
        "randomize"
-      ]
+      ],
+      "widgets_values_named": {
+       "noise_seed": 1027111520328378,
+       "control_after_generate": "randomize"
+      }
      },
      {
       "id": 6,
@@ -1043,6 +1201,7 @@
       ],
       "title": "CLIP Text Encode (Positive Prompt)",
       "properties": {
+       "Node name for S&R": "CLIPTextEncode",
        "enableTabs": false,
        "tabWidth": 65,
        "tabXOffset": 10,
@@ -1052,7 +1211,6 @@
        "secondTabWidth": 65,
        "cnr_id": "comfy-core",
        "ver": "0.3.71",
-       "Node name for S&R": "CLIPTextEncode",
        "ue_properties": {
         "widget_ue_connectable": {},
         "version": "7.7",
@@ -1062,6 +1220,9 @@
       "widgets_values": [
        "high fashion, vintage couture, street photography, luxury fashion shoot, neo brutalist architecture, pastel paints"
       ],
+      "widgets_values_named": {
+       "text": "high fashion, vintage couture, street photography, luxury fashion shoot, neo brutalist architecture, pastel paints"
+      },
       "color": "#232",
       "bgcolor": "#353"
      },
@@ -1094,6 +1255,15 @@
          "name": "lora_name"
         },
         "link": 228
+       },
+       {
+        "localized_name": "strength_model",
+        "name": "strength_model",
+        "type": "FLOAT",
+        "widget": {
+         "name": "strength_model"
+        },
+        "link": null
        }
       ],
       "outputs": [
@@ -1107,6 +1277,7 @@
        }
       ],
       "properties": {
+       "Node name for S&R": "LoraLoaderModelOnly",
        "enableTabs": false,
        "tabWidth": 65,
        "tabXOffset": 10,
@@ -1116,7 +1287,6 @@
        "secondTabWidth": 65,
        "cnr_id": "comfy-core",
        "ver": "0.7.0",
-       "Node name for S&R": "LoraLoaderModelOnly",
        "models": [
         {
          "name": "Flux_2-Turbo-LoRA_comfyui.safetensors",
@@ -1133,7 +1303,11 @@
       "widgets_values": [
        "Flux_2-Turbo-LoRA_comfyui.safetensors",
        1
-      ]
+      ],
+      "widgets_values_named": {
+       "lora_name": "Flux_2-Turbo-LoRA_comfyui.safetensors",
+       "strength_model": 1
+      }
      },
      {
       "id": 102,
@@ -1153,12 +1327,14 @@
        {
         "localized_name": "on_false",
         "name": "on_false",
+        "shape": 7,
         "type": "MODEL",
         "link": 208
        },
        {
         "localized_name": "on_true",
         "name": "on_true",
+        "shape": 7,
         "type": "MODEL",
         "link": 209
        },
@@ -1184,6 +1360,7 @@
       ],
       "title": "Switch(model)",
       "properties": {
+       "Node name for S&R": "ComfySwitchNode",
        "enableTabs": false,
        "tabWidth": 65,
        "tabXOffset": 10,
@@ -1193,7 +1370,6 @@
        "secondTabWidth": 65,
        "cnr_id": "comfy-core",
        "ver": "0.15.1",
-       "Node name for S&R": "ComfySwitchNode",
        "ue_properties": {
         "widget_ue_connectable": {},
         "version": "7.7",
@@ -1202,7 +1378,10 @@
       },
       "widgets_values": [
        false
-      ]
+      ],
+      "widgets_values_named": {
+       "switch": false
+      }
      },
      {
       "id": 100,
@@ -1218,7 +1397,17 @@
       "flags": {},
       "order": 1,
       "mode": 0,
-      "inputs": [],
+      "inputs": [
+       {
+        "localized_name": "value",
+        "name": "value",
+        "type": "INT",
+        "widget": {
+         "name": "value"
+        },
+        "link": null
+       }
+      ],
       "outputs": [
        {
         "localized_name": "INT",
@@ -1231,6 +1420,7 @@
       ],
       "title": "Steps",
       "properties": {
+       "Node name for S&R": "PrimitiveInt",
        "enableTabs": false,
        "tabWidth": 65,
        "tabXOffset": 10,
@@ -1240,7 +1430,6 @@
        "secondTabWidth": 65,
        "cnr_id": "comfy-core",
        "ver": "0.15.1",
-       "Node name for S&R": "PrimitiveInt",
        "ue_properties": {
         "widget_ue_connectable": {},
         "version": "7.7",
@@ -1250,7 +1439,11 @@
       "widgets_values": [
        20,
        "fixed"
-      ]
+      ],
+      "widgets_values_named": {
+       "value": 20,
+       "fixed": "fixed"
+      }
      },
      {
       "id": 99,
@@ -1266,7 +1459,17 @@
       "flags": {},
       "order": 2,
       "mode": 0,
-      "inputs": [],
+      "inputs": [
+       {
+        "localized_name": "value",
+        "name": "value",
+        "type": "INT",
+        "widget": {
+         "name": "value"
+        },
+        "link": null
+       }
+      ],
       "outputs": [
        {
         "localized_name": "INT",
@@ -1279,6 +1482,7 @@
       ],
       "title": "Steps",
       "properties": {
+       "Node name for S&R": "PrimitiveInt",
        "enableTabs": false,
        "tabWidth": 65,
        "tabXOffset": 10,
@@ -1288,7 +1492,6 @@
        "secondTabWidth": 65,
        "cnr_id": "comfy-core",
        "ver": "0.15.1",
-       "Node name for S&R": "PrimitiveInt",
        "ue_properties": {
         "widget_ue_connectable": {},
         "version": "7.7",
@@ -1298,7 +1501,11 @@
       "widgets_values": [
        8,
        "fixed"
-      ]
+      ],
+      "widgets_values_named": {
+       "value": 8,
+       "fixed": "fixed"
+      }
      },
      {
       "id": 103,
@@ -1318,12 +1525,14 @@
        {
         "localized_name": "on_false",
         "name": "on_false",
+        "shape": 7,
         "type": "INT",
         "link": 211
        },
        {
         "localized_name": "on_true",
         "name": "on_true",
+        "shape": 7,
         "type": "INT",
         "link": 212
        },
@@ -1349,6 +1558,7 @@
       ],
       "title": "Switch(steps)",
       "properties": {
+       "Node name for S&R": "ComfySwitchNode",
        "enableTabs": false,
        "tabWidth": 65,
        "tabXOffset": 10,
@@ -1358,7 +1568,6 @@
        "secondTabWidth": 65,
        "cnr_id": "comfy-core",
        "ver": "0.15.1",
-       "Node name for S&R": "ComfySwitchNode",
        "ue_properties": {
         "widget_ue_connectable": {},
         "version": "7.7",
@@ -1367,7 +1576,10 @@
       },
       "widgets_values": [
        false
-      ]
+      ],
+      "widgets_values_named": {
+       "switch": false
+      }
      },
      {
       "id": 104,
@@ -1407,6 +1619,7 @@
       ],
       "title": "Enable Turbo LoRA",
       "properties": {
+       "Node name for S&R": "PrimitiveBoolean",
        "enableTabs": false,
        "tabWidth": 65,
        "tabXOffset": 10,
@@ -1416,7 +1629,6 @@
        "secondTabWidth": 65,
        "cnr_id": "comfy-core",
        "ver": "0.15.1",
-       "Node name for S&R": "PrimitiveBoolean",
        "ue_properties": {
         "widget_ue_connectable": {},
         "version": "7.7",
@@ -1425,7 +1637,10 @@
       },
       "widgets_values": [
        false
-      ]
+      ],
+      "widgets_values_named": {
+       "value": false
+      }
      },
      {
       "id": 12,
@@ -1450,6 +1665,15 @@
          "name": "unet_name"
         },
         "link": 225
+       },
+       {
+        "localized_name": "weight_dtype",
+        "name": "weight_dtype",
+        "type": "COMBO",
+        "widget": {
+         "name": "weight_dtype"
+        },
+        "link": null
        }
       ],
       "outputs": [
@@ -1464,6 +1688,7 @@
        }
       ],
       "properties": {
+       "Node name for S&R": "UNETLoader",
        "enableTabs": false,
        "tabWidth": 65,
        "tabXOffset": 10,
@@ -1473,7 +1698,6 @@
        "secondTabWidth": 65,
        "cnr_id": "comfy-core",
        "ver": "0.3.71",
-       "Node name for S&R": "UNETLoader",
        "models": [
         {
          "name": "flux2_dev_fp8mixed.safetensors",
@@ -1490,7 +1714,11 @@
       "widgets_values": [
        "flux2_dev_fp8mixed.safetensors",
        "fp8_e4m3fn"
-      ]
+      ],
+      "widgets_values_named": {
+       "unet_name": "flux2_dev_fp8mixed.safetensors",
+       "weight_dtype": "fp8_e4m3fn"
+      }
      },
      {
       "id": 105,
@@ -1504,7 +1732,7 @@
        110
       ],
       "flags": {},
-      "order": 6,
+      "order": 18,
       "mode": 0,
       "inputs": [
        {
@@ -1512,6 +1740,24 @@
         "name": "model",
         "type": "MODEL",
         "link": 233
+       },
+       {
+        "localized_name": "lora_name",
+        "name": "lora_name",
+        "type": "COMBO",
+        "widget": {
+         "name": "lora_name"
+        },
+        "link": null
+       },
+       {
+        "localized_name": "strength_model",
+        "name": "strength_model",
+        "type": "FLOAT",
+        "widget": {
+         "name": "strength_model"
+        },
+        "link": 234
        }
       ],
       "outputs": [
@@ -1539,8 +1785,12 @@
       },
       "widgets_values": [
        "flux2_dev_female_nude_style_v1.safetensors",
-       1.0
-      ]
+       1
+      ],
+      "widgets_values_named": {
+       "lora_name": "flux2_dev_female_nude_style_v1.safetensors",
+       "strength_model": 1
+      }
      }
     ],
     "groups": [
@@ -1554,7 +1804,6 @@
        710
       ],
       "color": "#3f789e",
-      "font_size": 24,
       "flags": {}
      },
      {
@@ -1567,7 +1816,6 @@
        870
       ],
       "color": "#3f789e",
-      "font_size": 24,
       "flags": {}
      },
      {
@@ -1580,7 +1828,6 @@
        710
       ],
       "color": "#3f789e",
-      "font_size": 24,
       "flags": {}
      },
      {
@@ -1593,7 +1840,6 @@
        230
       ],
       "color": "#3f789e",
-      "font_size": 24,
       "flags": {}
      },
      {
@@ -1606,7 +1852,6 @@
        460
       ],
       "color": "#3f789e",
-      "font_size": 24,
       "flags": {}
      }
     ],
@@ -1866,6 +2111,14 @@
       "target_id": 105,
       "target_slot": 0,
       "type": "MODEL"
+     },
+     {
+      "id": 234,
+      "origin_id": -10,
+      "origin_slot": 9,
+      "target_id": 105,
+      "target_slot": 2,
+      "type": "FLOAT"
      }
     ],
     "extra": {
