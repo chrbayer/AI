@@ -107,6 +107,29 @@ def gib(n):
     return f"{n / 2**30:.1f} GB" if n >= 2**30 else f"{n / 2**20:.0f} MB"
 
 
+def orphans(wfs, models):
+    """Model files under `models` that none of the workflows names."""
+    referenced = set()
+    for _, wf in wfs:
+        referenced.update(refs(wf))
+    out = []
+    if models.is_dir():
+        for sub in sorted(p for p in models.iterdir() if p.is_dir() and p.name != STAGING):
+            for f in sorted(sub.rglob("*")):
+                key = str(f.relative_to(models))
+                inside = any(key.startswith(ref + "/") for ref in referenced)   # part of a repo snapshot
+                if f.is_file() and f.suffix in MODEL_SUFFIXES and key not in referenced and not inside:
+                    out.append(f)
+    return out
+
+
+def cmd_orphans(wf_dir, models_dir):
+    """One path per line, for `llmctl prune`."""
+    for f in orphans(workflows(wf_dir), Path(models_dir)):
+        print(f)
+    return 0
+
+
 def cmd_list(wf_dir, models_dir):
     wfs = workflows(wf_dir)
     if not wfs:
@@ -114,28 +137,19 @@ def cmd_list(wf_dir, models_dir):
         return 0
     models = Path(models_dir)
     width = max(len(n) for n, _ in wfs)
-    referenced = set()
     for name, wf in wfs:
         r = refs(wf)
-        referenced.update(r)
         have = [k for k in r if present(models / k)]
         total = sum(size(models / k) for k in have)
         missing = [k.split("/", 1)[1] for k in r if k not in have]
         state = "ready" if not missing else "missing: " + ", ".join(missing)
         print(f"    {name.removesuffix('.json'):<{width - 5}}  {len(have)}/{len(r)} models, "
               f"{gib(total):>8}  {state}")
-    orphans = []
-    if models.is_dir():
-        for sub in sorted(p for p in models.iterdir() if p.is_dir() and p.name != STAGING):
-            for f in sorted(sub.rglob("*")):
-                key = str(f.relative_to(models))
-                inside = any(key.startswith(ref + "/") for ref in referenced)   # part of a repo snapshot
-                if f.is_file() and f.suffix in MODEL_SUFFIXES and key not in referenced and not inside:
-                    orphans.append(f"{key} ({gib(f.stat().st_size)})")
-    if orphans:
-        print("    named by no workflow (kept):")
-        for o in orphans:
-            print(f"      {o}")
+    lone = orphans(wfs, models)
+    if lone:
+        print("    named by no workflow (kept; llmctl prune removes them):")
+        for f in lone:
+            print(f"      {f.relative_to(models)} ({gib(f.stat().st_size)})")
     urls, _ = collect(wfs)
     for key, u in urls.items():
         if len(u) > 1:
@@ -321,13 +335,15 @@ def main(argv):
         i = argv.index("--sources")
         sources = argv[i + 1] if i + 1 < len(argv) else None
         del argv[i:i + 2]
-    if len(argv) < 3 or argv[0] not in ("list", "sizes", "download"):
-        print("usage: comfyui_models.py list|sizes WORKFLOWS_DIR MODELS_DIR\n"
+    if len(argv) < 3 or argv[0] not in ("list", "sizes", "download", "orphans"):
+        print("usage: comfyui_models.py list|sizes|orphans WORKFLOWS_DIR MODELS_DIR\n"
               "       comfyui_models.py download WORKFLOWS_DIR MODELS_DIR [PATTERN] [--sources FILE]",
               file=sys.stderr)
         return 2
     if argv[0] == "list":
         return cmd_list(argv[1], argv[2])
+    if argv[0] == "orphans":
+        return cmd_orphans(argv[1], argv[2])
     if argv[0] == "sizes":
         return cmd_sizes(argv[1], argv[2])
     return cmd_download(argv[1], argv[2], argv[3] if len(argv) > 3 else None, sources)

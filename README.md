@@ -71,6 +71,7 @@ llmctl bench flash                     # halogen: prefill + decode of the runnin
 llmctl env <name> [slot]               # Set Claude Code env vars
 llmctl clear                           # Clear env vars
 llmctl download <model>                # Download model(s)
+llmctl prune [--dry-run]               # Models nothing names any more; deletes after a typed yes
 llmctl version                         # Print the version
 ```
 
@@ -1250,6 +1251,24 @@ them are served by the Vulkan build — the ROCm build is opt-in per model
 - **rerank** — Qwen3-Reranker-0.6B, Q8_0, 8K ctx; `/v1/rerank`
 
 Multimodal projectors are only loaded on an explicit `--mmproj`.
+
+### Pruning what nothing names
+
+`llmctl prune` lists what no longer belongs to anything, with its size on
+disk and what deleting it would actually free, and deletes it after `yes` is
+typed at a terminal (`--dry-run`, or no terminal: list only):
+
+- a directory under the models directory no `models.conf` entry reaches into;
+- inside one that an entry does reach, a `.gguf` no entry names — the further
+  shards of a split GGUF count as named by its first, drafts named in
+  `spec_args` count, halogen directories are left whole (the server mounts
+  them), and so is the VoiceDesign model llmctl uses itself;
+- the parts of a download joined into one file (`*.gguf.partNofM`), once the
+  joined file is there;
+- ComfyUI models no installed workflow names (what `list` shows as such).
+
+On btrfs a joined file shares its blocks with its parts, so deleting the parts
+frees nothing; `prune` says so rather than promising the size of the files.
 
 ## Architecture
 

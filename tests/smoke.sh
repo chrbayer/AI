@@ -161,6 +161,17 @@ check "the service repairs on reload"    "preset voice --repair" -- cat "$U/llmc
 check "the timer only reloads a running service" "is-active"     -- cat "$U/llmctl-repair.service"
 check "preset --repair leaves others alone" "nothing to repair"  -- "$L" preset voice --repair
 
+# ── prune ────────────────────────────────────────────────────
+M="$LLMCTL_MODELS_DIR"
+mkdir -p "$M/gone-model" "$M/magnum-v4-72b-GGUF/magnum-v4-72b-Q6_K" "$M/split"
+printf 'x' > "$M/gone-model/old.gguf"
+printf 'x' > "$M/magnum-v4-72b-GGUF/magnum-v4-72b-Q6_K/magnum-v4-72b-Q6_K-00002-of-00002.gguf"
+check "prune finds a directory nothing uses" "gone-model"        -- "$L" prune --dry-run
+check "prune keeps the shards of a named model" "!00002-of-00002" -- "$L" prune --dry-run
+check "prune keeps drafts named in spec args" "!Llama-3.2-1B"    -- "$L" prune --dry-run
+check "prune does not delete without a terminal" "Not deleting"  -- sh -c "'$L' prune < /dev/null"
+check "prune left the files in place"    "old.gguf"              -- ls "$M/gone-model"
+
 # ── completion ───────────────────────────────────────────────
 check "complete offers the commands"     "preset-save"           -- "$L" _complete ""
 check "complete offers the models"       "speech"                -- "$L" _complete start ""
