@@ -595,6 +595,46 @@ _capture_tts_slot() {
     return 1
 }
 
+# Links that make ComfyUI and llmctl share what they both use:
+#   <base>/models        → the models directory. Custom node packs (Qwen3-TTS)
+#                          look for and download their models there, not under
+#                          --models-directory.
+#   <base>/input/voice-* → the speech voices, one hard link per voice file:
+#                          LoadAudio lists only the input directory's own files
+#                          and refuses a symlink that resolves outside it.
+_comfyui_links() {
+    local base="$1" models="$2"
+    [[ -e "$base/models" || -L "$base/models" ]] || ln -s "$models" "$base/models"
+    _comfyui_voice_links "$base"
+}
+
+_comfyui_voice_links() {
+    local input="$1/input" f n
+    [[ -d "$1" ]] || return 0
+    mkdir -p "$input"
+    # Ours are the voice-* entries that are symlinks (an earlier layout) or share
+    # their inode with a voice — or whose voice is gone.
+    for f in "$input"/voice-*; do
+        [[ -e "$f" || -L "$f" ]] || continue
+        n="${f##*/voice-}"
+        if [[ -L "$f" || ! -e "$TTS_VOICES/$n" || "$f" -ef "$TTS_VOICES/$n" ]]; then rm -f "$f"; fi
+    done
+    for f in "$TTS_VOICES"/*.wav "$TTS_VOICES"/*.mp3 "$TTS_VOICES"/*.flac; do
+        [[ -f "$f" ]] || continue
+        ln "$f" "$input/voice-${f##*/}" 2>/dev/null || cp "$f" "$input/voice-${f##*/}"
+    done
+}
+
+# The same, for whichever comfyui entry is set up — after `voice` changed a voice.
+_comfyui_voice_links_all() {
+    local entry m_name
+    for entry in "${_MODELS[@]}"; do
+        IFS='|' read -r m_name _ <<< "$entry"
+        _resolve_model "$m_name" && [[ "$_r_backend" == comfyui ]] || continue
+        _comfyui_voice_links "$(dirname "${_r_binary//\~/$HOME}")"
+    done
+}
+
 _start_comfyui() {
     local -a refused=()
     [[ -n "$reasoning" ]] && refused+=("--reasoning")
@@ -651,6 +691,7 @@ _start_comfyui() {
     # --models-directory insists on an existing directory, and ComfyUI lists
     # custom_nodes/ under --base-directory without creating it.
     mkdir -p "$models" "$base/custom_nodes" "$COMFYUI_TMP" ${out:+"$out"}
+    _comfyui_links "$base" "$models"
 
     local url="http://${host:-127.0.0.1}:$port_server"
     [[ "$host" == "0.0.0.0" ]] && url="http://$(hostname):$port_server"
@@ -4047,6 +4088,45 @@ _comfyui_sync_workflows() {
     fi
 }
 
+# Install the custom node packs comfyui/custom_nodes.txt names, each at its pinned
+# commit, into --base-directory's custom_nodes/ (where ComfyUI looks), and their
+# requirements into ComfyUI's venv with torch held to its ROCm build; "-name"
+# after the commit drops a requirement, "+name" adds one.
+_comfyui_custom_nodes() {
+    local list="$COMFYUI_SHARE/custom_nodes.txt"
+    [[ -f "$list" ]] || return 0
+    mkdir -p "$c_base/custom_nodes" "$COMFYUI_TMP"
+    local dir url commit rest line
+    while read -r dir url commit rest; do
+        [[ -z "$dir" || "$dir" == \#* ]] && continue
+        local target="$c_base/custom_nodes/$dir"
+        if [[ ! -d "$target/.git" ]]; then
+            git clone -q "$url" "$target" || { echo "  custom nodes $dir: clone failed"; continue; }
+        fi
+        if [[ "$(git -C "$target" rev-parse HEAD 2>/dev/null)" != "$commit" ]]; then
+            git -C "$target" fetch -q origin 2>/dev/null
+            git -C "$target" -c advice.detachedHead=false checkout -q "$commit" ||
+                { echo "  custom nodes $dir: commit ${commit:0:12} not found"; continue; }
+            echo "  custom nodes $dir: at ${commit:0:12}"
+        else
+            echo "  custom nodes $dir: at ${commit:0:12} (unchanged)"
+        fi
+        if [[ -f "$target/requirements.txt" ]]; then
+            local skip req="$COMFYUI_TMP/req-$dir.txt" constraints="$COMFYUI_TMP/torch-constraints.txt"
+            cp "$target/requirements.txt" "$req"
+            for skip in $rest; do
+                case "$skip" in
+                    -*) sed -i -E "s/^[[:space:]]*${skip#-}([[:space:]<>=!~;#].*)?$/# skipped by llmctl: &/" "$req" ;;
+                    +*) printf '\n%s\n' "${skip#+}" >> "$req" ;;   # the file may lack a final newline
+                esac
+            done
+            _comfyui_pip freeze | grep -E '^(torch|torchvision|torchaudio)==' > "$constraints"
+            _comfyui_pip install -q -r "$req" -c "$constraints" || echo "  custom nodes $dir: requirements failed"
+            rm -f "$req" "$constraints"
+        fi
+    done < "$list"
+}
+
 # Move an existing ComfyUI checkout into place instead of building a new one: the
 # checkout becomes app/, its models, user data, input and output move to where
 # llmctl keeps them. All on one filesystem that is a rename, however many GB.
@@ -4134,9 +4214,17 @@ _download_comfyui() {
         echo "  ComfyUI in $c_app (update it with: $PROG update $_r_name)"
     fi
     _comfyui_apply_patches
+    _comfyui_custom_nodes
     _comfyui_gpu_check || echo "  Warning: torch sees no GPU — ComfyUI would run on the CPU."
     _comfyui_sync_workflows
     mkdir -p "$c_models"
+    _comfyui_links "$c_base" "$c_models"
+    # The VoiceDesign model `voice design` already has: a reflink costs no space
+    # on btrfs, and an ordinary copy elsewhere.
+    local qd="$c_models/qwen-tts/$(basename "$TTS_DESIGN_DIR")"
+    if [[ -f "$TTS_DESIGN_DIR/model.safetensors" && ! -e "$qd" ]]; then
+        mkdir -p "$(dirname "$qd")" && cp -r --reflink=auto "$TTS_DESIGN_DIR" "$qd"
+    fi
     # Model configs for old checkpoints ship in the checkout's models/configs, and
     # --models-directory looks for them beside the models.
     [[ -d "$c_models/configs" || ! -d "$c_app/models/configs" ]] || cp -r "$c_app/models/configs" "$c_models/"
@@ -4223,6 +4311,7 @@ cmd_voice() {
             rm -f "$TTS_VOICES/$name".{wav,mp3,flac}
             cp "$file" "$TTS_VOICES/$name.$ext"
             printf '%s\n' "${desc:-recording: $(basename "$file")}" > "$TTS_VOICES/$name.txt"
+            _comfyui_voice_links_all
             echo "Voice '$name' added. A few seconds of clean speech are enough; the clone keeps its timbre."
             ;;
         design)
@@ -4252,12 +4341,14 @@ cmd_voice() {
             [[ -f "$TTS_VOICES/$name.wav" ]] || { echo "Error: no recording was written"; return 1; }
             rm -f "$TTS_VOICES/$name".{mp3,flac}
             printf '%s\n' "$desc" > "$TTS_VOICES/$name.txt"
+            _comfyui_voice_links_all
             echo "Voice '$name' ready. Listen: $TTS_VOICES/$name.wav"
             ;;
         rm)
             local name="${1:-}"
             ls "$TTS_VOICES/$name".{wav,mp3,flac} > /dev/null 2>&1 || { echo "No voice '$name'."; return 1; }
             rm -f "$TTS_VOICES/$name".{wav,mp3,flac,txt}
+            _comfyui_voice_links_all
             echo "Voice '$name' removed."
             ;;
         *) echo "Usage: $PROG voice list | add <name> <file> | design <name> \"<description>\" | rm <name>"; return 1 ;;
@@ -4307,6 +4398,8 @@ cmd_update() {
     _comfyui_apply_patches
     echo "==> Python dependencies"
     _comfyui_python_deps "$torch" || return 1
+    echo "==> Custom nodes"
+    _comfyui_custom_nodes
     echo "==> GPU"
     _comfyui_gpu_check || return 1
     echo "==> Workflows"

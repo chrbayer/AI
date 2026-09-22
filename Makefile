@@ -31,6 +31,7 @@ install:
 	install -Dm644 -t $(SHAREDIR)/comfyui/workflows comfyui/workflows/*.json
 	install -Dm644 -t $(SHAREDIR)/comfyui/patches comfyui/patches/*.patch
 	install -Dm644 comfyui/sources.json $(SHAREDIR)/comfyui/sources.json
+	install -Dm644 comfyui/custom_nodes.txt $(SHAREDIR)/comfyui/custom_nodes.txt
 	install -Dm644 -t $(SHAREDIR)/tts/voices tts/voices/*
 	install -Dm644 README.md $(DOCDIR)/README.md
 

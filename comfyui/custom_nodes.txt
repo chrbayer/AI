@@ -1,0 +1,10 @@
+# Custom node packs llmctl installs into ComfyUI (download comfy / update comfy).
+# One pack per line:  <directory>  <git URL>  <commit>  [-<requirement to drop>|+<requirement to add> ...]
+# The commit is pinned: update moves a pack only when this file names a new one.
+# Requirements install into ComfyUI's venv with torch held to its ROCm build;
+# a "-name" drops that requirement, a "+name" adds one.
+
+# Qwen3-TTS: voice design, cloning, dialogue. Its requirements name the Intel
+# OpenVINO build of onnxruntime; its 25 Hz tokenizer imports onnxruntime at load
+# (the 12 Hz models used here never run it), so the plain CPU build does.
+ComfyUI-Qwen-TTS  https://github.com/flybirdxx/ComfyUI-Qwen-TTS  a1328c8a731eff82cf4c205b31bdfb7f29d817f4  -onnxruntime-openvino  +onnxruntime

@@ -41,6 +41,9 @@ from pathlib import Path
 
 MODEL_SUFFIXES = {".safetensors", ".ckpt", ".pt", ".pth", ".bin", ".gguf", ".sft"}
 HF_URL = re.compile(r"^https://huggingface\.co/([^/]+/[^/]+)/resolve/([^/]+)/(.+)$")
+# A whole repo, for node packs that load a model directory (Qwen3-TTS): the
+# workflow names it as <directory>/<name> and the repo's snapshot goes there.
+HF_REPO = re.compile(r"^https://huggingface\.co/([^/]+/[^/]+?)(?:/tree/([^/]+))?/?$")
 STAGING = ".download"
 
 
@@ -89,6 +92,17 @@ def collect(wfs):
     return urls, users
 
 
+def present(path):
+    """A file, or a model directory with something in it."""
+    return path.is_file() or (path.is_dir() and any(path.iterdir()))
+
+
+def size(path):
+    if path.is_file():
+        return path.stat().st_size
+    return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+
+
 def gib(n):
     return f"{n / 2**30:.1f} GB" if n >= 2**30 else f"{n / 2**20:.0f} MB"
 
@@ -104,18 +118,19 @@ def cmd_list(wf_dir, models_dir):
     for name, wf in wfs:
         r = refs(wf)
         referenced.update(r)
-        present = [k for k in r if (models / k).is_file()]
-        size = sum((models / k).stat().st_size for k in present)
-        missing = [k.split("/", 1)[1] for k in r if k not in present]
+        have = [k for k in r if present(models / k)]
+        total = sum(size(models / k) for k in have)
+        missing = [k.split("/", 1)[1] for k in r if k not in have]
         state = "ready" if not missing else "missing: " + ", ".join(missing)
-        print(f"    {name.removesuffix('.json'):<{width - 5}}  {len(present)}/{len(r)} models, "
-              f"{gib(size):>8}  {state}")
+        print(f"    {name.removesuffix('.json'):<{width - 5}}  {len(have)}/{len(r)} models, "
+              f"{gib(total):>8}  {state}")
     orphans = []
     if models.is_dir():
         for sub in sorted(p for p in models.iterdir() if p.is_dir() and p.name != STAGING):
             for f in sorted(sub.rglob("*")):
                 key = str(f.relative_to(models))
-                if f.is_file() and f.suffix in MODEL_SUFFIXES and key not in referenced:
+                inside = any(key.startswith(ref + "/") for ref in referenced)   # part of a repo snapshot
+                if f.is_file() and f.suffix in MODEL_SUFFIXES and key not in referenced and not inside:
                     orphans.append(f"{key} ({gib(f.stat().st_size)})")
     if orphans:
         print("    named by no workflow (kept):")
@@ -134,8 +149,8 @@ def cmd_sizes(wf_dir, models_dir):
     models = Path(models_dir)
     for name, wf in workflows(wf_dir):
         r = refs(wf)
-        if r and all((models / k).is_file() for k in r):
-            print(f"{sum((models / k).stat().st_size for k in r)}\t{name.removesuffix('.json')}")
+        if r and all(present(models / k) for k in r):
+            print(f"{sum(size(models / k) for k in r)}\t{name.removesuffix('.json')}")
     return 0
 
 
@@ -214,6 +229,21 @@ def fetch_url(url, dest, secret=None):
     return True
 
 
+def fetch_repo(url, dest, staging):
+    """A whole Hugging Face repo into the directory dest."""
+    repo, rev = HF_REPO.match(url).groups()
+    part = staging / repo
+    cmd = ["hf", "download", repo, "--local-dir", str(part)] + (["--revision", rev] if rev else [])
+    if subprocess.run(cmd).returncode != 0:
+        return False
+    shutil.rmtree(part / ".cache", ignore_errors=True)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.exists():
+        dest.rmdir()                  # empty, or present() would have held
+    os.replace(part, dest)
+    return True
+
+
 def fetch_plain(url, dest):
     if urllib.parse.urlsplit(url).hostname not in ("civitai.com", "civitai.red"):
         return fetch_url(url, dest) is True
@@ -243,11 +273,11 @@ def cmd_download(wf_dir, models_dir, pattern=None, sources=None):
         recipes = {k: v for k, v in json.loads(Path(sources).read_text()).items() if not k.startswith("_")}
     models = Path(models_dir)
     staging = models / STAGING
-    failed, fetched, present = [], 0, 0
+    failed, fetched, n_present = [], 0, 0
     for key, u in urls.items():
         dest = models / key
-        if dest.is_file():
-            present += 1
+        if present(dest):
+            n_present += 1
             continue
         if key in recipes:
             print(f"  {key}")
@@ -265,7 +295,12 @@ def cmd_download(wf_dir, models_dir, pattern=None, sources=None):
         print(f"  {key}")
         for url in u:
             print(f"    from {url}")
-            ok = fetch_hf(url, dest, staging) if HF_URL.match(url) else fetch_plain(url, dest)
+            if HF_URL.match(url):
+                ok = fetch_hf(url, dest, staging)
+            elif HF_REPO.match(url):
+                ok = fetch_repo(url, dest, staging)
+            else:
+                ok = fetch_plain(url, dest)
             if ok:
                 fetched += 1
                 break
@@ -276,7 +311,7 @@ def cmd_download(wf_dir, models_dir, pattern=None, sources=None):
     if not failed:
         # hf keeps what it needs to resume in here; only a complete run may drop it.
         shutil.rmtree(staging, ignore_errors=True)
-    print(f"  {len(urls)} models: {present} present, {fetched} downloaded, {len(failed)} failed")
+    print(f"  {len(urls)} models: {n_present} present, {fetched} downloaded, {len(failed)} failed")
     return 1 if failed else 0
 
 

@@ -796,6 +796,27 @@ llmctl update comfy --torch           # …and torch itself
   still toggles. An abliterated klein text
   encoder was measured too and left out: on its own it changes nothing, since
   the reluctance lives in the image model, not in the encoder. Adults only.
+- **Custom nodes.** `comfyui/custom_nodes.txt` names the node packs llmctl
+  installs, each pinned to a commit: `download` clones them into
+  `~/.local/share/llmctl/comfyui/custom_nodes/`, `update` moves them to the
+  commit the file names, and their requirements go into ComfyUI's venv with
+  torch held to its ROCm build (`-name` after the commit drops a requirement,
+  `+name` adds one). Restart ComfyUI after either. Node packs that load whole
+  model directories name them as Hugging Face repos
+  (`https://huggingface.co/<org>/<repo>`), and `download` fetches the snapshot
+  into `<directory>/<name>`. Because such packs look for their models under
+  ComfyUI's base directory rather than `--models-directory`, llmctl links
+  `~/.local/share/llmctl/comfyui/models` to the models directory.
+- **Speech in ComfyUI.** [ComfyUI-Qwen-TTS](https://github.com/flybirdxx/ComfyUI-Qwen-TTS)
+  brings Qwen3-TTS; two workflows use it. `Qwen3-TTS Stimme entwerfen` designs
+  a voice from a description (VoiceDesign), `Qwen3-TTS Stimme klonen` speaks in
+  the voice of a recording (Base, `x_vector_only`, so the clone speaks
+  accent-free German). The speech slot's voices appear in ComfyUI's input as
+  `voice-<name>.wav` — hard links, since LoadAudio refuses a symlink that leads
+  outside its input directory — and `llmctl voice` keeps them in step. The
+  VoiceDesign model `voice design` already has is reflinked, not downloaded
+  again. Both run through PyTorch at about 1.6× real time; for speech on
+  demand the speech slot (llama.cpp) is faster.
 - **Patches.** `comfyui/patches/qwen35-rocm-conv3d.patch` works around a
   segfault of PyTorch's Conv3d fallback on ROCm in the Qwen3-VL vision encoder
   (the Qwen-Image 2.1 edit workflow). `update` takes the patches out before
