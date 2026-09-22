@@ -2,7 +2,7 @@
 # llmctl — LLM server manager for Claude Code.
 # Usage:
 #   llmctl                                     list available models
-#   llmctl start <name> [slot] [--proxy] [--compact] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--temp F] [--top-p F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec]  start server (+ proxy with --proxy) in background (slot N, default 1)
+#   llmctl start <name> [slot] [--proxy] [--compact] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--temp F] [--top-p F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec] [--output DIR]  start server (+ proxy with --proxy) in background (slot N, default 1)
 #   llmctl preset <name> [--dry-run] [--force] [--wait N] [--proxy] [--public] [--host ADDR] [--clear-logs] [--verbose] [--gpu-priority L]  bring the machine to a whole configuration from presets.conf: keep what already matches, stop the rest, start what is missing
 #   llmctl preset-save <name> [--label TEXT] [--dry-run] [--force]  write the running configuration to presets.conf as a preset
 #   llmctl presets                             list the defined presets
@@ -458,6 +458,13 @@ _start_comfyui() {
         --listen "${host:-127.0.0.1}" --port "$port_server"
         --base-directory "$base" --models-directory "$models"
         "${_r_args[@]}")
+    # Absolute, since ComfyUI runs from its checkout; a preset entry's "~" is
+    # not expanded by any shell on the way here.
+    local out=""
+    if [[ -n "$output_dir" ]]; then
+        out="$(realpath -m "${output_dir/#\~/$HOME}")"
+        cmd+=(--output-directory "$out")
+    fi
     [[ "$verbose" == true ]] && cmd+=(--verbose DEBUG)
 
     if [[ "$print_cmd" == true ]]; then
@@ -478,7 +485,7 @@ _start_comfyui() {
     fi
     # --models-directory insists on an existing directory, and ComfyUI lists
     # custom_nodes/ under --base-directory without creating it.
-    mkdir -p "$models" "$base/custom_nodes" "$COMFYUI_TMP"
+    mkdir -p "$models" "$base/custom_nodes" "$COMFYUI_TMP" ${out:+"$out"}
 
     local url="http://${host:-127.0.0.1}:$port_server"
     [[ "$host" == "0.0.0.0" ]] && url="http://$(hostname):$port_server"
@@ -487,7 +494,8 @@ _start_comfyui() {
         echo "Model:    $_r_label"
         echo "Backend:  ComfyUI — $app"
         echo "Models:   $models"
-        echo "Data:     $base/{user,input,output,temp}"
+        echo "Data:     $base/{user,input,temp}"
+        echo "Output:   ${out:-$base/output (default; --output DIR elsewhere)}"
         echo "Host:     ${host:-127.0.0.1 (default)}"
         [[ -n "$host" && "$host" != "127.0.0.1" && "$host" != "localhost" ]] && \
             echo "  WARNING: ComfyUI has no authentication — anyone who reaches $host:$port_server can run workflows."
@@ -1065,6 +1073,7 @@ cmd_start() {
     # the argv of what is actually running there.
     local print_cmd=false
     local compact=false         # true = defragment host memory first (sudo)
+    local output_dir=""         # comfyui: where generated images go (default <base>/output)
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -1089,6 +1098,7 @@ cmd_start() {
             --top-p) _need_value "$@" || exit 1; top_p="$2"; shift 2 ;;
             --no-spec) spec=off; shift ;;                     # alias for --spec off
             --print-cmd) print_cmd=true; shift ;;
+            --output) _need_value "$@" || exit 1; output_dir="$2"; shift 2 ;;
             -*) echo "Unknown option: $1"; exit 1 ;;
             *) if [[ -z "$name" ]]; then name="$1"; elif [[ "$slot" == "1" ]]; then slot="$1"; fi; shift ;;
         esac
@@ -1145,6 +1155,9 @@ cmd_start() {
         comfyui) ;;
         *) echo "Error: model '$name' names an unknown backend '$_r_backend' in models.conf (llama, halogen or comfyui)"; exit 1 ;;
     esac
+    if [[ -n "$output_dir" && "$_r_backend" != comfyui ]]; then
+        echo "Error: --output is for comfyui models — '$name' generates no images"; exit 1
+    fi
     [[ "$start_proxy" == true ]] && { _check_deps python3 || exit 1; }
     if [[ "$print_cmd" != true && "$_r_backend" == llama ]]; then
         local hs
@@ -2289,6 +2302,8 @@ _capture_comfyui_slot() {
     [[ "$host" == "127.0.0.1" ]] && host=""
     local -a flags=()
     [[ -n "$host" ]] && flags+=(--host "$host")
+    local out
+    out=$(_argv_flag --output-directory) && flags+=(--output "$out")
     [[ "$(_argv_flag --verbose)" == DEBUG ]] && flags+=(--verbose)
     for name in "${candidates[@]}"; do
         _resolve_model "$name" || continue
@@ -3409,7 +3424,8 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  halogen models (backend=halogen) run in podman, exclusively, always with their proxy;"
     printf "  %-20s %s\n" ""                      "    --ctx above 262144 turns on YaRN, --mmproj the vision tower, --cache-ram only takes 0"
     printf "  %-20s %s\n" ""                      "  comfyui models (backend=comfyui) run ComfyUI with its web UI on the server port;"
-    printf "  %-20s %s\n" ""                      "    only --host, --verbose and --clear-logs apply. Every llama start unloads its models first"
+    printf "  %-20s %s\n" ""                      "    only --host, --verbose, --clear-logs and --output DIR (where images go) apply."
+    printf "  %-20s %s\n" ""                      "    Every llama start unloads its models first"
     printf "  %-20s %s\n" "preset <name>"          "bring the machine to the configuration presets.conf names (several models at once)"
     printf "  %-20s %s\n" ""                      "  keeps every slot that already runs exactly what the preset asks for,"
     printf "  %-20s %s\n" ""                      "  stops what differs or is not part of it, starts only what is missing"

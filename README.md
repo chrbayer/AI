@@ -93,6 +93,7 @@ llmctl version                         # Print the version
 | `--public` | token auth + hardening + mTLS front for the VPS (needs `gen-certs`) |
 | `--max-predict N` | cap tokens per generation (-1 = no limit; `--public` defaults to 8192) |
 | `--print-cmd` | build and validate everything, print the llama-server command, start nothing (this is how `preset` compares a slot against what it should run) |
+| `--output DIR` | ComfyUI only: where generated images go (default `~/.local/share/llmctl/comfyui/output`) |
 
 ### The proxy is opt-in
 
@@ -751,8 +752,11 @@ llmctl update comfy --torch           # …and torch itself
   `status` shows the GPU and RAM the process holds, read from its DRM fdinfo.
 - **Exclusive with halogen**, as every other slot is: a preset that switches to
   halogen stops ComfyUI.
-- **No LLM options.** `--host`, `--verbose` (`--verbose DEBUG`) and `--clear-logs`
-  apply; everything else is refused. `env`, `bench`, `cache-stats` and
+- **Images** go to `~/.local/share/llmctl/comfyui/output/`, or wherever
+  `--output DIR` says (`llmctl start comfy 9 --output ~/Bilder/comfy`; also in a
+  preset entry, where `~` is expanded too). `preset-save` records it.
+- **No LLM options.** `--host`, `--verbose` (`--verbose DEBUG`), `--clear-logs`
+  and `--output` apply; everything else is refused. `env`, `bench`, `cache-stats` and
   `probe-reasoning` have nothing to do for it. ComfyUI has no authentication, so
   `--host` beyond localhost warns.
 
