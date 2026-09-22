@@ -270,6 +270,21 @@ _slot_is_halogen() {
     command -v podman > /dev/null && podman container exists "$(_halogen_container "$1")" 2>/dev/null
 }
 
+# A halogen container that outlived its `podman run` client — the client is what
+# llmctl tracks, and killing it (a terminal that goes down with the command still
+# in the foreground) leaves the container running, holding the weights and the
+# port, while every PID-based check sees an empty slot.
+_halogen_orphan() {
+    _slot_is_halogen "$1" || return 1
+    [[ "$(podman inspect -f '{{.State.Running}}' "$(_halogen_container "$1")" 2>/dev/null)" == "true" ]] || return 1
+    # Whatever still holds the port then is podman's own plumbing, not the client:
+    # its argv is not the run command, so status would describe an empty slot.
+    local pid
+    pid=$(_slot_server_pid "$1") || return 0
+    _read_argv "$pid" && _is_halogen_argv && return 1
+    return 0
+}
+
 # The value of `-e KEY=VAL` in a halogen server's argv ($_ARGV), or nothing.
 _argv_env() {
     local key="$1" i
@@ -2155,7 +2170,7 @@ cmd_preset() {
     local s
     for s in $(_active_slots); do
         [[ " $seen " == *" $s "* ]] && continue
-        if _slot_server_pid "$s" > /dev/null || _slot_proxy_pid "$s" > /dev/null; then
+        if _slot_server_pid "$s" > /dev/null || _slot_proxy_pid "$s" > /dev/null || _halogen_orphan "$s"; then
             foreign+=("$s")
         fi
     done
@@ -2168,6 +2183,7 @@ cmd_preset() {
     for s in "${foreign[@]}"; do
         local running=""
         running=$(_slot_model_label "$s")
+        _halogen_orphan "$s" && running="halogen (container only)"
         [[ "$running" == "unknown" ]] && running="(proxy only)"
         printf "  slot %-3s %-14s %-24s %s\n" "$s" "-" "$running" "stop — not part of this preset"
     done
@@ -3105,6 +3121,13 @@ cmd_status() {
         # The detail lines hang under the "Slot N:" prefix, which grows with N.
         local indent
         printf -v indent '%*s' $(( 9 + ${#slot} - 1 )) ''
+        if _halogen_orphan "$slot"; then
+            echo "Slot $slot: halogen      (container $(_halogen_container "$slot"), no client process)"
+            echo "${indent}Note:      its podman client is gone — the container still holds the weights"
+            echo "${indent}           and :$port_server. '$PROG stop $slot' ends it; start it again to manage it."
+            found=1
+            continue
+        fi
         if [[ -n "$server_pid" ]] && ps -p "$server_pid" > /dev/null 2>&1; then
             local kind="llama-server"
             _slot_is_halogen "$slot" && kind="halogen     "
