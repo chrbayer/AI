@@ -34,6 +34,7 @@ import re
 import shutil
 import subprocess
 import sys
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -130,6 +131,7 @@ def fetch_hf(url, dest, staging):
     m = HF_URL.match(url)
     assert m
     repo, rev, path = m.groups()
+    path = urllib.parse.unquote(path)     # "Flux%20Klein.safetensors" is "Flux Klein.safetensors" in the repo
     local = staging / repo
     cmd = ["hf", "download", repo, path, "--revision", rev, "--local-dir", str(local)]
     if subprocess.run(cmd).returncode != 0:
@@ -143,14 +145,38 @@ def fetch_hf(url, dest, staging):
     return True
 
 
+def civitai_url(url):
+    """Civitai hands out most files only to a logged-in account: its API token
+    goes into the query (the documented way; a header would not survive the
+    redirect to its storage). None when there is no token."""
+    token = os.environ.get("CIVITAI_TOKEN", "").strip()
+    if not token:
+        print("      Civitai needs an API token: create one under civitai.com → Account settings →"
+              " API Keys, and put it into ~/.config/llmctl/civitai-token (or CIVITAI_TOKEN).",
+              file=sys.stderr)
+        return None
+    parts = urllib.parse.urlsplit(url)
+    query = urllib.parse.parse_qsl(parts.query) + [("token", token)]
+    return urllib.parse.urlunsplit(parts._replace(query=urllib.parse.urlencode(query)))
+
+
 def fetch_plain(url, dest):
+    if urllib.parse.urlsplit(url).hostname in ("civitai.com", "civitai.red"):
+        url = civitai_url(url)
+        if url is None:
+            return False
     part = dest.with_name(dest.name + ".part")
     dest.parent.mkdir(parents=True, exist_ok=True)
+    req = urllib.request.Request(url, headers={"User-Agent": "llmctl"})
     try:
-        with urllib.request.urlopen(url, timeout=60) as r, open(part, "wb") as f:
+        with urllib.request.urlopen(req, timeout=60) as r, open(part, "wb") as f:
             shutil.copyfileobj(r, f, 16 * 2**20)
     except OSError as e:
-        print(f"      {e}", file=sys.stderr)
+        # The error text can carry the URL, and with it the token.
+        msg = str(e)
+        if os.environ.get("CIVITAI_TOKEN"):
+            msg = msg.replace(os.environ["CIVITAI_TOKEN"].strip(), "***")
+        print(f"      {msg}", file=sys.stderr)
         part.unlink(missing_ok=True)
         return False
     os.replace(part, dest)
