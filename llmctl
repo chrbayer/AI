@@ -612,12 +612,13 @@ _comfyui_voice_links() {
     local input="$1/input" f n
     [[ -d "$1" ]] || return 0
     mkdir -p "$input"
-    # Ours are the voice-* entries that are symlinks (an earlier layout) or share
-    # their inode with a voice — or whose voice is gone.
+    # voice-<file> belongs to the voice <file>: replaced whenever that voice
+    # exists — a voice rewritten in place gets a new inode, which leaves the old
+    # link behind with the old sound. Symlinks are from an earlier layout.
     for f in "$input"/voice-*; do
         [[ -e "$f" || -L "$f" ]] || continue
         n="${f##*/voice-}"
-        if [[ -L "$f" || ! -e "$TTS_VOICES/$n" || "$f" -ef "$TTS_VOICES/$n" ]]; then rm -f "$f"; fi
+        if [[ -L "$f" || -e "$TTS_VOICES/$n" ]]; then rm -f "$f"; fi
     done
     for f in "$TTS_VOICES"/*.wav "$TTS_VOICES"/*.mp3 "$TTS_VOICES"/*.flac; do
         [[ -f "$f" ]] || continue
@@ -4309,7 +4310,14 @@ cmd_voice() {
             local ext="${file##*.}"; ext="${ext,,}"
             [[ " wav mp3 flac " == *" $ext "* ]] || { echo "Error: llama-tts reads wav, mp3 or flac"; return 1; }
             rm -f "$TTS_VOICES/$name".{wav,mp3,flac}
-            cp "$file" "$TTS_VOICES/$name.$ext"
+            # Stored as WAV at one loudness: a clone speaks as loud as its reference.
+            # Without the voice-design venv (download not run), as it comes.
+            if [[ -x "$TTS_DIR/venv/bin/python" ]] &&
+               "$TTS_DIR/venv/bin/python" "$TTS_DESIGN_SCRIPT" --normalize "$file" "$TTS_VOICES/$name.wav" 2>/dev/null; then
+                :
+            else
+                cp "$file" "$TTS_VOICES/$name.$ext"
+            fi
             printf '%s\n' "${desc:-recording: $(basename "$file")}" > "$TTS_VOICES/$name.txt"
             _comfyui_voice_links_all
             echo "Voice '$name' added. A few seconds of clean speech are enough; the clone keeps its timbre."
@@ -4351,6 +4359,13 @@ cmd_voice() {
             for ext in wav mp3 flac; do [[ -f "$TTS_VOICES/$name.$ext" ]] && found=1; done
             (( found )) || { echo "No voice '$name'."; return 1; }
             rm -f "$TTS_VOICES/$name".{wav,mp3,flac,txt}
+            # Its links in ComfyUI's input no longer have a voice to be matched by.
+            local entry m_name
+            for entry in "${_MODELS[@]}"; do
+                IFS='|' read -r m_name _ <<< "$entry"
+                _resolve_model "$m_name" && [[ "$_r_backend" == comfyui ]] || continue
+                rm -f "$(dirname "${_r_binary//\~/$HOME}")/input/voice-$name".{wav,mp3,flac}
+            done
             _comfyui_voice_links_all
             echo "Voice '$name' removed."
             ;;

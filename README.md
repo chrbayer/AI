@@ -882,6 +882,12 @@ llmctl voice rm erzaehler
   voice, ~15 s; describe the speaker as a native speaker of the language, since
   the clone keeps any accent. `voice add` takes a recording of your own (wav,
   mp3 or flac); a few seconds of clean speech are enough.
+- **Loudness.** A clone speaks as loud as its reference was recorded — a quiet
+  recording measured 11 dB below the designed voices, and so did its clone.
+  `voice add` and `voice design` therefore store every voice as mono 16-bit WAV
+  at −20 dBFS RMS, and the speech server brings every answer to the same level
+  (`--loudness`, −20 by default, `off` to disable). Both hold peaks below
+  −1 dBFS, so a recording with strong plosives ends up a little quieter.
 
 ## Exposing models on the internet (`--public`)
 

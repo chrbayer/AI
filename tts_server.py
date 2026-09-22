@@ -22,6 +22,11 @@ directory (`llmctl voice …` manages them), selected by its file name.
 `language` is an extension (ISO 639-1; the slot's --lang otherwise). `model` is
 accepted and ignored, as a slot serves one model; `speed` other than 1 is refused
 rather than ignored.
+
+The clone speaks as loud as its reference was recorded — a quiet recording
+gives a quiet voice, 11 dB apart between two voices here. So every answer is
+brought to one loudness (--loudness, -20 dBFS RMS by default), with its peaks
+held below -1 dBFS; --loudness off leaves llama-tts's output as it is.
 """
 import argparse
 import io
@@ -33,6 +38,8 @@ import threading
 import time
 import wave
 from pathlib import Path
+
+import numpy as np
 
 from flask import Flask, Response, jsonify, request
 
@@ -52,6 +59,20 @@ def voices():
     if not d.is_dir():
         return {}
     return {p.stem: p for p in sorted(d.iterdir()) if p.suffix.lower() in AUDIO_SUFFIXES}
+
+
+PEAK_CEILING_DBFS = -1.0
+
+
+def normalize(pcm, target_dbfs):
+    """16-bit mono PCM at target_dbfs RMS, peaks at most PEAK_CEILING_DBFS."""
+    x = np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32768.0
+    rms, peak = float(np.sqrt(np.mean(x ** 2))), float(np.abs(x).max()) if x.size else 0.0
+    if rms < 1e-6:
+        return pcm, 0.0
+    gain = min(10 ** (target_dbfs / 20) / rms, 10 ** (PEAK_CEILING_DBFS / 20) / peak)
+    y = np.clip(x * gain, -1.0, 32767 / 32768)
+    return (y * 32768).astype("<i2").tobytes(), 20 * np.log10(gain)
 
 
 def error(status, message, kind="invalid_request_error"):
@@ -113,10 +134,19 @@ def speech():
         data = out.read_bytes()
 
     with wave.open(io.BytesIO(data)) as w:
+        params = w.getparams()
         seconds = w.getnframes() / w.getframerate()
         pcm = w.readframes(w.getnframes())
-    log.info("voice=%s lang=%s chars=%d audio=%.1fs took=%.1fs (%.2fx real time)",
-             name, lang, len(text), seconds, dt, seconds / dt if dt else 0)
+    gain = 0.0
+    if args.loudness is not None and params.sampwidth == 2 and params.nchannels == 1:
+        pcm, gain = normalize(pcm, args.loudness)
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as w:
+            w.setparams(params)
+            w.writeframes(pcm)
+        data = buf.getvalue()
+    log.info("voice=%s lang=%s chars=%d audio=%.1fs took=%.1fs (%.2fx real time) gain=%+.1f dB",
+             name, lang, len(text), seconds, dt, seconds / dt if dt else 0, gain)
     if fmt == "pcm":
         return Response(pcm, mimetype="audio/pcm")
     return Response(data, mimetype="audio/wav")
@@ -135,6 +165,9 @@ def main():
     p.add_argument("--default-voice", default="")
     p.add_argument("--alias", default="qwen3-tts")
     p.add_argument("--timeout", type=int, default=600)
+    p.add_argument("--loudness", default="-20",
+                   type=lambda v: None if v == "off" else float(v),
+                   help="RMS level of every answer in dBFS, or off (default -20)")
     p.add_argument("extra", nargs="*", help="further llama-tts arguments (after --)")
     args = p.parse_args()
     log.info("model %s, voices in %s (%d), language %s", os.path.basename(args.model), args.voices,
