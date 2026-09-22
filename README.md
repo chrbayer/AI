@@ -60,6 +60,7 @@ llmctl preset-save <name>              # Record what is running now as a preset
 llmctl stop [slot]                     # Stop slot, or all if omitted
 llmctl status                          # Running state, model and key parameters (all slots)
 llmctl cache-stats [slot]              # Prompt-cache hit rate, read from the server log
+llmctl logs [slot] [-f] [--proxy|--tls] # A slot's log (last 50 lines, -n N); no slot: all logs
 llmctl clear-kv [slot]                 # Drop the KV cache without restarting
 llmctl probe-reasoning [model]         # What each model's chat template supports
 llmctl gen-certs <host>                # CA + server/VPS certificates for --public

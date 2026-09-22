@@ -104,7 +104,12 @@ check "speech start refuses a language" "--lang takes zh, en"    -- "$L" start s
 check "a slot past the ports is refused" "past the port layout"  -- "$L" start qwen 999 --print-cmd
 check "presets list what they start"     "speech"                -- "$L" presets
 check "preset dry-run plans its slots"   "slot 5"                -- "$L" preset voice --dry-run
-check "preset dry-run weighs the memory" "GPU memory"            -- "$L" preset voice --dry-run
+# The memory budget needs a GTT pool (an AMD GPU); without one it is left out.
+if compgen -G '/sys/class/drm/card*/device/mem_info_gtt_total' > /dev/null; then
+    check "preset dry-run weighs the memory" "GPU memory"        -- "$L" preset voice --dry-run
+else
+    check "preset dry-run skips the memory without a GPU" "!GPU memory" -- "$L" preset voice --dry-run
+fi
 check "preset refuses --output without comfy" "no ComfyUI entry" -- "$L" preset c4f --output /tmp --dry-run
 check "an unknown preset says so"        "Unknown preset"        -- "$L" preset nosuchpreset
 
@@ -141,6 +146,12 @@ check "voice import replaces another format" "!test.mp3"         -- sh -c "mv '$
 # ── things that must not happen ──────────────────────────────
 check "no command leaks the sandbox"     "!$HOME/.local/share/llmctl/tts" -- "$L" start speech 5 --print-cmd
 check "cache-stats without logs says so" "No server logs yet"  -- "$L" cache-stats
+check "logs without logs says so"       "No logs yet"           -- "$L" logs
+mkdir -p "$LLMCTL_STATE_DIR/logs"; printf 'one\ntwo\nthree\n' > "$LLMCTL_STATE_DIR/logs/server-4.log"
+check "logs lists what there is"         "server-4.log"          -- "$L" logs
+check "logs -n shows the last lines"     "!one"                  -- "$L" logs 4 -n 2
+check "logs names a missing proxy log"   "No proxy log for slot 4" -- "$L" logs 4 --proxy
+check "logs refuses a bad -n"            "takes a number"        -- "$L" logs 4 -n x
 check "update refuses a non-comfyui"     "nothing to update"     -- "$L" update qwen
 
 echo ""

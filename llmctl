@@ -3164,6 +3164,41 @@ cmd_status() {
     return 0
 }
 
+# Show a slot's log without knowing where it lives.
+# Usage: logs [slot] [--proxy|--tls] [-f] [-n N]
+#   no slot: every log there is, with size and last change
+cmd_logs() {
+    local slot="" kind=server follow=false lines=50
+    while (( $# )); do
+        case "$1" in
+            --proxy) kind=proxy ;;
+            --tls)   kind=stunnel ;;
+            -f|--follow) follow=true ;;
+            -n) lines="${2:-}"; shift
+                [[ "$lines" =~ ^[0-9]+$ ]] || { echo "Error: -n takes a number of lines"; return 1; } ;;
+            -*) echo "Usage: $PROG logs [slot] [--proxy|--tls] [-f] [-n N]"; return 1 ;;
+            *)  slot="$1" ;;
+        esac
+        shift
+    done
+    if [[ -z "$slot" ]]; then
+        [[ -n "$(compgen -G "$LOG_DIR/*-*.log")" ]] || { echo "No logs yet (start a server first)."; return 0; }
+        local f
+        for f in "$LOG_DIR"/{server,proxy,stunnel}-*.log; do
+            [[ -f "$f" ]] || continue
+            printf '  %-18s %8s  %s\n' "${f##*/}" "$(du -h "$f" | cut -f1)" "$(date -r "$f" '+%Y-%m-%d %H:%M')"
+        done | sort -t- -k2 -n
+        return 0
+    fi
+    _check_slot "$slot" || return 1
+    local log="$LOG_DIR/${kind}-${slot}.log"
+    [[ -f "$log" ]] || { echo "No $kind log for slot $slot ($log)."; return 1; }
+    if [[ "$follow" == true ]]; then
+        exec tail -n "$lines" -F "$log"
+    fi
+    tail -n "$lines" "$log"
+}
+
 # Summarize prompt-cache effectiveness from the server log (works whether or
 # not clients go through the proxy). Per finished task the INFO log carries
 # processed prompt tokens ("prompt eval time = .. / N"), generated tokens
@@ -3937,6 +3972,8 @@ cmd_help() {
     printf "  %-20s %s\n" "presets"                "show the defined presets and what they start"
     printf "  %-20s %s\n" "stop [slot]"            "stop slot (or all if omitted)"
     printf "  %-20s %s\n" "status"                 "show running state, model and key parameters per slot"
+    printf "  %-20s %s\n" "logs [slot]"            "a slot's server log (last 50 lines; -n N, -f to follow, --proxy, --tls);"
+    printf "  %-20s %s\n" ""                      "  without a slot: every log with size and last change"
     printf "  %-20s %s\n" "cache-stats [slot]"     "show prompt-cache hit rate (from the server log)"
     printf "  %-20s %s\n" "clear-kv [slot]"        "drop the KV cache of every server slot (or one slot); ComfyUI: unload its models"
     printf "  %-20s %s\n" "probe-reasoning [m]"    "what each downloaded model's chat template supports vs. models.conf"
@@ -4692,6 +4729,7 @@ case "${1:-}" in
     stop)       shift; cmd_stop "$@" ;;
     status)     cmd_status ;;
     cache-stats) shift; cmd_cache_stats "$@" ;;
+    logs)        shift; cmd_logs "$@" ;;
     clear-kv)   shift; cmd_clear_kv "$@" ;;
     probe-reasoning) shift; cmd_probe_reasoning "$@" ;;
     gen-certs)  shift; cmd_gen_certs "$@" ;;
