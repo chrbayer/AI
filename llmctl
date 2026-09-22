@@ -4302,6 +4302,11 @@ _tts_setup() {
         hf download "$TTS_DESIGN_REPO" --local-dir "$TTS_DESIGN_DIR" > /dev/null || return 1
     fi
     echo "  VoiceDesign model in $TTS_DESIGN_DIR"
+    if [[ "$(basename "$_r_binary")" == llama-server* && ! -x "${_r_binary//\~/$HOME}" ]]; then
+        echo "  Streaming needs a llama-server with /tts (llama.cpp PR #26603), not built yet:"
+        echo "    $SHARE_DIR/patches/build-tts-server.sh"
+        echo "  Until then the slot speaks through llama-tts, without streaming."
+    fi
 }
 
 # llmctl voice list|add|design|rm — the reference recordings speech slots speak in.

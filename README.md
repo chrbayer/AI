@@ -867,17 +867,32 @@ curl -s localhost:8005/v1/audio/speech -H 'Content-Type: application/json' \
   plays. Qwen3-TTS' vocoder works in windows of 72 frames (6 s), so a single
   long sentence arrives in 6 s pieces.
 - **Engine.** Streaming needs llama-server with a `/tts` endpoint, which is
-  llama.cpp PR #26603, not merged yet. `patches/build-tts-server.sh` builds it
-  into `~/src/llama.cpp-tts`: a worktree of your checkout with the pinned PR
-  merged and a one-line fix for an API change since
-  (`patches/llama.cpp-pr26603-mtmd-init-opt.patch`), built like the Vulkan build;
-  models.conf points `speech` at it. `tts_server.py` starts it as a child on a
-  private port that dies with it; the model stays loaded (5.0 GiB with one slot
-  of 4096 tokens). Without that build, llmctl falls back to `llama-tts`, run
-  once per request: ~1.5 s of loading each time, no streaming, the model on the
-  GPU only while it speaks. For comparison, the same model in PyTorch ran at
-  1.56× real time — slower than real time, bound by 90,000 kernel launches per
+  llama.cpp PR #26603, not merged yet. `tts_server.py` starts it as a child on
+  a private port that dies with it; the model stays loaded (5.0 GiB with one
+  slot of 4096 tokens). Without it, llmctl falls back to `llama-tts`, run once
+  per request: ~1.5 s of loading each time, no streaming, the model on the GPU
+  only while it speaks. For comparison, the same model in PyTorch ran at 1.56×
+  real time — slower than real time, bound by 90,000 kernel launches per
   sentence.
+- **Building that llama-server.** No llama.cpp checkout is needed:
+
+  ```bash
+  /usr/local/share/llmctl/patches/build-tts-server.sh    # or patches/ in a checkout of this repo
+  ```
+
+  It uses `~/src/llama.cpp` (or `$LLAMA_SRC`) if that is a llama.cpp checkout
+  and otherwise clones llama.cpp into `~/.local/share/llmctl/llama.cpp`. From
+  there it makes a git worktree in `~/.local/share/llmctl/llama.cpp-tts` —
+  where models.conf looks — at a pinned llama.cpp commit that is known to work,
+  merges the pinned PR commit, applies a one-line fix for an API change since
+  (`patches/llama.cpp-pr26603-mtmd-init-opt.patch`) and builds `llama-server`
+  and `llama-tts` with Vulkan. Nothing is installed, and a checkout it uses is
+  left as it is: the worktree shares only its git objects. It checks for git,
+  cmake, a C++ compiler and glslc first. `LLAMA_BASE=HEAD` builds on the
+  checkout's current commit instead, which may no longer merge with the PR. To
+  rebuild, remove the worktree (`git worktree remove --force
+  ~/.local/share/llmctl/llama.cpp-tts`) and run it again; once the PR is
+  merged, the ordinary llama-server does all this.
 - **Voices.** Qwen3-TTS Base speaks in the voice of a short reference recording,
   kept in `~/.local/share/llmctl/tts/voices/`, one file per voice, named by
   the file. The clone keeps the timbre and speaks accent-free German. Qwen3-TTS'
