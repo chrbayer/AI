@@ -80,6 +80,12 @@ check "llama start rejects --output"    "is for comfyui"       -- "$L" start qwe
 check "llama start rejects a level the model lacks" "has no thinking mode" -- "$L" start qwen-vl 3 --reasoning low --print-cmd
 check "asr start loads its mmproj"      "--mmproj"             -- "$L" start asr 6 --mmproj --print-cmd
 
+check "embed start pools"                "--embedding --pooling last" -- "$L" start embed 7 --print-cmd
+check "rerank start ranks"               "--reranking"           -- "$L" start rerank 8 --print-cmd
+check "env refuses an embedding model"   "/v1/embeddings"        -- "$L" env embed 7
+check "env refuses a reranking model"    "/v1/rerank"            -- "$L" env rerank 8
+check "complete env leaves out embed"    "!embed"                -- "$L" _complete env ""
+
 # ── halogen backend ──────────────────────────────────────────
 check "halogen start runs podman"       "podman run --rm --name llmctl-halogen-1" -- "$L" start flash 1 --print-cmd
 check "halogen start sets its context"  "HALOGEN_CTX=262144"                      -- "$L" start flash 1 --print-cmd

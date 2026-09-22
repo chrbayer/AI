@@ -1062,6 +1062,49 @@ with tts.audio.speech.with_streaming_response.create(
 - **Round trip.** A German question spoken by a cloned voice and transcribed
   back came out identical, punctuation included.
 
+## Building blocks for retrieval and memory
+
+An agent that has to find something again — notes, documents, what was said
+last week — needs two more slots beside its LLM:
+
+| Step | Slot | Endpoint |
+| --- | --- | --- |
+| index and search | `embed` (Qwen3-Embedding 8B) | `POST :800N/v1/embeddings` |
+| sort the hits | `rerank` (Qwen3-Reranker 0.6B) | `POST :800N/v1/rerank` |
+
+`llmctl download embed` and `llmctl download rerank`, then start them on free slots
+(`llmctl start embed 7`, `llmctl start rerank 8`) or add `"embed 7"` and
+`"rerank 8"` to a preset. Neither generates text, so `env`, `bench` and
+`probe-reasoning` leave them out, and `status` names the endpoint instead of
+reasoning and drafting. Like the voice slots they have no authentication.
+
+```python
+from openai import OpenAI
+import requests
+emb = OpenAI(base_url="http://localhost:8007/v1", api_key="-")
+docs = [...]                                                      # passages, as they are
+query = "Instruct: Given a question, retrieve passages that answer it\nQuery: " + question
+vectors = emb.embeddings.create(model="embed", input=docs + [query]).data  # 4096 dims
+# ... nearest by cosine similarity, then the top 20 or so into the reranker:
+hits = requests.post("http://localhost:8008/v1/rerank",
+                     json={"query": question, "documents": top20}).json()["results"]
+```
+
+- **Queries carry an instruction, documents do not.** Qwen3-Embedding was
+  trained that way; the instruction may be English whatever the language of
+  the text.
+- **Measured.** Three German questions against four unrelated passages: both
+  slots put the right passage first every time, the reranker with scores of
+  0.94–1.00 against ≤ 0.001 for the rest. 64 passages (8,200 tokens) embed in
+  9.6 s (~850 tokens/s), rerank in 2.0 s. On the GPU: 11.9 GB and 2.6 GB.
+- **Smaller.** `Qwen/Qwen3-Embedding-4B-GGUF` (Q8_0, 4.1 GB) roughly doubles
+  the speed for a little retrieval quality: change the entry's `model` and
+  `hf_includes`. Vectors from different models are not comparable — an index
+  is rebuilt when the model changes.
+- **One input, one batch.** A pooled input has to fit into one physical batch,
+  so both entries set `-ub`/`-b` to the context size (8,192 tokens). Longer
+  passages are refused; split them.
+
 ## Exposing models on the internet (`--public`)
 
 `--host` is and stays plain LAN exposure without authentication. `--public` is
@@ -1127,6 +1170,9 @@ them are served by the Vulkan build — the ROCm build is opt-in per model
 - **diamond** — L3.3-70B Magnum Diamond, i1-Q5_K_M, 32K ctx; drafted by the same Llama-3.2-1B (~2.0×)
 - **magnum** — Magnum-v4-72B, Q6_K, 32K ctx; a Qwen2.5-72B fulltune, drafted by Qwen2.5-1.5B-Instruct Q4_K_M (~2.0×)
 - **flash** — Qwen3.8-Flash-Next 125B MoE on the [halogen backend](#the-halogen-backend), 4-bit `.hgn`, 256K ctx (512K with YaRN via `--ctx 524288`), vision via `--mmproj` (on in preset `flash`); runs exclusively
+
+- **embed** — Qwen3-Embedding-8B, Q8_0, 8K ctx; `/v1/embeddings` for [retrieval](#building-blocks-for-retrieval-and-memory)
+- **rerank** — Qwen3-Reranker-0.6B, Q8_0, 8K ctx; `/v1/rerank`
 
 Multimodal projectors are only loaded on an explicit `--mmproj`.
 

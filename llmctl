@@ -144,6 +144,13 @@ _resolve_model() {
             # models.conf writes these as one string; splitting it into words is the point.
             # shellcheck disable=SC2206
             _r_args=($m_args)
+            # What a llama-server entry serves, told by its flags: chat unless it
+            # pools (embeddings) or scores pairs (rerank).
+            case " $m_args " in
+                *" --reranking "*|*" --rerank "*) _r_role=rerank ;;
+                *" --embedding "*|*" --embeddings "*) _r_role=embedding ;;
+                *) _r_role=chat ;;
+            esac
             _r_client="${m_client:-$m_name}"
             _r_rocm_env="${m_rocm_env:-}"
             _r_hf_repo="${m_hf_repo:-}"
@@ -1579,6 +1586,10 @@ cmd_start() {
         elif [[ -n "$_r_mmproj" ]]; then
             echo "mmproj: available but not loaded (pass --mmproj)"
         fi
+        case "$_r_role" in
+            embedding) echo "Serves:   embeddings — POST /v1/embeddings" ;;
+            rerank)    echo "Serves:   reranking — POST /v1/rerank" ;;
+        esac
         echo "ROCm env: ${_r_rocm_env:-—}"
         echo "Host:     ${host:-127.0.0.1 (default)}"
         # The LAN listener carries no authentication unless --public added a key
@@ -2842,6 +2853,7 @@ cmd_preset_save() {
     block+="_preset_entries=("$'\n'
     for e in "${entries[@]}"; do
         local m="${e%% *}" rest="${e#* }"
+        rest="${rest%"${rest##*[! ]}"}"          # an entry without flags ends in a space
         block+="$(printf '    "%-*s %s"' "$width" "$m" "$rest")"$'\n'
     done
     block+=")"$'\n'
@@ -2960,7 +2972,7 @@ _describe_server() {
     local model="" served="" ctx="" parallel="" predict="" cache_ram="" mmproj="" host="" similarity=""
     local spec_type="" spec_draft="" spec_n=""
     local reason="" reason_effort="" reason_budget=""
-    local auth=false
+    local auth=false role="" port=""
     local i=0
     while (( i < ${#_ARGV[@]} )); do
         case "${_ARGV[i]}" in
@@ -2980,6 +2992,9 @@ _describe_server() {
             --reasoning-effort)  reason_effort="${_ARGV[i+1]}"; i=$(( i + 2 )) ;;
             --reasoning-budget)  reason_budget="${_ARGV[i+1]}"; i=$(( i + 2 )) ;;
             --api-key-file)      auth=true;                    i=$(( i + 2 )) ;;
+            --port)              port="${_ARGV[i+1]}";         i=$(( i + 2 )) ;;
+            --embedding|--embeddings) role=embedding;          i=$(( i + 1 )) ;;
+            --reranking|--rerank) role=rerank;                 i=$(( i + 1 )) ;;
             *)                                                 i=$(( i + 1 )) ;;
         esac
     done
@@ -3010,6 +3025,12 @@ _describe_server() {
     local joined="" p
     for p in "${params[@]}"; do joined+="${joined:+, }$p"; done
     echo "${indent}Params:    $joined"
+
+    # Nothing is generated: reasoning and drafting do not apply.
+    case "$role" in
+        embedding) echo "${indent}Serves:    embeddings — POST http://${host:-127.0.0.1}:$port/v1/embeddings"; return 0 ;;
+        rerank)    echo "${indent}Serves:    reranking — POST http://${host:-127.0.0.1}:$port/v1/rerank"; return 0 ;;
+    esac
 
     # --reasoning off comes with a budget of 0; naming both would say it twice.
     if [[ "$reason" == "off" ]]; then
@@ -3175,6 +3196,7 @@ _complete_models() {   # [backend...]: only models on these backends
     for entry in "${_MODELS[@]}"; do
         IFS='|' read -r -a f <<< "$entry"
         name="${f[0]}" backend="${f[19]:-llama}"
+        [[ " ${f[6]} " == *" --embedding "* || " ${f[6]} " == *" --reranking "* ]] && backend=service
         (( $# == 0 )) || [[ " $* " == *" $backend "* ]] && echo "$name"
     done
 }
@@ -3297,6 +3319,10 @@ cmd_cache_stats() {
         found=1
         if grep -q '^Backend:  ComfyUI' "$log"; then
             echo "Slot $slot: ComfyUI — no prompt cache"
+            continue
+        fi
+        if grep -q '^Serves:   ' "$log"; then
+            echo "Slot $slot: $(grep -m1 '^Serves:   ' "$log" | sed 's/^Serves: *//; s/ —.*//') — no prompt cache"
             continue
         fi
         if grep -q '^Backend:  tts' "$log"; then
@@ -3476,7 +3502,7 @@ cmd_probe_reasoning() {
     for entry in "${_MODELS[@]}"; do
         IFS='|' read -r m_name _ m_model _ _ _ m_args _ _ _ _ _ _ _ m_reasoning _ <<< "$entry"
         [[ -n "$want" && "$m_name" != "$want" ]] && continue
-        _resolve_model "$m_name" && [[ "$_r_backend" == comfyui || "$_r_backend" == tts ]] && continue
+        _resolve_model "$m_name" && [[ "$_r_backend" == comfyui || "$_r_backend" == tts || "$_r_role" != chat ]] && continue
         local path="${m_model//\~/$HOME}"
 
         if [[ ! -f "$path" ]]; then
@@ -3591,6 +3617,13 @@ cmd_env() {
     if [[ "$_r_backend" == tts ]]; then
         echo "Error: '$name' is a speech model, not an LLM — there is nothing to point Claude Code at." >&2
         echo "       Its API: POST http://127.0.0.1:$port_server/v1/audio/speech" >&2
+        return 1
+    fi
+    if [[ "$_r_backend" == llama && "$_r_role" != chat ]]; then
+        local api="/v1/embeddings"; [[ "$_r_role" == rerank ]] && api="/v1/rerank"
+        local what="an embedding model"; [[ "$_r_role" == rerank ]] && what="a reranking model"
+        echo "Error: '$name' is $what, not a chat model — there is nothing to point Claude Code at." >&2
+        echo "       Its API: POST http://127.0.0.1:$port_server$api" >&2
         return 1
     fi
 
@@ -3858,6 +3891,10 @@ bench_model() {
     local model_path="${m_model//\~/$HOME}"
     if _resolve_model "$m_name" && [[ "$_r_backend" == comfyui || "$_r_backend" == tts ]]; then
         echo "  Skipping $m_label: not an LLM"
+        return
+    fi
+    if [[ "$_r_backend" == llama && "$_r_role" != chat ]]; then
+        echo "  Skipping $m_label: not a chat model"
         return
     fi
     if [[ ! -f "$model_path" ]]; then
