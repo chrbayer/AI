@@ -3045,8 +3045,12 @@ _describe_halogen() {
         echo "${indent}Reasoning: server default (effort xhigh)"
     fi
     echo "${indent}Spec:      MTP (always on)"
-    echo "${indent}Memory:    real use — free(1) counts the pinned weights as cache:"
-    echo "${indent}           $(_halogen_mem_line "$LOG_DIR/server-${slot}.log")"
+    if [[ "$(_argv_env HALOGEN_WEIGHTS_LOCK)" == "1" ]]; then
+        echo "${indent}Memory:    $(_halogen_mem_line "$LOG_DIR/server-${slot}.log")"
+    else
+        echo "${indent}Memory:    real use — free(1) counts the pinned weights as cache:"
+        echo "${indent}           $(_halogen_mem_line "$LOG_DIR/server-${slot}.log")"
+    fi
 }
 
 # _describe_server for ComfyUI: where its UI is, what it is doing, and how much
@@ -3068,15 +3072,18 @@ _describe_comfyui() {
 
 # What is really left: MemAvailable minus the weights halogen pinned, which the
 # kernel files under reclaimable page cache although nothing can reclaim them.
+# With HALOGEN_WEIGHTS_LOCK=1 (0.13.2) they are mlock'ed, so MemAvailable has
+# already dropped by them and subtracting again would count them twice.
 _halogen_mem_line() {
     local log="$1" weights gtt
     weights=$(sed -n 's/.*memory: \([0-9.]*\) GiB of weights locked.*/\1/p' "$log" 2>/dev/null | tail -1)
+    [[ "$(_argv_env HALOGEN_WEIGHTS_LOCK)" == "1" ]] && weights=0
     gtt=$(cat /sys/class/drm/card*/device/mem_info_gtt_used 2>/dev/null | head -1)
     awk -v w="${weights:-0}" -v gtt="${gtt:-0}" '
         /^MemAvailable:/ { avail = $2 / 1048576 }
         END { real = avail - w; if (real < 0) real = 0
-              printf "weights %.1f GiB pinned, GPU (GTT) %.1f GiB, really available %.1f GiB (free(1): %.1f)",
-                     w, gtt / 1073741824, real, avail }' /proc/meminfo
+              if (w == 0) printf "GPU (GTT) %.1f GiB, available %.1f GiB (the weights are mlocked, so free(1) counts them)", gtt / 1073741824, avail
+              else printf "weights %.1f GiB pinned, GPU (GTT) %.1f GiB, really available %.1f GiB (free(1): %.1f)", w, gtt / 1073741824, real, avail }' /proc/meminfo
 }
 
 cmd_status() {

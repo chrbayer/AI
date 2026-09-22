@@ -692,6 +692,12 @@ reading its own `.hgn` weights. The slot model stays the same — `start`, `stop
 - `download` also pulls the container image, and offers to remove older tags of
   it that no models.conf entry names and no container runs (a few GB each);
   without a terminal it prints the `podman rmi` command instead.
+- **`HALOGEN_CACHE_BRANCHES`** (0.13.3, default 2, 3 in models.conf here) is
+  how many branches of one conversation the prompt cache keeps resume points
+  for. Two is a conversation and one side turn; three is a parent forked into
+  two children, which is what Claude Code running subagents does — on two, the
+  parent's resume point is the one dropped. It costs ~0.8 GiB of host memory
+  and raises the entry cap with it (16 entries here, ~111 MiB each).
 - `clear-kv` has nothing to call (restart with `--cache-ram 0` for a hard reset),
   `cache-stats` reads the server's own `/cache` counters, `probe-reasoning` reads
   `tokenizer/chat_template.jinja` beside the checkpoint, and `bench` measures
@@ -701,10 +707,16 @@ reading its own `.hgn` weights. The slot model stays the same — `start`, `stop
   `benchmarks/*.jsonl` as llama-bench's, with a `results` list per run. While a
   halogen server runs, `bench` skips the llama models.
 
-**Memory as `free` shows it is misleading.** The weights are pinned by the GPU
-driver straight out of the file cache, not `mlock`ed, so `free` and
-`MemAvailable` count them as reclaimable cache: ~80 GiB "available" while
-~13 GiB really are. `status` prints the real figure.
+**Memory as `free` shows it is misleading** — unless the weights are locked.
+By default the GPU driver pins them straight out of the file cache without
+`mlock`, so `free` and `MemAvailable` count them as reclaimable cache: ~80 GiB
+"available" while ~13 GiB really are, and `status` prints the real figure.
+`HALOGEN_WEIGHTS_LOCK=1` (0.13.2, in models.conf here) `mlock`s them instead:
+the kernel can no longer reclaim weight pages while the 47.7 GiB lookup table
+streams through the same file cache — the cycle behind the prefill stalls
+`--compact` works around — and `free` then tells the truth, which `status`
+follows. The price is that a co-tenant asking for more than the host has left
+makes the kernel kill this server (exit 137) rather than starve it slowly.
 
 **The host matters more than for llama-server.** Measured on this machine:
 prefill 1100–1300 t/s and decode 35 t/s (prose) / 48 t/s (code) after a fresh
