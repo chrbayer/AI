@@ -1263,12 +1263,13 @@ typed at a terminal (`--dry-run`, or no terminal: list only):
   shards of a split GGUF count as named by its first, drafts named in
   `spec_args` count, halogen directories are left whole (the server mounts
   them), and so is the VoiceDesign model llmctl uses itself;
-- the parts of a download joined into one file (`*.gguf.partNofM`), once the
-  joined file is there;
 - ComfyUI models no installed workflow names (what `list` shows as such).
 
-On btrfs a joined file shares its blocks with its parts, so deleting the parts
-frees nothing; `prune` says so rather than promising the size of the files.
+Never listed: the parts of a download joined into one file
+(`*.gguf.partNofM`). `download` checks for them and fetches them again when
+they are gone — and then they take the space they now share with the joined
+file on btrfs. On btrfs, `prune` reports what deleting would really free
+rather than the size of the files.
 
 ## Architecture
 

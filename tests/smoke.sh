@@ -169,6 +169,8 @@ printf 'x' > "$M/magnum-v4-72b-GGUF/magnum-v4-72b-Q6_K/magnum-v4-72b-Q6_K-00002-
 check "prune finds a directory nothing uses" "gone-model"        -- "$L" prune --dry-run
 check "prune keeps the shards of a named model" "!00002-of-00002" -- "$L" prune --dry-run
 check "prune keeps drafts named in spec args" "!Llama-3.2-1B"    -- "$L" prune --dry-run
+mkdir -p "$M/joined"; printf 'x' > "$M/joined/big.gguf.part1of2"
+check "prune never lists download parts" "!part1of2"             -- "$L" prune --dry-run
 check "prune does not delete without a terminal" "Not deleting"  -- sh -c "'$L' prune < /dev/null"
 check "prune left the files in place"    "old.gguf"              -- ls "$M/gone-model"
 

@@ -3516,12 +3516,11 @@ cmd_prune() {
             [[ "$p" =~ ^(.*)-[0-9]{5}-of-([0-9]{5})\.gguf$ ]] && first="${BASH_REMATCH[1]}-00001-of-${BASH_REMATCH[2]}.gguf"
             for r in "${refs[@]}"; do [[ "$r" == "$p" || "$r" == "$first" || "$p" == "$r/"* ]] && { named=true; break; }; done
             [[ "$named" == true ]] && continue
-            # Parts are only spare once the joined file exists; before, they are the model.
-            [[ "$p" == *.part*of* && ! -s "${p%.part*}" ]] && continue
-            cand+=("$p")
-            if [[ "$p" == *.part*of* ]]; then why+=("part of a split download, joined into ${p##*/}"); why[-1]="${why[-1]%.part*}"
-            else why+=("no entry in models.conf names it"); fi
-        done < <(find "$d" -maxdepth 2 -type f \( -name '*.gguf' -o -name '*.gguf.part*of*' \) -not -path '*/.cache/*' -print0 | sort -z)
+            cand+=("$p"); why+=("no entry in models.conf names it")
+        # Not the parts of a joined download (*.gguf.partNofM): download checks
+        # for them and fetches them again when they are gone — then as blocks
+        # of their own, where now they share the joined file's.
+        done < <(find "$d" -maxdepth 2 -type f -name '*.gguf' -not -path '*/.cache/*' -print0 | sort -z)
     done
     # ComfyUI: what its installed workflows do not name.
     for entry in "${_MODELS[@]}"; do
@@ -3539,7 +3538,7 @@ cmd_prune() {
         return 0
     fi
     # What goes away for real: on btrfs, blocks shared with a file that stays
-    # (a reflinked copy, the parts of a joined download) are not freed.
+    # (a reflinked copy, say) are not freed.
     local btrfs=false
     [[ "$(stat -f -c %T "$models" 2>/dev/null)" == btrfs ]] && command -v btrfs > /dev/null && btrfs=true
     local i total=0 freed=0 sz ex
