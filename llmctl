@@ -9,7 +9,7 @@
 #   llmctl stop [slot]                         stop slot (or all if omitted)
 #   llmctl status                              show running state, model and key parameters per slot
 #   llmctl clear-kv [slot]                     drop the KV cache without restarting (all slots, or one); ComfyUI: unload its models
-#   llmctl download <name|all> [PATTERN] [--from DIR]  fetch models; for ComfyUI set it up and fetch what its workflows name
+#   llmctl download <name|all> [PATTERN] [--from DIR|--check]  fetch models; for ComfyUI set it up and fetch what its workflows name
 #   llmctl update <comfyui-model> [--torch]    pull ComfyUI and its Python dependencies forward
 #   llmctl voice list|add|design|rm            voices for speech (tts) slots
 #   llmctl probe-reasoning [model]             show what each model's chat template supports
@@ -3339,7 +3339,7 @@ cmd__complete() {
         env)
             case $k in 0) _complete_models llama halogen ;; 1) echo "$slot_nums" ;; esac
             printf '%s\n' --proxy --direct ;;
-        download) (( k == 0 )) && { _complete_models; echo all; }; printf '%s\n' --force --from ;;
+        download) (( k == 0 )) && { _complete_models; echo all; }; printf '%s\n' --check --force --from ;;
         update)   (( k == 0 )) && _complete_models comfyui; echo --torch ;;
         bench)    (( k == 0 )) && { _complete_models; echo all; }; echo --full ;;
         probe-reasoning) (( k == 0 )) && _complete_models llama ;;
@@ -4412,6 +4412,7 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  comfyui: set ComfyUI up (checkout, ROCm venv, patches, workflows) and fetch the"
     printf "  %-20s %s\n" ""                      "  models its workflows name; PATTERN: only workflows whose name contains it;"
     printf "  %-20s %s\n" ""                      "  --from DIR: move an existing ComfyUI checkout into place instead"
+    printf "  %-20s %s\n" ""                      "  --check: only tell what would be downloaded, with sizes; exit 0 when nothing"
     printf "  %-20s %s\n" "update <m> [--torch]"   "comfyui: git pull (patches kept), Python dependencies, workflows; --torch: torch too"
     printf "  %-20s %s\n" "voice list|add|design|rm" "voices the speech (tts) slots speak in: design one from a description, or add a recording"
     printf "  %-20s %s\n" ""                      "  voice export [FILE] / import FILE [--force]: they live nowhere else — back them up"
@@ -4477,14 +4478,49 @@ _download_model() {
     local includes="$3"
     local force="${4:-}"
 
-    echo "  Downloading $repo ..."
-    mkdir -p "$model_path"
-
     local -a include_args=()
     read -ra include_pats <<< "$includes"
     for pat in "${include_pats[@]}"; do
         include_args+=(--include "$pat")
     done
+
+    # --check: hf compares with what is in the directory and fetches nothing.
+    if [[ "$DL_CHECK" == true ]]; then
+        # hf creates the directory and its .cache even for a dry run. Where there
+        # is no directory yet, everything is missing, so a throwaway one answers.
+        local out line dir="$model_path" tmp="" had_cache=true
+        if [[ ! -d "$dir" ]]; then
+            tmp=$(mktemp -d); dir="$tmp"
+        fi
+        [[ -e "$dir/.cache" ]] || had_cache=false
+        out=$(hf download "$repo" --local-dir "$dir" "${include_args[@]}" --dry-run 2>&1)
+        [[ "$had_cache" == true ]] || rm -rf "$dir/.cache"
+        [[ -n "$tmp" ]] && rm -rf "$tmp"
+        line=$(grep -m1 -oE 'Will download [0-9]+ files? \(out of [0-9]+\) totalling [0-9.]+ ?[A-Za-z]*' <<< "$out")
+        if [[ -z "$line" ]]; then
+            echo "  $repo: cannot tell — $(tail -1 <<< "$out")"
+            DL_UNKNOWN=$(( DL_UNKNOWN + 1 ))
+            return 0
+        fi
+        local n total size
+        read -r _ _ n _ _ _ total _ size <<< "${line//[()]/}"
+        size="${size%.}"
+        if (( n == 0 )); then
+            echo "  $repo: complete ($total file(s))"
+        else
+            echo "  $repo: $n of $total file(s) to download, $size"
+            # The files that make the size; a repo's README and configs only as a count.
+            awk -F'\t' 'f && $2 ~ /[MGT]$/ { printf "    %-8s %s\n", $2, $1; next }
+                        f && $2 != "-" { small++ }
+                        /^file\tsize/ { f = 1 }
+                        END { if (small) printf "    and %d small file(s)\n", small }' <<< "$out"
+            DL_PENDING=$(( DL_PENDING + 1 ))
+        fi
+        return 0
+    fi
+
+    echo "  Downloading $repo ..."
+    mkdir -p "$model_path"
 
     if [[ -n "$force" ]]; then
         HF_FORCE_DOWNLOAD=1 hf download "$repo" --local-dir "$model_path" "${include_args[@]}"
@@ -4730,6 +4766,7 @@ _download_comfyui() {
     local pattern="$1" from="$2"
     _comfyui_paths
     echo "=== $_r_label ==="
+    [[ "$DL_CHECK" == true ]] && { _check_comfyui "$pattern"; return 0; }
     if [[ -n "$from" ]]; then
         _comfyui_migrate "$from" || return 1
     elif [[ ! -x "$c_app/.venv/bin/python" ]]; then
@@ -4767,6 +4804,43 @@ _download_comfyui() {
     python3 -u "$COMFYUI_MODELS_SCRIPT" download "$c_wf" "$c_models" ${pattern:+"$pattern"} --sources "$COMFYUI_SHARE/sources.json"
 }
 
+# download --check for a comfyui entry: the checkout and its venv, the custom
+# nodes at their commit, and the models the workflows name. Changes nothing.
+_check_comfyui() {
+    local pattern="$1" wf="$c_wf"
+    if [[ -x "$c_app/.venv/bin/python" ]]; then
+        echo "  ComfyUI: present in $c_app"
+    else
+        echo "  ComfyUI: to set up — git clone, venv with ROCm torch (~17 GB of wheels)"
+        DL_PENDING=$(( DL_PENDING + 1 ))
+    fi
+    local dir url commit rest
+    while read -r dir url commit rest; do
+        [[ -z "$dir" || "$dir" == \#* ]] && continue
+        local target="$c_base/custom_nodes/$dir"
+        if [[ ! -d "$target/.git" ]]; then
+            echo "  custom nodes $dir: to clone"; DL_PENDING=$(( DL_PENDING + 1 ))
+        elif [[ "$(git -C "$target" rev-parse HEAD 2>/dev/null)" != "$commit" ]]; then
+            if git -C "$target" cat-file -e "$commit^{commit}" 2>/dev/null; then
+                echo "  custom nodes $dir: to move to ${commit:0:12} (already fetched)"
+            else
+                echo "  custom nodes $dir: to fetch ${commit:0:12}"; DL_PENDING=$(( DL_PENDING + 1 ))
+            fi
+        else
+            echo "  custom nodes $dir: at ${commit:0:12}"
+        fi
+    done < <(grep -v '^[[:space:]]*$' "$COMFYUI_SHARE/custom_nodes.txt" 2>/dev/null)
+    # Before the first download the workflows are only the bundled ones.
+    [[ -d "$wf" ]] || wf="$COMFYUI_SHARE/workflows"
+    _check_deps hf python3 || return 1
+    python3 "$COMFYUI_MODELS_SCRIPT" check "$wf" "$c_models" ${pattern:+"$pattern"} --sources "$COMFYUI_SHARE/sources.json"
+    case $? in
+        0) ;;
+        1) DL_PENDING=$(( DL_PENDING + 1 )) ;;
+        *) DL_UNKNOWN=$(( DL_UNKNOWN + 1 )) ;;
+    esac
+}
+
 # An interpreter the ROCm torch wheels are built for. `command -v` is no test:
 # a pyenv shim for a version that is installed but not selected exists and
 # fails when run. $1 is an explicit choice, tried first.
@@ -4784,6 +4858,17 @@ _find_python() {
 # what `voice design` needs — a venv with ROCm torch and qwen-tts, and the
 # VoiceDesign model — and the bundled starter voices.
 _tts_setup() {
+    if [[ "$DL_CHECK" == true ]]; then
+        if [[ -x "$TTS_DIR/venv/bin/python" ]]; then
+            echo "  venv for voice design: present"
+        else
+            echo "  venv for voice design: to build — torch and torchaudio for ROCm, qwen-tts (several GB)"
+            DL_PENDING=$(( DL_PENDING + 1 ))
+        fi
+        echo "  VoiceDesign model:"
+        _download_model "$TTS_DESIGN_REPO" "$TTS_DESIGN_DIR" ""
+        return 0
+    fi
     mkdir -p "$TTS_VOICES"
     local f n=0
     for f in "$TTS_SHARE"/voices/*; do
@@ -5013,9 +5098,11 @@ cmd_download() {
     local force=""
 
     local from="" pattern=""
+    DL_CHECK=false DL_PENDING=0 DL_UNKNOWN=0
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --force|-f) force="1"; shift ;;
+            --check|--dry-run) DL_CHECK=true; shift ;;
             --from) _need_value "$@" || return 1; from="$2"; shift 2 ;;
             -*) echo "Unknown option: $1"; return 1 ;;
             *) if [[ -z "$target" ]]; then target="$1"; else pattern="$1"; fi; shift ;;
@@ -5023,11 +5110,12 @@ cmd_download() {
     done
 
     if [[ -z "$target" ]]; then
-        echo "Usage: $PROG download [--force] <model-name|all>"
+        echo "Usage: $PROG download [--force|--check] <model-name|all>"
         echo "       $PROG download <comfyui-model> [PATTERN] [--from DIR]"
         echo ""
         echo "  Options:"
         echo "    --force, -f   force re-download even if model exists"
+        echo "    --check       only tell what would be downloaded; exit 0 when nothing"
         echo "    PATTERN       comfyui: only the models of workflows whose file name contains it"
         echo "    --from DIR    comfyui: move an existing ComfyUI checkout (with .venv) into place"
         echo ""
@@ -5040,9 +5128,31 @@ cmd_download() {
     fi
 
     _check_deps hf || return 1
+    if [[ "$DL_CHECK" == true ]]; then
+        [[ -z "$force$from" ]] || { echo "Error: --check fetches nothing, so --force and --from have no meaning with it"; return 1; }
+        # A subshell's exit is caught here, so the verdict comes last either way.
+        local rc=0
+        _download_target "$target" "$pattern" "$force" "$from" || rc=$?
+        (( rc == 0 || DL_PENDING > 0 )) || return 2
+        echo ""
+        if (( DL_PENDING )); then
+            echo "To download: $DL_PENDING item(s) above — $PROG download $target${pattern:+ \"$pattern\"}"
+            return 1
+        fi
+        if (( DL_UNKNOWN )); then
+            echo "Could not check $DL_UNKNOWN item(s); nothing else to download."
+            return 2
+        fi
+        echo "Nothing to download: $target is complete."
+        return 0
+    fi
+    _download_target "$target" "$pattern" "$force" "$from"
+}
 
+_download_target() {
+    local target="$1" pattern="$2" force="$3" from="$4"
     if [[ "$target" == "all" ]]; then
-        echo "Downloading all models..."
+        [[ "$DL_CHECK" == true ]] || echo "Downloading all models..."
         for entry in "${_MODELS[@]}"; do
             IFS='|' read -r m_name _ m_model m_mmproj _ m_label _ _ _ m_hf_repo m_hf_includes m_hf_dir _ _ _ _ m_spec_args m_hf_draft m_hf_mmproj _ <<< "$entry"
             _resolve_model "$m_name"
@@ -5105,6 +5215,15 @@ cmd_download() {
 # the first start anyway, but then that start waits for gigabytes of image.
 _pull_halogen_image() {
     _check_deps podman || return 1
+    if [[ "$DL_CHECK" == true ]]; then
+        if podman image exists "$_r_binary"; then
+            echo "  Container image $_r_binary: present"
+        else
+            echo "  Container image $_r_binary: to pull"
+            DL_PENDING=$(( DL_PENDING + 1 ))
+        fi
+        return 0
+    fi
     echo "  Container image $_r_binary:"
     podman pull -q "$_r_binary" > /dev/null && echo "  present"
     _prune_halogen_images "$_r_binary"

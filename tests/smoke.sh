@@ -26,10 +26,16 @@ cp "$ROOT/examples/models.conf" "$ROOT/examples/presets.conf" "$LLMCTL_CONFIG_DI
 
 # Stubs: the commands llmctl checks for before it builds anything. podman
 # answers "no such container", so no slot looks like a running halogen.
-for b in llama-server llama-tts hf stunnel git cmake systemctl loginctl journalctl; do
+for b in llama-server llama-tts stunnel git cmake systemctl loginctl journalctl; do
     printf '#!/bin/sh\nexit 0\n' > "$SANDBOX/bin/$b"
 done
 printf '#!/bin/sh\nexit 1\n' > "$SANDBOX/bin/podman"
+# hf answers a dry run as if every file were there.
+cat > "$SANDBOX/bin/hf" <<'STUB'
+#!/bin/sh
+case " $* " in *" --dry-run "*) printf '[dry-run] Will download 0 files (out of 2) totalling 0.0.\nfile\tsize\n' ;; esac
+exit 0
+STUB
 chmod +x "$SANDBOX"/bin/*
 export PATH="$SANDBOX/bin:$PATH"
 
@@ -183,6 +189,13 @@ check "complete skips option values"     "--proxy"               -- "$L" _comple
 check "complete env leaves out ComfyUI"  "!comfy"                -- "$L" _complete env ""
 check "complete update offers ComfyUI"   "comfy"                 -- "$L" _complete update ""
 check "complete asks for files"          "@files"                -- "$L" _complete voice import ""
+
+# ── download --check ──────────────────────────────────────────
+check "download --check says complete"   "Nothing to download"   -- "$L" download qwen --check
+check "download --check covers the draft" "Draft model"          -- "$L" download llama3.3 --check
+check "download --check sees a missing image" "to pull"          -- "$L" download flash --check
+check "download --check exits 1 when something is missing" "rc=1" -- sh -c "'$L' download flash --check >/dev/null; echo rc=\$?"
+check "download --check refuses --force" "have no meaning"       -- "$L" download qwen --check --force
 
 # ── things that must not happen ──────────────────────────────
 check "no command leaks the sandbox"     "!$HOME/.local/share/llmctl/tts" -- "$L" start speech 5 --print-cmd

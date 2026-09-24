@@ -46,8 +46,17 @@ directly — that is the form used below. Without it: `eval "$(llmctl env qwen 1
 
 ```bash
 llmctl download <model-name>
-llmctl download all   # all models
+llmctl download all           # all models
+llmctl download all --check   # only tell what is missing, with sizes
 ```
+
+`--check` fetches nothing and creates nothing. For each model it lists what a
+download would bring — files from Hugging Face (asked of `hf download
+--dry-run`), a halogen container image not pulled yet, and for ComfyUI the
+checkout and venv, custom nodes not at their commit and every model a
+workflow names that is not there (`download comfy klein --check`, too). It
+ends with a verdict, and its exit status says the same: 0 nothing to
+download, 1 something, 2 could not tell.
 
 ## Usage
 
@@ -70,7 +79,7 @@ llmctl bench --full all                # Full test: all 8 ROCm combos + Vulkan
 llmctl bench flash                     # halogen: prefill + decode of the running slot
 llmctl env <name> [slot]               # Set Claude Code env vars
 llmctl clear                           # Clear env vars
-llmctl download <model>                # Download model(s)
+llmctl download <model>                # Download model(s); --check: only say what is missing
 llmctl prune [--dry-run]               # Models nothing names any more; deletes after a typed yes
 llmctl version                         # Print the version
 ```

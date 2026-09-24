@@ -35,6 +35,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -275,6 +276,68 @@ def fetch_plain(url, dest):
     return result is True
 
 
+UNITS = {"": 1, "K": 2**10, "M": 2**20, "G": 2**30, "T": 2**40}
+
+
+def hf_bytes(text):
+    """hf's '18.0G' as bytes."""
+    m = re.fullmatch(r"([\d.]+)\s*([KMGT]?)B?", text.strip())
+    return int(float(m.group(1)) * UNITS[m.group(2)]) if m else 0
+
+
+def hf_dry_run(args):
+    """(files to fetch, their bytes) — or None when hf cannot tell."""
+    with tempfile.TemporaryDirectory() as tmp:
+        r = subprocess.run(["hf", "download", *args, "--local-dir", tmp, "--dry-run"],
+                           capture_output=True, text=True)
+    m = re.search(r"Will download (\d+) files? \(out of \d+\) totalling ([\d.]+\s*\w*)", r.stdout + r.stderr)
+    return (int(m.group(1)), hf_bytes(m.group(2).rstrip("."))) if m else None
+
+
+def cmd_check(wf_dir, models_dir, pattern=None, sources=None):
+    """What `download` would fetch, fetching nothing. Exit 1 when something is missing."""
+    wfs = workflows(wf_dir, pattern)
+    if not wfs:
+        print(f"  no workflow in {wf_dir}" + (f" matches '{pattern}'" if pattern else ""))
+        return 2
+    urls, users = collect(wfs)
+    recipes = {}
+    if sources and Path(sources).is_file():
+        recipes = {k: v for k, v in json.loads(Path(sources).read_text()).items() if not k.startswith("_")}
+    models = Path(models_dir)
+    missing, known, unknown = 0, 0, 0
+    for key, u in urls.items():
+        if present(models / key):
+            continue
+        missing += 1
+        if key in recipes:
+            n = recipes[key].get("bytes") or 0
+            known += n
+            print(f"  missing  {gib(n):>8}  {key}  (built from {recipes[key]['repo']})")
+            continue
+        got = None
+        url = u[0] if u else ""
+        m, r = HF_URL.match(url), HF_REPO.match(url)
+        if m:
+            repo, rev, path = m.groups()
+            got = hf_dry_run([repo, urllib.parse.unquote(path), "--revision", rev])
+        elif r:
+            repo, rev = r.groups()
+            got = hf_dry_run([repo] + (["--revision", rev] if rev else []))
+        if got:
+            known += got[1]
+        else:
+            unknown += 1
+        size = gib(got[1]) if got else "?"
+        where = urllib.parse.urlsplit(url).hostname or "no URL — place it by hand"
+        who = users[key][0].removesuffix(".json") if len(users[key]) == 1 else f"{len(users[key])} workflows"
+        print(f"  missing  {size:>8}  {key}  ({where}; for {who})")
+    print(f"  {len(urls)} models: {len(urls) - missing} present, {missing} to download"
+          + (f", {gib(known)}" if missing else "")
+          + (f" plus {unknown} of unknown size" if unknown else ""))
+    return 1 if missing else 0
+
+
 def cmd_download(wf_dir, models_dir, pattern=None, sources=None):
     wfs = workflows(wf_dir, pattern)
     if not wfs:
@@ -335,13 +398,15 @@ def main(argv):
         i = argv.index("--sources")
         sources = argv[i + 1] if i + 1 < len(argv) else None
         del argv[i:i + 2]
-    if len(argv) < 3 or argv[0] not in ("list", "sizes", "download", "orphans"):
+    if len(argv) < 3 or argv[0] not in ("list", "sizes", "download", "orphans", "check"):
         print("usage: comfyui_models.py list|sizes|orphans WORKFLOWS_DIR MODELS_DIR\n"
-              "       comfyui_models.py download WORKFLOWS_DIR MODELS_DIR [PATTERN] [--sources FILE]",
+              "       comfyui_models.py download|check WORKFLOWS_DIR MODELS_DIR [PATTERN] [--sources FILE]",
               file=sys.stderr)
         return 2
     if argv[0] == "list":
         return cmd_list(argv[1], argv[2])
+    if argv[0] == "check":
+        return cmd_check(argv[1], argv[2], argv[3] if len(argv) > 3 else None, sources)
     if argv[0] == "orphans":
         return cmd_orphans(argv[1], argv[2])
     if argv[0] == "sizes":
