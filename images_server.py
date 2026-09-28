@@ -256,8 +256,11 @@ def run(graph):
             raise RuntimeError("ComfyUI failed: " + ("; ".join(msgs) or "see its log"))
         time.sleep(0.5)
     else:
+        # Out of the queue, or stopped if it already runs: nobody waits for it
+        # any more, and a client that retries would otherwise add a second one.
         requests.post(f"{ARGS.comfy}/queue", json={"delete": [pid]}, timeout=10)
-        raise TimeoutError(f"no result within {ARGS.timeout} s")
+        requests.post(f"{ARGS.comfy}/interrupt", json={"prompt_id": pid}, timeout=10)
+        raise TimeoutError(f"no result within {ARGS.timeout} s — stopped it in ComfyUI")
     out = []
     for node in h["outputs"].values():
         for img in node.get("images", []):
@@ -377,7 +380,8 @@ def main():
     p.add_argument("--api", required=True, help="directory of the API-format workflows")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, required=True)
-    p.add_argument("--timeout", type=int, default=900, help="seconds one image may take")
+    # FLUX.2 dev editing with two references takes ~20 min here.
+    p.add_argument("--timeout", type=int, default=3600, help="seconds one image may take")
     p.parse_args(namespace=ARGS)
     ARGS.comfy = ARGS.comfy.rstrip("/")
     ARGS.public_comfy = (ARGS.public_comfy or ARGS.comfy).rstrip("/")

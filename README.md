@@ -922,7 +922,7 @@ without knowing a ComfyUI workflow.
 
 ```python
 from openai import OpenAI
-img = OpenAI(base_url="http://localhost:8089/v1", api_key="-")
+img = OpenAI(base_url="http://localhost:8089/v1", api_key="-", timeout=3600, max_retries=0)
 r = img.images.generate(model="flux2-klein-9b", prompt="Ein roter Leuchtturm bei Sonnenuntergang",
                         size="1024x768", extra_body={"seed": 42})
 png = base64.b64decode(r.data[0].b64_json)
@@ -947,10 +947,18 @@ r = img.images.edit(model="flux2-klein-9b", image=open("turm.png", "rb"),
   size follows its first image.
 - **Results stay out of the gallery.** They go to ComfyUI's temp directory,
   not to `output/`; the caller has them.
-- **Measured** (klein, beside a 70B and an 8B LLM, 37 GB free): a 1024×768
-  image in 39–55 s including loading the model, an edit in 62 s — and once in
-  350 s, when klein's ~33 GB met that memory and the system went into zram.
-  The official `openai` Python client works unchanged for both.
+- **Measured** at 1024×1024, the machine to itself, each including loading
+  its model: Qwen-Image 2.1 51–77 s, an edit with one image 98 s, with two
+  160 s; FLUX.2 dev 330 s, an edit with one image 630 s, with two ~20 min,
+  FLUX.2 dev Turbo 137 s; SeedVR2 upscales 384 → 1536 px in 33 s.
+  klein, beside a 70B and an 8B LLM with 37 GB free: 39–55 s, an edit 62 s —
+  and once 350 s, when its ~33 GB met that memory and the system went into
+  zram. The official `openai` Python client works unchanged.
+- **Give the client time, and no retries.** The `openai` client gives up
+  after 10 minutes and then sends the request again, twice — for FLUX.2 dev
+  that is the same 20 minutes of work three times. Hence `timeout=3600,
+  max_retries=0` above. The server waits up to an hour itself and stops the
+  job in ComfyUI when that runs out.
 - **The API format.** POST /prompt takes a workflow in ComfyUI's API format,
   which only its frontend can make from a saved one. `comfyui/api/` holds the
   bundled workflows in that format, made by `comfyui/export_api.py`: it opens
