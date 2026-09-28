@@ -1323,4 +1323,10 @@ streamed WAV header and the transcript clean-up in the proxy. A helper whose
 imports (flask, numpy, requests) are missing is skipped, not failed.
 
 What they cannot reach is everything that needs the real thing: a server that
-starts and answers, a download, `update comfy`. Those are checked by hand.
+starts and answers, a download, `update comfy`. `tests/setup_paths.sh` covers
+the setup paths from nothing — ComfyUI (`download`, `update`, custom nodes,
+an image through the API), the voice-design venv, the streaming speech build,
+speech read back by asr — with only what setup builds in a scratch directory
+(`SETUP_TEST_DIR`, default `/tmp/llmctl-setup-test`) and the real models, which
+it never writes to. The two parts take ~17 GB each, one after the other, and
+the machine to themselves.
