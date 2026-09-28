@@ -774,9 +774,10 @@ the weights locked, `MemAvailable` has already dropped by them and subtracting
 them again would count them twice.
 
 **The host matters more than for llama-server.** Measured on this machine:
-prefill 1100–1300 t/s and decode 40 t/s (prose) / 59 t/s (code) on 0.14.0,
-whose draft head drafts two tokens ahead (0.13.8: 33 / 47–52 t/s, same
-greedy output, same session), after a fresh boot with `amd_iommu=off amdgpu.noretry=0` on the kernel line; the same server
+prefill 1310–1370 t/s (6.6k–26k tokens) and decode 39 t/s (prose) / 59 t/s
+(code) on 0.14.2 — 0.14.1's routed-expert kernel took prefill up by 9–32%
+(0.14.0: 1060–1260 t/s), 0.14.0's draft head decode by 20% (0.13.8: 33 /
+47–52 t/s); same greedy output, same session — after a fresh boot with `amd_iommu=off amdgpu.noretry=0` on the kernel line; the same server
 with fragmented memory managed 8–370 t/s of prefill, most requests stalling
 40–200 s in kernel compaction. Keep `vm.compaction_proactiveness` at the kernel
 default (20) — 0 does not prevent the stalls.
