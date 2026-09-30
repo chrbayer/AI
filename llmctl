@@ -250,11 +250,12 @@ _check_deps() {
 #     PID file names the podman client, its argv is the full start command (what
 #     preset and preset-save compare against), and the container's output is the
 #     server log. The container is named llmctl-halogen-<slot>.
-#   - It holds most of the machine: ~64 GiB of weights pinned, ~30 GiB of KV pool
-#     and working memory. So it runs exclusively — it will not start beside any
-#     other slot, and no other slot starts beside it.
-#   - It speaks OpenAI Chat Completions and Responses, not Anthropic Messages, so
-#     its proxy is not optional: it translates /v1/messages for Claude Code.
+#   - It holds most of the machine: ~62 GiB of weights pinned, ~20 GiB of KV pool
+#     and working memory. Other slots start beside it only when they fit
+#     (_memory_check_start), and it starts beside others only when it fits.
+#   - Its proxy always runs: it caps token budgets and inlines image URLs. Since
+#     0.15.1 the server speaks the Messages API itself, and the proxy passes
+#     /v1/messages through (LLMCTL_HALOGEN_TRANSLATE=1: translates it instead).
 #   - Settings are environment variables of the container: models.conf's
 #     extra_args hold KEY=VAL pairs, and start options map onto them.
 HALOGEN_NATIVE_CTX=262144        # Qwen3.8-Flash-Next's trained context; more takes YaRN
@@ -356,7 +357,8 @@ _halogen_cap_of_slot() {
 #   - ComfyUI loads models per workflow and keeps them until something else needs
 #     the room. It cannot see an LLM coming, so starting a llama model first asks
 #     every running ComfyUI to unload (POST /free).
-#   - halogen runs exclusively, and ComfyUI is no exception.
+#   - Beside halogen it starts when its idle footprint fits; its workflows then
+#     have only what is left.
 #   - It serves its own web UI on the slot's server port; there is no proxy and no
 #     Claude Code environment.
 #
@@ -542,6 +544,7 @@ _start_tts() {
         return 0
     fi
 
+    [[ "$ignore_memory" == true ]] || _memory_check_start "$slot" "${cmd[*]}" false
     _check_deps python3 "$_r_binary" || exit 1
     local f
     for f in "$model" "$mm"; do
@@ -724,13 +727,7 @@ _start_comfyui() {
         return 0
     fi
 
-    local hs
-    hs=$(_halogen_slots | head -1)
-    if [[ -n "$hs" ]]; then
-        echo "Error: a halogen server runs on slot $hs, and halogen runs exclusively — it holds"
-        echo "       most of this machine's memory. Stop it first: $PROG stop $hs"
-        exit 1
-    fi
+    [[ "$ignore_memory" == true ]] || _memory_check_start "$slot" "${cmd[*]}" false
     if [[ ! -x "$app/.venv/bin/python" || ! -f "$app/main.py" ]]; then
         echo "Error: ComfyUI is not set up at $app — run: $PROG download $_r_name"
         exit 1
@@ -1227,18 +1224,8 @@ _start_halogen() {
         return 0
     fi
 
-    # ── Exclusive: nothing else may run while halogen holds the machine ──
-    local -a others=()
-    local s
-    for s in $(_active_slots); do
-        [[ "$s" == "$slot" ]] && continue
-        if _slot_server_pid "$s" > /dev/null || _slot_proxy_pid "$s" > /dev/null; then others+=("$s"); fi
-    done
-    if (( ${#others[@]} )); then
-        echo "Error: halogen runs exclusively — it holds most of this machine's memory — and"
-        echo "       slot(s) ${others[*]} are running. Stop them first: $PROG stop"
-        exit 1
-    fi
+    # ── It holds most of the machine: it has to fit beside what runs ──
+    [[ "$ignore_memory" == true ]] || _memory_check_start "$slot" "${cmd[*]}" true
     local container; container=$(_halogen_container "$slot")
     if podman container exists "$container" 2>/dev/null; then
         # Left behind by a podman client that died without cleaning up; the port
@@ -1368,6 +1355,7 @@ cmd_start() {
     local output_dir=""         # comfyui: where generated images go (default <base>/output)
     local lang=""               # tts: default language of the speech slot (ISO 639-1)
     local seed=""               # tts: sampling seed when a request names none (-1 = random)
+    local ignore_memory=false   # skip the memory check beside halogen (preset checks the set itself)
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -1395,6 +1383,7 @@ cmd_start() {
             --output) _need_value "$@" || exit 1; output_dir="$2"; shift 2 ;;
             --lang) _need_value "$@" || exit 1; lang="$2"; shift 2 ;;
             --seed) _need_value "$@" || exit 1; seed="$2"; shift 2 ;;
+            --ignore-memory) ignore_memory=true; shift ;;
             -*) echo "Unknown option: $1"; exit 1 ;;
             *) if [[ -z "$name" ]]; then name="$1"; elif [[ "$slot" == "1" ]]; then slot="$1"; fi; shift ;;
         esac
@@ -1462,13 +1451,6 @@ cmd_start() {
     fi
     [[ "$start_proxy" == true ]] && { _check_deps python3 || exit 1; }
     if [[ "$print_cmd" != true && "$_r_backend" == llama ]]; then
-        local hs
-        hs=$(_halogen_slots | head -1)
-        if [[ -n "$hs" ]]; then
-            echo "Error: a halogen server runs on slot $hs, and halogen runs exclusively — it holds"
-            echo "       most of this machine's memory. Stop it first: $PROG stop $hs"
-            exit 1
-        fi
         [[ "$compact" == true ]] && { _compact_memory || exit 1; }
     fi
 
@@ -1599,6 +1581,7 @@ cmd_start() {
         printf '%s\n' "${cmd[*]}"
         return 0
     fi
+    [[ "$ignore_memory" == true ]] || _memory_check_start "$slot" "${cmd[*]}" false
 
     # The proxy is opt-in (--proxy): it only rewrites time/date stamps to keep the
     # prompt cache warm, which a client that sends no such stamps does not need.
@@ -2163,11 +2146,6 @@ cmd_preset() {
             exit 1
         fi
 
-        if [[ "$_r_backend" == halogen && ${#_p_entries[@]} -gt 1 ]]; then
-            echo "Error: preset '$name': '$m' is a halogen model, which runs exclusively —"
-            echo "       a preset with it can name no other model."
-            exit 1
-        fi
         e_model+=("$m"); e_slot+=("$s"); e_flags+=("${eff[*]}"); e_label+=("$_r_label")
         e_cmd+=("$out")
         # A halogen slot always has its proxy, asked for or not.
@@ -2304,7 +2282,8 @@ cmd_preset() {
         echo "      $keep_n slot(s) keep running, and keep their logs."
     fi
 
-    _preset_memory_check
+    local fits=true
+    _preset_memory_check || fits=false
 
     if [[ "$dry_run" == true ]]; then
         if (( start_n + restart_n > 0 )); then
@@ -2318,6 +2297,7 @@ cmd_preset() {
         echo ""
         return 0
     fi
+    [[ "$fits" == true ]] || exit 1
 
     if (( start_n + restart_n == 0 )) && (( ${#foreign[@]} == 0 )); then
         local pending=0 j
@@ -2374,7 +2354,8 @@ cmd_preset() {
         # there before belongs to an earlier start and must not answer for this one.
         local off=0
         [[ -f "$LOG_DIR/server-${sl}.log" ]] && off=$(stat -c%s "$LOG_DIR/server-${sl}.log" 2>/dev/null || echo 0)
-        if ( cmd_start "$m" "$sl" "${flags[@]}" ) && _wait_for_slot "$sl" "$wait_limit" "$off"; then
+        # --ignore-memory: the whole set was weighed above, before anything stopped.
+        if ( cmd_start "$m" "$sl" "${flags[@]}" --ignore-memory ) && _wait_for_slot "$sl" "$wait_limit" "$off"; then
             _record_footprint "$sl"
             echo "$_p_name" > "$PID_DIR/preset-${sl}"
             started+=("$sl")
@@ -2444,16 +2425,86 @@ _footprint_key() { printf '%s' "$1" | sha1sum | cut -c1-16; }
 # GPU memory of whatever runs on a slot, in MiB. A halogen container runs its
 # engine outside our process tree, but it runs alone, so the GPU total is its.
 # A speech slot's model lives in the engine it started as a child.
-_slot_gpu_mib() {
-    local pid c sum
+# The GTT a slot's processes hold, from their DRM fdinfo. halogen's engine runs
+# inside its container, reached through podman's host PIDs.
+_slot_gtt_mib() {
+    local pid c sum=0
     pid=$(_slot_server_pid "$1") || return 1
     if _slot_is_halogen "$1"; then
-        echo $(( $(_gtt_used_bytes) / 1048576 ))
+        for c in $(podman top "$(_halogen_container "$1")" hpid 2>/dev/null | tail -n +2); do
+            sum=$(( sum + $(_proc_gpu_mib "$c") ))
+        done
     else
         sum=$(_proc_gpu_mib "$pid")
         for c in $(pgrep -P "$pid"); do sum=$(( sum + $(_proc_gpu_mib "$c") )); done
-        echo "$sum"
     fi
+    echo "$sum"
+}
+
+# The weights halogen pinned in host memory, outside the GTT pool, as its
+# startup log reports them.
+_halogen_pinned_mib() {
+    local g
+    g=$(sed -n 's/.*memory: \([0-9.]*\) GiB of weights locked.*/\1/p' "$LOG_DIR/server-$1.log" 2>/dev/null | tail -1)
+    awk -v g="${g:-0}" 'BEGIN { printf "%d", g * 1024 }'
+}
+
+# What a slot takes from memory: its GTT, and for halogen the pinned weights
+# too — they come out of the same RAM the GTT pool is carved from.
+_slot_gpu_mib() {
+    local gtt
+    gtt=$(_slot_gtt_mib "$1") || return 1
+    if _slot_is_halogen "$1"; then
+        echo $(( gtt + $(_halogen_pinned_mib "$1") ))
+    else
+        echo "$gtt"
+    fi
+}
+
+# Beside halogen, a start has to fit: what runs already, plus what this start
+# will take (measured, or estimated), within the GTT pool minus what programs
+# outside llmctl hold and a reserve. halogen's pinned weights count, though
+# they lie outside the pool — the pool is carved from the same RAM, and what is
+# left beyond it is the system's and the page cache's (the n-gram table is read
+# through it). Only when halogen runs or starts; llama sets keep their own ways.
+# $1 slot, $2 the command it will run, $3 true when it is a halogen start.
+_memory_check_start() {
+    local slot="$1" target="$2" starting_halogen="$3"
+    local s hs=""
+    for s in $(_halogen_slots); do [[ "$s" != "$slot" ]] && hs="$s"; done
+    [[ -n "$hs" || "$starting_halogen" == true ]] || return 0
+    local total=$(( $(_gtt_total_bytes) / 1048576 ))
+    (( total > 0 )) || return 0
+    local need how="measured"
+    need=$(_lookup_footprint "$target")
+    [[ -n "$need" ]] || { need=$(_estimate_cmd_mib "$target"); how="estimated"; }
+    local running=0 gtt_ours=0 m
+    local -a held=()
+    local pid known
+    for s in $(_active_slots); do
+        m=$(_slot_gtt_mib "$s" 2>/dev/null) && gtt_ours=$(( gtt_ours + m ))
+        [[ "$s" == "$slot" ]] && continue
+        m=$(_slot_gpu_mib "$s" 2>/dev/null) || continue
+        # A slot still loading holds less than it will: what it is known to
+        # take, where that is more.
+        if pid=$(_slot_server_pid "$s") && _read_argv "$pid"; then
+            known=$(_lookup_footprint "${_ARGV[*]}")
+            [[ -n "$known" ]] || known=$(_estimate_cmd_mib "${_ARGV[*]}")
+            (( known > m )) && m=$known
+        fi
+        running=$(( running + m )); held+=("slot $s $(_gib "$m")")
+    done
+    local outside=$(( $(_gtt_used_bytes) / 1048576 - gtt_ours ))
+    (( outside < 0 )) && outside=0
+    local budget=$(( total - outside - GTT_RESERVE_MIB ))
+    (( running + need <= budget )) && return 0
+    local beside="halogen on slot $hs"
+    [[ -n "$hs" ]] || beside="the slots that run"
+    echo "Error: not enough memory beside $beside:"
+    echo "       this start needs $(_gib "$need") ($how); running: ${held[*]:-nothing} ($(_gib "$running"));"
+    echo "       budget $(_gib "$budget") (GTT pool $(_gib "$total") minus $(_gib "$outside") outside llmctl and $(_gib "$GTT_RESERVE_MIB") reserve)."
+    echo "       Stop a slot first, or start anyway with --ignore-memory."
+    exit 1
 }
 
 # The GPU with the largest GTT pool: its total and what is in use, in bytes.
@@ -2504,9 +2555,9 @@ _estimate_cmd_mib() {
         esac
     done
     # halogen: its files are no guide — the n-gram table beside the weights is
-    # read through the page cache, not loaded. ~64 GiB pinned weights (v2) and
-    # ~30 GiB of KV pool and working memory, as models.conf describes it.
-    [[ " ${w[*]} " == *" --name $HALOGEN_CONTAINER_PREFIX"* ]] && { echo $(( 94 * 1024 )); return; }
+    # read through the page cache, not loaded. 62 GiB pinned weights (v2) and
+    # ~20 GiB of KV pool and working memory, as models.conf describes it.
+    [[ " ${w[*]} " == *" --name $HALOGEN_CONTAINER_PREFIX"* ]] && { echo $(( 84 * 1024 )); return; }
     echo $(( bytes / 1048576 ))
 }
 
@@ -2519,7 +2570,7 @@ _preset_memory_check() {
     # pool minus what our running slots hold.
     local ours=0 s m
     for s in $(_active_slots); do
-        m=$(_slot_gpu_mib "$s" 2>/dev/null) && ours=$(( ours + m ))
+        m=$(_slot_gtt_mib "$s" 2>/dev/null) && ours=$(( ours + m ))
     done
     local outside_mib=$(( $(_gtt_used_bytes) / 1048576 - ours ))
     (( outside_mib < 0 )) && outside_mib=0
@@ -2544,7 +2595,18 @@ _preset_memory_check() {
         printf "  slot %-3s %-14s %9s  (%s)\n" "${e_slot[i]}" "${e_model[i]}" "$(_gib "$mib")" "$how"
     done
     printf "  %-23s %9s  of %s available\n" "total" "$(_gib "$sum")" "$(_gib "$budget")"
-    if (( sum > budget )); then
+    local with_halogen=false
+    for (( i=0; i < ${#e_cmd[@]}; i++ )); do
+        [[ " ${e_cmd[i]} " == *" --name $HALOGEN_CONTAINER_PREFIX"* ]] && with_halogen=true
+    done
+    [[ "$with_halogen" == true ]] && echo "  (halogen counts its pinned weights too: they come out of the same RAM)"
+    if (( sum > budget )) && [[ "$with_halogen" == true ]]; then
+        # Beside halogen an overcommit does not fail cleanly: its pinned weights
+        # stay, and what gives way is the page cache and then swap.
+        echo "  This set does not fit beside halogen — not starting it. Drop an entry,"
+        echo "  or start the slots by hand with --ignore-memory."
+        return 1
+    elif (( sum > budget )); then
         echo "  WARNING: this set needs more than the GPU has free — a model will likely fail"
         echo "           to load. Loading anyway; what fails is rolled back."
     elif (( estimated )); then
@@ -3323,7 +3385,7 @@ cmd__complete() {
     case "$sub" in
         start)
             case $k in 0) _complete_models ;; 1) echo "$slot_nums" ;; esac
-            printf '%s\n' --proxy --public --compact --max-predict --reasoning --no-reasoning --reasoning-budget \
+            printf '%s\n' --ignore-memory --proxy --public --compact --max-predict --reasoning --no-reasoning --reasoning-budget \
                 --parallel --ctx --cache-ram --similarity --verbose --clear-logs --host --gpu-priority --mmproj \
                 --spec --no-spec --temp --top-p --print-cmd --output --lang --seed ;;
         preset)
@@ -4216,7 +4278,7 @@ bench_model() {
     local hs
     hs=$(_halogen_slots | head -1)
     if [[ -n "$hs" ]]; then
-        echo "  Skipping $m_label: halogen runs on slot $hs, exclusively — $PROG stop $hs first"
+        echo "  Skipping $m_label: halogen runs on slot $hs, and a measurement beside it measures both — $PROG stop $hs first"
         return
     fi
 
@@ -4371,7 +4433,8 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  --public: token auth + hardening + mTLS front for the VPS (needs gen-certs)"
     printf "  %-20s %s\n" ""                      "  --max-predict N: cap tokens per generation (-1=no limit; --public defaults to 8192)"
     printf "  %-20s %s\n" ""                      "  --compact: defragment host memory first (sudo) — for models that need large pinned blocks"
-    printf "  %-20s %s\n" ""                      "  halogen models (backend=halogen) run in podman, exclusively, always with their proxy;"
+    printf "  %-20s %s\n" ""                      "  halogen models (backend=halogen) run in podman, always with their proxy; other slots"
+    printf "  %-20s %s\n" ""                      "    start beside a running one only when their memory fits (--ignore-memory: anyway);"
     printf "  %-20s %s\n" ""                      "    --ctx above 262144 turns on YaRN, --mmproj the vision tower, --cache-ram only takes 0"
     printf "  %-20s %s\n" ""                      "  comfyui models (backend=comfyui) run ComfyUI with its web UI on the server port;"
     printf "  %-20s %s\n" ""                      "    only --host, --verbose, --clear-logs, --output DIR (where images go) and --proxy apply;"

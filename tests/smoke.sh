@@ -127,6 +127,17 @@ fi
 check "preset refuses --output without comfy" "no ComfyUI entry" -- "$L" preset c4f --output /tmp --dry-run
 check "an unknown preset says so"        "Unknown preset"        -- "$L" preset nosuchpreset
 
+# halogen shares the machine: a preset may name it beside other models.
+cat >> "$LLMCTL_CONFIG_DIR/presets.conf" <<'CONF'
+_preset_name="flash-plus"
+_preset_label="halogen and a reranker"
+_preset_entries=("flash 1" "rerank 8")
+add_preset
+CONF
+check "a preset may pair halogen with others" "slot 8"           -- "$L" preset flash-plus --dry-run
+check "start takes --ignore-memory"      "podman run"            -- "$L" start flash 1 --ignore-memory --print-cmd
+check "complete offers --ignore-memory"  "--ignore-memory"       -- "$L" _complete start flash ""
+
 # ── env ──────────────────────────────────────────────────────
 check "env exports a base URL"           "ANTHROPIC_BASE_URL"    -- "$L" env qwen 1 --direct
 check "env refuses ComfyUI"              "not an LLM"            -- "$L" env comfy 9

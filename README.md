@@ -694,11 +694,22 @@ reading its own `.hgn` weights. The slot model stays the same — `start`, `stop
   the full command, which is what `preset` compares), the container's output is
   the server log, and the container is named `llmctl-halogen-<slot>`. `stop` uses
   `podman stop`, which waits for the container to exit and removes it.
-- **It runs exclusively.** It pins ~62 GiB of weights and reserves ~20 GiB of KV
-  pool and working memory — most of a 128 GB machine. `start` refuses it beside
-  any other slot and refuses any other model beside it; a preset that names it
-  can name nothing else. `preset` switching between a halogen and a llama
-  configuration works, since it stops before it starts.
+- **Other slots beside it, when they fit.** It pins ~62 GiB of weights and
+  reserves ~20 GiB of KV pool and working memory, ~82 GiB in all, which leaves
+  ~20 GiB of the GTT pool for other slots — the voice slots (~11 GiB) or
+  embeddings and a reranker (~14 GiB), not a second big LLM. While halogen runs
+  or starts, `start` weighs what the new slot takes (measured, else estimated)
+  plus what runs against the GTT pool minus what programs outside llmctl hold
+  and 2 GiB, and refuses what does not fit, with the numbers; `--ignore-memory`
+  starts it anyway. halogen's pinned weights count, though they lie outside the
+  pool: the pool is carved from the same RAM, and what lies beyond it is the
+  system's and the page cache's, through which the n-gram table is read. A
+  preset with halogen is weighed the same way as a whole and not started when
+  it does not fit (without halogen an overcommitted preset still only warns).
+  Measured with flash, embeddings, a reranker and the speech slot together:
+  11.9 GiB really available, no swap on the SSD, all four answering. Start
+  halogen first where you can: it wants contiguous 2 MiB blocks, and memory
+  others have fragmented makes its startup compact.
 - **Its proxy always runs.** Since 0.15.1 the server speaks the Anthropic
   Messages API itself — thinking blocks replayed exactly through their
   signature, `cache_control` as a resume point for the prompt cache — so the
@@ -771,8 +782,8 @@ It stays off because of what each costs the disk: the weights are clean file
 pages, so reclaiming them writes nothing and costs re-reads, while locking them
 leaves only anonymous memory to reclaim, which goes to swap — on this host a
 file on the SSD, which filled during that test. A killed server starts again;
-SSD writes do not come back. halogen runs exclusively anyway, so the pressure
-can only come from programs outside llmctl. `status` follows the setting: with
+SSD writes do not come back. Other slots start beside it only when they fit,
+so the pressure can only come from programs outside llmctl. `status` follows the setting: with
 the weights locked, `MemAvailable` has already dropped by them and subtracting
 them again would count them twice.
 
@@ -917,8 +928,10 @@ llmctl update comfy --torch           # …and torch itself
   (`POST /free`) and waits until the memory is gone. A ComfyUI with a job in its
   queue is left alone, with a warning. `clear-kv` on its slot unloads too.
   `status` shows the GPU and RAM the process holds, read from its DRM fdinfo.
-- **Exclusive with halogen**, as every other slot is: a preset that switches to
-  halogen stops ComfyUI.
+- **Beside halogen only what is left.** ComfyUI starts beside halogen when its
+  idle footprint fits, but its workflows need 5–53 GB each once they run, and
+  beside halogen's ~82 GiB little of that is there: `preset --dry-run` lists
+  which workflows still fit.
 - **Images** go to `~/.local/share/llmctl/comfyui/output/`, or wherever
   `--output DIR` says (`llmctl start comfy 9 --output ~/Bilder/comfy`; also in a
   preset entry, where `~` is expanded too). `preset-save` records it.
@@ -1284,7 +1297,7 @@ them are served by the Vulkan build — the ROCm build is opt-in per model
 - **mistral** — Mistral-Medium-3.5-128B, UD-Q5_K_XL, 32K ctx
 - **diamond** — L3.3-70B Magnum Diamond, i1-Q5_K_M, 32K ctx; drafted by the same Llama-3.2-1B (~2.0×)
 - **magnum** — Magnum-v4-72B, Q6_K, 32K ctx; a Qwen2.5-72B fulltune, drafted by Qwen2.5-1.5B-Instruct Q4_K_M (~2.0×)
-- **flash** — Qwen3.8-Flash-Next 125B MoE on the [halogen backend](#the-halogen-backend), 4-bit `.hgn`, 256K ctx (512K with YaRN via `--ctx 524288`), vision via `--mmproj` (on in preset `flash`); runs exclusively
+- **flash** — Qwen3.8-Flash-Next 125B MoE on the [halogen backend](#the-halogen-backend), 4-bit `.hgn`, 256K ctx (512K with YaRN via `--ctx 524288`), vision via `--mmproj` (on in preset `flash`); ~82 GiB, other slots beside it only as they fit
 
 - **embed** — Qwen3-Embedding-8B, Q8_0, 8K ctx; `/v1/embeddings` for [retrieval](#building-blocks-for-retrieval-and-memory)
 - **rerank** — Qwen3-Reranker-0.6B, Q8_0, 8K ctx; `/v1/rerank`
