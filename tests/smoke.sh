@@ -93,6 +93,10 @@ check "env refuses an embedding model"   "/v1/embeddings"        -- "$L" env emb
 check "env refuses a reranking model"    "/v1/rerank"            -- "$L" env rerank 8
 check "complete env leaves out embed"    "!embed"                -- "$L" _complete env ""
 
+check "asr-live runs audio.cpp"          "audiocpp_server --config" -- "$L" start asr-live 7 --print-cmd
+check "asr-live refuses LLM options"     "audio.cpp model"       -- "$L" start asr-live 7 --ctx 4096 --print-cmd
+check "env refuses asr-live"             "speech recognizer"     -- "$L" env asr-live 7
+
 # ── halogen backend ──────────────────────────────────────────
 check "halogen start runs podman"       "podman run --rm --name llmctl-halogen-1" -- "$L" start flash 1 --print-cmd
 check "halogen start sets its context"  "HALOGEN_CTX=262144"                      -- "$L" start flash 1 --print-cmd

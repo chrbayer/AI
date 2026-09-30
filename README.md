@@ -1162,6 +1162,7 @@ llmctl does not contain an agent, but everything one needs to listen and speak:
 | Step | Slot | Endpoint |
 | --- | --- | --- |
 | hear | `asr` (Qwen3-ASR 1.7B, `--mmproj --proxy`) | `POST :8086/v1/audio/transcriptions` |
+| hear, live | `asr-live` (Nemotron 3.5 ASR on audio.cpp) | `POST :800N/v1/audio/transcriptions/live` |
 | think | any LLM, e.g. `qwen-moe --proxy` | `POST :808N/v1/chat/completions` (`stream`) |
 | speak | `speech` (Qwen3-TTS 1.7B) | `POST :8005/v1/audio/speech` (`stream`) |
 
@@ -1181,6 +1182,31 @@ with tts.audio.speech.with_streaming_response.create(
         player.write(chunk)
 ```
 
+- **Live speech recognition.** `asr-live` runs Nemotron 3.5 ASR (0.6B, 35
+  languages, German found by itself) on [audio.cpp](https://github.com/0xShug0/audio.cpp),
+  a ggml runtime for speech models, as backend `audiocpp`. It transcribes
+  while the audio is still coming in: send raw 16 kHz mono s16le PCM as it is
+  captured, in a chunked request body, and read the text as SSE deltas on the
+  same connection —
+
+  ```bash
+  ffmpeg -f pulse -i default -ar 16000 -ac 1 -f s16le - |
+    curl -sN -T - -H 'Expect:' 'http://127.0.0.1:8007/v1/audio/transcriptions/live?model=nemotron-asr-live'
+  ```
+
+  Measured on a 25 s German passage: first text after 1 s, a delta every
+  320 ms, and the whole text 0.06 s after the last audio, where `asr` needs
+  2.6 s once the recording is complete. A whole recording also works
+  (`POST /v1/audio/transcriptions`, `model=nemotron-asr`, 0.34 s for 25 s). It
+  is a little less exact than `asr`: three slips in that passage (a missing
+  "Prozent", "vier, zwei" for "vier Komma zwei"), one in 22 s of free speech,
+  and numbers stay words. ~2.4 GiB on the GPU. `llmctl download asr-live`
+  clones audio.cpp at a pinned commit and builds it with Vulkan and only the
+  model families `models.conf` names (85 s, 1.8 GB); `outdated` reports newer
+  upstream commits. The server takes its models from a JSON file llmctl writes
+  per slot under `~/.local/state/llmctl/audiocpp/`. Qwen3-ASR on audio.cpp was
+  tried too and is no gain: 5.2 s for the passage, and its "streaming" only
+  buffers.
 - **Speech recognition.** Qwen3-ASR recognizes 30 languages including German
   and names the language. It writes "language German<asr_text>…" before the
   text; the proxy of the `asr` slot strips that and returns `language` as a
@@ -1306,6 +1332,7 @@ them are served by the Vulkan build — the ROCm build is opt-in per model
 
 - **embed** — Qwen3-Embedding-8B, Q8_0, 8K ctx; `/v1/embeddings` for [retrieval](#building-blocks-for-retrieval-and-memory)
 - **rerank** — Qwen3-Reranker-0.6B, Q8_0, 8K ctx; `/v1/rerank`
+- **asr-live** — Nemotron 3.5 ASR 0.6B, f16, on audio.cpp (backend `audiocpp`); [live speech recognition](#building-blocks-for-a-voice-agent)
 
 Multimodal projectors are only loaded on an explicit `--mmproj`.
 

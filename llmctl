@@ -495,6 +495,203 @@ _slot_is_tts() {
     pid=$(_slot_server_pid "$1") && _read_argv "$pid" && _is_tts_argv
 }
 
+# ── audio.cpp backend (asr-live) ────────────────────────────
+#
+# audio.cpp (github.com/0xShug0/audio.cpp) runs speech models on ggml — here
+# Nemotron 3.5 ASR, which transcribes while the audio is still coming in. Its
+# server takes its models from a JSON file, not from its command line, so
+# llmctl writes one per model and slot, named after both: the command line then
+# still tells models apart (what preset compares), and status and preset-save
+# read the model back from the file. Each entry is served twice: as <alias>
+# for whole recordings (POST /v1/audio/transcriptions) and as <alias>-live for
+# live audio (POST /v1/audio/transcriptions/live, raw PCM in a chunked body,
+# text deltas as SSE on the same connection).
+# models.conf fields for backend=audiocpp:
+#   binary       audiocpp_server, built by `download` from a pinned commit
+#   model        the model's GGUF
+#   alias        the model id the server answers to
+#   extra_args   family=<audio.cpp family> task=<asr|tts|…> (KEY=VAL)
+AUDIOCPP_GIT="https://github.com/0xShug0/audio.cpp.git"
+AUDIOCPP_COMMIT=9427addd82e41e2e97ea6a243b4824b59d4a3c83   # 2026-09-30, tried here
+AUDIOCPP_DIR="$DATA_DIR/audio.cpp"
+AUDIOCPP_CONF_DIR="$STATE_DIR/audiocpp"
+
+_is_audiocpp_argv() { [[ " ${_ARGV[*]} " == *" --config $AUDIOCPP_CONF_DIR/"* ]]; }
+
+# The model file an audio.cpp server runs, from its config file.
+_audiocpp_model_of_argv() {
+    local conf
+    conf=$(_argv_flag --config) || return 1
+    python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["models"][0]["path"])' "$conf" 2>/dev/null
+}
+
+# KEY=VAL out of an audiocpp entry's extra_args.
+_audiocpp_arg() {
+    local key="$1" a
+    for a in "${_r_args[@]}"; do [[ "$a" == "$key="* ]] && { echo "${a#*=}"; return 0; }; done
+    return 1
+}
+
+_start_audiocpp() {
+    local -a refused=()
+    [[ -n "$reasoning" ]] && refused+=("--reasoning")
+    [[ -n "$ctx" ]] && refused+=("--ctx")
+    [[ -n "$parallel" ]] && refused+=("--parallel")
+    [[ -n "$cache_ram" ]] && refused+=("--cache-ram")
+    [[ -n "$similarity" ]] && refused+=("--similarity")
+    [[ -n "$spec" ]] && refused+=("--spec")
+    [[ "$use_mmproj" == true ]] && refused+=("--mmproj")
+    [[ -n "$temp" ]] && refused+=("--temp")
+    [[ -n "$top_p" ]] && refused+=("--top-p")
+    [[ -n "$max_predict" ]] && refused+=("--max-predict")
+    [[ "$start_proxy" == true ]] && refused+=("--proxy")
+    [[ "$public" == true ]] && refused+=("--public")
+    [[ -n "$gpu_priority" ]] && refused+=("--gpu-priority")
+    [[ "$compact" == true ]] && refused+=("--compact")
+    [[ "$verbose" == true ]] && refused+=("--verbose")
+    [[ -n "$output_dir" ]] && refused+=("--output")
+    [[ -n "$lang" ]] && refused+=("--lang")
+    [[ -n "$seed" ]] && refused+=("--seed")
+    if (( ${#refused[@]} )); then
+        echo "Error: '$name' is an audio.cpp model — these options have no meaning for it: ${refused[*]}"
+        exit 1
+    fi
+    local family task
+    family=$(_audiocpp_arg family) || { echo "Error: models.conf entry '$_r_name' names no family=… in extra_args"; exit 1; }
+    task=$(_audiocpp_arg task) || task=asr
+    local model="${_r_model//\~/$HOME}" bin="${_r_binary//\~/$HOME}"
+    local conf="$AUDIOCPP_CONF_DIR/${_r_name}-${slot}.json"
+    local -a cmd=("$bin" --config "$conf" --host "${host:-127.0.0.1}" --port "$port_server")
+
+    if [[ "$print_cmd" == true ]]; then
+        printf '%s\n' "${cmd[*]}"
+        return 0
+    fi
+
+    [[ "$ignore_memory" == true ]] || _memory_check_start "$slot" "${cmd[*]}" false
+    [[ -x "$bin" ]] || { echo "Error: audio.cpp is not built — run: $PROG download $_r_name"; exit 1; }
+    [[ -f "$model" ]] || { echo "Error: $model is missing — run: $PROG download $_r_name"; exit 1; }
+    mkdir -p "$AUDIOCPP_CONF_DIR"
+    python3 - "$conf" "$model" "$_r_client" "$family" "$task" <<'PY' || exit 1
+import json, sys
+conf, model, alias, family, task = sys.argv[1:]
+json.dump({"backend": "vulkan", "device": 0, "threads": 4, "lazy_load": False,
+           "models": [{"id": alias, "family": family, "path": model, "task": task, "mode": "offline"},
+                      {"id": alias + "-live", "family": family, "path": model, "task": task,
+                       "mode": "streaming"}]},
+          open(conf, "w"), indent=2)
+PY
+    local url="http://${host:-127.0.0.1}:$port_server"
+    local config_text
+    config_text="$(
+        echo "Model:    $_r_label ($_r_client, $_r_client-live)"
+        echo "Backend:  audio.cpp — $bin, Vulkan"
+        echo "Weights:  $model"
+        echo "Config:   $conf"
+        echo "Host:     ${host:-127.0.0.1 (default)}"
+        echo "API:      POST $url/v1/audio/transcriptions        (file, model=$_r_client)"
+        echo "          POST $url/v1/audio/transcriptions/live   (?model=$_r_client-live, chunked 16 kHz s16le PCM → SSE deltas)"
+        echo "----- effective config -----"
+        echo "Command:"
+        printf '  %s\n' "${cmd[*]}"
+        echo "----------------------------"
+    )"
+    echo "$config_text"
+    : > "$server_log"
+    printf '%s\n\n' "$config_text" >> "$server_log"
+    echo "Starting audio.cpp [slot $slot] on port $port_server..."
+    local server_pid=""
+    server_pid=$(_spawn_detached "$PID_DIR/server-${slot}.pid" "$server_log" append "${cmd[@]}")
+    [[ -n "$server_pid" ]] || { echo "Error: audio.cpp did not report a PID. See $server_log" >&2; exit 1; }
+    echo "Server running (PID: $server_pid, detached)"
+    echo ""
+    echo "  Try:   curl -s $url/v1/audio/transcriptions -F file=@aufnahme.wav -F model=$_r_client"
+    echo "  Live:  ffmpeg -f pulse -i default -ar 16000 -ac 1 -f s16le - | curl -sN -T - -H 'Expect:' \\"
+    echo "           '$url/v1/audio/transcriptions/live?model=$_r_client-live'"
+    echo "  Logs:  tail -f $server_log"
+    echo "  Stop:  $PROG stop $slot"
+}
+
+# status for an audio.cpp slot.
+_describe_audiocpp() {
+    local indent="$1" model host port label ids
+    model=$(_audiocpp_model_of_argv) || model=""
+    host=$(_argv_flag --host) || host="127.0.0.1"
+    port=$(_argv_flag --port) || port="?"
+    label=$(_label_for_model_path "$model") || label="$(basename "${model:-unknown}")"
+    ids=$(curl -sf -m 3 "http://127.0.0.1:$port/v1/models" | python3 -c 'import json,sys; print(", ".join(m["id"] for m in json.load(sys.stdin)["data"]))' 2>/dev/null)
+    echo "${indent}Model:     $label"
+    echo "${indent}API:       http://$host:$port/v1/audio/transcriptions, …/transcriptions/live"
+    echo "${indent}Models:    ${ids:-no answer (still starting?)}"
+}
+
+# preset-save for an audio.cpp slot: the entry by its model file, plus --host.
+_capture_audiocpp_slot() {
+    local slot="$1" model host name
+    model=$(_audiocpp_model_of_argv) || { echo "slot $slot: cannot read the audio.cpp config" >&2; return 1; }
+    local -a candidates=()
+    mapfile -t candidates < <(_names_for_model_path "$model")
+    (( ${#candidates[@]} )) || { echo "slot $slot: $(basename "$model") is not in models.conf" >&2; return 1; }
+    host=$(_argv_flag --host) || host=""
+    [[ "$host" == "127.0.0.1" ]] && host=""
+    local -a flags=()
+    [[ -n "$host" ]] && flags+=(--host "$host")
+    for name in "${candidates[@]}"; do
+        _resolve_model "$name" || continue
+        local built=""
+        built=$( cmd_start "$name" "$slot" "${flags[@]}" --print-cmd 2>/dev/null ) || continue
+        if [[ "$built" == "${_ARGV[*]}" ]]; then
+            _cap_entry="$name $slot${flags[*]:+ ${flags[*]}}"
+            _cap_label="$_r_label"
+            return 0
+        fi
+    done
+    echo "slot $slot: cannot express the running audio.cpp server as start options." >&2
+    return 1
+}
+
+# download for an audiocpp entry: audio.cpp itself, from a pinned commit, built
+# with Vulkan and only the model families models.conf names — the full set is
+# 90-odd families and 7 GB of build.
+_audiocpp_families() {
+    local entry f fams=""
+    local -a w
+    for entry in "${_MODELS[@]}"; do
+        IFS='|' read -r -a w <<< "$entry"
+        [[ "${w[19]:-}" == audiocpp ]] || continue
+        for f in ${w[6]}; do [[ "$f" == family=* ]] && fams+="${fams:+,}${f#family=}"; done
+    done
+    echo "$fams"
+}
+_audiocpp_setup() {
+    local bin="${_r_binary//\~/$HOME}"
+    if [[ "$DL_CHECK" == true ]]; then
+        if [[ -x "$bin" ]]; then echo "  audio.cpp: built"
+        else echo "  audio.cpp: to clone and build (Vulkan, ~2 min)"; DL_PENDING=$(( DL_PENDING + 1 )); fi
+        return 0
+    fi
+    if [[ -x "$bin" ]]; then
+        echo "  audio.cpp in $AUDIOCPP_DIR ($(git -C "$AUDIOCPP_DIR" rev-parse --short HEAD 2>/dev/null))"
+        return 0
+    fi
+    _check_deps git cmake c++ glslc || return 1
+    if [[ ! -d "$AUDIOCPP_DIR/.git" ]]; then
+        echo "  git clone $AUDIOCPP_GIT"
+        git clone -q "$AUDIOCPP_GIT" "$AUDIOCPP_DIR" || return 1
+    fi
+    git -C "$AUDIOCPP_DIR" cat-file -e "$AUDIOCPP_COMMIT^{commit}" 2>/dev/null ||
+        git -C "$AUDIOCPP_DIR" fetch -q origin "$AUDIOCPP_COMMIT" || return 1
+    git -C "$AUDIOCPP_DIR" -c advice.detachedHead=false checkout -q "$AUDIOCPP_COMMIT" || return 1
+    git -C "$AUDIOCPP_DIR" submodule update -q --init --recursive --depth 1 || return 1
+    local fams; fams=$(_audiocpp_families)
+    echo "  building with Vulkan, model families: $fams"
+    ( cd "$AUDIOCPP_DIR" && scripts/build_linux.sh --backend vulkan --model-set custom --models "$fams" \
+        --target audiocpp_server ) > "$AUDIOCPP_DIR/build.log" 2>&1 ||
+        { echo "  build failed — see $AUDIOCPP_DIR/build.log"; return 1; }
+    [[ -x "$bin" ]] || { echo "  built, but $bin is not there — see $AUDIOCPP_DIR/build.log"; return 1; }
+    echo "  built: $bin"
+}
+
 _start_tts() {
     local -a refused=()
     [[ -n "$reasoning" ]] && refused+=("--reasoning")
@@ -1437,8 +1634,8 @@ cmd_start() {
         llama) ;;
         # Its proxy is what speaks the Messages API, so it always runs.
         halogen) start_proxy=true ;;
-        comfyui|tts) ;;
-        *) echo "Error: model '$name' names an unknown backend '$_r_backend' in models.conf (llama, halogen, comfyui or tts)"; exit 1 ;;
+        comfyui|tts|audiocpp) ;;
+        *) echo "Error: model '$name' names an unknown backend '$_r_backend' in models.conf (llama, halogen, comfyui, tts or audiocpp)"; exit 1 ;;
     esac
     if [[ -n "$output_dir" && "$_r_backend" != comfyui ]]; then
         echo "Error: --output is for comfyui models — '$name' generates no images"; exit 1
@@ -1503,6 +1700,10 @@ cmd_start() {
     fi
     if [[ "$_r_backend" == tts ]]; then
         _start_tts
+        return
+    fi
+    if [[ "$_r_backend" == audiocpp ]]; then
+        _start_audiocpp
         return
     fi
 
@@ -1789,7 +1990,8 @@ _is_llmctl_process() {
     [[ "$cmdline" == *"--slot-save-path $SLOT_STATE_DIR/"* || "$cmdline" == *"$PROXY_SCRIPT"* ||
        "$cmdline" == *"--name $HALOGEN_CONTAINER_PREFIX"* ||
        "$cmdline" == *"/main.py --listen "*" --base-directory "* ||
-       "$cmdline" == *"$TTS_SERVER_SCRIPT"* || "$cmdline" == *"$IMAGES_SERVER_SCRIPT"* ]]
+       "$cmdline" == *"$TTS_SERVER_SCRIPT"* || "$cmdline" == *"$IMAGES_SERVER_SCRIPT"* ||
+       "$cmdline" == *"--config $AUDIOCPP_CONF_DIR/"* ]]
 }
 
 # The slots this machine currently has something on, ascending. Nothing keeps a
@@ -1852,6 +2054,12 @@ _slot_model_label() {
         label=$(_label_for_model_path "$path") || label="$(basename "$path")"
         echo "$label"; return 0
     fi
+    if _is_audiocpp_argv; then
+        local path label
+        path=$(_audiocpp_model_of_argv) || { echo "unknown"; return 1; }
+        label=$(_label_for_model_path "$path") || label="$(basename "$path")"
+        echo "$label"; return 0
+    fi
     if _is_comfyui_argv; then
         local path label
         path=$(_argv_flag --models-directory) || { echo "unknown"; return 1; }
@@ -1904,6 +2112,7 @@ _stop_slot() {
         local kind="llama-server"
         _read_argv "$server_pid" && _is_comfyui_argv && kind="ComfyUI"
         _read_argv "$server_pid" && _is_tts_argv && kind="speech server"
+        _read_argv "$server_pid" && _is_audiocpp_argv && kind="audio.cpp"
         kill "$server_pid" 2>/dev/null
         # Until it is gone: a restart on the same slot needs the port free, and
         # ComfyUI takes a moment to let go of it. SIGKILL after 15 s.
@@ -2019,7 +2228,7 @@ _wait_for_slot() {
 
         # halogen: uvicorn announces the API once the engine behind it answers.
         # ComfyUI: the address of its web UI, once the server is up.
-        if grep -Eq "(llama_server:|server is) listening on http://[^[:space:]]*:${port}([^0-9]|\$)|Uvicorn running on http://|To see the GUI go to: https?://[^[:space:]]*:${port}([^0-9]|\$)|tts_server listening on http://[^[:space:]]*:${port}([^0-9]|\$)" <<< "$fresh"; then
+        if grep -Eq "(llama_server:|server is) listening on http://[^[:space:]]*:${port}([^0-9]|\$)|Uvicorn running on http://|To see the GUI go to: https?://[^[:space:]]*:${port}([^0-9]|\$)|tts_server listening on http://[^[:space:]]*:${port}([^0-9]|\$)|audiocpp_server listening on http://[^[:space:]]*:${port}([^0-9]|\$)" <<< "$fresh"; then
             echo "  loaded after ${waited}s — listening on :$port"
             return 0
         fi
@@ -2119,12 +2328,12 @@ cmd_preset() {
         # Each backend gets the ones that mean something to it: ComfyUI has no
         # proxy, no public front and no Vulkan queue, and only it takes --output.
         local -a eff=("${w[@]:2}")
-        if [[ "$_r_backend" == comfyui || "$_r_backend" == tts ]]; then
+        if [[ "$_r_backend" == comfyui || "$_r_backend" == tts || "$_r_backend" == audiocpp ]]; then
             local k=0
             while (( k < ${#extra[@]} )); do
                 case "${extra[k]}" in
                     --proxy|--public) k=$(( k + 1 )) ;;
-                    --verbose)        [[ "$_r_backend" == tts ]] || eff+=("${extra[k]}"); k=$(( k + 1 )) ;;
+                    --verbose)        [[ "$_r_backend" == comfyui ]] && eff+=("${extra[k]}"); k=$(( k + 1 )) ;;
                     --gpu-priority)   k=$(( k + 2 )) ;;
                     --host)           eff+=("${extra[k]}" "${extra[k+1]}"); k=$(( k + 2 )) ;;
                     *)                eff+=("${extra[k]}"); k=$(( k + 1 )) ;;
@@ -2689,6 +2898,10 @@ _capture_slot() {
         _capture_tts_slot "$slot"
         return
     fi
+    if _is_audiocpp_argv; then
+        _capture_audiocpp_slot "$slot"
+        return
+    fi
 
     local model="" mmproj="" ctx="" parallel="" predict="" cache_ram="" similarity="" host=""
     local spec_type="" reason="" reason_effort="" reason_budget=""
@@ -3113,6 +3326,10 @@ _describe_server() {
         _describe_tts "$indent"
         return 0
     fi
+    if _is_audiocpp_argv; then
+        _describe_audiocpp "$indent"
+        return 0
+    fi
 
     local model="" served="" ctx="" parallel="" predict="" cache_ram="" mmproj="" host="" similarity=""
     local spec_type="" spec_draft="" spec_n=""
@@ -3302,6 +3519,7 @@ cmd_status() {
             _slot_is_halogen "$slot" && kind="halogen     "
             _read_argv "$server_pid" && _is_comfyui_argv && kind="comfyui     "
             _read_argv "$server_pid" && _is_tts_argv && kind="tts         "
+            _read_argv "$server_pid" && _is_audiocpp_argv && kind="audiocpp    "
             echo "Slot $slot: $kind (PID: $server_pid) on :$port_server$preset_note"
             # A loaded server's footprint, for preset's memory balance. Not
             # ComfyUI's: it swings with every workflow; preset records it idle.
@@ -3733,6 +3951,17 @@ cmd_outdated() {
         fi
     fi
 
+    printf '\n\033[1maudio.cpp\033[0m\n'
+    if [[ -d "$AUDIOCPP_DIR/.git" ]]; then
+        behind=$(_gh_json "repos/0xShug0/audio.cpp/compare/$AUDIOCPP_COMMIT...HEAD" .ahead_by)
+        if [[ -z "$behind" ]]; then echo "  audio.cpp (${AUDIOCPP_COMMIT:0:9}, pinned): cannot compare"
+        elif (( behind == 0 )); then echo "  audio.cpp (${AUDIOCPP_COMMIT:0:9}, pinned) — current"
+        else echo "  audio.cpp (${AUDIOCPP_COMMIT:0:9}, pinned) — upstream has $behind newer commits; move AUDIOCPP_COMMIT after trying them"
+             newer=$(( newer + 1 )); fi
+    else
+        echo "  not set up"
+    fi
+
     printf '\n\033[1mComfyUI\033[0m\n'
     for entry in "${_MODELS[@]}"; do
         IFS='|' read -r -a f <<< "$entry"
@@ -3861,6 +4090,10 @@ cmd_cache_stats() {
         fi
         if grep -q '^Serves:   ' "$log"; then
             echo "Slot $slot: $(grep -m1 '^Serves:   ' "$log" | sed 's/^Serves: *//; s/ —.*//') — no prompt cache"
+            continue
+        fi
+        if grep -q '^Backend:  audio.cpp' "$log"; then
+            echo "Slot $slot: audio.cpp — no prompt cache"
             continue
         fi
         if grep -q '^Backend:  tts' "$log"; then
@@ -4040,7 +4273,7 @@ cmd_probe_reasoning() {
     for entry in "${_MODELS[@]}"; do
         IFS='|' read -r m_name _ m_model _ _ _ m_args _ _ _ _ _ _ _ m_reasoning _ <<< "$entry"
         [[ -n "$want" && "$m_name" != "$want" ]] && continue
-        _resolve_model "$m_name" && [[ "$_r_backend" == comfyui || "$_r_backend" == tts || "$_r_role" != chat ]] && continue
+        _resolve_model "$m_name" && [[ "$_r_backend" == comfyui || "$_r_backend" == tts || "$_r_backend" == audiocpp || "$_r_role" != chat ]] && continue
         local path="${m_model//\~/$HOME}"
 
         if [[ ! -f "$path" ]]; then
@@ -4155,6 +4388,11 @@ cmd_env() {
     if [[ "$_r_backend" == tts ]]; then
         echo "Error: '$name' is a speech model, not an LLM — there is nothing to point Claude Code at." >&2
         echo "       Its API: POST http://127.0.0.1:$port_server/v1/audio/speech" >&2
+        return 1
+    fi
+    if [[ "$_r_backend" == audiocpp ]]; then
+        echo "Error: '$name' is a speech recognizer, not an LLM — there is nothing to point Claude Code at." >&2
+        echo "       Its API: POST http://127.0.0.1:$port_server/v1/audio/transcriptions (and …/live)" >&2
         return 1
     fi
     if [[ "$_r_backend" == llama && "$_r_role" != chat ]]; then
@@ -4427,7 +4665,7 @@ bench_model() {
     local result_file="$5"
 
     local model_path="${m_model//\~/$HOME}"
-    if _resolve_model "$m_name" && [[ "$_r_backend" == comfyui || "$_r_backend" == tts ]]; then
+    if _resolve_model "$m_name" && [[ "$_r_backend" == comfyui || "$_r_backend" == tts || "$_r_backend" == audiocpp ]]; then
         echo "  Skipping $m_label: not an LLM"
         return
     fi
@@ -4610,6 +4848,8 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "    only --host, --verbose, --clear-logs, --output DIR (where images go) and --proxy apply;"
     printf "  %-20s %s\n" ""                      "    --proxy: OpenAI image API (/v1/images/generations, /edits) on the proxy port"
     printf "  %-20s %s\n" ""                      "    Every llama start unloads its models first"
+    printf "  %-20s %s\n" ""                      "  audiocpp models (backend=audiocpp) run audio.cpp: /v1/audio/transcriptions and …/live"
+    printf "  %-20s %s\n" ""                      "    (live speech recognition); only --host and --clear-logs apply"
     printf "  %-20s %s\n" ""                      "  tts models (backend=tts) serve POST /v1/audio/speech on the server port; --lang CODE sets"
     printf "  %-20s %s\n" ""                      "    the default language (de), --seed N a fixed sampling seed (default -1: random each time);"
     printf "  %-20s %s\n" ""                      "    only --host and --clear-logs apply besides"
@@ -5446,6 +5686,7 @@ _download_target() {
             [[ -n "$m_hf_mmproj" ]] && _download_mmproj "$m_hf_mmproj" "$m_mmproj" "$force"
             [[ "$_r_backend" == halogen ]] && _pull_halogen_image
             [[ "$_r_backend" == tts ]] && _tts_setup
+            [[ "$_r_backend" == audiocpp ]] && _audiocpp_setup
         done
         return
     fi
@@ -5475,6 +5716,7 @@ _download_target() {
     [[ -n "$_r_hf_mmproj" ]] && _download_mmproj "$_r_hf_mmproj" "$_r_mmproj" "$force"
     [[ "$_r_backend" == halogen ]] && _pull_halogen_image
     [[ "$_r_backend" == tts ]] && _tts_setup
+    [[ "$_r_backend" == audiocpp ]] && _audiocpp_setup
     return 0
 }
 
