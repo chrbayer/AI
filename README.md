@@ -81,6 +81,7 @@ llmctl env <name> [slot]               # Set Claude Code env vars
 llmctl clear                           # Clear env vars
 llmctl download <model>                # Download model(s); --check: only say what is missing
 llmctl prune [--dry-run]               # Models nothing names any more; deletes after a typed yes
+llmctl outdated [--quick]              # What has a newer version (images, builds, ComfyUI, models)
 llmctl version                         # Print the version
 ```
 
@@ -1303,6 +1304,28 @@ them are served by the Vulkan build — the ROCm build is opt-in per model
 - **rerank** — Qwen3-Reranker-0.6B, Q8_0, 8K ctx; `/v1/rerank`
 
 Multimodal projectors are only loaded on an explicit `--mmproj`.
+
+### What has a newer version
+
+`llmctl outdated` asks, and changes nothing (exit 0: all current, 1: something
+newer):
+
+- **halogen**: the image tag in `models.conf` against the registry's newest,
+  with the changelog headings in between;
+- **llama.cpp**: the commit each installed llama-server reports in `--version`
+  against `master`;
+- **the speech server's PR**: merged yet, or commits past the one we build;
+- **ComfyUI** against its upstream, and each custom node's pinned commit;
+- **installed models against their Hugging Face repos, by content.** GGUFs and
+  halogen through hf's own record of each file's SHA-256, taken at download.
+  ComfyUI's models are read and hashed once — ~140 GB in 42 s here, four files
+  at a time — and cached in `~/.local/state/llmctl/checksums.tsv` by size and
+  mtime, so later runs take seconds; `--quick` compares size and the date of
+  the repo's last change instead. The date is shown either way. Built models
+  (`comfyui/sources.json`) come from a pinned revision and cannot drift;
+  Civitai's cannot be asked.
+
+A changed model is fetched again by deleting it and running `download`.
 
 ### Pruning what nothing names
 

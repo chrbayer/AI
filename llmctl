@@ -3356,7 +3356,7 @@ cmd__complete() {
     (( n >= 2 )) && prev="${w[n-2]}"
     if (( n == 1 )); then
         printf '%s\n' start preset preset-save presets stop status logs cache-stats clear-kv \
-            probe-reasoning gen-certs bench list env clear shell-init download update voice service prune help version
+            probe-reasoning gen-certs bench list env clear shell-init download update voice service prune outdated help version
         return 0
     fi
     # Positional words before the one completed, options and their values left out.
@@ -3393,6 +3393,7 @@ cmd__complete() {
             printf '%s\n' --dry-run --force --repair --wait --output --proxy --public --host --clear-logs --verbose --gpu-priority ;;
         preset-save) printf '%s\n' --dry-run --force --label ;;
         prune) echo --dry-run ;;
+        outdated) echo --quick ;;
         service)
             case $k in
                 0) printf '%s\n' enable disable start stop status ;;
@@ -3632,6 +3633,161 @@ cmd_prune() {
     for (( i=0; i<${#cand[@]}; i++ )); do
         rm -rf -- "${cand[i]}" && echo "  deleted ${cand[i]#"$models"/}"
     done
+}
+
+# What has moved on since it was installed — reported, nothing changed:
+# halogen images, the llama.cpp builds, the speech server's PR, ComfyUI and its
+# custom nodes, and every installed model against its Hugging Face repo (GGUFs
+# and halogen through hf's own record of each file's SHA-256, ComfyUI's models
+# by SHA-256 read once and cached, --quick: by size and date).
+# Usage: outdated [--quick]   exit 0: all current, 1: something newer
+_gh_json() {   # path jq-filter: GitHub API, through gh when it is logged in
+    if command -v gh > /dev/null && gh auth status > /dev/null 2>&1; then
+        gh api "$1" -q "$2" 2>/dev/null
+    else
+        curl -sf "https://api.github.com/$1" | python3 -c '
+import json, sys
+j = json.load(sys.stdin)
+for k in sys.argv[1].lstrip(".").split("."):
+    j = j.get(k) if isinstance(j, dict) else None
+print("" if j is None else str(j).lower() if isinstance(j, bool) else j)' "$2" 2>/dev/null
+    fi
+}
+cmd_outdated() {
+    local quick=false
+    [[ "${1:-}" == --quick ]] && quick=true
+    local newer=0 entry name
+    local -a f
+    _check_deps hf python3 || return 2
+
+    printf '\n\033[1mhalogen\033[0m\n'
+    local seen=""
+    for entry in "${_MODELS[@]}"; do
+        IFS='|' read -r -a f <<< "$entry"
+        _resolve_model "${f[0]}" && [[ "$_r_backend" == halogen ]] || continue
+        local image="${_r_binary%:*}" tag="${_r_binary##*:}"
+        [[ " $seen " == *" $image "* ]] && continue
+        seen+=" $image"
+        local latest
+        latest=$(podman search --list-tags --limit 1000 "$image" 2>/dev/null |
+                 awk 'NR > 1 { print $2 }' | grep -E '^[0-9]+(\.[0-9]+)+$' | sort -V | tail -1)
+        if [[ -z "$latest" ]]; then
+            echo "  $image: cannot ask the registry"
+        elif [[ "$latest" == "$tag" || "$(printf '%s\n%s\n' "$latest" "$tag" | sort -V | tail -1)" == "$tag" ]]; then
+            echo "  $image:$tag — current"
+        else
+            echo "  $image:$tag — $latest is out"
+            newer=$(( newer + 1 ))
+            # The changelog of a ghcr.io/<owner>/<repo> image, if GitHub has one.
+            local gh_repo="${image#ghcr.io/}"
+            curl -sf "https://raw.githubusercontent.com/$gh_repo/main/CHANGELOG.md" |
+                awk -v t="$tag" '/^## / { v = $2; if (v == t) exit; print "    " $0 }'
+        fi
+    done
+
+    printf '\n\033[1mllama.cpp builds\033[0m\n'
+    local bin path out commit behind
+    for bin in $(printf '%s\n' "${LLAMA_DEFAULT_BIN:-llama-server}" "${LLAMA_ROCM_BIN:-}" | awk 'NF && !s[$0]++'); do
+        path=$(command -v "$bin" 2>/dev/null) || { echo "  $bin: not installed"; continue; }
+        out=$("$path" --version 2>&1)
+        commit=$(grep -oE 'commit [0-9a-f]{7,}|\(([0-9a-f]{7,})\)' <<< "$out" | head -1 | grep -oE '[0-9a-f]{7,}')
+        if [[ -z "$commit" ]]; then echo "  $path: no commit in --version"; continue; fi
+        behind=$(_gh_json "repos/ggml-org/llama.cpp/compare/$commit...master" .ahead_by)
+        if [[ -z "$behind" ]]; then echo "  $path ($commit): not on ggml-org/llama.cpp master, cannot compare"
+        elif (( behind == 0 )); then echo "  $path ($commit) — current"
+        else echo "  $path ($commit) — $behind commits behind master"; newer=$(( newer + 1 )); fi
+    done
+
+    printf '\n\033[1mspeech server (llama.cpp PR)\033[0m\n'
+    local script="$SHARE_DIR/patches/build-tts-server.sh" pr pinned
+    pr=$(sed -n 's/^PR=//p' "$script" 2>/dev/null); pinned=$(sed -n 's/^PR_COMMIT=//p' "$script" 2>/dev/null)
+    if [[ -n "$pr" ]]; then
+        local merged state head
+        merged=$(_gh_json "repos/ggml-org/llama.cpp/pulls/$pr" .merged)
+        state=$(_gh_json "repos/ggml-org/llama.cpp/pulls/$pr" .state)
+        head=$(_gh_json "repos/ggml-org/llama.cpp/pulls/$pr" .head.sha)
+        if [[ "$merged" == true ]]; then
+            echo "  PR #$pr is merged — the ordinary llama-server has /tts now; build-tts-server.sh can go"
+            newer=$(( newer + 1 ))
+        elif [[ -n "$head" && "$head" != "$pinned" ]]; then
+            echo "  PR #$pr ($state) has commits past ours (${pinned:0:9} → ${head:0:9})"
+            newer=$(( newer + 1 ))
+        elif [[ -n "$head" ]]; then
+            echo "  PR #$pr ($state), at ${pinned:0:9} — current"
+        else
+            echo "  PR #$pr: cannot ask GitHub"
+        fi
+    fi
+
+    printf '\n\033[1mComfyUI\033[0m\n'
+    for entry in "${_MODELS[@]}"; do
+        IFS='|' read -r -a f <<< "$entry"
+        _resolve_model "${f[0]}" && [[ "$_r_backend" == comfyui ]] || continue
+        _comfyui_paths
+        [[ -d "$c_app/.git" ]] || { echo "  not set up"; continue; }
+        local here gh_repo
+        here=$(git -C "$c_app" rev-parse HEAD 2>/dev/null)
+        gh_repo=$(sed -E 's#^https://github.com/##; s#\.git$##' <<< "$COMFYUI_GIT")
+        behind=$(_gh_json "repos/$gh_repo/compare/$here...HEAD" .ahead_by)
+        if [[ -z "$behind" ]]; then echo "  ComfyUI (${here:0:9}): cannot compare"
+        elif (( behind == 0 )); then echo "  ComfyUI (${here:0:9}) — current"
+        else echo "  ComfyUI (${here:0:9}) — $behind commits behind; $PROG update ${f[0]}"; newer=$(( newer + 1 )); fi
+        local dir url pin rest
+        while read -r dir url pin rest; do
+            [[ -z "$dir" || "$dir" == \#* ]] && continue
+            gh_repo=$(sed -E 's#^https://github.com/##; s#\.git$##' <<< "$url")
+            behind=$(_gh_json "repos/$gh_repo/compare/$pin...HEAD" .ahead_by)
+            if [[ -z "$behind" ]]; then echo "  custom nodes $dir: cannot compare"
+            elif (( behind == 0 )); then echo "  custom nodes $dir (${pin:0:9}, pinned) — current"
+            else echo "  custom nodes $dir (${pin:0:9}, pinned) — upstream has $behind newer commits; move the pin in comfyui/custom_nodes.txt after trying them"
+                 newer=$(( newer + 1 )); fi
+        done < "$COMFYUI_SHARE/custom_nodes.txt"
+        echo "  models:"
+        local -a qflag=()
+        [[ "$quick" == true ]] && qflag=(--quick)
+        python3 "$COMFYUI_MODELS_SCRIPT" outdated "$c_wf" "$c_models" --sources "$COMFYUI_SHARE/sources.json" \
+            "${qflag[@]}" | sed 's/^/  /'
+        (( PIPESTATUS[0] == 1 )) && newer=$(( newer + 1 ))
+    done
+
+    printf '\n\033[1mModels\033[0m (installed ones, against their Hugging Face repos)\n'
+    DL_CHECK=true DL_PENDING=0 DL_UNKNOWN=0
+    local model_dir report
+    for entry in "${_MODELS[@]}"; do
+        IFS='|' read -r -a f <<< "$entry"
+        _resolve_model "${f[0]}" || continue
+        [[ -n "$_r_hf_repo" && -e "${_r_model//\~/$HOME}" ]] || continue
+        model_dir="${_r_hf_dir:-$(dirname "${_r_model//\~/$HOME}")}"; model_dir="${model_dir//\~/$HOME}"
+        report=$( {
+            _download_model "$_r_hf_repo" "$model_dir" "$_r_hf_includes" ""
+            [[ -n "$_r_hf_draft" ]] && _download_draft "$_r_hf_draft" "" "${_r_spec_args[@]}"
+            [[ -n "$_r_hf_mmproj" ]] && _download_mmproj "$_r_hf_mmproj" "$_r_mmproj" ""
+        } 2>&1 )
+        if grep -q 'to download' <<< "$report"; then
+            echo "  ${f[0]}: newer files on Hugging Face"
+            grep -E 'to download|^    ' <<< "$report" | sed 's/^/  /'
+            newer=$(( newer + 1 ))
+        elif grep -q 'cannot tell' <<< "$report"; then
+            echo "  ${f[0]}: $(grep -m1 'cannot tell' <<< "$report" | sed 's/^ *//')"
+        else
+            echo "  ${f[0]} — current"
+        fi
+    done
+    if [[ -f "$TTS_DESIGN_DIR/model.safetensors" ]]; then
+        report=$(_download_model "$TTS_DESIGN_REPO" "$TTS_DESIGN_DIR" "" 2>&1)
+        if grep -q 'to download' <<< "$report"; then
+            echo "  VoiceDesign: newer files on Hugging Face"; newer=$(( newer + 1 ))
+        else
+            echo "  VoiceDesign — current"
+        fi
+    fi
+
+    echo ""
+    if (( newer )); then
+        echo "Newer: $newer item(s) above."
+        return 1
+    fi
+    echo "Everything current."
 }
 
 # Show a slot's log without knowing where it lives.
@@ -4462,6 +4618,8 @@ cmd_help() {
     printf "  %-20s %s\n" "status"                 "show running state, model and key parameters per slot"
     printf "  %-20s %s\n" "service enable <p>"     "run preset p as a systemd user service: at login, dead slots restarted"
     printf "  %-20s %s\n" ""                      "  service start / stop (now) / disable / status"
+    printf "  %-20s %s\n" "outdated [--quick]"     "what has a newer version: halogen image, llama.cpp builds, the speech PR, ComfyUI,"
+    printf "  %-20s %s\n" ""                      "  custom nodes, installed models (by SHA-256; --quick: size and date); changes nothing"
     printf "  %-20s %s\n" "prune [--dry-run]"      "list the models nothing names any more, with what deleting them frees; asks first"
     printf "  %-20s %s\n" "logs [slot]"            "a slot's server log (last 50 lines; -n N, -f to follow, --proxy, --tls);"
     printf "  %-20s %s\n" ""                      "  without a slot: every log with size and last change"
@@ -5342,6 +5500,7 @@ case "${1:-}" in
     logs)        shift; cmd_logs "$@" ;;
     service)     shift; cmd_service "$@" ;;
     prune)       shift; cmd_prune "$@" ;;
+    outdated)    shift; cmd_outdated "$@" ;;
     _complete)   shift; cmd__complete "$@" 2>/dev/null ;;
     clear-kv)   shift; cmd_clear_kv "$@" ;;
     probe-reasoning) shift; cmd_probe_reasoning "$@" ;;

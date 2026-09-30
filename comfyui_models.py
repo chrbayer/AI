@@ -338,6 +338,167 @@ def cmd_check(wf_dir, models_dir, pattern=None, sources=None):
     return 1 if missing else 0
 
 
+def hf_api(url, body=None):
+    """GET, or POST a JSON body, to the Hub API — with the hf login's token,
+    which gated repos need."""
+    token = os.environ.get("HF_TOKEN") or ""
+    tf = Path(os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface")) / "token"
+    if not token and tf.is_file():
+        token = tf.read_text().strip()
+    headers = {"User-Agent": "llmctl"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    data = None
+    if body is not None:
+        data = json.dumps(body).encode()
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, data=data, headers=headers)
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.load(r)
+
+
+def checksum_cache():
+    return Path(os.environ.get("LLMCTL_CHECKSUMS",
+                               os.path.expanduser("~/.local/state/llmctl/checksums.tsv")))
+
+
+def sha256_files(files):
+    """{path: sha256} for local files, read once and cached by path, size and
+    mtime — a model file changes only when it is replaced."""
+    import hashlib
+    from concurrent.futures import ThreadPoolExecutor
+    cache_file, cache = checksum_cache(), {}
+    if cache_file.is_file():
+        for line in cache_file.read_text().splitlines():
+            parts = line.split("\t")
+            if len(parts) == 4:
+                cache[parts[0]] = parts[1:]
+    def key(f):
+        st = f.stat()
+        return [str(st.st_size), str(st.st_mtime_ns)]
+    todo = [f for f in files if cache.get(str(f), [None, None])[:2] != key(f)]
+    if todo:
+        total = sum(f.stat().st_size for f in todo)
+        print(f"  checksums: reading {len(todo)} file(s), {gib(total)} — once, then cached",
+              file=sys.stderr, flush=True)
+        def one(f):
+            h = hashlib.sha256()
+            with open(f, "rb", buffering=0) as fh:
+                while chunk := fh.read(64 << 20):
+                    h.update(chunk)
+            return f, h.hexdigest()
+        with ThreadPoolExecutor(4) as pool:
+            for f, digest in pool.map(one, todo):
+                cache[str(f)] = key(f) + [digest]
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        cache_file.write_text("".join(f"{p}\t{v[0]}\t{v[1]}\t{v[2]}\n" for p, v in sorted(cache.items())))
+    return {f: cache[str(f)][2] for f in files}
+
+
+def remote_files(repo, rev, paths=None):
+    """{path: (size, sha256 or None, date of the last commit that changed it)}."""
+    if paths is None:
+        entries = hf_api(f"https://huggingface.co/api/models/{repo}/tree/{rev}?recursive=true&expand=true")
+    else:
+        entries = hf_api(f"https://huggingface.co/api/models/{repo}/paths-info/{rev}",
+                         {"paths": sorted(paths), "expand": True})
+    return {e["path"]: (e.get("size"), (e.get("lfs") or {}).get("oid"),
+                        ((e.get("lastCommit") or {}).get("date") or "")[:10])
+            for e in entries if e.get("type", "file") == "file"}
+
+
+def cmd_outdated(wf_dir, models_dir, sources=None, quick=False):
+    """Which present models are no longer what their Hugging Face source holds.
+    Each file is compared by SHA-256 with the one the repo holds now (read once,
+    then cached), or with --quick by size alone; the date of the last change in
+    the repo is shown beside. A whole repo (a directory) is compared file by
+    file. Built models (sources.json) come from a pinned revision and cannot
+    drift; other hosts cannot be asked. Exit 1 when something changed."""
+    import datetime
+    urls, _ = collect(workflows(wf_dir))
+    recipes = set()
+    if sources and Path(sources).is_file():
+        recipes = {k for k in json.loads(Path(sources).read_text()) if not k.startswith("_")}
+    models = Path(models_dir)
+    # key -> candidates: [(repo, rev, [(local file, remote path)])]; any candidate matching = current
+    cands, unchecked = {}, []
+    wanted = {}                                   # (repo, rev) -> remote paths, or None for a whole tree
+    for key, u in urls.items():
+        dest = models / key
+        if not present(dest) or key in recipes:
+            continue
+        for x in u:
+            m, r = HF_URL.match(x), HF_REPO.match(x)
+            if m and dest.is_file():
+                repo, rev, path = m.groups()
+                path = urllib.parse.unquote(path)
+                cands.setdefault(key, []).append((repo, rev, [(dest, path)]))
+                if wanted.get((repo, rev), set()) is not None:
+                    wanted.setdefault((repo, rev), set()).add(path)
+            elif r and dest.is_dir():
+                repo, rev = r.groups()
+                files = [(f, str(f.relative_to(dest))) for f in sorted(dest.rglob("*"))
+                         if f.is_file() and ".cache" not in f.parts]
+                cands.setdefault(key, []).append((repo, rev or "main", files, "tree"))
+                wanted[(repo, rev or "main")] = None
+        if key not in cands:
+            unchecked.append(f"{key} ({urllib.parse.urlsplit(u[0]).hostname if u else 'no URL'})")
+    remote, failed = {}, {}
+    for (repo, rev), paths in wanted.items():
+        try:
+            remote[(repo, rev)] = remote_files(repo, rev, paths)
+        except OSError as e:
+            failed[(repo, rev)] = str(e)
+    local_sum = {}
+    if not quick:
+        need = [f for cs in cands.values() for c in cs if (c[0], c[1]) in remote
+                for f, p in c[2] if remote[(c[0], c[1])].get(p, (0, None))[1]]
+        local_sum = sha256_files(sorted(set(need)))
+    changed, current = [], 0
+    for key, cs in cands.items():
+        notes, ok_any, asked = [], False, False
+        for c in cs:
+            repo, rev, files = c[0], c[1], c[2]
+            if (repo, rev) in failed:
+                notes.append(f"{repo}: {failed[(repo, rev)]}"); continue
+            asked = True
+            rem = remote[(repo, rev)]
+            prefix = "" if len(c) < 4 else None     # a tree: its files are the repo's files
+            diffs = []
+            for f, p in files:
+                size, sha, date = rem.get(p, (None, None, ""))
+                st = f.stat()
+                here = datetime.date.fromtimestamp(st.st_mtime).isoformat()
+                if size is None:
+                    diffs.append(f"{p}: gone from {repo}")
+                elif not quick and sha and local_sum.get(f) != sha:
+                    diffs.append(f"{p}: other content in {repo} (changed {date}, here since {here})")
+                elif size != st.st_size:
+                    diffs.append(f"{p}: {st.st_size:,} bytes here, {size:,} in {repo} (changed {date})")
+                elif quick and date and date > here:
+                    diffs.append(f"{p}: changed in {repo} on {date}, after this copy ({here}) — size alike; run without --quick")
+            if len(c) == 4:
+                missing = sorted(set(rem) - {p for _, p in files})
+                diffs += [f"{p}: new in {repo}" for p in missing]
+            if not diffs:
+                ok_any = True; break
+            notes.append("; ".join(diffs[:3]) + (" ..." if len(diffs) > 3 else ""))
+        if ok_any:
+            current += 1
+        elif asked:
+            changed.append(f"{key}: {notes[-1]}")
+        else:
+            unchecked.append(f"{key} ({notes[0]})")
+    for c in changed:
+        print(f"  changed   {c}")
+    for u in unchecked:
+        print(f"  unchecked {u}")
+    how = "size and date" if quick else "SHA-256"
+    print(f"  {current + len(changed)} models checked by {how}: {current} current, {len(changed)} changed"
+          + (f", {len(unchecked)} not checkable" if unchecked else ""))
+    return 1 if changed else 0
+
+
 def cmd_download(wf_dir, models_dir, pattern=None, sources=None):
     wfs = workflows(wf_dir, pattern)
     if not wfs:
@@ -398,13 +559,17 @@ def main(argv):
         i = argv.index("--sources")
         sources = argv[i + 1] if i + 1 < len(argv) else None
         del argv[i:i + 2]
-    if len(argv) < 3 or argv[0] not in ("list", "sizes", "download", "orphans", "check"):
+    if len(argv) < 3 or argv[0] not in ("list", "sizes", "download", "orphans", "check", "outdated"):
         print("usage: comfyui_models.py list|sizes|orphans WORKFLOWS_DIR MODELS_DIR\n"
               "       comfyui_models.py download|check WORKFLOWS_DIR MODELS_DIR [PATTERN] [--sources FILE]",
               file=sys.stderr)
         return 2
     if argv[0] == "list":
         return cmd_list(argv[1], argv[2])
+    if argv[0] == "outdated":
+        quick = "--quick" in argv
+        argv = [x for x in argv if x != "--quick"]
+        return cmd_outdated(argv[1], argv[2], sources, quick)
     if argv[0] == "check":
         return cmd_check(argv[1], argv[2], argv[3] if len(argv) > 3 else None, sources)
     if argv[0] == "orphans":

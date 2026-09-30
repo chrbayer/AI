@@ -212,6 +212,23 @@ class Sources(unittest.TestCase):
                     self.assertTrue(urls, f"{key} has no URL")
 
 
+class Checksums(unittest.TestCase):
+    def test_a_file_is_read_once_and_again_only_when_it_changes(self):
+        import hashlib, os
+        with tempfile.TemporaryDirectory() as d:
+            os.environ["LLMCTL_CHECKSUMS"] = str(Path(d) / "sums.tsv")
+            f = Path(d) / "m.safetensors"
+            f.write_bytes(b"one")
+            self.assertEqual(cm.sha256_files([f])[f], hashlib.sha256(b"one").hexdigest())
+            # A cached entry is used as long as size and mtime hold: planted, it is returned.
+            cache = Path(d) / "sums.tsv"
+            cache.write_text(cache.read_text().replace(hashlib.sha256(b"one").hexdigest(), "cached"))
+            self.assertEqual(cm.sha256_files([f])[f], "cached")
+            f.write_bytes(b"other")
+            self.assertEqual(cm.sha256_files([f])[f], hashlib.sha256(b"other").hexdigest())
+            del os.environ["LLMCTL_CHECKSUMS"]
+
+
 API = ROOT / "comfyui" / "api"
 
 
