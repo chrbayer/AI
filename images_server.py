@@ -2,9 +2,11 @@
 """OpenAI's image API in front of ComfyUI — for llmctl's comfyui slots.
 
     POST /v1/images/generations   {"model", "prompt", "size", "n", "seed", "response_format"}
-    POST /v1/images/edits         multipart: image (or image[]), prompt, model, n, seed
-                                  or JSON: "images": ["data:image/png;base64,...", ...]
-    GET  /v1/models               the workflows whose models ComfyUI has
+    POST /v1/images/edits         multipart: image (or image[]), mask, prompt, model, n, seed
+                                  or JSON: "images": ["data:image/png;base64,...", ...], "mask"
+                                  extra: "strength" (ControlNet), "pad" (Outpaint)
+    GET  /v1/models               the workflows whose models ComfyUI has, and the
+                                  extra fields each takes
 
 A model is a bundled workflow, in the API format comfyui/export_api.py makes
 of it: "FLUX.2 klein 9B T2I (bf16, 4 Schritte).json" is flux2-klein-9b for
@@ -42,6 +44,8 @@ SAVE = {"SaveImage", "SaveImageAdvanced"}
 LATENT_SIZE = {"EmptyFlux2LatentImage", "EmptyLatentImage", "EmptySD3LatentImage",
                "EmptyHunyuanLatent", "Flux2Scheduler"}
 SIZE_MIN, SIZE_MAX, SIZE_STEP = 256, 2048, 16
+STRENGTH_MAX = 2.0
+PAD_MAX, PAD_STEP, FEATHER_MAX = 2048, 8, 512
 
 
 class Refused(Exception):
@@ -194,6 +198,104 @@ def prune(graph, gone):
         graph.pop(key, None)
 
 
+def mask_users(graph):
+    """Where the workflow reads the mask its first image carries as transparency
+    to redraw there. The upscaler only puts that transparency back on its result."""
+    slots = image_nodes(graph)
+    if not slots:
+        return []
+    return [(node, name) for node in graph.values() for name, value in node["inputs"].items()
+            if value == [slots[0], 1] and node["class_type"] != "JoinImageWithAlpha"]
+
+
+def extras(graph):
+    """The extra request fields this workflow takes."""
+    out = []
+    if mask_users(graph):
+        out.append("mask")
+    kinds = {n["class_type"] for n in graph.values()}
+    if "ZImageFunControlnet" in kinds:
+        out.append("strength")
+    if "ImagePadForOutpaint" in kinds:
+        out.append("pad")
+    return out
+
+
+def png_info(data):
+    """(width, height, has alpha) of a PNG, or None for anything else."""
+    if len(data) < 26 or data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
+        return None
+    w, h = int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+    return w, h, data[25] in (4, 6) or b"tRNS" in data
+
+
+def set_mask(graph, mask, image):
+    """OpenAI's mask: transparent where the image is to be redrawn. It takes the
+    place of the mask the image's own transparency gives."""
+    users = mask_users(graph)
+    if not users:
+        raise Refused("this workflow takes no mask — the Inpaint ones do")
+    info = png_info(mask)
+    if info is None:
+        raise Refused("the mask is a PNG")
+    if not info[2]:
+        raise Refused("the mask needs transparency: transparent is redrawn, opaque is kept")
+    size = png_info(image)
+    if size and size[:2] != info[:2]:
+        raise Refused(f"the mask is {info[0]}x{info[1]}, the image {size[0]}x{size[1]}")
+    key = str(max(int(k.split(":")[0]) for k in graph) + 1)
+    graph[key] = {"class_type": "LoadImageMask", "inputs": {"image": upload(mask), "channel": "alpha"},
+                  "_meta": {"title": "Mask (API)"}}
+    for node, name in users:
+        node["inputs"][name] = [key, 0]
+
+
+def set_strength(graph, strength):
+    nodes = [n for n in graph.values() if n["class_type"] == "ZImageFunControlnet"]
+    if not nodes:
+        raise Refused("this workflow has no ControlNet to set a strength for")
+    try:
+        strength = float(strength)
+    except (TypeError, ValueError):
+        raise Refused(f"strength is a number, not '{strength}'") from None
+    if not 0 <= strength <= STRENGTH_MAX:
+        raise Refused(f"strength is 0 to {STRENGTH_MAX:g}")
+    for node in nodes:
+        node["inputs"]["strength"] = strength
+
+
+def set_pad(graph, pad):
+    """pad: pixels on every side, or {"left", "top", "right", "bottom", "feathering"}."""
+    nodes = [n for n in graph.values() if n["class_type"] == "ImagePadForOutpaint"]
+    if not nodes:
+        raise Refused("this workflow does not pad — the Outpaint ones do")
+    if isinstance(pad, str):
+        try:
+            pad = json.loads(pad)
+        except ValueError:
+            raise Refused(f"pad is a number or an object, not '{pad}'") from None
+    sides = ("left", "top", "right", "bottom")
+    if isinstance(pad, int) and not isinstance(pad, bool):
+        pad = dict.fromkeys(sides, pad)
+    if not isinstance(pad, dict) or set(pad) - {*sides, "feathering"}:
+        raise Refused('pad is a number or {"left", "top", "right", "bottom", "feathering"}')
+    values = {}
+    for side in sides:
+        v = pad.get(side, 0)
+        if not isinstance(v, int) or isinstance(v, bool) or not 0 <= v <= PAD_MAX or v % PAD_STEP:
+            raise Refused(f"pad {side} is 0 to {PAD_MAX} in steps of {PAD_STEP}, not {v!r}")
+        values[side] = v
+    if not any(values.values()):
+        raise Refused("pad adds nothing on any side")
+    if "feathering" in pad:
+        f = pad["feathering"]
+        if not isinstance(f, int) or isinstance(f, bool) or not 0 <= f <= FEATHER_MAX:
+            raise Refused(f"pad feathering is 0 to {FEATHER_MAX}, not {f!r}")
+        values["feathering"] = f
+    for node in nodes:
+        node["inputs"].update(values)
+
+
 def upload(data):
     name = hashlib.sha256(data).hexdigest()[:24] + ".png"
     r = requests.post(f"{ARGS.comfy}/upload/image",
@@ -205,7 +307,7 @@ def upload(data):
     return f"{j['subfolder']}/{j['name']}" if j.get("subfolder") else j["name"]
 
 
-def prepare(graph, prompt, size, images):
+def prepare(graph, prompt, size, images, mask=None, strength=None, pad=None):
     for key in [k for k, n in graph.items() if n["class_type"] in UI_ONLY]:
         del graph[key]
     for node in graph.values():               # into temp, not the user's output
@@ -225,7 +327,13 @@ def prepare(graph, prompt, size, images):
             raise Refused(f"this workflow takes at most {len(slots)} image(s), got {len(images)}")
         for key, data in zip(slots, images):
             graph[key]["inputs"]["image"] = upload(data)
+        if mask is not None:
+            set_mask(graph, mask, images[0])
         prune(graph, slots[len(images):])
+    if strength is not None:
+        set_strength(graph, strength)
+    if pad is not None:
+        set_pad(graph, pad)
     if not any(n["class_type"] == "PreviewImage" for n in graph.values()):
         raise Refused("with these images the workflow has nothing left to produce")
 
@@ -275,7 +383,7 @@ def run(graph):
     return out
 
 
-def respond(name, kind, prompt, size, n, seed, fmt, images=None):
+def respond(name, kind, prompt, size, n, seed, fmt, images=None, **extra):
     if fmt not in ("b64_json", "url"):
         raise Refused("response_format is b64_json or url")
     if not 1 <= n <= 8:
@@ -286,7 +394,7 @@ def respond(name, kind, prompt, size, n, seed, fmt, images=None):
     t0 = time.time()
     for i in range(n):
         graph = json.loads(json.dumps(template))
-        prepare(graph, prompt, size, images)
+        prepare(graph, prompt, size, images, **extra)
         set_seed(graph, seed + i)
         for png, url in run(graph):
             data.append({"b64_json": base64.b64encode(png).decode()} if fmt == "b64_json"
@@ -345,14 +453,19 @@ def edits():
             images = [x.read() for key in ("image", "image[]") for x in request.files.getlist(key)]
             prompt, model, size = f.get("prompt", ""), f.get("model"), f.get("size")
             n, seed, fmt = int(f.get("n") or 1), f.get("seed"), f.get("response_format") or "b64_json"
+            mask = request.files["mask"].read() if "mask" in request.files else None
+            strength, pad = f.get("strength") or None, f.get("pad") or None
         else:
             j = request.get_json(silent=True) or {}
             raw = j.get("images") or j.get("image") or []
             images = [data_url(x) for x in (raw if isinstance(raw, list) else [raw])]
             prompt, model, size = j.get("prompt", ""), j.get("model"), j.get("size")
             n, seed, fmt = int(j.get("n") or 1), j.get("seed"), j.get("response_format") or "b64_json"
+            mask = data_url(j["mask"]) if j.get("mask") else None
+            strength, pad = j.get("strength"), j.get("pad")
         return respond(model or default_model("edits"), "edits", prompt, size, n,
-                       seed if seed in (None, "") else int(seed), fmt, images)
+                       seed if seed in (None, "") else int(seed), fmt, images,
+                       mask=mask, strength=strength, pad=pad)
     return handle(go)
 
 
@@ -361,11 +474,13 @@ def models():
     def go():
         data = {}
         for (name, kind), path in workflows().items():
-            if missing_models(json.loads(path.read_text())):
+            graph = json.loads(path.read_text())
+            if missing_models(graph):
                 continue
             m = data.setdefault(name, {"id": name, "object": "model", "owned_by": "comfyui",
-                                       "endpoints": []})
+                                       "endpoints": [], "parameters": []})
             m["endpoints"].append(f"/v1/images/{kind}")
+            m["parameters"] += [x for x in extras(graph) if x not in m["parameters"]]
         return jsonify({"object": "list", "data": list(data.values())})
     return handle(go)
 

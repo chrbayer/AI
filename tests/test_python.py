@@ -359,5 +359,70 @@ class ImageApi(unittest.TestCase):
                 self._refs_ok(g)
 
 
+def png(w, h, alpha=True):
+    """Enough of a PNG for the header checks: signature and IHDR."""
+    return (b"\x89PNG\r\n\x1a\n" + (13).to_bytes(4, "big") + b"IHDR"
+            + w.to_bytes(4, "big") + h.to_bytes(4, "big") + bytes([8, 6 if alpha else 2, 0, 0, 0]))
+
+
+@unittest.skipIf(images is None, "images_server needs flask and requests")
+class ImageApiExtras(unittest.TestCase):
+    INPAINT = "Qwen-Image 2.1 Inpaint Turbo (bf16, 4 Schritte).json"
+    OUTPAINT = "Qwen-Image 2.1 Outpaint (bf16, dpmpp_2m 14).json"
+    CONTROL = "Qwen-Image 2.1 Control (bf16, dpmpp_2m 14).json"
+    EDIT = "Qwen-Image 2.1 Edit (bf16, dpmpp_2m 14).json"
+
+    def setUp(self):
+        images.upload = lambda data: "llmctl-api/x.png"
+
+    def _prepared(self, name, **extra):
+        g = api(name)
+        images.prepare(g, "PROMPT", None, [png(64, 48)], **extra)
+        return g
+
+    def test_each_workflow_names_the_extras_it_takes(self):
+        self.assertEqual(images.extras(api(self.INPAINT)), ["mask", "strength"])
+        self.assertEqual(images.extras(api(self.OUTPAINT)), ["strength", "pad"])
+        self.assertEqual(images.extras(api(self.CONTROL)), ["strength"])
+        self.assertEqual(images.extras(api(self.EDIT)), [])
+        self.assertEqual(images.extras(api("SeedVR2 7B Upscale (fp16).json")), [])  # keeps alpha, redraws nothing
+
+    def test_a_mask_replaces_the_images_transparency(self):
+        g = self._prepared(self.INPAINT, mask=png(64, 48))
+        key, node = next((k, n) for k, n in g.items() if n["class_type"] == "LoadImageMask")
+        self.assertEqual(node["inputs"]["channel"], "alpha")
+        slot = images.image_nodes(g)[0]
+        self.assertFalse([v for n in g.values() for v in n["inputs"].values() if v == [slot, 1]])
+        self.assertTrue([v for n in g.values() for v in n["inputs"].values() if v == [key, 0]])
+
+    def test_a_mask_that_does_not_fit_is_refused(self):
+        for mask, why in ((png(64, 64), "size"), (png(64, 48, alpha=False), "alpha"), (b"GIF89a", "not PNG")):
+            with self.subTest(why), self.assertRaises(images.Refused):
+                self._prepared(self.INPAINT, mask=mask)
+        with self.assertRaises(images.Refused):
+            self._prepared(self.EDIT, mask=png(64, 48))
+
+    def test_strength_goes_into_the_controlnet(self):
+        g = self._prepared(self.CONTROL, strength="0.8")
+        self.assertEqual({n["inputs"]["strength"] for n in g.values()
+                          if n["class_type"] == "ZImageFunControlnet"}, {0.8})
+        for bad in (-0.1, 2.5, "strong"):
+            with self.subTest(bad), self.assertRaises(images.Refused):
+                self._prepared(self.CONTROL, strength=bad)
+        with self.assertRaises(images.Refused):
+            self._prepared(self.EDIT, strength=0.5)
+
+    def test_pad_sets_the_sides(self):
+        pad = lambda g: next(n["inputs"] for n in g.values() if n["class_type"] == "ImagePadForOutpaint")
+        self.assertEqual({pad(self._prepared(self.OUTPAINT, pad=64))[k] for k in ("left", "top", "right", "bottom")}, {64})
+        p = pad(self._prepared(self.OUTPAINT, pad='{"top": 128, "feathering": 20}'))
+        self.assertEqual((p["left"], p["top"], p["right"], p["bottom"], p["feathering"]), (0, 128, 0, 0, 20))
+        for bad in (0, 12, {"up": 64}, {"left": 4096}, {"left": 64, "feathering": -1}, True):
+            with self.subTest(bad), self.assertRaises(images.Refused):
+                self._prepared(self.OUTPAINT, pad=bad)
+        with self.assertRaises(images.Refused):
+            self._prepared(self.INPAINT, pad=64)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

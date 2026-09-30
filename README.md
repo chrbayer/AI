@@ -1071,6 +1071,26 @@ r = img.images.edit(model="flux2-klein-9b", image=open("turm.png", "rb"),
   `image`/`image[]` form fields or as data URLs in a JSON `images` list;
   fewer are fine — the unused references drop out of the workflow. An edit's
   size follows its first image.
+- **Extra fields for the ControlNet workflows** (#19), so an agent steers them
+  as finely as the UI; `GET /v1/models` names the ones each model takes under
+  `parameters`, and a workflow refuses a field it has no use for:
+  - `mask` (Inpaint): a PNG the size of the image, transparent where to
+    redraw — OpenAI's edits mask, as a form file or a data URL. It takes the
+    place of the image's own transparency, so the image can stay a plain photo.
+  - `strength` (all Qwen-Image 2.1 ControlNet workflows, 0–2): how closely the
+    result follows the control image; the workflows use 0.5 (Control) and 1.
+    For Canny at 0.3 a watercolour of the photo keeps only its layout, at 1.0
+    every edge.
+  - `pad` (Outpaint): pixels to add, one number for every side or
+    `{"left", "top", "right", "bottom", "feathering"}` (steps of 8, up to
+    2048; feathering 40 by default).
+
+  ```python
+  r = img.images.edit(model="qwen-image-21-inpaint-turbo", image=open("tisch.png", "rb"),
+                      mask=open("maske.png", "rb"), prompt="ein Stück Schokoladenkuchen")
+  r = img.images.edit(model="qwen-image-21-outpaint-turbo", image=open("tisch.png", "rb"),
+                      prompt="Küche mit Hängelampen", extra_body={"pad": {"top": 256}})
+  ```
 - **Results stay out of the gallery.** They go to ComfyUI's temp directory,
   not to `output/`; the caller has them.
 - **Measured** at 1024×1024, the machine to itself, each including loading
