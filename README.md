@@ -1204,9 +1204,18 @@ with tts.audio.speech.with_streaming_response.create(
   clones audio.cpp at a pinned commit and builds it with Vulkan and only the
   model families `models.conf` names (85 s, 1.8 GB); `outdated` reports newer
   upstream commits. The server takes its models from a JSON file llmctl writes
-  per slot under `~/.local/state/llmctl/audiocpp/`. Qwen3-ASR on audio.cpp was
-  tried too and is no gain: 5.2 s for the passage, and its "streaming" only
-  buffers.
+  per slot under `~/.local/state/llmctl/audiocpp/`.
+
+  **When the speaker has finished** follows from the same stream: while
+  someone talks, a delta arrives every 320 ms; when none has come for about
+  700 ms, the utterance is over. audio.cpp's Silero VAD would say so directly,
+  but its server does not deliver VAD over the live route yet (it waits for
+  text and fails at the end), only its CLI does.
+
+  Tried on audio.cpp and not taken: Qwen3-ASR (5.2 s for the passage, and its
+  "streaming" only buffers) and Qwen3-TTS, which runs offline only — the
+  passage above in 20.3 s with nothing before, where `speech` has the first
+  sound after 3.5 s and all of it after 16.0 s.
 - **Speech recognition.** Qwen3-ASR recognizes 30 languages including German
   and names the language. It writes "language German<asr_text>…" before the
   text; the proxy of the `asr` slot strips that and returns `language` as a
