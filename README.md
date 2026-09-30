@@ -906,9 +906,15 @@ llmctl update comfy --torch           # …and torch itself
   right after the model loader; its strength is the **LoRA strength** slider
   on the workflow's node (1.0 by default, 0 to compare against the plain
   model). In the dev workflows it comes before the Turbo switch, so Turbo
-  still toggles. An abliterated klein text
-  encoder was measured too and left out: on its own it changes nothing, since
-  the reluctance lives in the image model, not in the encoder. Adults only.
+  still toggles. The klein NSFW workflows also use an abliterated text encoder
+  ([ponpoke/flux2-klein-9b-uncensored-text-encoder](https://huggingface.co/ponpoke/flux2-klein-9b-uncensored-text-encoder),
+  16.4 GB, same tensors as the stock one). On its own it changes nothing —
+  klein's reluctance lives in the image model, which is what the LoRA is for.
+  Beside the LoRA it changes little: 8 pairs with the same prompt and seed, one
+  encoder each, were near-identical in 7; in the eighth only the abliterated
+  one left out a garment the prompt had not asked for. The encoder is a
+  dropdown on the workflow's node, so the stock one is a click away in the
+  UI. Adults only.
 - **Custom nodes.** `comfyui/custom_nodes.txt` names the node packs llmctl
   installs, each pinned to a commit: `download` clones them into
   `~/.local/share/llmctl/comfyui/custom_nodes/`, `update` moves them to the

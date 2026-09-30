@@ -288,7 +288,7 @@
    },
    "widgets_values": [
     "flux-2-klein-9b.safetensors",
-    "qwen_3_8b.safetensors",
+    "qwen_3_8b_uncensored.safetensors",
     "full_encoder_small_decoder.safetensors",
     "Replace the background with a quiet coastal cliff at overcast sunset. Remove all buildings and streets. Add wind-shaped grass and a distant ocean horizon. Keep the subject’s pose and framing unchanged.",
     26416064315367,
@@ -296,7 +296,7 @@
    ],
    "widgets_values_named": {
     "unet_name": "flux-2-klein-9b.safetensors",
-    "clip_name": "qwen_3_8b.safetensors",
+    "clip_name": "qwen_3_8b_uncensored.safetensors",
     "vae_name": "full_encoder_small_decoder.safetensors",
     "text": "Replace the background with a quiet coastal cliff at overcast sunset. Remove all buildings and streets. Add wind-shaped grass and a distant ocean horizon. Keep the subject’s pose and framing unchanged.",
     "noise_seed": 26416064315367,
@@ -561,7 +561,7 @@
    },
    "widgets_values": [
     "flux-2-klein-9b.safetensors",
-    "qwen_3_8b.safetensors",
+    "qwen_3_8b_uncensored.safetensors",
     "full_encoder_small_decoder.safetensors",
     "Let this character hold the bag with both hands",
     583453753589969,
@@ -569,7 +569,7 @@
    ],
    "widgets_values_named": {
     "unet_name": "flux-2-klein-9b.safetensors",
-    "clip_name": "qwen_3_8b.safetensors",
+    "clip_name": "qwen_3_8b_uncensored.safetensors",
     "vae_name": "full_encoder_small_decoder.safetensors",
     "text": "Let this character hold the bag with both hands",
     "noise_seed": 583453753589969,
@@ -1171,8 +1171,8 @@
        "ver": "0.8.2",
        "models": [
         {
-         "name": "qwen_3_8b.safetensors",
-         "url": "https://huggingface.co/Comfy-Org/vae-text-encorder-for-flux-klein-9b/resolve/main/split_files/text_encoders/qwen_3_8b.safetensors",
+         "name": "qwen_3_8b_uncensored.safetensors",
+         "url": "https://huggingface.co/ponpoke/flux2-klein-9b-uncensored-text-encoder/resolve/fba36e796aac081246708dd30392a401ba44922e/model.safetensors",
          "directory": "text_encoders"
         }
        ],
@@ -1183,12 +1183,12 @@
        }
       },
       "widgets_values": [
-       "qwen_3_8b.safetensors",
+       "qwen_3_8b_uncensored.safetensors",
        "flux2",
        "default"
       ],
       "widgets_values_named": {
-       "clip_name": "qwen_3_8b.safetensors",
+       "clip_name": "qwen_3_8b_uncensored.safetensors",
        "type": "flux2",
        "device": "default"
       }
@@ -3081,8 +3081,8 @@
        "ver": "0.8.2",
        "models": [
         {
-         "name": "qwen_3_8b.safetensors",
-         "url": "https://huggingface.co/Comfy-Org/vae-text-encorder-for-flux-klein-9b/resolve/main/split_files/text_encoders/qwen_3_8b.safetensors",
+         "name": "qwen_3_8b_uncensored.safetensors",
+         "url": "https://huggingface.co/ponpoke/flux2-klein-9b-uncensored-text-encoder/resolve/fba36e796aac081246708dd30392a401ba44922e/model.safetensors",
          "directory": "text_encoders"
         }
        ],
@@ -3093,12 +3093,12 @@
        }
       },
       "widgets_values": [
-       "qwen_3_8b.safetensors",
+       "qwen_3_8b_uncensored.safetensors",
        "flux2",
        "default"
       ],
       "widgets_values_named": {
-       "clip_name": "qwen_3_8b.safetensors",
+       "clip_name": "qwen_3_8b_uncensored.safetensors",
        "type": "flux2",
        "device": "default"
       }

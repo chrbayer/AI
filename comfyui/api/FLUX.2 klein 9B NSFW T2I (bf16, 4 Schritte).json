@@ -172,7 +172,7 @@
  },
  "75:71": {
   "inputs": {
-   "clip_name": "qwen_3_8b.safetensors",
+   "clip_name": "qwen_3_8b_uncensored.safetensors",
    "type": "flux2",
    "device": "default"
   },
