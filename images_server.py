@@ -10,6 +10,8 @@
                                   with boxes to repaint and a prompt for each (needs --vision)
     GET  /v1/models               the workflows whose models ComfyUI has, and the
                                   extra fields each takes
+    GET  /repair                  a page to check a picture, pick and edit the boxes, and
+                                  repaint them; it starts and stops the vision slot on request
 
 A model is a bundled workflow, in the API format comfyui/export_api.py makes
 of it: "FLUX.2 klein 9B T2I (bf16, 4 Schritte).json" is flux2-klein-9b for
@@ -28,13 +30,14 @@ import io
 import json
 import random
 import re
+import subprocess
 import threading
 import time
 import uuid
 from pathlib import Path
 
 import requests
-from flask import Flask, jsonify, request
+from flask import Flask, Response, jsonify, request
 
 try:                              # the mask from boxes, /check's sizes and preview
     from PIL import Image, ImageDraw, ImageFont
@@ -672,6 +675,129 @@ def check_endpoint():
     return handle(go)
 
 
+# ── the repair page ──────────────────────────────────────────
+
+REPAIR_PAGE = Path(__file__).with_name("images_repair.html")
+IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp")
+_vision = {"state": None, "message": ""}
+_vision_lock = threading.Lock()
+
+
+def vision_up():
+    if not getattr(ARGS, "vision", ""):
+        return False
+    try:
+        return requests.get(f"{ARGS.vision}/health", timeout=2).status_code == 200
+    except requests.RequestException:
+        return False
+
+
+def comfy_up():
+    try:
+        return requests.get(f"{ARGS.comfy}/system_stats", timeout=2).status_code == 200
+    except requests.RequestException:
+        return False
+
+
+def controllable():
+    return bool(getattr(ARGS, "llmctl", None) and getattr(ARGS, "vision_slot", None)
+                and getattr(ARGS, "vision_model", None))
+
+
+def run_vision(action):
+    """Start or stop the vision slot through llmctl, in the background. Before
+    a start ComfyUI lets go of its models: beside flash they do not fit."""
+    slot = str(ARGS.vision_slot)
+    try:
+        if action == "start":
+            try:
+                requests.post(f"{ARGS.comfy}/free", json={"unload_models": True, "free_memory": True}, timeout=10)
+                time.sleep(3)
+            except requests.RequestException:
+                pass
+            cmd = [ARGS.llmctl, "start", ARGS.vision_model, slot, "--mmproj"]
+        else:
+            cmd = [ARGS.llmctl, "stop", slot]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+        tail = "\n".join((r.stdout + r.stderr).strip().splitlines()[-6:])
+        if r.returncode != 0:
+            _vision.update(state=None, message=f"llmctl {action} failed: {tail}")
+            return
+        if action == "start":
+            deadline = time.time() + 900
+            while time.time() < deadline and not vision_up():
+                time.sleep(3)
+            ok = vision_up()
+            _vision.update(state=None, message="" if ok else "the vision slot did not come up; see llmctl logs " + slot)
+        else:
+            _vision.update(state=None, message="")
+    except Exception as e:                                        # noqa: BLE001
+        _vision.update(state=None, message=f"llmctl {action}: {e}")
+
+
+@app.get("/repair")
+def repair_page():
+    return Response(REPAIR_PAGE.read_text(), mimetype="text/html")
+
+
+@app.get("/repair/status")
+def repair_status():
+    up = vision_up()
+    state = _vision["state"] or ("up" if up else "down")
+    return jsonify({"vision": {"configured": bool(getattr(ARGS, "vision", "")), "state": state,
+                               "controllable": controllable(), "model": getattr(ARGS, "vision_model", None),
+                               "slot": getattr(ARGS, "vision_slot", None), "message": _vision["message"]},
+                    "comfy": {"up": comfy_up()}})
+
+
+@app.post("/repair/vision")
+def repair_vision():
+    def go():
+        action = (request.get_json(silent=True) or {}).get("action")
+        if action not in ("start", "stop"):
+            raise Refused("action is start or stop")
+        if not controllable():
+            raise Refused("this image API was not started with a vision slot llmctl can start and stop")
+        with _vision_lock:
+            if _vision["state"]:
+                raise Refused(f"the vision slot is already {_vision['state']}")
+            _vision.update(state="starting" if action == "start" else "stopping", message="")
+        threading.Thread(target=run_vision, args=(action,), daemon=True).start()
+        return jsonify({"state": _vision["state"]})
+    return handle(go)
+
+
+@app.get("/repair/recent")
+def repair_recent():
+    def go():
+        r = requests.get(f"{ARGS.comfy}/internal/files/output", timeout=10)
+        r.raise_for_status()
+        names = [n.rsplit(" [", 1)[0] for n in r.json()]
+        return jsonify([n for n in names if n.lower().endswith(IMAGE_SUFFIXES)][:60])
+    return handle(go)
+
+
+@app.get("/repair/image")
+def repair_image():
+    def go():
+        name = request.args.get("name", "")
+        if not name or "/" in name or "\\" in name or name.startswith("."):
+            raise Refused("name is a file in ComfyUI's output")
+        v = requests.get(f"{ARGS.comfy}/view", params={"filename": name, "type": "output"}, timeout=60)
+        if v.status_code != 200:
+            raise Refused(f"ComfyUI has no output '{name}'")
+        if request.args.get("thumb"):
+            pillow()
+            im = Image.open(io.BytesIO(v.content)).convert("RGB")
+            im.thumbnail((256, 256))
+            buf = io.BytesIO()
+            im.save(buf, "JPEG", quality=80)
+            return Response(buf.getvalue(), mimetype="image/jpeg",
+                            headers={"Cache-Control": "max-age=3600"})
+        return Response(v.content, mimetype=v.headers.get("content-type", "image/png"))
+    return handle(go)
+
+
 @app.get("/v1/models")
 def models():
     def go():
@@ -703,6 +829,9 @@ def main():
     # FLUX.2 dev editing with two references takes ~20 min here.
     p.add_argument("--timeout", type=int, default=3600, help="seconds one image may take")
     p.add_argument("--vision", help="URL of an OpenAI chat server with vision, for /v1/images/check")
+    p.add_argument("--vision-slot", type=int, help="llmctl slot of the vision model, for /repair to start and stop")
+    p.add_argument("--vision-model", help="llmctl model that /repair starts on that slot")
+    p.add_argument("--llmctl", help="llmctl itself, for /repair to start and stop the vision slot")
     p.parse_args(namespace=ARGS)
     ARGS.comfy = ARGS.comfy.rstrip("/")
     ARGS.public_comfy = (ARGS.public_comfy or ARGS.comfy).rstrip("/")

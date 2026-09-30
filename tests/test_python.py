@@ -490,5 +490,42 @@ class ImageCheck(unittest.TestCase):
             images.check(b"png")
 
 
+@unittest.skipIf(images is None, "images_server needs flask and requests")
+class RepairPage(unittest.TestCase):
+    def setUp(self):
+        self.args = vars(images.ARGS).copy()
+        images.ARGS.comfy = "http://127.0.0.1:9"          # nothing listens there
+        images.ARGS.vision = ""
+        for k in ("vision_slot", "vision_model", "llmctl"):
+            setattr(images.ARGS, k, None)
+        self.client = images.app.test_client()
+
+    def tearDown(self):
+        images.ARGS.__dict__.clear(); images.ARGS.__dict__.update(self.args)
+
+    def test_the_page_is_served(self):
+        r = self.client.get("/repair")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn(b"Bildreparatur", r.data)
+
+    def test_status_without_a_vision_slot(self):
+        j = self.client.get("/repair/status").get_json()
+        self.assertEqual(j["vision"]["state"], "down")
+        self.assertFalse(j["vision"]["configured"])
+        self.assertFalse(j["vision"]["controllable"])
+        self.assertFalse(j["comfy"]["up"])
+
+    def test_vision_cannot_be_started_without_llmctl_and_a_slot(self):
+        r = self.client.post("/repair/vision", json={"action": "start"})
+        self.assertEqual(r.status_code, 400)
+        images.ARGS.llmctl, images.ARGS.vision_slot, images.ARGS.vision_model = "/bin/false", 2, "flash"
+        self.assertEqual(self.client.post("/repair/vision", json={"action": "reboot"}).status_code, 400)
+
+    def test_only_plain_output_names_are_fetched(self):
+        for name in ("../secret.png", "a/b.png", ".hidden.png", ""):
+            with self.subTest(name):
+                self.assertEqual(self.client.get("/repair/image", query_string={"name": name}).status_code, 400)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

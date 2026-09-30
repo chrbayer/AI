@@ -1135,6 +1135,24 @@ r = img.images.edit(model="flux2-klein-9b", image=open("turm.png", "rb"),
   repairs 10–29 %; `max_area` 0.05 would have spared both. flash (82 GiB) and the Inpaint
   workflow (~37 GiB of models: DiT, ControlNet, encoder) do not fit into the
   104 GiB together: check first, stop flash, then repair.
+- **The repair page:** `http://localhost:8089/repair` does all of the above by
+  hand. Drop in a picture (or pick one of ComfyUI's latest outputs), give the
+  prompt it came from, press *Prüfen*: the flaws appear as numbered boxes over
+  the picture, each with a checkbox and its `fix` text to edit. Boxes move,
+  grow at their corner and go with ✕ or Delete; dragging on the picture adds
+  one of your own. *Reparieren* repaints the ticked ones — the prompt is made
+  from the picture's prompt and the fixes, and stays as you edit it — and
+  shows the result beside the picture (hold it for the original). *Nochmal*
+  tries another seed, *Übernehmen & weiter* makes the result the picture to
+  check again, *Herunterladen* saves it.
+
+  The page starts and stops the vision model on request (*Vision starten*,
+  *Vision stoppen*), since it and Inpaint do not fit together; starting first
+  has ComfyUI let go of its models. That needs `--vision` as a slot number:
+  the image API then calls `llmctl start flash N --mmproj` and `llmctl stop N`
+  (`LLMCTL_VISION_MODEL` names another model). Nothing starts by itself. With
+  `--host`, whoever reaches the page can press those buttons, as they can run
+  workflows in ComfyUI.
 - **Results stay out of the gallery.** They go to ComfyUI's temp directory,
   not to `output/`; the caller has them.
 - **Measured** at 1024×1024, the machine to itself, each including loading

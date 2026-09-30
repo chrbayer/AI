@@ -369,6 +369,8 @@ COMFYUI_TORCH_INDEX="https://download.pytorch.org/whl/rocm7.2"
 COMFYUI_MODELS_SCRIPT="$LIB_DIR/comfyui_models.py"
 COMFYUI_SHARE="$SHARE_DIR/comfyui"      # bundled workflows/ and patches/
 IMAGES_SERVER_SCRIPT="$LIB_DIR/images_server.py"   # OpenAI image API, a comfyui slot's --proxy
+# What the image API's /repair page starts on the --vision slot, with --mmproj.
+VISION_MODEL="${LLMCTL_VISION_MODEL:-flash}"
 # Not /tmp: that is a small tmpfs here, and pip unpacks multi-GB torch wheels.
 COMFYUI_TMP="${XDG_CACHE_HOME:-$HOME/.cache}/llmctl/comfyui-tmp"
 
@@ -1215,7 +1217,8 @@ _start_images_server() {
         python3 -u "$IMAGES_SERVER_SCRIPT" --comfy "http://127.0.0.1:$port_server" \
             --public-comfy "http://${host:-127.0.0.1}:$port_server" \
             --api "$COMFYUI_SHARE/api" --host "${host:-127.0.0.1}" --port "$port_proxy" \
-            ${vision:+--vision "$vision"})
+            ${vision:+--vision "$vision"} \
+            ${vision_slot:+--vision-slot "$vision_slot" --vision-model "$VISION_MODEL" --llmctl "$(readlink -f "${BASH_SOURCE[0]}")"})
     [[ -n "$pid" ]] || { echo "Error: the image API did not report a PID. See $log"; return 1; }
     for (( i=0; i<10; i++ )); do
         sleep 1
@@ -1555,6 +1558,7 @@ cmd_start() {
     local seed=""               # tts: sampling seed when a request names none (-1 = random)
     local ignore_memory=false   # skip the memory check beside halogen (preset checks the set itself)
     local vision=""             # comfyui: slot or URL of a vision model for the image API's /check
+    local vision_slot=""        # … its slot, when given as one: /repair starts and stops it there
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -1637,6 +1641,9 @@ cmd_start() {
         [[ "$_r_backend" == comfyui && "$start_proxy" == true ]] || \
             { echo "Error: --vision is for the image API: a comfyui model started with --proxy"; exit 1; }
         if [[ "$vision" =~ ^[1-9][0-9]*$ ]]; then
+            _check_slot "$vision" || exit 1
+            [[ "$vision" == "$slot" ]] && { echo "Error: --vision names this very slot ($slot)"; exit 1; }
+            vision_slot="$vision"
             vision="http://127.0.0.1:$(( PORT_BASE_SERVER + vision ))"
         elif [[ ! "$vision" =~ ^https?:// ]]; then
             echo "Error: --vision takes a slot number or a URL; got '$vision'"; exit 1

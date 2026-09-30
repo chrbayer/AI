@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bildreparatur</title>
+<style>
+:root {
+  --bg: #f6f5f2; --panel: #ffffff; --text: #1d1d1f; --muted: #6b6b70; --line: #deddd8;
+  --accent: #2f6fdb; --accent-text: #ffffff; --ok: #1f8a4c; --warn: #b7791f; --bad: #c0392b;
+  --box: #ff3b30; --box-off: #9a9a9a; --shadow: 0 1px 3px rgba(0,0,0,.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161618; --panel: #202023; --text: #ececef; --muted: #9a9aa2; --line: #333338;
+    --accent: #5b8def; --accent-text: #0e0e10; --ok: #3cc47c; --warn: #e0a84a; --bad: #ef6b5b;
+    --box: #ff5a4f; --box-off: #77777d; --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+       font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;
+         padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+header h1 { font-size: 17px; margin: 0 8px 0 0; }
+.status { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--box-off); display: inline-block; }
+.dot.up { background: var(--ok); } .dot.busy { background: var(--warn); animation: pulse 1s infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; padding: 16px; max-width: 1500px; margin: 0 auto; }
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; box-shadow: var(--shadow); }
+.panel h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; }
+.side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--text);
+         border-radius: 7px; padding: 6px 12px; cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.small { padding: 3px 8px; font-size: 13px; }
+label { display: block; font-size: 13px; color: var(--muted); margin: 8px 0 3px; }
+input[type=text], input[type=number], textarea, select {
+  width: 100%; font: inherit; color: var(--text); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; }
+textarea { resize: vertical; min-height: 54px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row > * { flex: 1 1 auto; }
+.row > button { flex: 0 0 auto; }
+.hint { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
+.hint.warn { color: var(--warn); } .hint.bad { color: var(--bad); }
+
+#drop { border: 2px dashed var(--line); border-radius: 10px; padding: 40px 16px; text-align: center; color: var(--muted); }
+#drop.over { border-color: var(--accent); color: var(--accent); }
+.views { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.views.two { grid-template-columns: 1fr 1fr; }
+@media (max-width: 700px) { .views.two { grid-template-columns: 1fr; } }
+.view h3 { font-size: 13px; color: var(--muted); margin: 0 0 6px; font-weight: 500; }
+.stage { position: relative; user-select: none; touch-action: none; line-height: 0; cursor: crosshair; }
+.stage img { width: 100%; height: auto; display: block; border-radius: 6px; }
+.box { position: absolute; border: 2px solid var(--box); background: rgba(255,59,48,.08); cursor: move; }
+.box.off { border-style: dashed; border-color: var(--box-off); background: transparent; }
+.box.sel { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--box); }
+.box .num { position: absolute; left: -2px; top: -22px; background: var(--box); color: #fff;
+            font: 600 12px/20px system-ui; padding: 0 6px; border-radius: 4px 4px 0 0; }
+.box.off .num { background: var(--box-off); }
+.box .grip { position: absolute; right: -6px; bottom: -6px; width: 12px; height: 12px;
+             background: var(--box); border: 2px solid var(--panel); border-radius: 3px; cursor: nwse-resize; }
+.box.off .grip { background: var(--box-off); }
+.result img { width: 100%; border-radius: 6px; display: block; }
+.compare { position: relative; line-height: 0; }
+.compare .before { position: absolute; inset: 0; opacity: 0; transition: opacity .1s; }
+.compare.show-before .before { opacity: 1; }
+
+#list { display: flex; flex-direction: column; gap: 10px; }
+.item { border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+.item.sel { border-color: var(--box); }
+.item .head { display: flex; gap: 8px; align-items: center; }
+.item .head .n { font-weight: 700; color: var(--box); min-width: 20px; }
+.item .head .what { flex: 1; font-size: 13px; color: var(--muted); }
+.item textarea { margin-top: 6px; min-height: 40px; font-size: 13px; }
+.remarks { font-size: 13px; color: var(--muted); }
+.remarks li { margin: 4px 0; }
+
+#gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; margin-top: 10px; max-height: 320px; overflow: auto; }
+#gallery img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 5px; cursor: pointer; border: 2px solid transparent; }
+#gallery img:hover { border-color: var(--accent); }
+#toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); max-width: calc(100% - 32px);
+         background: var(--text); color: var(--bg); padding: 10px 14px; border-radius: 8px; font-size: 14px;
+         display: none; z-index: 10; white-space: pre-wrap; }
+.spin::after { content: ""; display: inline-block; width: 11px; height: 11px; margin-left: 7px; vertical-align: -1px;
+               border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: rot .8s linear infinite; }
+@keyframes rot { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Bildreparatur</h1>
+  <span class="status"><span id="vdot" class="dot"></span><span id="vtext">Vision …</span></span>
+  <button id="vstart" class="small">Vision starten</button>
+  <button id="vstop" class="small">Vision stoppen</button>
+  <span class="status"><span id="cdot" class="dot"></span>ComfyUI</span>
+</header>
+
+<main>
+  <section class="panel">
+    <div id="drop">
+      Bild hierher ziehen oder <button id="pick">Datei wählen</button>
+      <button id="recent">Aus ComfyUI-Ausgabe</button>
+      <input id="file" type="file" accept="image/*" hidden>
+      <div id="gallery" hidden></div>
+    </div>
+    <div id="work" hidden>
+      <div class="row" style="margin-bottom:10px">
+        <span id="fname" class="hint" style="margin:0"></span>
+        <button id="other" class="small">Anderes Bild</button>
+      </div>
+      <div id="views" class="views">
+        <div class="view">
+          <h3>Bild — Rahmen ziehen, verschieben, an der Ecke vergrößern</h3>
+          <div id="stage" class="stage"><img id="img" alt=""></div>
+        </div>
+        <div class="view result" id="resultView" hidden>
+          <h3>Ergebnis — gedrückt halten zeigt das Original</h3>
+          <div id="compare" class="compare"><img id="res" alt=""><img id="before" class="before" alt=""></div>
+          <div class="row" style="margin-top:10px">
+            <button id="again">Nochmal, anderer Seed</button>
+            <button id="adopt">Übernehmen &amp; weiter</button>
+            <button id="save">Herunterladen</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="side">
+    <section class="panel">
+      <h2>1 · Prüfen</h2>
+      <label for="prompt">Womit das Bild erzeugt wurde (optional, hilft)</label>
+      <textarea id="prompt" placeholder="z. B. a barista pouring latte art"></textarea>
+      <label for="area">Größte Stelle: <span id="areaText"></span> des Bildes</label>
+      <input id="area" type="range" min="0.02" max="0.4" step="0.01" value="0.2" style="width:100%">
+      <div class="row" style="margin-top:10px"><button id="check" class="primary">Prüfen</button></div>
+      <p id="checkHint" class="hint"></p>
+    </section>
+
+    <section class="panel">
+      <h2>2 · Fundstellen</h2>
+      <div id="list"><p class="hint">Noch nichts geprüft. Eigene Stellen: Rahmen ins Bild ziehen.</p></div>
+      <div id="remarksBox" hidden>
+        <label>Hinweise ohne Reparatur (zu groß oder das ganze Bild)</label>
+        <ul id="remarks" class="remarks"></ul>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>3 · Reparieren</h2>
+      <label for="final">Prompt für die Reparatur</label>
+      <textarea id="final" rows="4"></textarea>
+      <p class="hint" id="finalHint">Wird aus Prompt und den gewählten Korrekturen gebildet — Änderungen hier bleiben stehen.</p>
+      <div class="row">
+        <div><label for="model">Workflow</label>
+          <select id="model"><option value="qwen-image-21-inpaint-turbo">Inpaint Turbo (~26 s)</option>
+                              <option value="qwen-image-21-inpaint">Inpaint (~70 s)</option></select></div>
+        <div style="max-width:90px"><label for="margin">Rand px</label><input id="margin" type="number" value="16" min="0" max="256"></div>
+        <div style="max-width:120px"><label for="seed">Seed</label><input id="seed" type="number" value="7"></div>
+      </div>
+      <div class="row" style="margin-top:10px"><button id="repair" class="primary">Reparieren</button></div>
+      <p id="repairHint" class="hint"></p>
+    </section>
+  </div>
+</main>
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const S = { checkMsg: "", src: null, name: "bild.png", w: 0, h: 0, boxes: [], sel: null, result: null,
+            finalEdited: false, vision: "down", controllable: false, comfy: false, busy: false };
+let nextId = 1;
+
+function toast(msg, ms = 5000) {
+  const t = $("toast"); t.textContent = msg; t.style.display = "block";
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.style.display = "none", ms);
+}
+async function api(path, opts = {}) {
+  const r = await fetch(path, opts);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.error) throw new Error((j.error && j.error.message) || r.statusText);
+  return j;
+}
+const jsonPost = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+// ── status ──
+async function status() {
+  try {
+    const s = await api("repair/status");
+    S.vision = s.vision.state; S.controllable = s.vision.controllable; S.comfy = s.comfy.up;
+    const busy = S.vision === "starting" || S.vision === "stopping";
+    $("vdot").className = "dot" + (S.vision === "up" ? " up" : busy ? " busy" : "");
+    const who = s.vision.model ? `${s.vision.model} (Slot ${s.vision.slot})` : "Vision";
+    $("vtext").textContent = !s.vision.configured ? "kein Vision-Slot (--vision)"
+      : { up: `${who} läuft`, down: `${who} aus`, starting: `${who} startet …`, stopping: `${who} stoppt …` }[S.vision];
+    $("vstart").hidden = $("vstop").hidden = !S.controllable;
+    $("vstart").disabled = S.vision !== "down"; $("vstop").disabled = S.vision !== "up";
+    $("cdot").className = "dot" + (S.comfy ? " up" : "");
+    if (s.vision.message) toast(s.vision.message, 8000);
+  } catch (e) { $("vtext").textContent = "Bild-API nicht erreichbar"; }
+  buttons();
+}
+function buttons() {
+  const have = !!S.src;
+  $("check").disabled = !have || S.busy || S.vision !== "up";
+  $("checkHint").textContent = !have ? "" : S.busy ? $("checkHint").textContent : S.vision === "up" ? S.checkMsg :
+    S.controllable ? (S.checkMsg ? S.checkMsg + " " : "") + "Zum Prüfen erst „Vision starten“ (~30 s)." : "Zum Prüfen muss der Vision-Slot laufen.";
+  const chosen = S.boxes.filter(b => b.on).length;
+  $("repair").disabled = !have || S.busy || !chosen || S.vision !== "down" || !S.comfy;
+  const rh = $("repairHint"); rh.className = "hint";
+  if (!have) rh.textContent = "";
+  else if (S.vision !== "down") { rh.textContent = "Vision-Modell und Inpaint passen nicht zusammen in den Speicher — erst „Vision stoppen“."; rh.className = "hint warn"; }
+  else if (!S.comfy) { rh.textContent = "ComfyUI läuft nicht."; rh.className = "hint bad"; }
+  else rh.textContent = chosen ? `${chosen} Stelle(n) werden neu gemalt.` : "Keine Stelle gewählt.";
+}
+$("vstart").onclick = () => vision("start");
+$("vstop").onclick = () => vision("stop");
+async function vision(action) {
+  try { await jsonPost("repair/vision", { action }); } catch (e) { toast(e.message); }
+  status();
+}
+setInterval(status, 3000);
+
+// ── loading a picture ──
+$("pick").onclick = () => $("file").click();
+$("file").onchange = e => e.target.files[0] && readFile(e.target.files[0]);
+const drop = $("drop");
+drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); const f = e.dataTransfer.files[0]; f && readFile(f); };
+document.addEventListener("paste", e => { const f = [...e.clipboardData.files].find(f => f.type.startsWith("image/")); f && readFile(f); });
+function readFile(f) { const r = new FileReader(); r.onload = () => load(r.result, f.name); r.readAsDataURL(f); }
+$("recent").onclick = async () => {
+  const g = $("gallery");
+  if (!g.hidden) { g.hidden = true; return; }
+  try {
+    const names = await api("repair/recent");
+    g.innerHTML = names.length ? "" : "<p class='hint'>Keine Bilder in ComfyUIs Ausgabe.</p>";
+    for (const n of names) {
+      const im = document.createElement("img"); im.loading = "lazy"; im.title = n;
+      im.src = "repair/image?thumb=1&name=" + encodeURIComponent(n);
+      im.onclick = async () => {
+        const b = await (await fetch("repair/image?name=" + encodeURIComponent(n))).blob();
+        const r = new FileReader(); r.onload = () => load(r.result, n); r.readAsDataURL(b);
+      };
+      g.appendChild(im);
+    }
+    g.hidden = false;
+  } catch (e) { toast(e.message); }
+};
+function load(src, name) {
+  const probe = new Image();
+  probe.onload = () => {
+    Object.assign(S, { checkMsg: "", src, name, w: probe.naturalWidth, h: probe.naturalHeight, boxes: [], sel: null, result: null });
+    $("img").src = src; $("before").src = src;
+    $("fname").textContent = `${name} · ${S.w}×${S.h}`;
+    $("drop").hidden = true; $("gallery").hidden = true; $("work").hidden = false;
+    $("resultView").hidden = true; $("views").classList.remove("two");
+    $("remarksBox").hidden = true;
+    render();
+  };
+  probe.src = src;
+}
+$("other").onclick = () => { $("work").hidden = true; $("drop").hidden = false; S.src = null; buttons(); };
+
+// ── boxes on the picture ──
+const stage = $("stage");
+function scale() { const r = $("img").getBoundingClientRect(); return { r, k: r.width / S.w }; }
+function render() {
+  stage.querySelectorAll(".box").forEach(n => n.remove());
+  const { k } = scale();
+  for (const b of S.boxes) {
+    const d = document.createElement("div");
+    d.className = "box" + (b.on ? "" : " off") + (S.sel === b.id ? " sel" : "");
+    Object.assign(d.style, { left: b.x1 * k + "px", top: b.y1 * k + "px",
+                             width: (b.x2 - b.x1) * k + "px", height: (b.y2 - b.y1) * k + "px" });
+    d.innerHTML = `<span class="num">${b.n}</span><span class="grip"></span>`;
+    d.dataset.id = b.id;
+    stage.appendChild(d);
+  }
+  renderList(); compose(); buttons();
+}
+function renumber() { S.boxes.forEach((b, i) => b.n = i + 1); }
+let drag = null;
+stage.addEventListener("pointerdown", e => {
+  if (!S.src) return;
+  const { r, k } = scale();
+  const px = (e.clientX - r.left) / k, py = (e.clientY - r.top) / k;
+  const el = e.target.closest(".box");
+  if (el) {
+    const b = S.boxes.find(b => b.id == el.dataset.id);
+    S.sel = b.id;
+    drag = { b, mode: e.target.classList.contains("grip") ? "size" : "move", px, py, o: { ...b } };
+  } else {
+    const b = { id: nextId++, n: 0, x1: px, y1: py, x2: px, y2: py, what: "eigene Stelle", fix: "", on: true, own: true };
+    S.boxes.push(b); renumber(); S.sel = b.id;
+    drag = { b, mode: "size", px, py, o: { ...b }, fresh: true };
+  }
+  stage.setPointerCapture(e.pointerId);
+  render();
+});
+stage.addEventListener("pointermove", e => {
+  if (!drag) return;
+  const { r, k } = scale();
+  const px = Math.max(0, Math.min(S.w, (e.clientX - r.left) / k)), py = Math.max(0, Math.min(S.h, (e.clientY - r.top) / k));
+  const { b, o } = drag, dx = px - drag.px, dy = py - drag.py;
+  if (drag.mode === "move") {
+    const w = o.x2 - o.x1, h = o.y2 - o.y1;
+    b.x1 = Math.max(0, Math.min(S.w - w, o.x1 + dx)); b.y1 = Math.max(0, Math.min(S.h - h, o.y1 + dy));
+    b.x2 = b.x1 + w; b.y2 = b.y1 + h;
+  } else if (drag.fresh) {
+    b.x1 = Math.min(drag.px, px); b.x2 = Math.max(drag.px, px); b.y1 = Math.min(drag.py, py); b.y2 = Math.max(drag.py, py);
+  } else {
+    b.x2 = Math.max(o.x1 + 8, o.x2 + dx); b.y2 = Math.max(o.y1 + 8, o.y2 + dy);
+    b.x2 = Math.min(S.w, b.x2); b.y2 = Math.min(S.h, b.y2);
+  }
+  render();
+});
+stage.addEventListener("pointerup", () => {
+  if (drag && drag.fresh && (drag.b.x2 - drag.b.x1 < 6 || drag.b.y2 - drag.b.y1 < 6)) {
+    S.boxes = S.boxes.filter(b => b !== drag.b); renumber(); S.sel = null;
+  }
+  if (drag && drag.fresh && S.boxes.includes(drag.b)) {
+    const id = drag.b.id;
+    setTimeout(() => { const t = document.querySelector(`.item[data-id="${id}"] textarea`); t && t.focus(); });
+  }
+  drag = null; render();
+});
+window.addEventListener("resize", () => S.src && render());
+document.addEventListener("keydown", e => {
+  if ((e.key === "Delete" || e.key === "Backspace") && S.sel && !/TEXTAREA|INPUT/.test(document.activeElement.tagName)) {
+    S.boxes = S.boxes.filter(b => b.id !== S.sel); S.sel = null; renumber(); render();
+  }
+});
+
+// ── the list ──
+function renderList() {
+  const L = $("list");
+  const f = document.activeElement;
+  if (f && f.tagName === "TEXTAREA" && f.closest("#list") && S.boxes.some(b => b.id == f.closest(".item").dataset.id)
+      && L.querySelectorAll(".item").length === S.boxes.length) {
+    // keep typing undisturbed; only the selection marks change
+    L.querySelectorAll(".item").forEach(it => it.classList.toggle("sel", it.dataset.id == S.sel));
+    return;
+  }
+  if (!S.boxes.length) { L.innerHTML = "<p class='hint'>Keine Stellen. Eigene: Rahmen ins Bild ziehen.</p>"; return; }
+  L.innerHTML = "";
+  for (const b of S.boxes) {
+    const it = document.createElement("div");
+    it.className = "item" + (S.sel === b.id ? " sel" : ""); it.dataset.id = b.id;
+    it.innerHTML = `<div class="head"><input type="checkbox" ${b.on ? "checked" : ""}>
+      <span class="n">${b.n}</span><span class="what"></span><button class="small" title="Entfernen">✕</button></div>
+      <textarea placeholder="Was soll hier stattdessen zu sehen sein?"></textarea>`;
+    it.querySelector(".what").textContent = b.what;
+    const ta = it.querySelector("textarea"); ta.value = b.fix;
+    ta.oninput = () => { b.fix = ta.value; compose(); };
+    ta.onfocus = () => { S.sel = b.id; render(); };
+    it.querySelector("input").onchange = e => { b.on = e.target.checked; render(); };
+    it.querySelector("button").onclick = () => { S.boxes = S.boxes.filter(x => x !== b); renumber(); render(); };
+    it.onclick = e => { if (e.target === it || e.target.classList.contains("what")) { S.sel = b.id; render(); } };
+    L.appendChild(it);
+  }
+}
+
+// ── prompts ──
+$("area").oninput = () => $("areaText").textContent = Math.round($("area").value * 100) + " %";
+$("area").oninput();
+$("prompt").oninput = compose;
+$("final").oninput = () => { S.finalEdited = true; $("finalHint").textContent = "Von Hand geändert. Leeren, um ihn wieder bilden zu lassen."; if (!$("final").value) { S.finalEdited = false; compose(); } };
+function compose() {
+  if (S.finalEdited) return;
+  const fixes = [...new Set(S.boxes.filter(b => b.on && b.fix.trim()).map(b => b.fix.trim()))];
+  const base = $("prompt").value.trim();
+  $("final").value = [base, fixes.join("; ")].filter(Boolean).join(". ");
+  $("finalHint").textContent = "Wird aus Prompt und den gewählten Korrekturen gebildet — Änderungen hier bleiben stehen.";
+}
+
+// ── check ──
+$("check").onclick = async () => {
+  S.busy = true; buttons(); $("check").classList.add("spin");
+  const t0 = Date.now(); const tick = setInterval(() => $("checkHint").textContent = `prüft … ${Math.round((Date.now() - t0) / 1000)} s`, 1000);
+  try {
+    const c = await jsonPost("v1/images/check", { image: S.src, prompt: $("prompt").value.trim() || undefined, max_area: +$("area").value });
+    S.boxes = S.boxes.filter(b => b.own);
+    for (const a of c.artifacts) {
+      const [x1, y1, x2, y2] = a.box;
+      S.boxes.push({ id: nextId++, n: 0, x1, y1, x2, y2, what: a.what, fix: a.fix, on: true });
+    }
+    renumber(); S.sel = null;
+    const rm = $("remarks"); rm.innerHTML = "";
+    for (const r of c.remarks) {
+      const li = document.createElement("li"); li.textContent = r.what + " ";
+      if (r.box) {
+        const add = document.createElement("button"); add.className = "small"; add.textContent = "als Stelle";
+        add.onclick = () => { const [x1, y1, x2, y2] = r.box; S.boxes.push({ id: nextId++, n: 0, x1, y1, x2, y2, what: r.what, fix: r.fix, on: true }); renumber(); li.remove(); render(); };
+        li.appendChild(add);
+      }
+      rm.appendChild(li);
+    }
+    $("remarksBox").hidden = !c.remarks.length;
+    clearInterval(tick);
+    S.checkMsg = `${c.artifacts.length} Stelle(n), ${c.remarks.length} Hinweis(e) in ${c.seconds} s.`;
+    render();
+  } catch (e) { clearInterval(tick); S.checkMsg = ""; toast(e.message); }
+  S.busy = false; $("check").classList.remove("spin"); buttons();
+};
+
+// ── repair ──
+async function repair() {
+  S.busy = true; buttons(); $("repair").classList.add("spin");
+  const t0 = Date.now(); const tick = setInterval(() => $("repairHint").textContent = `malt neu … ${Math.round((Date.now() - t0) / 1000)} s`, 1000);
+  try {
+    const boxes = S.boxes.filter(b => b.on).map(b => [b.x1, b.y1, b.x2, b.y2].map(Math.round));
+    const r = await jsonPost("v1/images/edits", { model: $("model").value, image: S.src, prompt: $("final").value,
+      boxes, margin: +$("margin").value || 0, seed: +$("seed").value || 0 });
+    S.result = "data:image/png;base64," + r.data[0].b64_json;
+    $("res").src = S.result; $("resultView").hidden = false; $("views").classList.add("two");
+    clearInterval(tick); toast(`Fertig in ${Math.round((Date.now() - t0) / 1000)} s (Seed ${r.seed}).`, 3000);
+  } catch (e) { clearInterval(tick); toast(e.message); }
+  S.busy = false; $("repair").classList.remove("spin"); buttons();
+}
+$("repair").onclick = repair;
+$("again").onclick = () => { $("seed").value = Math.floor(Math.random() * 1e9); repair(); };
+$("adopt").onclick = () => {
+  const base = S.name.replace(/(-repariert)*\.[^.]+$/, "") + "-repariert.png";
+  const prompt = $("prompt").value;
+  load(S.result, base);
+  $("prompt").value = prompt; S.finalEdited = false; compose();
+};
+$("save").onclick = () => {
+  const a = document.createElement("a"); a.href = S.result;
+  a.download = S.name.replace(/(-repariert)*\.[^.]+$/, "") + "-repariert.png"; a.click();
+};
+const cmp = $("compare");
+for (const [ev, on] of [["pointerdown", true], ["pointerup", false], ["pointerleave", false]])
+  cmp.addEventListener(ev, () => cmp.classList.toggle("show-before", on));
+
+status();
+</script>
+</body>
+</html>

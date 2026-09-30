@@ -34,6 +34,7 @@ install:
 	install -Dm644 comfyui_models.py $(LIBDIR)/comfyui_models.py
 	install -Dm644 tts_server.py $(LIBDIR)/tts_server.py
 	install -Dm644 images_server.py $(LIBDIR)/images_server.py
+	install -Dm644 images_repair.html $(LIBDIR)/images_repair.html
 	install -Dm644 tts_voice_design.py $(LIBDIR)/tts_voice_design.py
 	install -Dm644 -t $(SHAREDIR)/templates templates/*
 	install -Dm644 -t $(SHAREDIR)/examples examples/*.conf
