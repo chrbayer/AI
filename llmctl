@@ -250,7 +250,7 @@ _check_deps() {
 #     PID file names the podman client, its argv is the full start command (what
 #     preset and preset-save compare against), and the container's output is the
 #     server log. The container is named llmctl-halogen-<slot>.
-#   - It holds most of the machine: ~68 GiB of weights pinned, ~30 GiB of KV pool
+#   - It holds most of the machine: ~64 GiB of weights pinned, ~30 GiB of KV pool
 #     and working memory. So it runs exclusively — it will not start beside any
 #     other slot, and no other slot starts beside it.
 #   - It speaks OpenAI Chat Completions and Responses, not Anthropic Messages, so
@@ -1055,8 +1055,11 @@ _start_proxy() {
     local -a backend_env=()
     if [[ -n "$halogen_cap" ]] || _slot_is_halogen "$slot"; then
         [[ -z "$halogen_cap" ]] && halogen_cap=$(_halogen_cap_of_slot "$slot")
-        backend_env=(LLM_TRANSLATE_MESSAGES=1 LLM_PROXY_TIMEOUT="$HALOGEN_PROXY_TIMEOUT"
+        backend_env=(LLM_PROXY_TIMEOUT="$HALOGEN_PROXY_TIMEOUT"
                      LLM_MAX_TOKENS_CAP="$halogen_cap" LLM_INLINE_IMAGE_URLS=1)
+        # halogen speaks the Messages API itself since 0.15.1; the proxy's own
+        # translation stays for an older image, or to compare.
+        [[ "${LLMCTL_HALOGEN_TRANSLATE:-0}" == 1 ]] && backend_env+=(LLM_TRANSLATE_MESSAGES=1)
     else
         backend_env=(LLM_PROXY_TIMEOUT="$LLAMA_SERVER_TIMEOUT")
         # llama-server fetches image URLs itself, from any address — through a
@@ -2501,9 +2504,9 @@ _estimate_cmd_mib() {
         esac
     done
     # halogen: its files are no guide — the n-gram table beside the weights is
-    # read through the page cache, not loaded. ~68 GiB pinned weights and ~30 GiB
-    # of KV pool and working memory, as models.conf describes it.
-    [[ " ${w[*]} " == *" --name $HALOGEN_CONTAINER_PREFIX"* ]] && { echo $(( 98 * 1024 )); return; }
+    # read through the page cache, not loaded. ~64 GiB pinned weights (v2) and
+    # ~30 GiB of KV pool and working memory, as models.conf describes it.
+    [[ " ${w[*]} " == *" --name $HALOGEN_CONTAINER_PREFIX"* ]] && { echo $(( 94 * 1024 )); return; }
     echo $(( bytes / 1048576 ))
 }
 
@@ -3495,7 +3498,7 @@ cmd_prune() {
             word="${word//\~/$HOME}"
             [[ "$word" == /* ]] && refs+=("$(realpath -m "$word")")
         done
-        # halogen mounts the checkpoint's directory: tokenizer, overlays, vision.
+        # halogen mounts the checkpoint's directory: tokenizer, n-gram table, vision.
         [[ "$_r_backend" == halogen ]] && whole+=("$(dirname "$(realpath -m "${_r_model//\~/$HOME}")")")
     done
     local -a cand=() why=()

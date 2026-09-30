@@ -694,15 +694,18 @@ reading its own `.hgn` weights. The slot model stays the same — `start`, `stop
   the full command, which is what `preset` compares), the container's output is
   the server log, and the container is named `llmctl-halogen-<slot>`. `stop` uses
   `podman stop`, which waits for the container to exit and removes it.
-- **It runs exclusively.** It pins ~68 GiB of weights and reserves ~30 GiB of KV
+- **It runs exclusively.** It pins ~62 GiB of weights and reserves ~20 GiB of KV
   pool and working memory — most of a 128 GB machine. `start` refuses it beside
   any other slot and refuses any other model beside it; a preset that names it
   can name nothing else. `preset` switching between a halogen and a llama
   configuration works, since it stops before it starts.
-- **Its proxy always runs.** The server speaks OpenAI Chat Completions and
-  Responses, not Anthropic Messages, so `proxy.py` translates `/v1/messages`
-  (see `anthropic_compat.py`): system, text, images, tool use and results,
-  thinking, streaming with pings during prefill. It also clamps token budgets to
+- **Its proxy always runs.** Since 0.15.1 the server speaks the Anthropic
+  Messages API itself — thinking blocks replayed exactly through their
+  signature, `cache_control` as a resume point for the prompt cache — so the
+  proxy passes `/v1/messages` through. Its own translation into Chat
+  Completions (`anthropic_compat.py`: system, text, images, tool use and
+  results, thinking, streaming with pings during prefill) is still there for an
+  older image: `LLMCTL_HALOGEN_TRANSLATE=1` when starting. The proxy clamps token budgets to
   the server's cap — halogen answers a larger `max_tokens` with HTTP 400 instead
   of shortening it, and Claude Code asks for 32000 — and waits up to an hour for
   the backend, since a full 256K prefill alone takes minutes. Images given as
@@ -773,11 +776,28 @@ can only come from programs outside llmctl. `status` follows the setting: with
 the weights locked, `MemAvailable` has already dropped by them and subtracting
 them again would count them twice.
 
-**The host matters more than for llama-server.** Measured on this machine:
-prefill 1310–1370 t/s (6.6k–26k tokens) and decode 39 t/s (prose) / 59 t/s
-(code) on 0.14.2 — 0.14.1's routed-expert kernel took prefill up by 9–32%
-(0.14.0: 1060–1260 t/s), 0.14.0's draft head decode by 20% (0.13.8: 33 /
-47–52 t/s); same greedy output, same session — after a fresh boot with `amd_iommu=off amdgpu.noretry=0` on the kernel line; the same server
+**v2 against w4b** (0.15.1 with v2 against 0.14.2 with w4b and its sidecar,
+two runs each, one session):
+
+| | 0.14.2 + w4b | 0.15.1 + v2 |
+| --- | --- | --- |
+| halogen's own count | 96.3 GiB (68.0 weights, 7.2 pool, 21.1 working) | **81.7 GiB** (62.1, 7.2, 12.4) |
+| GTT (GPU) | 34.7 GiB | **19.9 GiB** |
+| `MemAvailable` drop on loading | 34.7 GiB | **19.1 GiB** |
+| really available (`status`) | 8.4 GiB | **30.6 GiB** |
+| prefill 850 / 6.6k / 26k tokens | 981–991 / 1344–1401 / 1351–1354 t/s | 1049–1051 / 1431–1435 / 1389–1396 t/s |
+| decode prose / code | 29.5–37.5 / 46.9–53.9 t/s | 32.8–38.4 / 51.8–53.2 t/s |
+| first streamed token | 0.6–0.7 s | 0.3 s |
+
+14.6 GiB less memory — 5.9 from the checkpoint, 8.7 from 0.15.1's working
+memory fit — for the same speed: prefill 3–7% faster, decode within the spread
+between runs, which is wide (the first w4b run, with host memory fragmented
+after a 118 GB download, decoded prose at 29.5). The two checkpoints are
+different weights, so their greedy texts differ and so do their drafts.
+
+**The host matters more than for llama-server.** Measured on 0.14.2 with w4b:
+prefill 1310–1370 t/s (6.6k–26k tokens) and decode 39 / 59 t/s after a fresh
+boot with `amd_iommu=off amdgpu.noretry=0` on the kernel line; the same server
 with fragmented memory managed 8–370 t/s of prefill, most requests stalling
 40–200 s in kernel compaction. Keep `vm.compaction_proactiveness` at the kernel
 default (20) — 0 does not prevent the stalls.
