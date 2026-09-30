@@ -1153,6 +1153,21 @@ r = img.images.edit(model="flux2-klein-9b", image=open("turm.png", "rb"),
   (`LLMCTL_VISION_MODEL` names another model). Nothing starts by itself. With
   `--host`, whoever reaches the page can press those buttons, as they can run
   workflows in ComfyUI.
+- **The same in ComfyUI:** the workflow `Artifact Check (flash)` holds
+  llmctl's own node *Artifact Check (llmctl)* (from `comfyui/nodes/`, linked
+  into ComfyUI's `custom_nodes/` at every start). Load a picture, give its
+  prompt, run: the node asks the image API's check and shows the picture with
+  the numbered boxes, a report and the prompt for the repair. It also leaves
+  the picture in `input/` as `artifacts_<hash>.png`, the flaws transparent.
+  Load that file in `Qwen-Image 2.1 Inpaint (Turbo)`: the boxes are its mask,
+  to edit in the MaskEditor (right-click the picture → *Open in MaskEditor*);
+  paste the repair prompt and run. Its `vision` switch, *start if needed, stop
+  after*, starts flash for the check (after unloading ComfyUI's models) and
+  stops it afterwards, so the Inpaint run has the memory; *leave as is* (the
+  default) touches nothing. The node reaches the image API through
+  `LLMCTL_IMAGES_API`, which llmctl sets when it starts ComfyUI — so start it
+  with `--proxy --vision SLOT`. The workflow is not served through the image
+  API itself; after an install, `llmctl update comfy` adds it to the UI's list.
 - **Results stay out of the gallery.** They go to ComfyUI's temp directory,
   not to `output/`; the caller has them.
 - **Measured** at 1024×1024, the machine to itself, each including loading

@@ -160,6 +160,19 @@ def turbo(make):
     return made
 
 
+def artifact_check():
+    """A vision model looks for flaws; the picture lands in input/ with them transparent."""
+    return {
+        "1": {"class_type": "LoadImage", "inputs": {"image": "check.png"}, "_meta": {"title": "Bild"}},
+        "2": {"class_type": "LlmctlArtifactCheck", "_meta": {"title": "Artifact Check (llmctl)"},
+              "inputs": {"image": ["1", 0], "prompt": "", "max_area": 0.2, "margin": 16,
+                         "vision": "leave as is", "api_url": ""}},
+        "3": {"class_type": "PreviewImage", "inputs": {"images": ["2", 0]}, "_meta": {"title": "Fundstellen"}},
+        "4": {"class_type": "PreviewAny", "inputs": {"source": ["2", 4]}, "_meta": {"title": "Bericht"}},
+        "5": {"class_type": "PreviewAny", "inputs": {"source": ["2", 3]}, "_meta": {"title": "Prompt für die Reparatur"}},
+    }
+
+
 WORKFLOWS = {
     "Qwen-Image 2.1 Control (bf16, dpmpp_2m 14)": control,
     "Qwen-Image 2.1 Canny Control (bf16, dpmpp_2m 14)": canny,
@@ -173,6 +186,7 @@ WORKFLOWS = {
     "Qwen-Image 2.1 Depth Control Turbo (bf16, 4 Schritte)": turbo(depth),
     "Qwen-Image 2.1 Inpaint Turbo (bf16, 4 Schritte)": turbo(inpaint),
     "Qwen-Image 2.1 Outpaint Turbo (bf16, 4 Schritte)": turbo(outpaint),
+    "Artifact Check (flash)": artifact_check,
 }
 
 

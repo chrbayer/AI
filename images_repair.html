@@ -374,8 +374,9 @@ $("prompt").oninput = compose;
 $("final").oninput = () => { S.finalEdited = true; $("finalHint").textContent = "Von Hand geändert. Leeren, um ihn wieder bilden zu lassen."; if (!$("final").value) { S.finalEdited = false; compose(); } };
 function compose() {
   if (S.finalEdited) return;
-  const fixes = [...new Set(S.boxes.filter(b => b.on && b.fix.trim()).map(b => b.fix.trim()))];
-  const base = $("prompt").value.trim();
+  const clean = t => t.trim().replace(/[.\s]+$/, "");
+  const fixes = [...new Set(S.boxes.filter(b => b.on && clean(b.fix)).map(b => clean(b.fix)))];
+  const base = clean($("prompt").value);
   $("final").value = [base, fixes.join("; ")].filter(Boolean).join(". ");
   $("finalHint").textContent = "Wird aus Prompt und den gewählten Korrekturen gebildet — Änderungen hier bleiben stehen.";
 }

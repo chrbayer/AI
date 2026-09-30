@@ -854,6 +854,11 @@ _capture_tts_slot() {
 _comfyui_links() {
     local base="$1" models="$2"
     [[ -e "$base/models" || -L "$base/models" ]] || ln -s "$models" "$base/models"
+    # llmctl's own nodes (Artifact Check): linked, so an install reaches them at the next start.
+    if [[ -d "$COMFYUI_SHARE/nodes/llmctl_nodes" ]]; then
+        mkdir -p "$base/custom_nodes"
+        ln -sfn "$COMFYUI_SHARE/nodes/llmctl_nodes" "$base/custom_nodes/llmctl_nodes"
+    fi
     _comfyui_voice_links "$base"
 }
 
@@ -963,7 +968,8 @@ _start_comfyui() {
     # purpose — it word-splits into KEY=VAL pairs for env.
     local server_pid=""
     server_pid=$(cd "$app" && _spawn_detached "$PID_DIR/server-${slot}.pid" "$server_log" append \
-        env TMPDIR="$COMFYUI_TMP" PYTHONUNBUFFERED=1 $_r_rocm_env "${cmd[@]}")
+        env TMPDIR="$COMFYUI_TMP" PYTHONUNBUFFERED=1 \
+            LLMCTL_IMAGES_API="http://127.0.0.1:$(( PORT_BASE_PROXY + slot ))" $_r_rocm_env "${cmd[@]}")
     if [[ -z "$server_pid" ]]; then
         echo "Error: ComfyUI did not report a PID. See $server_log" >&2
         exit 1

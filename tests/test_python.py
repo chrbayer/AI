@@ -12,6 +12,7 @@ skipped rather than failed, so the rest still runs.
 """
 import io
 import json
+import warnings
 import sys
 import tempfile
 import unittest
@@ -244,6 +245,8 @@ class Sources(unittest.TestCase):
         for path in sorted((ROOT / "comfyui" / "workflows").glob("*.json")):
             with self.subTest(workflow=path.name):
                 wf = json.loads(path.read_text())
+                if any(n.get("type", "").startswith("Llmctl") for n in wf["nodes"]):
+                    continue                                  # llmctl's nodes load no model
                 self.assertTrue(cm.refs(wf), "names no models at all")
                 for key, urls in cm.refs(wf).items():
                     self.assertTrue(urls, f"{key} has no URL")
@@ -279,6 +282,8 @@ class ImageApi(unittest.TestCase):
         for path in sorted((ROOT / "comfyui" / "workflows").glob("*.json")):
             if "TTS" in path.name:
                 continue
+            if any(n.get("type", "").startswith("Llmctl") for n in json.loads(path.read_text())["nodes"]):
+                continue                                          # calls the image API itself
             with self.subTest(workflow=path.name):
                 self.assertTrue((API / path.name).exists(),
                                 "run comfyui/export_api.py and commit what it writes")
@@ -525,6 +530,38 @@ class RepairPage(unittest.TestCase):
         for name in ("../secret.png", "a/b.png", ".hidden.png", ""):
             with self.subTest(name):
                 self.assertEqual(self.client.get("/repair/image", query_string={"name": name}).status_code, 400)
+
+
+NODES = ROOT / "comfyui" / "nodes"
+
+
+class ArtifactNode(unittest.TestCase):
+    """The helpers of llmctl's ComfyUI node, without ComfyUI."""
+    @classmethod
+    def setUpClass(cls):
+        import importlib.util
+        import types
+        sys.modules.setdefault("folder_paths", types.ModuleType("folder_paths"))
+        spec = importlib.util.spec_from_file_location("llmctl_nodes", NODES / "llmctl_nodes" / "__init__.py")
+        cls.n = importlib.util.module_from_spec(spec)
+        try:
+            with warnings.catch_warnings():                   # torch's ROCm build is chatty
+                warnings.simplefilter("ignore")
+                spec.loader.exec_module(cls.n)                # numpy, torch, pillow, requests
+        except ImportError as e:
+            raise unittest.SkipTest(f"the node needs {e.name}")
+
+    def test_the_mask_covers_the_grown_boxes(self):
+        m = self.n.mask_of([[10, 10, 20, 20]], 5, (100, 50))
+        self.assertEqual(m.shape, (50, 100))
+        self.assertEqual((m[5, 5], m[24, 24], m[26, 26], m[40, 90]), (1.0, 1.0, 0.0, 0.0))
+
+    def test_the_repair_prompt_joins_the_fixes_once(self):
+        a = [{"fix": "a hand"}, {"fix": "a hand"}, {"fix": " a cup "}, {"fix": ""}]
+        self.assertEqual(self.n.repair_prompt("a kitchen", a), "a kitchen. a hand; a cup")
+        self.assertEqual(self.n.repair_prompt("", a), "a hand; a cup")
+        self.assertEqual(self.n.repair_prompt("A kitchen.", [{"fix": "A hand."}, {"fix": "A cup."}]),
+                         "A kitchen. A hand; A cup")
 
 
 if __name__ == "__main__":
