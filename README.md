@@ -20,7 +20,7 @@ your home directory:
 | --- | --- | --- |
 | `~/.config/llmctl/` | `models.conf`, `presets.conf`, `tokens`, `tls/` | `LLMCTL_CONFIG_DIR` (tokens/tls also `LLM_CONF_DIR`, `LLM_TOKEN_FILE`) |
 | `~/.local/share/llmctl/models/` | the GGUF files (`$MODELS_DIR` in `models.conf`), ComfyUI's models in `comfyui/` | `LLMCTL_MODELS_DIR`, or set `MODELS_DIR` in `models.conf` |
-| `~/.local/share/llmctl/` | `benchmarks/`, `claude/<model>[-<slot>]` (Claude Code profiles set by `env`), `comfyui/` (ComfyUI's checkout in `app/`, its workflows, input and output), `tts/` (voices, voice-design venv) | `LLMCTL_DATA_DIR` |
+| `~/.local/share/llmctl/` | `benchmarks/`, `claude/<model>[-<slot>]` (Claude Code profiles set by `env`), `comfyui/` (ComfyUI's checkout in `app/`, its workflows, input and output), `tts/` (voices; a voice-design venv only without ComfyUI) | `LLMCTL_DATA_DIR` |
 | `~/.local/state/llmctl/` | `logs/`, `pids/`, `slots/`, `stunnel/` | `LLMCTL_STATE_DIR` |
 
 `examples/` holds a complete `models.conf` and `presets.conf`. Copy them to edit
@@ -1009,7 +1009,7 @@ behind `tts_server.py`, which answers the OpenAI speech API on the slot's server
 port.
 
 ```bash
-llmctl download speech        # GGUFs, voice-design venv and model, two voices
+llmctl download speech        # GGUFs, VoiceDesign model, two voices (+ a venv, without ComfyUI)
 llmctl start speech 5
 curl -s localhost:8005/v1/audio/speech -H 'Content-Type: application/json' \
      -d '{"input": "Guten Morgen!", "voice": "frau"}' -o morgen.wav
@@ -1131,9 +1131,13 @@ llmctl voice add ich ~/aufnahme.wav "meine eigene Stimme"
 llmctl voice rm erzaehler
 ```
 
-  `voice design` runs Qwen3-TTS VoiceDesign (PyTorch, in its own venv under
-  `~/.local/share/llmctl/tts/venv`) once to speak a sample in the described
-  voice, ~15 s; describe the speaker as a native speaker of the language, since
+  `voice design` runs Qwen3-TTS VoiceDesign (PyTorch) once to speak a sample
+  in the described voice, ~15 s. Where ComfyUI is set up it runs in ComfyUI's
+  venv, with the `qwen_tts` its Qwen-TTS node ships as source — the same ROCm
+  torch, not installed a second time (16 GB); the pip package `qwen-tts` would
+  pin transformers 4.57 and break ComfyUI. Without ComfyUI, `download speech`
+  builds a venv of its own under `~/.local/share/llmctl/tts/venv`, and `prune`
+  offers it for deletion once ComfyUI's can take over; describe the speaker as a native speaker of the language, since
   the clone keeps any accent. `voice add` takes a recording of your own (wav,
   mp3 or flac); a few seconds of clean speech are enough.
 - **Backing them up.** The voices live in `~/.local/share/llmctl/tts/voices/`
@@ -1313,7 +1317,8 @@ newer):
 - **halogen**: the image tag in `models.conf` against the registry's newest,
   with the changelog headings in between;
 - **llama.cpp**: the commit each installed llama-server reports in `--version`
-  against `master`;
+  against the newest stable release (a `v` tag, e.g. v0.5.0) — at or past it
+  is current; how far `master` has moved on is only shown;
 - **the speech server's PR**: merged yet, or commits past the one we build;
 - **ComfyUI** against its upstream, and each custom node's pinned commit;
 - **installed models against their Hugging Face repos, by content.** GGUFs and

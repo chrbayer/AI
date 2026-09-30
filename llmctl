@@ -3599,6 +3599,11 @@ cmd_prune() {
         done < <(python3 "$COMFYUI_MODELS_SCRIPT" orphans "$c_wf" "$c_models" 2>/dev/null)
     done
 
+    # The voice-design venv, once ComfyUI's serves instead.
+    if [[ -d "$TTS_DIR/venv" ]] && _voice_python && [[ -n "$_vd_path" ]]; then
+        cand+=("$TTS_DIR/venv"); why+=("voice design runs in ComfyUI's venv now")
+    fi
+
     if (( ${#cand[@]} == 0 )); then
         echo "Nothing to prune: every model here is named by models.conf or a workflow."
         return 0
@@ -3685,17 +3690,26 @@ cmd_outdated() {
         fi
     done
 
+    # Against the newest stable release (a v-tag, GitHub's "latest"), not master:
+    # a build at or past it is current; master's lead is only shown.
     printf '\n\033[1mllama.cpp builds\033[0m\n'
-    local bin path out commit behind
+    local bin path out commit behind stable status
+    stable=$(_gh_json "repos/ggml-org/llama.cpp/releases/latest" .tag_name)
     for bin in $(printf '%s\n' "${LLAMA_DEFAULT_BIN:-llama-server}" "${LLAMA_ROCM_BIN:-}" | awk 'NF && !s[$0]++'); do
         path=$(command -v "$bin" 2>/dev/null) || { echo "  $bin: not installed"; continue; }
         out=$("$path" --version 2>&1)
         commit=$(grep -oE 'commit [0-9a-f]{7,}|\(([0-9a-f]{7,})\)' <<< "$out" | head -1 | grep -oE '[0-9a-f]{7,}')
         if [[ -z "$commit" ]]; then echo "  $path: no commit in --version"; continue; fi
         behind=$(_gh_json "repos/ggml-org/llama.cpp/compare/$commit...master" .ahead_by)
-        if [[ -z "$behind" ]]; then echo "  $path ($commit): not on ggml-org/llama.cpp master, cannot compare"
-        elif (( behind == 0 )); then echo "  $path ($commit) — current"
-        else echo "  $path ($commit) — $behind commits behind master"; newer=$(( newer + 1 )); fi
+        [[ -n "$stable" ]] && status=$(_gh_json "repos/ggml-org/llama.cpp/compare/$stable...$commit" .status)
+        if [[ -z "$stable" || -z "${status:-}" ]]; then
+            echo "  $path ($commit): cannot compare with a release${behind:+ ($behind commits behind master)}"
+        elif [[ "$status" == identical || "$status" == ahead ]]; then
+            echo "  $path ($commit) — current: $stable is the newest stable release${behind:+, master is $behind commits further}"
+        else
+            echo "  $path ($commit) — older than $stable, the newest stable release"
+            newer=$(( newer + 1 ))
+        fi
     done
 
     printf '\n\033[1mspeech server (llama.cpp PR)\033[0m\n'
@@ -5079,11 +5093,38 @@ _find_python() {
 # ── Speech setup ────────────────────────────────────────────
 #
 # download for a tts entry fetches its GGUFs the usual way (hf_repo); this adds
-# what `voice design` needs — a venv with ROCm torch and qwen-tts, and the
+# what `voice design` needs — a Python with ROCm torch and qwen_tts, and the
 # VoiceDesign model — and the bundled starter voices.
+
+# The Python that designs voices, in _vd_py, with _vd_path for PYTHONPATH:
+# ComfyUI's venv where ComfyUI is set up, with the qwen_tts its Qwen-TTS node
+# ships as source — the same torch, 16 GB not installed twice. (The pip package
+# qwen-tts would not do: it pins transformers 4.57 and would break ComfyUI.)
+# Otherwise a venv of its own, which `download` builds.
+_voice_python() {
+    local entry app lib
+    local -a f
+    _vd_py="" _vd_path=""
+    for entry in "${_MODELS[@]}"; do
+        IFS='|' read -r -a f <<< "$entry"
+        [[ "${f[19]:-}" == comfyui ]] || continue
+        app="${f[1]//\~/$HOME}"
+        for lib in "$(dirname "$app")"/custom_nodes/*/qwen_tts; do
+            if [[ -x "$app/.venv/bin/python" && -f "$lib/__init__.py" ]]; then
+                _vd_py="$app/.venv/bin/python" _vd_path="$(dirname "$lib")"
+                return 0
+            fi
+        done
+    done
+    [[ -x "$TTS_DIR/venv/bin/python" ]] && { _vd_py="$TTS_DIR/venv/bin/python"; return 0; }
+    return 1
+}
+
 _tts_setup() {
     if [[ "$DL_CHECK" == true ]]; then
-        if [[ -x "$TTS_DIR/venv/bin/python" ]]; then
+        if _voice_python && [[ -n "$_vd_path" ]]; then
+            echo "  voice design: ComfyUI's venv"
+        elif [[ -n "$_vd_py" ]]; then
             echo "  venv for voice design: present"
         else
             echo "  venv for voice design: to build — torch and torchaudio for ROCm, qwen-tts (several GB)"
@@ -5099,7 +5140,9 @@ _tts_setup() {
         [[ -f "$f" && ! -e "$TTS_VOICES/$(basename "$f")" ]] && { cp "$f" "$TTS_VOICES/"; n=$(( n + 1 )); }
     done
     echo "  voices: $n file(s) added to $TTS_VOICES"
-    if [[ ! -x "$TTS_DIR/venv/bin/python" ]]; then
+    if _voice_python && [[ -n "$_vd_path" ]]; then
+        echo "  voice design runs in ComfyUI's venv (${_vd_py%/bin/python})"
+    elif [[ ! -x "$TTS_DIR/venv/bin/python" ]]; then
         local py
         py=$(_find_python "${TTS_PYTHON:-}") || { echo "Error: no working Python 3 found (set TTS_PYTHON)"; return 1; }
         echo "  venv for voice design with $("$py" --version 2>&1)"
@@ -5153,8 +5196,8 @@ cmd_voice() {
             rm -f "$TTS_VOICES/$name".{wav,mp3,flac}
             # Stored as WAV at one loudness: a clone speaks as loud as its reference.
             # Without the voice-design venv (download not run), as it comes.
-            if [[ -x "$TTS_DIR/venv/bin/python" ]] &&
-               "$TTS_DIR/venv/bin/python" "$TTS_DESIGN_SCRIPT" --normalize "$file" "$TTS_VOICES/$name.wav" 2>/dev/null; then
+            if _voice_python &&
+               PYTHONPATH="$_vd_path" "$_vd_py" "$TTS_DESIGN_SCRIPT" --normalize "$file" "$TTS_VOICES/$name.wav" 2>/dev/null; then
                 :
             else
                 cp "$file" "$TTS_VOICES/$name.$ext"
@@ -5179,13 +5222,13 @@ cmd_voice() {
                 return 1
             fi
             [[ "$name" =~ ^[a-z0-9_-]+$ ]] || { echo "Error: a voice name is lowercase letters, digits, - and _"; return 1; }
-            if [[ ! -x "$TTS_DIR/venv/bin/python" || ! -f "$TTS_DESIGN_DIR/model.safetensors" ]]; then
+            if ! _voice_python || [[ ! -f "$TTS_DESIGN_DIR/model.safetensors" ]]; then
                 echo "Error: voice design is not set up — run: $PROG download <speech model>"; return 1
             fi
             echo "Designing '$name' (Qwen3-TTS VoiceDesign, ~15 s) ..."
             local -a targs=("$TTS_DESIGN_DIR" "$TTS_VOICES/$name.wav" "$desc" --language "$language")
             [[ -n "$text" ]] && targs+=(--text "$text")
-            TMPDIR="$COMFYUI_TMP" "$TTS_DIR/venv/bin/python" "$TTS_DESIGN_SCRIPT" "${targs[@]}" 2>&1 |
+            TMPDIR="$COMFYUI_TMP" PYTHONPATH="$_vd_path" "$_vd_py" "$TTS_DESIGN_SCRIPT" "${targs[@]}" 2>&1 |
                 grep -vE 'SoX|sox|flash-attn|^\*+$|If you do|double-check|path variables|- - -|MIOpen|pad_token|^\s*$|\(null\)' || true
             [[ -f "$TTS_VOICES/$name.wav" ]] || { echo "Error: no recording was written"; return 1; }
             rm -f "$TTS_VOICES/$name".{mp3,flac}
