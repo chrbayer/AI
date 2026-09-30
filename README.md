@@ -906,7 +906,17 @@ llmctl update comfy --torch           # …and torch itself
     they were.
   - `Qwen-Image 2.1 Inpaint`: paint the mask over what to redraw (the image
     node's mask editor); the prompt describes the whole picture, and only the
-    masked part changes.
+    masked part changes — for **replacing or adding** something (a cap
+    swapped, a figure put in). It is not for removing: it fills the mask with
+    an object of the mask's shape. A backpack masked on a bench came back as a
+    wooden box and, with a tight mask and a prompt describing the bench's
+    slats, as a grey seat shell. The Fun patch blanks the masked pixels itself
+    (grey), so the shape comes from the mask, not from what was there. To
+    **remove** something, use an Edit workflow ("Entferne den roten Rucksack,
+    sonst nichts ändern"): Qwen-Image 2.1 Edit (97 s, 47 s as Turbo) and FLUX.2
+    klein Edit (55 s) both took the backpack away and ran the bench's slats
+    through; outside it they shift the picture slightly (7.7/255 on average,
+    not visible), where Inpaint keeps it exact (3.8/255).
 
   Pose and depth come from the custom node pack
   [comfyui_controlnet_aux](https://github.com/Fannovel16/comfyui_controlnet_aux),
