@@ -928,14 +928,18 @@ llmctl update comfy --torch           # …and torch itself
   commercial work; `depth_anything_v2_vits.pth` (Apache-2.0, coarser) is one
   dropdown away. There is no official template for 2.1 yet; `comfyui/build_control_workflows.py` writes
   the graphs in API format and has ComfyUI's frontend turn them into UI
-  workflows. Measured: ~80–95 s per 1024² image.
+  workflows. Measured: ~80–95 s per 1024² image. Each has a **Turbo** variant
+  (`… Turbo (bf16, 4 Schritte)`) with the 4-step Acc LoRA below: 25–38 s,
+  control and quality held — pose, depth, canny and inpaint came out as good
+  as at 14 steps; the scribble's cabin a little busier.
 - **Background removal.** `Qwen-Image 2.1 Background Removal (bf16, euler 25)`
   is ComfyUI's own template on the bf16 models already here: an edit with
   the instruction "Remove the background, and output a PNG image", and
   Qwen-Image 2.1 answers with a real alpha channel. Tried: a man in a park cut
   out cleanly to the fingertips; in a living room it chose the sofa and the
   coffee table as the subject and dropped the room. 150–165 s per image (25
-  steps). Through the image API as `qwen-image-21-background-removal`: the
+  steps); the Turbo variant (4 steps with the Acc LoRA) 47 s, as clean and as
+  transparent. Through the image API as `qwen-image-21-background-removal`: the
   prompt is the instruction, so send that sentence; the PNG comes back with
   transparency.
 - **Qwen-Image 2.1 in 4 steps.** `Qwen-Image 2.1 [Heretic] T2I/Edit Turbo (bf16,
@@ -1044,7 +1048,8 @@ r = img.images.edit(model="flux2-klein-9b", image=open("turm.png", "rb"),
   `qwen-image-21-heretic-turbo` for generations and edits,
   `qwen-image-21-control`, `qwen-image-21-canny-control`,
   `qwen-image-21-pose-control`, `qwen-image-21-depth-control` and
-  `qwen-image-21-inpaint` and `qwen-image-21-background-removal` for edits (the image is the control image, the photo
+  `qwen-image-21-inpaint` and `qwen-image-21-background-removal` for edits
+  (each also as `…-turbo`) (the image is the control image, the photo
   or the picture to inpaint — transparent where to redraw, as OpenAI's edits
   take a mask), and
   `seedvr2-7b-upscale` for edits (4× upscaling, no prompt). `GET /v1/models`
