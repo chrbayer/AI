@@ -887,7 +887,7 @@ llmctl update comfy --torch           # …and torch itself
   (7.6 GB, `model_patches/`) is one model for eight kinds of control image —
   canny, depth, pose, scribble, lineart, HED, MLSD, grayscale — and for
   inpainting. ComfyUI loads it as a model patch ("Load Model Patch" + "Apply Fun
-  ControlNet"). Five workflows:
+  ControlNet"). Six workflows:
   - `Qwen-Image 2.1 Control`: a control image of any of those kinds, the
     prompt paints the rest. Strength 0.5 by default: at 1.0 a scribble came
     back as flat vector art whatever the prompt asked, at 0.5 as the asked-for
@@ -904,6 +904,13 @@ llmctl update comfy --torch           # …and torch itself
     style, freer than Canny, which holds every edge. Tried: a modern living
     room became an alpine cabin, sofa, table, lamp, window and shelves where
     they were.
+  - `Qwen-Image 2.1 Outpaint`: extend a picture beyond its edges. The canvas
+    is padded (256 px left and right by default, set per side on the "New
+    border" node) and the new border inpainted; the prompt describes the whole
+    wider scene. The picture is scaled to ~0.8 MP first, so the result is
+    ~1.3 MP (1424×912 from a square). Tried: a bench cut off at the left edge
+    was completed, with more trees, lamps and benches around; a man in a park
+    got more park on both sides; no visible seam. 112–124 s, Turbo 36 s.
   - `Qwen-Image 2.1 Inpaint`: paint the mask over what to redraw (the image
     node's mask editor); the prompt describes the whole picture, and only the
     masked part changes — for **replacing or adding** something (a cap
@@ -1048,8 +1055,8 @@ r = img.images.edit(model="flux2-klein-9b", image=open("turm.png", "rb"),
   `qwen-image-21-heretic-turbo` for generations and edits,
   `qwen-image-21-control`, `qwen-image-21-canny-control`,
   `qwen-image-21-pose-control`, `qwen-image-21-depth-control` and
-  `qwen-image-21-inpaint` and `qwen-image-21-background-removal` for edits
-  (each also as `…-turbo`) (the image is the control image, the photo
+  `qwen-image-21-inpaint`, `qwen-image-21-outpaint` (256 px left and right)
+  and `qwen-image-21-background-removal` for edits (each also as `…-turbo`) (the image is the control image, the photo
   or the picture to inpaint — transparent where to redraw, as OpenAI's edits
   take a mask), and
   `seedvr2-7b-upscale` for edits (4× upscaling, no prompt). `GET /v1/models`

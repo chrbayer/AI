@@ -130,6 +130,21 @@ def inpaint():
     return g
 
 
+def outpaint():
+    """Extend a picture beyond its edges: the canvas padded (ImagePadForOutpaint,
+    256 px left and right by default, a 40 px feathered seam), the new border
+    inpainted. The picture is scaled to ~0.8 MP first, in steps of 16, so the
+    padded canvas stays a multiple of 16 and ~1.3 MP."""
+    g = base("A wide panoramic photograph of the whole scene, continuing naturally beyond the frame", "Qwen_image_2.1_outpaint")
+    g["5"] = {"class_type": "LoadImage", "inputs": {"image": "outpaint.png"}, "_meta": {"title": "Picture to extend"}}
+    g["6"]["inputs"]["megapixels"] = 0.8
+    g["21"] = {"class_type": "ImagePadForOutpaint", "inputs": {"image": ["6", 0], "left": 256, "top": 0, "right": 256,
+               "bottom": 0, "feathering": 40}, "_meta": {"title": "New border (px per side)"}}
+    g["7"]["inputs"]["image"] = ["21", 0]
+    g["8"]["inputs"].update({"inpaint_image": ["21", 0], "mask": ["21", 1]})
+    return g
+
+
 def turbo(make):
     """The same graph with the 4-step Acc LoRA (converted for ComfyUI by
     download comfy) between the model and the ControlNet, and 4 euler steps:
@@ -151,11 +166,13 @@ WORKFLOWS = {
     "Qwen-Image 2.1 Pose Control (bf16, dpmpp_2m 14)": pose,
     "Qwen-Image 2.1 Depth Control (bf16, dpmpp_2m 14)": depth,
     "Qwen-Image 2.1 Inpaint (bf16, dpmpp_2m 14)": inpaint,
+    "Qwen-Image 2.1 Outpaint (bf16, dpmpp_2m 14)": outpaint,
     "Qwen-Image 2.1 Control Turbo (bf16, 4 Schritte)": turbo(control),
     "Qwen-Image 2.1 Canny Control Turbo (bf16, 4 Schritte)": turbo(canny),
     "Qwen-Image 2.1 Pose Control Turbo (bf16, 4 Schritte)": turbo(pose),
     "Qwen-Image 2.1 Depth Control Turbo (bf16, 4 Schritte)": turbo(depth),
     "Qwen-Image 2.1 Inpaint Turbo (bf16, 4 Schritte)": turbo(inpaint),
+    "Qwen-Image 2.1 Outpaint Turbo (bf16, 4 Schritte)": turbo(outpaint),
 }
 
 
