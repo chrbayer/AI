@@ -887,7 +887,7 @@ llmctl update comfy --torch           # …and torch itself
   (7.6 GB, `model_patches/`) is one model for eight kinds of control image —
   canny, depth, pose, scribble, lineart, HED, MLSD, grayscale — and for
   inpainting. ComfyUI loads it as a model patch ("Load Model Patch" + "Apply Fun
-  ControlNet"). Three workflows:
+  ControlNet"). Five workflows:
   - `Qwen-Image 2.1 Control`: a control image of any of those kinds, the
     prompt paints the rest. Strength 0.5 by default: at 1.0 a scribble came
     back as flat vector art whatever the prompt asked, at 0.5 as the asked-for
@@ -895,13 +895,28 @@ llmctl update comfy --torch           # …and torch itself
     has to be followed closely.
   - `Qwen-Image 2.1 Canny Control`: a photo's edges (ComfyUI's own Canny) as
     the control — a new picture on the old one's layout, e.g. as a watercolour.
+  - `Qwen-Image 2.1 Pose Control`: the body pose of a person in a photo
+    (DWPose) — someone else, somewhere else, standing the same way. Tried: a
+    man waving in a park became a dancer on a stage, arm raised and hand on
+    the hip exactly as his.
+  - `Qwen-Image 2.1 Depth Control`: the spatial layout of a photo (Depth
+    Anything V2 Large) — the same room or landscape in other materials and
+    style, freer than Canny, which holds every edge. Tried: a modern living
+    room became an alpine cabin, sofa, table, lamp, window and shelves where
+    they were.
   - `Qwen-Image 2.1 Inpaint`: paint the mask over what to redraw (the image
     node's mask editor); the prompt describes the whole picture, and only the
     masked part changes.
 
-  Pose and depth maps are not made here: ComfyUI has no preprocessor for them
-  (they would need a custom node pack), so bring them as images. There is no
-  official template for 2.1 yet; `comfyui/build_control_workflows.py` writes
+  Pose and depth come from the custom node pack
+  [comfyui_controlnet_aux](https://github.com/Fannovel16/comfyui_controlnet_aux),
+  installed like the others (`comfyui/custom_nodes.txt`, without its CUDA
+  onnxruntime and mediapipe); each workflow shows the map it made as a
+  preview. DWPose runs its torchscript models, on the GPU. Its detector models
+  (1.6 GB) come from Hugging Face on first use into the pack's own `ckpts/`.
+  Depth Anything V2 Large is licensed CC-BY-NC — fine at home, not for
+  commercial work; `depth_anything_v2_vits.pth` (Apache-2.0, coarser) is one
+  dropdown away. There is no official template for 2.1 yet; `comfyui/build_control_workflows.py` writes
   the graphs in API format and has ComfyUI's frontend turn them into UI
   workflows. Measured: ~80–95 s per 1024² image.
 - **Qwen-Image 2.1 in 4 steps.** `Qwen-Image 2.1 [Heretic] T2I/Edit Turbo (bf16,
@@ -1008,7 +1023,8 @@ r = img.images.edit(model="flux2-klein-9b", image=open("turm.png", "rb"),
   `flux2-klein-9b-nsfw`, `flux2-dev`, `flux2-dev-turbo`, `flux2-dev-nsfw`,
   `qwen-image-21`, `qwen-image-21-heretic`, `qwen-image-21-turbo`,
   `qwen-image-21-heretic-turbo` for generations and edits,
-  `qwen-image-21-control`, `qwen-image-21-canny-control` and
+  `qwen-image-21-control`, `qwen-image-21-canny-control`,
+  `qwen-image-21-pose-control`, `qwen-image-21-depth-control` and
   `qwen-image-21-inpaint` for edits (the image is the control image, the photo
   or the picture to inpaint — transparent where to redraw, as OpenAI's edits
   take a mask), and

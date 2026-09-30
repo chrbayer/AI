@@ -88,6 +88,33 @@ def canny():
     return g
 
 
+def pose():
+    """The body pose of a person in a photo (DWPose, from comfyui_controlnet_aux)
+    as the control: someone else, somewhere else, standing the same way."""
+    g = base("A dancer in a flowing red dress on a theatre stage, spotlight, photograph", "Qwen_image_2.1_pose")
+    g["5"] = {"class_type": "LoadImage", "inputs": {"image": "pose.png"}, "_meta": {"title": "Photo with the pose to take over"}}
+    # torchscript, not onnx: runs through torch on the GPU; onnxruntime here is CPU only.
+    g["14"] = {"class_type": "DWPreprocessor", "inputs": {"image": ["6", 0], "detect_hand": "enable", "detect_body": "enable",
+               "detect_face": "enable", "resolution": 1024, "bbox_detector": "yolox_l.torchscript.pt",
+               "pose_estimator": "dw-ll_ucoco_384_bs5.torchscript.pt", "scale_stick_for_xinsr_cn": "disable"}}
+    g["15"] = {"class_type": "PreviewImage", "inputs": {"images": ["14", 0]}, "_meta": {"title": "Pose"}}
+    g["8"]["inputs"]["image"] = ["14", 0]
+    return g
+
+
+def depth():
+    """The spatial layout of a photo (Depth Anything V2 Large, from
+    comfyui_controlnet_aux; CC-BY-NC) as the control: the same room or
+    landscape, freely re-made in its materials and style."""
+    g = base("The same room as a cosy wooden alpine cabin interior, warm evening light, photograph", "Qwen_image_2.1_depth")
+    g["5"] = {"class_type": "LoadImage", "inputs": {"image": "room.png"}, "_meta": {"title": "Photo whose space to keep"}}
+    g["14"] = {"class_type": "DepthAnythingV2Preprocessor", "inputs": {"image": ["6", 0], "ckpt_name": "depth_anything_v2_vitl.pth",
+               "resolution": 1024}}
+    g["15"] = {"class_type": "PreviewImage", "inputs": {"images": ["14", 0]}, "_meta": {"title": "Depth"}}
+    g["8"]["inputs"]["image"] = ["14", 0]
+    return g
+
+
 def inpaint():
     """Repaint where the mask is (drawn in the mask editor, or transparent in
     the PNG); the prompt describes the whole picture."""
@@ -103,6 +130,8 @@ def inpaint():
 WORKFLOWS = {
     "Qwen-Image 2.1 Control (bf16, dpmpp_2m 14)": control,
     "Qwen-Image 2.1 Canny Control (bf16, dpmpp_2m 14)": canny,
+    "Qwen-Image 2.1 Pose Control (bf16, dpmpp_2m 14)": pose,
+    "Qwen-Image 2.1 Depth Control (bf16, dpmpp_2m 14)": depth,
     "Qwen-Image 2.1 Inpaint (bf16, dpmpp_2m 14)": inpaint,
 }
 
@@ -170,7 +199,13 @@ async def main():
                     return app.graph.serialize();
                 }})()""")
                 out = ROOT / "workflows" / f"{name}.json"
-                out.write_text(json.dumps(with_downloads(wf), indent=1, ensure_ascii=False) + "\n")
+                wf = with_downloads(wf)
+                # The frontend gives each load a new id; an unchanged graph keeps its old one.
+                if out.exists():
+                    old = json.loads(out.read_text())
+                    if {**old, "id": None} == {**wf, "id": None}:
+                        wf["id"] = old["id"]
+                out.write_text(json.dumps(wf, indent=1, ensure_ascii=False) + "\n")
                 print(f"{len(wf['nodes']):3d} nodes  {out.relative_to(ROOT.parent)}")
     finally:
         proc.terminate()
