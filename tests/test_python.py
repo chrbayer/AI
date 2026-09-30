@@ -473,6 +473,17 @@ class ImageCheck(unittest.TestCase):
         self.assertEqual([p["box"] for p in places], [[200, 200, 600, 400], [1800, 800, 2000, 900]])
         self.assertEqual([p["id"] for p in places], [1, 2])
         self.assertEqual([r["what"] for r in remarks], ["b"])
+        self.assertEqual(remarks[0]["box"], [0, 0, 2000, 1000])       # still there to use by hand
+        places, remarks = images.to_pixels([{"what": "a", "fix": "", "bbox_2d": [100, 200, 300, 400]}],
+                                           (2000, 1000), max_area=0.03)
+        self.assertEqual((len(places), len(remarks)), (0, 1))         # 4 % of the picture
+
+    def test_max_area_is_a_share(self):
+        self.assertEqual(images.area_limit(None), images.WHOLE_SHARE)
+        self.assertEqual(images.area_limit("0.1"), 0.1)
+        for bad in (0, 1.5, "much"):
+            with self.subTest(bad), self.assertRaises(images.Refused):
+                images.area_limit(bad)
 
     def test_without_a_vision_model_a_check_is_refused(self):
         with self.assertRaises(images.Refused):

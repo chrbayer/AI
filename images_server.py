@@ -6,8 +6,8 @@
                                   or JSON: "images": ["data:image/png;base64,...", ...], "mask"
                                   extra: "strength" (ControlNet), "pad" (Outpaint),
                                   "boxes" + "margin" (Inpaint: a mask made of rectangles)
-    POST /v1/images/check         image (+ prompt): the artifacts a vision model sees, with
-                                  boxes to repaint and a prompt for each (needs --vision)
+    POST /v1/images/check         image (+ prompt, max_area): the artifacts a vision model sees,
+                                  with boxes to repaint and a prompt for each (needs --vision)
     GET  /v1/models               the workflows whose models ComfyUI has, and the
                                   extra fields each takes
 
@@ -571,19 +571,31 @@ def parse_artifacts(text):
     return out
 
 
-def to_pixels(artifacts, size):
-    """0–1000 boxes to the image's pixels; the ones that cover most of it are
-    remarks on the whole, not places to repaint."""
+def area_limit(value):
+    if value in (None, ""):
+        return WHOLE_SHARE
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        raise Refused(f"max_area is a share of the picture, not '{value}'") from None
+    if not 0 < value <= 1:
+        raise Refused("max_area is a share of the picture above 0, up to 1")
+    return value
+
+
+def to_pixels(artifacts, size, max_area=WHOLE_SHARE):
+    """0–1000 boxes to the image's pixels. A box over `max_area` of the picture
+    is a remark, not a place to repaint: repainting that much makes new flaws."""
     w, h = size
     places, remarks = [], []
     for a in artifacts:
         x1, y1, x2, y2 = a["bbox_2d"]
         x1, x2 = sorted((max(0, min(1000, x1)), max(0, min(1000, x2))))
         y1, y2 = sorted((max(0, min(1000, y1)), max(0, min(1000, y2))))
-        if (x2 - x1) * (y2 - y1) > WHOLE_SHARE * 1e6:
-            remarks.append({"what": a["what"], "fix": a["fix"]})
-            continue
         box = [round(x1 * w / 1000), round(y1 * h / 1000), round(x2 * w / 1000), round(y2 * h / 1000)]
+        if (x2 - x1) * (y2 - y1) > max_area * 1e6:
+            remarks.append({"what": a["what"], "fix": a["fix"], "box": box})
+            continue
         places.append({"id": len(places) + 1, "what": a["what"], "fix": a["fix"], "box": box})
     return places, remarks
 
@@ -609,9 +621,10 @@ def vision_model():
         return "vision"
 
 
-def check(data, prompt=None, want_preview=False):
+def check(data, prompt=None, want_preview=False, max_area=None):
     if not getattr(ARGS, "vision", ""):
         raise Refused("no vision model — start the image API with --vision SLOT (flash with --mmproj)")
+    max_area = area_limit(max_area)
     size = image_size(data)
     about = f' It was generated from the prompt: "{prompt}".' if prompt else ""
     t0 = time.time()
@@ -630,7 +643,7 @@ def check(data, prompt=None, want_preview=False):
     artifacts = parse_artifacts(j["choices"][0]["message"].get("content"))
     if artifacts is None:
         raise RuntimeError("the vision model gave no artifact list")
-    places, remarks = to_pixels(artifacts, size)
+    places, remarks = to_pixels(artifacts, size, max_area)
     out = {"size": list(size), "artifacts": places, "remarks": remarks,
            "seconds": round(time.time() - t0, 1)}
     if want_preview:
@@ -646,14 +659,16 @@ def check_endpoint():
             f = request.form
             files = [x.read() for key in ("image", "image[]") for x in request.files.getlist(key)]
             prompt, want = f.get("prompt"), f.get("preview", "").lower() in ("1", "true", "yes")
+            max_area = f.get("max_area")
         else:
             j = request.get_json(silent=True) or {}
             raw = j.get("image") or j.get("images") or []
             files = [data_url(x) for x in (raw if isinstance(raw, list) else [raw])]
             prompt, want = j.get("prompt"), bool(j.get("preview"))
+            max_area = j.get("max_area")
         if len(files) != 1:
             raise Refused("a check takes exactly one image")
-        return jsonify(check(files[0], prompt or None, want))
+        return jsonify(check(files[0], prompt or None, want, max_area))
     return handle(go)
 
 

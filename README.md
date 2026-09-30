@@ -1099,8 +1099,10 @@ r = img.images.edit(model="flux2-klein-9b", image=open("turm.png", "rb"),
   for the flaws in it — extra fingers, melted faces, ghosted objects, garbled
   text — and answers with `artifacts`: an `id`, what is wrong, a `fix` (what
   the place should show, a prompt to repaint it) and a `box` in pixels, ready
-  for `boxes`. Flaws that concern the whole picture ("four dishes, not five")
-  come as `remarks` without a box; `"preview": true` adds the picture with the
+  for `boxes`. A flaw whose box covers more than `max_area` of the picture
+  (a share, 0.4 by default) comes as a remark in `remarks` — with its box, to
+  use by hand — since repainting that much tends to make new flaws; `0.05`
+  keeps to small glitches. `"preview": true` adds the picture with the
   numbered boxes drawn in. The vision model is a slot of its own: start the
   image API with `--vision SLOT` (`llmctl start comfy 9 --proxy --vision 2`)
   and that slot with `llmctl start flash 2 --mmproj`.
@@ -1120,7 +1122,17 @@ r = img.images.edit(model="flux2-klein-9b", image=open("turm.png", "rb"),
   place, misses 1, and flags one of the two clean images; ~40 s per image
   (7–170 s). Qwen3-VL-8B found 1 of 22; Qwen3.8-27B was no better than flash
   and ten times slower. So the check proposes and someone picks — repainting
-  every box also repaints healthy places. flash (82 GiB) and the Inpaint
+  every box also repaints healthy places.
+
+  **What repair is for:** small, local glitches in an otherwise good picture —
+  a hand on a toothbrush, a guitar head, a milk jug, a doubled clock came out
+  right in one go (26 s each with Inpaint Turbo). A picture that is flawed
+  all over (a crowd of melted faces, tangled yoga bodies) has no sound
+  surroundings to repaint from; there a new seed does better. Unattended,
+  with every box: 9 of 21 pictures clearly better, 7 hardly changed, 2 worse
+  (a cyclist lost his shorts, a new upside-down figure). Box size does not
+  tell them apart — the harmful boxes held 10–13 % of the picture, good big
+  repairs 10–29 %; `max_area` 0.05 would have spared both. flash (82 GiB) and the Inpaint
   workflow (~37 GiB of models: DiT, ControlNet, encoder) do not fit into the
   104 GiB together: check first, stop flash, then repair.
 - **Results stay out of the gallery.** They go to ComfyUI's temp directory,
