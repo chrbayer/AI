@@ -4,7 +4,10 @@
     POST /v1/images/generations   {"model", "prompt", "size", "n", "seed", "response_format"}
     POST /v1/images/edits         multipart: image (or image[]), mask, prompt, model, n, seed
                                   or JSON: "images": ["data:image/png;base64,...", ...], "mask"
-                                  extra: "strength" (ControlNet), "pad" (Outpaint)
+                                  extra: "strength" (ControlNet), "pad" (Outpaint),
+                                  "boxes" + "margin" (Inpaint: a mask made of rectangles)
+    POST /v1/images/check         image (+ prompt): the artifacts a vision model sees, with
+                                  boxes to repaint and a prompt for each (needs --vision)
     GET  /v1/models               the workflows whose models ComfyUI has, and the
                                   extra fields each takes
 
@@ -21,6 +24,7 @@ Started by `llmctl start comfy N --proxy` on the slot's proxy port.
 import argparse
 import base64
 import hashlib
+import io
 import json
 import random
 import re
@@ -31,6 +35,11 @@ from pathlib import Path
 
 import requests
 from flask import Flask, jsonify, request
+
+try:                              # the mask from boxes, /check's sizes and preview
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:                                               # pragma: no cover
+    Image = None
 
 app = Flask(__name__)
 ARGS = argparse.Namespace()
@@ -46,10 +55,18 @@ LATENT_SIZE = {"EmptyFlux2LatentImage", "EmptyLatentImage", "EmptySD3LatentImage
 SIZE_MIN, SIZE_MAX, SIZE_STEP = 256, 2048, 16
 STRENGTH_MAX = 2.0
 PAD_MAX, PAD_STEP, FEATHER_MAX = 2048, 8, 512
+MARGIN_DEFAULT, MARGIN_MAX = 16, 256
+# A box over this share of the picture is no place to repaint but a remark on
+# the whole ("four dishes, not five"); /check lists it apart.
+WHOLE_SHARE = 0.4
 
 
 class Refused(Exception):
     """A request this server cannot fulfil; the message goes back as a 400."""
+
+
+class Unavailable(Exception):
+    """Something this server needs does not answer; a 503."""
 
 
 def error(message, status=400, kind="invalid_request_error"):
@@ -212,7 +229,7 @@ def extras(graph):
     """The extra request fields this workflow takes."""
     out = []
     if mask_users(graph):
-        out.append("mask")
+        out += ["mask", "boxes"]
     kinds = {n["class_type"] for n in graph.values()}
     if "ZImageFunControlnet" in kinds:
         out.append("strength")
@@ -296,6 +313,50 @@ def set_pad(graph, pad):
         node["inputs"].update(values)
 
 
+def pillow():
+    if Image is None:
+        raise Refused("this needs Pillow beside the image API (pip install pillow)")
+
+
+def image_size(data):
+    pillow()
+    try:
+        return Image.open(io.BytesIO(data)).size
+    except Exception:                                             # noqa: BLE001
+        raise Refused("that is no image Pillow can read") from None
+
+
+def boxes_mask(boxes, size, margin=None):
+    """OpenAI's mask from rectangles in the image's pixels: transparent inside
+    each, grown by `margin` on every side, opaque elsewhere."""
+    pillow()
+    if isinstance(boxes, str):
+        try:
+            boxes = json.loads(boxes)
+        except ValueError:
+            raise Refused("boxes is a JSON list of [x1, y1, x2, y2]") from None
+    if not isinstance(boxes, list) or not boxes or not all(
+            isinstance(b, list) and len(b) == 4 and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in b)
+            for b in boxes):
+        raise Refused("boxes is a non-empty list of [x1, y1, x2, y2] in the image's pixels")
+    try:
+        margin = MARGIN_DEFAULT if margin in (None, "") else int(margin)
+    except (TypeError, ValueError):
+        raise Refused(f"margin is a number of pixels, not '{margin}'") from None
+    if not 0 <= margin <= MARGIN_MAX:
+        raise Refused(f"margin is 0 to {MARGIN_MAX}")
+    w, h = size
+    mask = Image.new("RGBA", size, (0, 0, 0, 255))
+    draw = ImageDraw.Draw(mask)
+    for x1, y1, x2, y2 in boxes:
+        x1, x2 = sorted((x1, x2)); y1, y2 = sorted((y1, y2))
+        draw.rectangle([max(0, x1 - margin), max(0, y1 - margin),
+                        min(w - 1, x2 + margin), min(h - 1, y2 + margin)], fill=(0, 0, 0, 0))
+    buf = io.BytesIO()
+    mask.save(buf, "PNG")
+    return buf.getvalue()
+
+
 def upload(data):
     name = hashlib.sha256(data).hexdigest()[:24] + ".png"
     r = requests.post(f"{ARGS.comfy}/upload/image",
@@ -307,7 +368,7 @@ def upload(data):
     return f"{j['subfolder']}/{j['name']}" if j.get("subfolder") else j["name"]
 
 
-def prepare(graph, prompt, size, images, mask=None, strength=None, pad=None):
+def prepare(graph, prompt, size, images, mask=None, strength=None, pad=None, boxes=None, margin=None):
     for key in [k for k, n in graph.items() if n["class_type"] in UI_ONLY]:
         del graph[key]
     for node in graph.values():               # into temp, not the user's output
@@ -327,6 +388,12 @@ def prepare(graph, prompt, size, images, mask=None, strength=None, pad=None):
             raise Refused(f"this workflow takes at most {len(slots)} image(s), got {len(images)}")
         for key, data in zip(slots, images):
             graph[key]["inputs"]["image"] = upload(data)
+        if mask is not None and boxes is not None:
+            raise Refused("a mask or boxes, not both")
+        if boxes is not None:
+            if not mask_users(graph):
+                raise Refused("this workflow takes no mask — the Inpaint ones do")
+            mask = boxes_mask(boxes, image_size(images[0]), margin)
         if mask is not None:
             set_mask(graph, mask, images[0])
         prune(graph, slots[len(images):])
@@ -418,6 +485,8 @@ def handle(fn):
         return error(str(e))
     except TimeoutError as e:
         return error(str(e), 504, "timeout")
+    except Unavailable as e:
+        return error(str(e), 503, "unavailable")
     except requests.ConnectionError:
         return error(f"ComfyUI does not answer at {ARGS.comfy} (still starting?)", 503, "unavailable")
     except Exception as e:                                        # noqa: BLE001
@@ -455,6 +524,7 @@ def edits():
             n, seed, fmt = int(f.get("n") or 1), f.get("seed"), f.get("response_format") or "b64_json"
             mask = request.files["mask"].read() if "mask" in request.files else None
             strength, pad = f.get("strength") or None, f.get("pad") or None
+            boxes, margin = f.get("boxes") or None, f.get("margin")
         else:
             j = request.get_json(silent=True) or {}
             raw = j.get("images") or j.get("image") or []
@@ -463,9 +533,127 @@ def edits():
             n, seed, fmt = int(j.get("n") or 1), j.get("seed"), j.get("response_format") or "b64_json"
             mask = data_url(j["mask"]) if j.get("mask") else None
             strength, pad = j.get("strength"), j.get("pad")
+            boxes, margin = j.get("boxes"), j.get("margin")
         return respond(model or default_model("edits"), "edits", prompt, size, n,
                        seed if seed in (None, "") else int(seed), fmt, images,
-                       mask=mask, strength=strength, pad=pad)
+                       mask=mask, strength=strength, pad=pad, boxes=boxes, margin=margin)
+    return handle(go)
+
+
+# ── checking a picture ───────────────────────────────────────
+
+CHECK_PROMPT = """You are a strict quality inspector for AI-generated images.{about}
+Find generation artifacts: extra, missing or fused fingers, hands or limbs; malformed or melted faces; duplicated or ghosted objects; body parts that merge with objects or other people; physically impossible geometry; garbled or misspelled text; objects that make no sense.
+Do not report style, lighting or composition choices. Only report real defects you can see.
+Answer only with JSON: {{"artifacts": [{{"what": "short description", "fix": "what this region should show instead, as a short image description to repaint it", "bbox_2d": [x1, y1, x2, y2]}}]}} with coordinates on a 0-1000 scale for both axes. Use an empty list if the image is clean."""
+
+
+def parse_artifacts(text):
+    """The artifacts in a vision model's answer: an object with "artifacts",
+    or a bare list; "label" for "what". None when there is no JSON in it."""
+    text = re.sub(r"<think>.*?</think>", "", text or "", flags=re.S)
+    m = re.search(r"[\[{].*[\]}]", text, re.S)
+    if not m:
+        return None
+    try:
+        j = json.loads(m.group(0))
+    except ValueError:
+        return None
+    j = j.get("artifacts") if isinstance(j, dict) else j
+    if not isinstance(j, list):
+        return None
+    out = []
+    for a in j:
+        b = a.get("bbox_2d") if isinstance(a, dict) else None
+        if isinstance(b, list) and len(b) == 4 and all(isinstance(v, (int, float)) for v in b):
+            out.append({"what": str(a.get("what") or a.get("label") or ""),
+                        "fix": str(a.get("fix") or ""), "bbox_2d": b})
+    return out
+
+
+def to_pixels(artifacts, size):
+    """0–1000 boxes to the image's pixels; the ones that cover most of it are
+    remarks on the whole, not places to repaint."""
+    w, h = size
+    places, remarks = [], []
+    for a in artifacts:
+        x1, y1, x2, y2 = a["bbox_2d"]
+        x1, x2 = sorted((max(0, min(1000, x1)), max(0, min(1000, x2))))
+        y1, y2 = sorted((max(0, min(1000, y1)), max(0, min(1000, y2))))
+        if (x2 - x1) * (y2 - y1) > WHOLE_SHARE * 1e6:
+            remarks.append({"what": a["what"], "fix": a["fix"]})
+            continue
+        box = [round(x1 * w / 1000), round(y1 * h / 1000), round(x2 * w / 1000), round(y2 * h / 1000)]
+        places.append({"id": len(places) + 1, "what": a["what"], "fix": a["fix"], "box": box})
+    return places, remarks
+
+
+def preview(data, places):
+    im = Image.open(io.BytesIO(data)).convert("RGB")
+    draw = ImageDraw.Draw(im)
+    width = max(3, im.width // 300)
+    font = ImageFont.load_default(max(20, im.width // 30))
+    for a in places:
+        x1, y1, x2, y2 = a["box"]
+        draw.rectangle([x1, y1, x2, y2], outline="red", width=width)
+        draw.text((x1 + 2 * width, y1 + width), str(a["id"]), fill="red", font=font)
+    buf = io.BytesIO()
+    im.save(buf, "PNG")
+    return base64.b64encode(buf.getvalue()).decode()
+
+
+def vision_model():
+    try:
+        return requests.get(f"{ARGS.vision}/v1/models", timeout=10).json()["data"][0]["id"]
+    except Exception:                                             # noqa: BLE001
+        return "vision"
+
+
+def check(data, prompt=None, want_preview=False):
+    if not getattr(ARGS, "vision", ""):
+        raise Refused("no vision model — start the image API with --vision SLOT (flash with --mmproj)")
+    size = image_size(data)
+    about = f' It was generated from the prompt: "{prompt}".' if prompt else ""
+    t0 = time.time()
+    try:
+        r = requests.post(f"{ARGS.vision}/v1/chat/completions", timeout=ARGS.timeout, json={
+            "model": vision_model(), "temperature": 0, "max_tokens": 12000,
+            "messages": [{"role": "user", "content": [
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64," + base64.b64encode(data).decode()}},
+                {"type": "text", "text": CHECK_PROMPT.format(about=about)}]}]})
+    except requests.ConnectionError:
+        raise Unavailable(f"the vision model does not answer at {ARGS.vision}") from None
+    j = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+    if r.status_code != 200 or "choices" not in j:
+        detail = (j.get("error") or {}).get("message") if isinstance(j.get("error"), dict) else r.text[:300]
+        raise RuntimeError(f"the vision model failed: {detail} (loaded with --mmproj?)")
+    artifacts = parse_artifacts(j["choices"][0]["message"].get("content"))
+    if artifacts is None:
+        raise RuntimeError("the vision model gave no artifact list")
+    places, remarks = to_pixels(artifacts, size)
+    out = {"size": list(size), "artifacts": places, "remarks": remarks,
+           "seconds": round(time.time() - t0, 1)}
+    if want_preview:
+        out["preview"] = preview(data, places)
+    app.logger.info("check: %d artifact(s), %d remark(s) in %.1f s", len(places), len(remarks), out["seconds"])
+    return out
+
+
+@app.post("/v1/images/check")
+def check_endpoint():
+    def go():
+        if request.files:
+            f = request.form
+            files = [x.read() for key in ("image", "image[]") for x in request.files.getlist(key)]
+            prompt, want = f.get("prompt"), f.get("preview", "").lower() in ("1", "true", "yes")
+        else:
+            j = request.get_json(silent=True) or {}
+            raw = j.get("image") or j.get("images") or []
+            files = [data_url(x) for x in (raw if isinstance(raw, list) else [raw])]
+            prompt, want = j.get("prompt"), bool(j.get("preview"))
+        if len(files) != 1:
+            raise Refused("a check takes exactly one image")
+        return jsonify(check(files[0], prompt or None, want))
     return handle(go)
 
 
@@ -499,9 +687,11 @@ def main():
     p.add_argument("--port", type=int, required=True)
     # FLUX.2 dev editing with two references takes ~20 min here.
     p.add_argument("--timeout", type=int, default=3600, help="seconds one image may take")
+    p.add_argument("--vision", help="URL of an OpenAI chat server with vision, for /v1/images/check")
     p.parse_args(namespace=ARGS)
     ARGS.comfy = ARGS.comfy.rstrip("/")
     ARGS.public_comfy = (ARGS.public_comfy or ARGS.comfy).rstrip("/")
+    ARGS.vision = (ARGS.vision or "").rstrip("/")
     print(f"Image API on http://{ARGS.host}:{ARGS.port}/v1/images/* for ComfyUI at {ARGS.comfy}; "
           f"{len(workflows())} workflows in {ARGS.api}", flush=True)
     app.run(host=ARGS.host, port=ARGS.port, threaded=True)

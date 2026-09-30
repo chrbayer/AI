@@ -9,7 +9,7 @@ sudo make install          # program to /usr/local (bin/llmctl, lib/llmctl, shar
 sudo make install-link     # instead: /usr/local/bin/llmctl → this checkout, edits apply at once
 sudo make uninstall
 
-pip install flask requests # for proxy.py
+pip install flask requests pillow # for proxy.py and the image API
 pip install waitress       # optional, recommended for production proxy
 ```
 
@@ -1081,6 +1081,9 @@ r = img.images.edit(model="flux2-klein-9b", image=open("turm.png", "rb"),
     result follows the control image; the workflows use 0.5 (Control) and 1.
     For Canny at 0.3 a watercolour of the photo keeps only its layout, at 1.0
     every edge.
+  - `boxes` (Inpaint): instead of a mask, rectangles `[x1, y1, x2, y2]` in the
+    image's pixels, each grown by `margin` (16 px by default) — what
+    `/v1/images/check` returns.
   - `pad` (Outpaint): pixels to add, one number for every side or
     `{"left", "top", "right", "bottom", "feathering"}` (steps of 8, up to
     2048; feathering 40 by default).
@@ -1091,6 +1094,35 @@ r = img.images.edit(model="flux2-klein-9b", image=open("turm.png", "rb"),
   r = img.images.edit(model="qwen-image-21-outpaint-turbo", image=open("tisch.png", "rb"),
                       prompt="Küche mit Hängelampen", extra_body={"pad": {"top": 256}})
   ```
+- **Checking a picture for artifacts** (#23): `POST /v1/images/check` with one
+  `image` (and the `prompt` it was made from, which helps) asks a vision model
+  for the flaws in it — extra fingers, melted faces, ghosted objects, garbled
+  text — and answers with `artifacts`: an `id`, what is wrong, a `fix` (what
+  the place should show, a prompt to repaint it) and a `box` in pixels, ready
+  for `boxes`. Flaws that concern the whole picture ("four dishes, not five")
+  come as `remarks` without a box; `"preview": true` adds the picture with the
+  numbered boxes drawn in. The vision model is a slot of its own: start the
+  image API with `--vision SLOT` (`llmctl start comfy 9 --proxy --vision 2`)
+  and that slot with `llmctl start flash 2 --mmproj`.
+
+  ```python
+  import requests
+  c = requests.post("http://localhost:8089/v1/images/check", timeout=3600,
+                    files={"image": open("bild.png", "rb")}, data={"prompt": prompt}).json()
+  pick = [a for a in c["artifacts"] if a["id"] in (1, 3)]
+  r = img.images.edit(model="qwen-image-21-inpaint-turbo", image=open("bild.png", "rb"),
+                      prompt=prompt + ". " + "; ".join(a["fix"] for a in pick),
+                      extra_body={"boxes": [a["box"] for a in pick]})
+  ```
+
+  Measured on 24 Qwen-Image images with hand-judged flaws (22 flawed, 2 clean):
+  flash finds 18 of the 22 at least partly (13 fully), puts 3 at the wrong
+  place, misses 1, and flags one of the two clean images; ~40 s per image
+  (7–170 s). Qwen3-VL-8B found 1 of 22; Qwen3.8-27B was no better than flash
+  and ten times slower. So the check proposes and someone picks — repainting
+  every box also repaints healthy places. flash (82 GiB) and the Inpaint
+  workflow (~37 GiB of models: DiT, ControlNet, encoder) do not fit into the
+  104 GiB together: check first, stop flash, then repair.
 - **Results stay out of the gallery.** They go to ComfyUI's temp directory,
   not to `output/`; the caller has them.
 - **Measured** at 1024×1024, the machine to itself, each including loading

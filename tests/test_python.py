@@ -10,6 +10,7 @@ Nothing here touches a GPU, a model or the network. tts_server needs flask and
 numpy, proxy.py needs flask and requests; a helper whose imports are missing is
 skipped rather than failed, so the rest still runs.
 """
+import io
 import json
 import sys
 import tempfile
@@ -381,7 +382,7 @@ class ImageApiExtras(unittest.TestCase):
         return g
 
     def test_each_workflow_names_the_extras_it_takes(self):
-        self.assertEqual(images.extras(api(self.INPAINT)), ["mask", "strength"])
+        self.assertEqual(images.extras(api(self.INPAINT)), ["mask", "boxes", "strength"])
         self.assertEqual(images.extras(api(self.OUTPAINT)), ["strength", "pad"])
         self.assertEqual(images.extras(api(self.CONTROL)), ["strength"])
         self.assertEqual(images.extras(api(self.EDIT)), [])
@@ -422,6 +423,60 @@ class ImageApiExtras(unittest.TestCase):
                 self._prepared(self.OUTPAINT, pad=bad)
         with self.assertRaises(images.Refused):
             self._prepared(self.INPAINT, pad=64)
+
+
+@unittest.skipIf(images is None or images.Image is None, "images_server needs flask, requests and pillow")
+class ImageCheck(unittest.TestCase):
+    def test_boxes_make_a_mask_transparent_inside_them(self):
+        from PIL import Image
+        m = Image.open(io.BytesIO(images.boxes_mask([[10, 10, 20, 20]], (100, 50), margin=5)))
+        self.assertEqual(m.size, (100, 50))
+        self.assertEqual(m.getpixel((15, 15))[3], 0)        # inside
+        self.assertEqual(m.getpixel((6, 6))[3], 0)          # in the margin
+        self.assertEqual(m.getpixel((40, 40))[3], 255)      # kept
+        m = Image.open(io.BytesIO(images.boxes_mask("[[-50, -50, 500, 10]]", (100, 50), margin=0)))
+        self.assertEqual(m.getpixel((99, 0))[3], 0)         # clipped to the picture
+
+    def test_boxes_that_are_no_boxes_are_refused(self):
+        for boxes in ([], [[1, 2, 3]], "nonsense", [[1, 2, 3, True]]):
+            with self.subTest(boxes), self.assertRaises(images.Refused):
+                images.boxes_mask(boxes, (100, 100))
+        with self.assertRaises(images.Refused):
+            images.boxes_mask([[1, 2, 3, 4]], (100, 100), margin=1000)
+
+    def test_boxes_go_into_the_inpaint_mask_and_not_elsewhere(self):
+        from PIL import Image
+        buf = io.BytesIO(); Image.new("RGB", (64, 48)).save(buf, "PNG")
+        images.upload = lambda data: "llmctl-api/x.png"
+        g = api(ImageApiExtras.INPAINT)
+        images.prepare(g, "P", None, [buf.getvalue()], boxes=[[1, 1, 9, 9]])
+        self.assertIn("LoadImageMask", {n["class_type"] for n in g.values()})
+        for extra in ({"boxes": [[1, 1, 9, 9]], "mask": b"x"},):
+            with self.assertRaises(images.Refused):
+                images.prepare(api(ImageApiExtras.INPAINT), "P", None, [buf.getvalue()], **extra)
+        with self.assertRaises(images.Refused):
+            images.prepare(api(ImageApiExtras.EDIT), "P", None, [buf.getvalue()], boxes=[[1, 1, 9, 9]])
+
+    def test_a_vision_answer_is_read_in_its_shapes(self):
+        obj = '<think>hm</think>```json\n{"artifacts": [{"what": "hand", "fix": "a hand", "bbox_2d": [1, 2, 3, 4]}]}\n```'
+        bare = '[{"label": "text", "bbox_2d": [5, 6, 7, 8]}, {"what": "no box"}]'
+        self.assertEqual(images.parse_artifacts(obj), [{"what": "hand", "fix": "a hand", "bbox_2d": [1, 2, 3, 4]}])
+        self.assertEqual(images.parse_artifacts(bare), [{"what": "text", "fix": "", "bbox_2d": [5, 6, 7, 8]}])
+        self.assertEqual(images.parse_artifacts('{"artifacts": []}'), [])
+        self.assertIsNone(images.parse_artifacts("I see no problems."))
+
+    def test_boxes_become_pixels_and_whole_picture_ones_remarks(self):
+        places, remarks = images.to_pixels([
+            {"what": "a", "fix": "", "bbox_2d": [100, 200, 300, 400]},
+            {"what": "b", "fix": "", "bbox_2d": [0, 0, 1000, 1000]},
+            {"what": "c", "fix": "", "bbox_2d": [900, 900, 1200, 800]}], (2000, 1000))
+        self.assertEqual([p["box"] for p in places], [[200, 200, 600, 400], [1800, 800, 2000, 900]])
+        self.assertEqual([p["id"] for p in places], [1, 2])
+        self.assertEqual([r["what"] for r in remarks], ["b"])
+
+    def test_without_a_vision_model_a_check_is_refused(self):
+        with self.assertRaises(images.Refused):
+            images.check(b"png")
 
 
 if __name__ == "__main__":

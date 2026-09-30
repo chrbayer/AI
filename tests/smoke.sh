@@ -84,6 +84,7 @@ check "llama start builds a command"    "llama-server --model" -- "$L" start qwe
 check "llama start takes --ctx"         "--ctx-size 4096"      -- "$L" start qwen 1 --ctx 4096 --print-cmd
 check "llama start rejects --lang"      "for speech (tts)"     -- "$L" start qwen 1 --lang de --print-cmd
 check "llama start rejects --output"    "is for comfyui"       -- "$L" start qwen 1 --output /tmp --print-cmd
+check "llama start rejects --vision"    "is for the image API" -- "$L" start qwen 1 --vision 2 --print-cmd
 check "llama start rejects a level the model lacks" "has no thinking mode" -- "$L" start qwen-vl 3 --reasoning low --print-cmd
 check "asr start loads its mmproj"      "--mmproj"             -- "$L" start asr 6 --mmproj --print-cmd
 

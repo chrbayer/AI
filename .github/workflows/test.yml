@@ -9,6 +9,6 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - run: pip install flask numpy requests
+      - run: pip install flask numpy requests pillow
       - run: sudo apt-get install -y shellcheck
       - run: make test
