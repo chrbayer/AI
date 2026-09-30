@@ -290,6 +290,8 @@ class ImageApi(unittest.TestCase):
         self.assertEqual(images.slug("SeedVR2 7B Upscale (fp16)"), ("seedvr2-7b-upscale", "edits"))
         self.assertEqual(images.slug("Qwen-Image 2.1 Canny Control (bf16, dpmpp_2m 14)"), ("qwen-image-21-canny-control", "edits"))
         self.assertEqual(images.slug("Qwen-Image 2.1 Inpaint (bf16, dpmpp_2m 14)"), ("qwen-image-21-inpaint", "edits"))
+        self.assertEqual(images.slug("Qwen-Image 2.1 Background Removal (bf16, euler 25)"),
+                         ("qwen-image-21-background-removal", "edits"))
 
     def test_each_generation_takes_prompt_size_and_seed(self):
         for path in sorted(API.glob("*T2I*.json")):
