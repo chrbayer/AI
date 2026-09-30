@@ -57,7 +57,9 @@ def error(message, status=400, kind="invalid_request_error"):
 def slug(stem):
     """'FLUX.2 klein 9B T2I (bf16, 4 Schritte)' -> ('flux2-klein-9b', 'generations')."""
     name = re.sub(r"\(.*?\)", "", stem)
-    kind = "edits" if re.search(r"\b(Edit|Upscale)\b", name) else "generations"
+    # Workflows that start from an image: edits, the upscaler, and the
+    # ControlNet ones (a control image, a photo's edges, an image to inpaint).
+    kind = "edits" if re.search(r"\b(Edit|Upscale|Control|Canny|Inpaint)\b", name) else "generations"
     name = re.sub(r"\b(T2I|Edit)\b", "", name)
     name = re.sub(r"[^a-z0-9]+", "-", name.lower().replace(".", "")).strip("-")
     return name, kind

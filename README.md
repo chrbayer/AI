@@ -882,6 +882,28 @@ llmctl update comfy --torch           # …and torch itself
   create it (civitai.com → Account settings → API Keys), and stores it there
   with mode 600. The key goes into the download URL's query and is masked in
   every message.
+- **Steering Qwen-Image 2.1: ControlNet and inpainting.** alibaba-pai's
+  [Fun ControlNet Union](https://huggingface.co/alibaba-pai/Qwen-Image-2.1-Fun-Controlnet-Union)
+  (7.6 GB, `model_patches/`) is one model for eight kinds of control image —
+  canny, depth, pose, scribble, lineart, HED, MLSD, grayscale — and for
+  inpainting. ComfyUI loads it as a model patch ("Load Model Patch" + "Apply Fun
+  ControlNet"). Three workflows:
+  - `Qwen-Image 2.1 Control`: a control image of any of those kinds, the
+    prompt paints the rest. Strength 0.5 by default: at 1.0 a scribble came
+    back as flat vector art whatever the prompt asked, at 0.5 as the asked-for
+    photograph on the scribble's layout. Raise it for a pose or depth map that
+    has to be followed closely.
+  - `Qwen-Image 2.1 Canny Control`: a photo's edges (ComfyUI's own Canny) as
+    the control — a new picture on the old one's layout, e.g. as a watercolour.
+  - `Qwen-Image 2.1 Inpaint`: paint the mask over what to redraw (the image
+    node's mask editor); the prompt describes the whole picture, and only the
+    masked part changes.
+
+  Pose and depth maps are not made here: ComfyUI has no preprocessor for them
+  (they would need a custom node pack), so bring them as images. There is no
+  official template for 2.1 yet; `comfyui/build_control_workflows.py` writes
+  the graphs in API format and has ComfyUI's frontend turn them into UI
+  workflows. Measured: ~80–95 s per 1024² image.
 - **Qwen-Image 2.1 in 4 steps.** `Qwen-Image 2.1 [Heretic] T2I/Edit Turbo (bf16,
   4 Schritte)` add alibaba-pai's official 4-step Acc LoRA and sample 4 steps
   with `euler`: a 1024² image in 16 s instead of 70, an edit in 47 s instead
@@ -985,7 +1007,11 @@ r = img.images.edit(model="flux2-klein-9b", image=open("turm.png", "rb"),
 - **Models are the bundled workflows**, named after them: `flux2-klein-9b`,
   `flux2-klein-9b-nsfw`, `flux2-dev`, `flux2-dev-turbo`, `flux2-dev-nsfw`,
   `qwen-image-21`, `qwen-image-21-heretic`, `qwen-image-21-turbo`,
-  `qwen-image-21-heretic-turbo` for generations and edits, and
+  `qwen-image-21-heretic-turbo` for generations and edits,
+  `qwen-image-21-control`, `qwen-image-21-canny-control` and
+  `qwen-image-21-inpaint` for edits (the image is the control image, the photo
+  or the picture to inpaint — transparent where to redraw, as OpenAI's edits
+  take a mask), and
   `seedvr2-7b-upscale` for edits (4× upscaling, no prompt). `GET /v1/models`
   lists those whose model files ComfyUI has, with the endpoints each serves.
   Without `model`, it is klein.
