@@ -18,8 +18,22 @@
       "model-00003-of-00004.safetensors",
       "model-00004-of-00004.safetensors"
     ],
-    "rename": [["model.language_model.", "model."]],
+    "rename": [
+      [
+        "model.language_model.",
+        "model."
+      ]
+    ],
     "tensors": 750,
     "bytes": 17534247392
+  },
+  "loras/Qwen-Image-2.1-Fun-Acc-4Step-comfyui.safetensors": {
+    "_what": "alibaba-pai's 4-step Acc LoRA for Qwen-Image 2.1 is diffusers-only; converted for ComfyUI (see convert_qwenimage21_lora)",
+    "kind": "qwenimage21_prefused_lora",
+    "repo": "alibaba-pai/Qwen-Image-2.1-Fun-Acc-LoRAs",
+    "revision": "f7545234760e1847cd8e89e52bd951cb0b7e327f",
+    "file": "models/Qwen-Image-2.1-Fun-Acc-4Step.safetensors",
+    "tensors": 399,
+    "bytes": 444692800
   }
 }

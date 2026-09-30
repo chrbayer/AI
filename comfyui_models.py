@@ -499,6 +499,159 @@ def cmd_outdated(wf_dir, models_dir, sources=None, quick=False):
     return 1 if changed else 0
 
 
+def read_header(path):
+    """(header dict without __metadata__, byte offset where the data starts)."""
+    with open(path, "rb") as f:
+        n = struct.unpack("<Q", f.read(8))[0]
+        header = json.loads(f.read(n))
+    header.pop("__metadata__", None)
+    return header, 8 + n
+
+
+def write_safetensors(dest, tensors, metadata):
+    """tensors: [(name, dtype, shape, bytes-like or (path, pos, size))], written
+    in name order, 8-byte aligned, to dest via a .part file."""
+    header, offset = {"__metadata__": metadata}, 0
+    for name, dtype, shape, data in tensors:
+        size = data[2] if isinstance(data, tuple) else len(data)
+        header[name] = {"dtype": dtype, "shape": list(shape), "data_offsets": [offset, offset + size]}
+        offset += size
+    raw = json.dumps(header, separators=(",", ":")).encode()
+    raw += b" " * (-len(raw) % 8)       # the data starts 8-byte aligned
+    part = dest.with_name(dest.name + ".part")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    print(f"    writing {dest.name} ({gib(offset)})")
+    with open(part, "wb") as out:
+        out.write(struct.pack("<Q", len(raw)))
+        out.write(raw)
+        for _, _, _, data in tensors:
+            if not isinstance(data, tuple):
+                out.write(data)
+                continue
+            src, pos, size = data
+            with open(src, "rb") as f:
+                f.seek(pos)
+                while size:
+                    chunk = f.read(min(size, 64 * 2**20))
+                    out.write(chunk)
+                    size -= len(chunk)
+    os.replace(part, dest)
+
+
+def bf16_to_f32(np, raw):
+    return (np.frombuffer(raw, dtype=np.uint16).astype(np.uint32) << 16).view(np.float32)
+
+
+def f32_to_bf16(np, x):
+    """Round to nearest even, as torch does."""
+    u = x.astype(np.float32).view(np.uint32)
+    return ((u + 0x7FFF + ((u >> 16) & 1)) >> 16).astype(np.uint16)
+
+
+def convert_qwenimage21_lora(key, recipe, dest, staging):
+    """alibaba-pai's Qwen-Image 2.1 LoRAs are for diffusers only: keys without
+    ".weight", separate gate_layer/proj in each block's MLP, and one proj_out
+    per sampling step. ComfyUI fuses the MLP into gate_up = [gate; up] and has
+    one proj_out. So: the direct modules renamed; each gate_layer/proj pair
+    stacked into one LoRA on gate_up (rank r+r, block-diagonal up); proj_out as
+    the mean of its steps (they differ by ~1%); the norms, which it carries
+    unchanged, left out."""
+    import numpy as np
+    local = staging / recipe["repo"]
+    print(f"    converted from {recipe['repo']}@{recipe['revision'][:12]} (diffusers LoRA → ComfyUI)")
+    cmd = ["hf", "download", recipe["repo"], recipe["file"], "--revision", recipe["revision"],
+           "--local-dir", str(local)]
+    if subprocess.run(cmd).returncode != 0:
+        return False
+    src = local / recipe["file"]
+    header, start = read_header(src)
+    if {t["dtype"] for t in header.values()} != {"BF16"}:
+        print("    expected a bf16 LoRA — not converting it", file=sys.stderr)
+        return False
+    def raw(name):
+        a, b = header[name]["data_offsets"]
+        with open(src, "rb") as f:
+            f.seek(start + a)
+            return f.read(b - a)
+    def ref(name):
+        a, b = header[name]["data_offsets"]
+        return (src, start + a, b - a)
+    mods = sorted({k.rsplit(".lora_", 1)[0] for k in header if ".lora_" in k})
+    out = []
+    for m in mods:
+        if m.endswith(".img_mlp.gate_layer") or m.endswith(".img_mlp.proj"):
+            continue
+        for part in ("down", "up"):
+            k = f"{m}.lora_{part}"
+            out.append((f"diffusion_model.{m}.lora_{part}.weight", "BF16", header[k]["shape"], ref(k)))
+    for m in mods:
+        if not m.endswith(".img_mlp.gate_layer"):
+            continue
+        b = m[:-len(".gate_layer")]
+        g, p = header[f"{b}.gate_layer.lora_up"]["shape"], header[f"{b}.proj.lora_up"]["shape"]
+        rg, rp = header[f"{b}.gate_layer.lora_down"]["shape"][0], header[f"{b}.proj.lora_down"]["shape"][0]
+        down = raw(f"{b}.gate_layer.lora_down") + raw(f"{b}.proj.lora_down")        # rows stacked
+        up = np.zeros((g[0] + p[0], rg + rp), dtype=np.uint16)                        # bf16 zero is 0x0000
+        up[:g[0], :rg] = np.frombuffer(raw(f"{b}.gate_layer.lora_up"), dtype=np.uint16).reshape(g)
+        up[g[0]:, rg:] = np.frombuffer(raw(f"{b}.proj.lora_up"), dtype=np.uint16).reshape(p)
+        in_dim = header[f"{b}.gate_layer.lora_down"]["shape"][1]
+        out.append((f"diffusion_model.{b}.gate_up.lora_down.weight", "BF16", [rg + rp, in_dim], down))
+        out.append((f"diffusion_model.{b}.gate_up.lora_up.weight", "BF16", list(up.shape), up.tobytes()))
+    shape = header["proj_out.weight"]["shape"]                                        # [steps, out, in]
+    mean = bf16_to_f32(np, raw("proj_out.weight")).reshape(shape).mean(axis=0)
+    out.append(("diffusion_model.proj_out.set_weight", "BF16", shape[1:], f32_to_bf16(np, mean).tobytes()))
+    out.sort(key=lambda t: t[0])
+    if len(out) != recipe["tensors"]:
+        print(f"    expected {recipe['tensors']} tensors, made {len(out)} — not writing it", file=sys.stderr)
+        return False
+    write_safetensors(dest, out, {"converted_from": f"{recipe['repo']}@{recipe['revision']}/{recipe['file']}"})
+    shutil.rmtree(local, ignore_errors=True)
+    return True
+
+
+def build(key, recipe, dest, staging):
+    """Make a model from a recipe in sources.json: shards joined and renamed
+    (the default), or a conversion named by "kind"."""
+    if recipe.get("kind") == "qwenimage21_prefused_lora":
+        return convert_qwenimage21_lora(key, recipe, dest, staging)
+    local = staging / recipe["repo"]
+    print(f"    built from {recipe['repo']}@{recipe['revision'][:12]} "
+          f"({len(recipe['shards'])} shards, tensors renamed)")
+    cmd = ["hf", "download", recipe["repo"], *recipe["shards"],
+           "--revision", recipe["revision"], "--local-dir", str(local)]
+    if subprocess.run(cmd).returncode != 0:
+        return False
+
+    def renamed(name):
+        for old, new in recipe.get("rename", []):
+            if name.startswith(old):
+                return new + name[len(old):]
+        return name
+
+    # Every tensor: new name, source shard, source byte range.
+    tensors = []
+    for shard in recipe["shards"]:
+        header, start = read_header(local / shard)
+        for name, t in header.items():
+            a, b = t["data_offsets"]
+            tensors.append((renamed(name), t["dtype"], t["shape"], local / shard, start + a, b - a))
+    tensors.sort()
+    names = [t[0] for t in tensors]
+    total = sum(t[5] for t in tensors)
+    if len(set(names)) != len(names):
+        print("    two tensors end up with the same name — the recipe's rename is wrong", file=sys.stderr)
+        return False
+    if len(tensors) != recipe["tensors"] or total != recipe["bytes"]:
+        print(f"    expected {recipe['tensors']} tensors / {recipe['bytes']} bytes, the shards hold "
+              f"{len(tensors)} / {total} — not building it", file=sys.stderr)
+        return False
+
+    write_safetensors(dest, [(n, dt, sh, (src, pos, size)) for n, dt, sh, src, pos, size in tensors],
+                      {"format": "pt"})
+    shutil.rmtree(local, ignore_errors=True)
+    return True
+
+
 def cmd_download(wf_dir, models_dir, pattern=None, sources=None):
     wfs = workflows(wf_dir, pattern)
     if not wfs:

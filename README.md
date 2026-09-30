@@ -882,6 +882,18 @@ llmctl update comfy --torch           # …and torch itself
   create it (civitai.com → Account settings → API Keys), and stores it there
   with mode 600. The key goes into the download URL's query and is masked in
   every message.
+- **Qwen-Image 2.1 in 4 steps.** `Qwen-Image 2.1 [Heretic] T2I/Edit Turbo (bf16,
+  4 Schritte)` add alibaba-pai's official 4-step Acc LoRA and sample 4 steps
+  with `euler`: a 1024² image in 16 s instead of 70, an edit in 47 s instead
+  of 77, with a composition of its own for a given seed. The LoRA is published
+  for diffusers only — its keys lack `.weight`, each block's MLP has separate
+  `gate_layer`/`proj` where ComfyUI's model fuses them into `gate_up`, and it
+  carries one `proj_out` per sampling step — so ComfyUI loads nothing of it
+  and the result is the bare model at 4 steps, a smear. `download comfy`
+  converts it (`comfyui/sources.json`, `convert_qwenimage21_lora`): modules
+  renamed, each MLP pair stacked into one LoRA on `gate_up` (exact), `proj_out`
+  as the mean of its four steps (they differ by ~1%). Checked: bit-identical
+  to a torch conversion, every key loaded, sharp images.
 - **NSFW workflows.** `FLUX.2 klein 9B NSFW T2I/Edit` and `FLUX.2 dev NSFW
   T2I/Edit` add a LoRA. For klein it is what makes nudity possible at all:
   without it klein dresses a figure the prompt describes as nude. FLUX.2 dev
@@ -966,7 +978,8 @@ r = img.images.edit(model="flux2-klein-9b", image=open("turm.png", "rb"),
 
 - **Models are the bundled workflows**, named after them: `flux2-klein-9b`,
   `flux2-klein-9b-nsfw`, `flux2-dev`, `flux2-dev-turbo`, `flux2-dev-nsfw`,
-  `qwen-image-21`, `qwen-image-21-heretic` for generations and edits, and
+  `qwen-image-21`, `qwen-image-21-heretic`, `qwen-image-21-turbo`,
+  `qwen-image-21-heretic-turbo` for generations and edits, and
   `seedvr2-7b-upscale` for edits (4× upscaling, no prompt). `GET /v1/models`
   lists those whose model files ComfyUI has, with the endpoints each serves.
   Without `model`, it is klein.

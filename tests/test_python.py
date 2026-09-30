@@ -199,9 +199,45 @@ class Sources(unittest.TestCase):
                 continue
             with self.subTest(recipe=key):
                 self.assertIn("/", key)                  # <directory>/<name>
-                for field in ("repo", "revision", "shards", "tensors", "bytes"):
+                source = "file" if recipe.get("kind") else "shards"
+                for field in ("repo", "revision", source, "tensors", "bytes"):
                     self.assertIn(field, recipe)
                 self.assertEqual(len(recipe["revision"]), 40)   # a pinned commit
+
+    def test_a_recipe_joins_and_renames_shards(self):
+        """build() once went missing unnoticed: every model it would make was
+        already there. Two fake shards, joined and renamed without a download."""
+        import struct
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d:
+            staging = Path(d) / "staging"
+            shard_dir = staging / "org" / "repo"
+            shard_dir.mkdir(parents=True)
+            def shard(path, tensors):
+                header, blob = {}, b""
+                for name, data in tensors:
+                    header[name] = {"dtype": "BF16", "shape": [len(data) // 2], "data_offsets": [len(blob), len(blob) + len(data)]}
+                    blob += data
+                raw = json.dumps(header).encode()
+                path.write_bytes(struct.pack("<Q", len(raw)) + raw + blob)
+            shard(shard_dir / "a.safetensors", [("model.x", b"\x01\x00\x02\x00")])
+            shard(shard_dir / "b.safetensors", [("model.y", b"\x03\x00")])
+            recipe = {"repo": "org/repo", "revision": "0" * 40, "shards": ["a.safetensors", "b.safetensors"],
+                      "rename": [["model.", "enc."]], "tensors": 2, "bytes": 6}
+            dest = Path(d) / "out.safetensors"
+            with mock.patch.object(cm.subprocess, "run", return_value=mock.Mock(returncode=0)):
+                self.assertTrue(cm.build("text_encoders/out.safetensors", recipe, dest, staging))
+            header, start = cm.read_header(dest)
+            self.assertEqual(sorted(header), ["enc.x", "enc.y"])
+            raw = dest.read_bytes()
+            x = header["enc.x"]["data_offsets"]
+            self.assertEqual(raw[start + x[0]:start + x[1]], b"\x01\x00\x02\x00")
+
+    def test_bf16_rounds_to_nearest_even(self):
+        import numpy as np
+        x = np.array([1.0, 1.00390625, 1.01171875, -2.5], dtype=np.float32)   # halfway cases included
+        back = cm.bf16_to_f32(np, cm.f32_to_bf16(np, x).tobytes())
+        self.assertEqual(back.tolist(), [1.0, 1.0, 1.015625, -2.5])
 
     def test_every_bundled_workflow_parses_and_names_its_models(self):
         for path in sorted((ROOT / "comfyui" / "workflows").glob("*.json")):
