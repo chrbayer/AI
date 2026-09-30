@@ -1,0 +1,235 @@
+{
+ "1": {
+  "inputs": {
+   "unet_name": "qwen_image_2.1_bf16.safetensors",
+   "weight_dtype": "default"
+  },
+  "class_type": "UNETLoader",
+  "_meta": {
+   "title": "Load Diffusion Model"
+  }
+ },
+ "2": {
+  "inputs": {
+   "clip_name": "qwen3vl_8b_bf16.safetensors",
+   "type": "qwen_image",
+   "device": "default"
+  },
+  "class_type": "CLIPLoader",
+  "_meta": {
+   "title": "Load CLIP"
+  }
+ },
+ "3": {
+  "inputs": {
+   "vae_name": "qwen_image_2.1_vae_bf16.safetensors"
+  },
+  "class_type": "VAELoader",
+  "_meta": {
+   "title": "Load VAE"
+  }
+ },
+ "4": {
+  "inputs": {
+   "name": "Qwen-Image-2.1-Fun-Controlnet-Union.safetensors"
+  },
+  "class_type": "ModelPatchLoader",
+  "_meta": {
+   "title": "Load Model Patch"
+  }
+ },
+ "5": {
+  "inputs": {
+   "image": "photo.png"
+  },
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "Photo whose layout to keep"
+  }
+ },
+ "6": {
+  "inputs": {
+   "upscale_method": "lanczos",
+   "megapixels": 1,
+   "resolution_steps": 16,
+   "image": [
+    "5",
+    0
+   ]
+  },
+  "class_type": "ImageScaleToTotalPixels",
+  "_meta": {
+   "title": "Scale Image to Total Pixels"
+  }
+ },
+ "7": {
+  "inputs": {
+   "image": [
+    "6",
+    0
+   ]
+  },
+  "class_type": "GetImageSize",
+  "_meta": {
+   "title": "Get Image Size"
+  }
+ },
+ "8": {
+  "inputs": {
+   "strength": 1,
+   "start_percent": 0,
+   "end_percent": 1,
+   "model": [
+    "20",
+    0
+   ],
+   "model_patch": [
+    "4",
+    0
+   ],
+   "vae": [
+    "3",
+    0
+   ],
+   "image": [
+    "14",
+    0
+   ]
+  },
+  "class_type": "ZImageFunControlnet",
+  "_meta": {
+   "title": "Apply Fun ControlNet"
+  }
+ },
+ "9": {
+  "inputs": {
+   "prompt": "The same scene as a watercolour painting, soft washes, visible paper texture",
+   "negative_prompt": "",
+   "resolution": 1024,
+   "clip": [
+    "2",
+    0
+   ]
+  },
+  "class_type": "TextEncodeQwenImage21",
+  "_meta": {
+   "title": "Text Encode Qwen Image 2.1"
+  }
+ },
+ "10": {
+  "inputs": {
+   "width": [
+    "7",
+    0
+   ],
+   "height": [
+    "7",
+    1
+   ],
+   "batch_size": 1
+  },
+  "class_type": "EmptyLatentImage",
+  "_meta": {
+   "title": "Empty Latent Image"
+  }
+ },
+ "11": {
+  "inputs": {
+   "seed": 42,
+   "steps": 4,
+   "cfg": 1,
+   "sampler_name": "euler",
+   "scheduler": "simple",
+   "denoise": 1,
+   "model": [
+    "8",
+    0
+   ],
+   "positive": [
+    "9",
+    0
+   ],
+   "negative": [
+    "9",
+    1
+   ],
+   "latent_image": [
+    "10",
+    0
+   ]
+  },
+  "class_type": "KSampler",
+  "_meta": {
+   "title": "KSampler"
+  }
+ },
+ "12": {
+  "inputs": {
+   "samples": [
+    "11",
+    0
+   ],
+   "vae": [
+    "3",
+    0
+   ]
+  },
+  "class_type": "VAEDecode",
+  "_meta": {
+   "title": "VAE Decode"
+  }
+ },
+ "13": {
+  "inputs": {
+   "filename_prefix": "Qwen_image_2.1_canny_turbo",
+   "images": [
+    "12",
+    0
+   ]
+  },
+  "class_type": "SaveImage",
+  "_meta": {
+   "title": "Save Image"
+  }
+ },
+ "14": {
+  "inputs": {
+   "low_threshold": 0.4,
+   "high_threshold": 0.8,
+   "image": [
+    "6",
+    0
+   ]
+  },
+  "class_type": "Canny",
+  "_meta": {
+   "title": "Detect Edges (Canny)"
+  }
+ },
+ "15": {
+  "inputs": {
+   "images": [
+    "14",
+    0
+   ]
+  },
+  "class_type": "PreviewImage",
+  "_meta": {
+   "title": "Edges"
+  }
+ },
+ "20": {
+  "inputs": {
+   "lora_name": "Qwen-Image-2.1-Fun-Acc-4Step-comfyui.safetensors",
+   "strength_model": 1,
+   "model": [
+    "1",
+    0
+   ]
+  },
+  "class_type": "LoraLoaderModelOnly",
+  "_meta": {
+   "title": "4-step Acc LoRA (alibaba-pai)"
+  }
+ }
+}

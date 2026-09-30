@@ -36,12 +36,15 @@ MODELS = {   # file -> (directory, url), for the loader nodes' download entries
         f"{HF}/Comfy-Org/Qwen-Image-2.1/resolve/main/text_encoders/qwen3vl_8b_bf16.safetensors"),
     "qwen_image_2.1_vae_bf16.safetensors": ("vae",
         f"{HF}/Comfy-Org/Qwen-Image-2.1/resolve/main/vae/qwen_image_2.1_vae_bf16.safetensors"),
+    "Qwen-Image-2.1-Fun-Acc-4Step-comfyui.safetensors": ("loras",
+        f"{HF}/alibaba-pai/Qwen-Image-2.1-Fun-Acc-LoRAs/resolve/"
+        "f7545234760e1847cd8e89e52bd951cb0b7e327f/models/Qwen-Image-2.1-Fun-Acc-4Step.safetensors"),
     "Qwen-Image-2.1-Fun-Controlnet-Union.safetensors": ("model_patches",
         f"{HF}/alibaba-pai/Qwen-Image-2.1-Fun-Controlnet-Union/resolve/"
         "8a4702014d4dabb5f896fcba917e2ee0a961465f/Qwen-Image-2.1-Fun-Controlnet-Union.safetensors"),
 }
 LOADER_INPUT = {"UNETLoader": "unet_name", "CLIPLoader": "clip_name", "VAELoader": "vae_name",
-                "ModelPatchLoader": "name"}
+                "ModelPatchLoader": "name", "LoraLoaderModelOnly": "lora_name"}
 
 
 def base(prompt, prefix):
@@ -127,12 +130,32 @@ def inpaint():
     return g
 
 
+def turbo(make):
+    """The same graph with the 4-step Acc LoRA (converted for ComfyUI by
+    download comfy) between the model and the ControlNet, and 4 euler steps:
+    ~25-38 s instead of 80-95, control and quality held (tried on all five)."""
+    def made():
+        g = make()
+        g["20"] = {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["1", 0], "strength_model": 1.0,
+                   "lora_name": "Qwen-Image-2.1-Fun-Acc-4Step-comfyui.safetensors"}, "_meta": {"title": "4-step Acc LoRA (alibaba-pai)"}}
+        g["8"]["inputs"]["model"] = ["20", 0]
+        g["11"]["inputs"].update(steps=4, sampler_name="euler")
+        g["13"]["inputs"]["filename_prefix"] += "_turbo"
+        return g
+    return made
+
+
 WORKFLOWS = {
     "Qwen-Image 2.1 Control (bf16, dpmpp_2m 14)": control,
     "Qwen-Image 2.1 Canny Control (bf16, dpmpp_2m 14)": canny,
     "Qwen-Image 2.1 Pose Control (bf16, dpmpp_2m 14)": pose,
     "Qwen-Image 2.1 Depth Control (bf16, dpmpp_2m 14)": depth,
     "Qwen-Image 2.1 Inpaint (bf16, dpmpp_2m 14)": inpaint,
+    "Qwen-Image 2.1 Control Turbo (bf16, 4 Schritte)": turbo(control),
+    "Qwen-Image 2.1 Canny Control Turbo (bf16, 4 Schritte)": turbo(canny),
+    "Qwen-Image 2.1 Pose Control Turbo (bf16, 4 Schritte)": turbo(pose),
+    "Qwen-Image 2.1 Depth Control Turbo (bf16, 4 Schritte)": turbo(depth),
+    "Qwen-Image 2.1 Inpaint Turbo (bf16, 4 Schritte)": turbo(inpaint),
 }
 
 
