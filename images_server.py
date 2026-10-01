@@ -111,8 +111,12 @@ def model_files():
             for node in info.values():
                 for section in ("required", "optional"):
                     for key, spec in (node.get("input", {}).get(section) or {}).items():
-                        if key in MODEL_INPUTS and spec and isinstance(spec[0], list):
+                        if key not in MODEL_INPUTS or not spec:
+                            continue
+                        if isinstance(spec[0], list):                  # ["a.safetensors", …]
                             files.setdefault(key, set()).update(spec[0])
+                        elif spec[0] == "COMBO" and len(spec) > 1:      # newer nodes: options apart
+                            files.setdefault(key, set()).update((spec[1] or {}).get("options") or [])
             _have.update(at=time.time(), files=files)
         return _have["files"]
 
@@ -153,7 +157,8 @@ def set_prompt(graph, prompt):
             node["inputs"]["prompt"] = prompt; done = True
     if not done:
         plain = [n for n in graph.values() if n["class_type"] == "CLIPTextEncode"
-                 and "Negative" not in title(n) and isinstance(n["inputs"].get("text"), str)]
+                 and "Negative" not in title(n) and "(fixed)" not in title(n)
+                 and isinstance(n["inputs"].get("text"), str)]
         if plain:
             plain[0]["inputs"]["text"] = prompt; done = True
     return done

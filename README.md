@@ -1091,6 +1091,18 @@ llmctl update comfy --torch           # …and torch itself
   cache its n-gram table is read through — prefill held (1036/1385/1396 t/s
   at 850/6.6K/26K tokens), decode fell 20–30 % (prose 31.5 t/s, code 44)
   while ComfyUI kept the model loaded. Image API: `z-image-turbo`.
+- **Z-Image Turbo 2K Upscale.** `Z-Image Turbo 2K Upscale (bf16, 5 Schritte)` is
+  ComfyUI's own template: RealESRGAN ×4 (67 MB) on the picture scaled to 1 MP,
+  halved, then a light Z-Image Turbo pass (denoise 0.33) that adds detail — a
+  1024² picture comes back at 2048² in ~106 s. Image API:
+  `z-image-turbo-2k-upscale`; it keeps its own prompt ("masterpiece, 8k"), as
+  the request's is usually a placeholder. Compared on three pictures shrunk to
+  384 px, against the originals: it stays faithful and sharp; SeedVR2 is the
+  most faithful and the fastest (30 s, but ×4 from the input: 1536 px here);
+  alibaba-pai's Z-Image **Tile ControlNet** (the same Union 2.1 repo, 6.7 GB),
+  repainting at 2048² from the enlarged picture, invented the most — another
+  face with new wrinkles, a wall in a different wood — in 160 s, so it is not
+  a workflow here.
 - **Z-Image Turbo NSFW.** `Z-Image Turbo NSFW T2I (bf16, 8 Schritte)` is the
   Turbo workflow on tewea's NSFW finetune of its DiT
   (`z_image_turbo_bf16_nsfw_v2`, 12.6 GB, Apache-2.0, pinned; its model card

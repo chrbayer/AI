@@ -310,6 +310,31 @@ class ImageApi(unittest.TestCase):
         self.assertEqual(images.slug("Z-Image T2I (bf16, 25 Schritte)"), ("z-image", "generations"))
         self.assertEqual(images.slug("Z-Image Turbo NSFW T2I (bf16, 8 Schritte)"), ("z-image-turbo-nsfw", "generations"))
 
+    def test_model_lists_in_both_object_info_formats(self):
+        info = {"UNETLoader": {"input": {"required": {"unet_name": [["a.safetensors"], {}]}}},
+                "UpscaleModelLoader": {"input": {"required": {"model_name": ["COMBO", {"options": ["x4.safetensors"]}]}}}}
+        class R:
+            def json(self): return info
+        old_get, images.requests.get = images.requests.get, lambda *a, **k: R()
+        old_comfy = getattr(images.ARGS, "comfy", None)
+        images.ARGS.comfy = "http://127.0.0.1:9"
+        images._have.update(at=0.0, files={})
+        try:
+            files = images.model_files()
+        finally:
+            images.requests.get = old_get
+            images.ARGS.comfy = old_comfy
+            images._have.update(at=0.0, files={})
+        self.assertEqual(files["unet_name"], {"a.safetensors"})
+        self.assertEqual(files["model_name"], {"x4.safetensors"})
+
+    def test_the_2k_upscaler_keeps_its_own_prompt(self):
+        self.assertEqual(images.slug("Z-Image Turbo 2K Upscale (bf16, 5 Schritte)"), ("z-image-turbo-2k-upscale", "edits"))
+        g = api("Z-Image Turbo 2K Upscale (bf16, 5 Schritte).json")
+        images.set_prompt(g, "PROMPT")
+        self.assertNotIn("PROMPT", json.dumps(g))
+        self.assertIn("masterpiece, 8k", json.dumps(g))
+
     def test_a_negative_prompt_only_where_guidance_uses_it(self):
         g = api("Z-Image T2I (bf16, 25 Schritte).json")
         self.assertIn("negative_prompt", images.extras(g))
