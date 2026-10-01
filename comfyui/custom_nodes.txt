@@ -24,3 +24,8 @@ comfyui_controlnet_aux  https://github.com/Fannovel16/comfyui_controlnet_aux  0c
 ComfyUI-Impact-Pack  https://github.com/ltdrdata/ComfyUI-Impact-Pack  429d0159ad429e64d2b3916e6e7be9c22d025c3c  -git+https://github.com/facebookresearch/sam2
 # Its YOLO detectors (ultralytics, AGPL-3.0); models from Bingsu/adetailer.
 ComfyUI-Impact-Subpack  https://github.com/ltdrdata/ComfyUI-Impact-Subpack  50c7b71a6a224734cc9b21963c6d1926816a97f1
+
+# rgthree: comfort in the ComfyUI UI — a progress bar, group bypass/mute,
+# seed control, an image comparer, context nodes, the power lora loader. No
+# models, no requirements. The bundled workflows use none of its nodes.
+rgthree-comfy  https://github.com/rgthree/rgthree-comfy  449c58fcdd612f7733e54c51f6758ead63fa180b

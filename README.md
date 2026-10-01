@@ -1228,6 +1228,14 @@ llmctl update comfy --torch           # …and torch itself
   into `<directory>/<name>`. Because such packs look for their models under
   ComfyUI's base directory rather than `--models-directory`, llmctl links
   `~/.local/share/llmctl/comfyui/models` to the models directory.
+- **rgthree-comfy.** [rgthree-comfy](https://github.com/rgthree/rgthree-comfy)
+  (MIT) adds comfort in the UI and nothing else: a progress bar on top, bypass
+  or mute a whole group with one click, seed control (random, last, fixed),
+  an image comparer with a slider, context nodes that carry model, prompts and
+  latent as one wire, and the power lora loader. No models, no requirements.
+  None of the bundled workflows uses its nodes, and the API export
+  (`export_api.py`) and the workflow builder give the same files with it
+  loaded. Its settings are under the rgthree entry of ComfyUI's settings.
 - **Speech in ComfyUI.** [ComfyUI-Qwen-TTS](https://github.com/flybirdxx/ComfyUI-Qwen-TTS)
   brings Qwen3-TTS; two workflows use it. `Qwen3-TTS Stimme entwerfen` designs
   a voice from a description (VoiceDesign), `Qwen3-TTS Stimme klonen` speaks in
