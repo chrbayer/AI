@@ -1109,6 +1109,41 @@ llmctl update comfy --torch           # …and torch itself
   `probe-reasoning` have nothing to do for it. ComfyUI has no authentication, so
   `--host` beyond localhost warns.
 
+### ComfyUI from the internet (`--tunnel`)
+
+ComfyUI, its image API and the repair page can be reached from outside
+through a server of your own that is on the internet, without opening a
+port here:
+
+```
+Browser ──443 (Let's Encrypt) + Basic Auth──► Apache on the server ──► 127.0.0.1:8009  ComfyUI
+                                                                   └─► 127.0.0.1:8089  /repair, /v1/images
+                         autossh -R 8009, -R 8089 ◄── this machine (connects out)
+```
+
+`llmctl start comfy 9 --proxy --vision 2 --tunnel` starts autossh beside the
+slot: `-R 8009:127.0.0.1:8009` for the UI and, with `--proxy`, `-R 8089:…`
+for the image API with its repair page — on the server bound to its loopback
+only. The server comes from `LLMCTL_TUNNEL_HOST` or
+`~/.config/llmctl/tunnel-host` (`user@host`, a key that logs in without a
+prompt). `stop` ends the tunnel with the slot, `status` shows it. A port the
+far side still holds from a session that died unnoticed makes the first try
+fail (`ExitOnForwardFailure`); llmctl clears its own leftovers and tries again
+after a pause.
+
+`deploy/vps-comfy-vhost.conf` is the Apache side: its own name with a Let's
+Encrypt certificate, **Basic Auth in front of everything** — ComfyUI has no
+login, and whoever reaches it runs workflows and uploads files — the
+websocket, `/repair` and `/v1/images/` to the image API, one-hour timeouts
+for the long jobs and 200 MB request bodies for pictures. The repair page
+calls the image API from the browser with the same credentials; OpenAI
+clients from outside send none, so the API stays closed to them. Its
+*Vision starten/stoppen* buttons work from outside too: they run llmctl here.
+
+Tried: the tunnel up in 3 s, 8009 and 8089 listening on the server's
+loopback, UI, repair page and its status answering there; `stop` freed both
+ports on the server and left no ssh behind; a restart came up at once.
+
 ### Which model for a picture
 
 The text-to-image models side by side, one session, the machine to itself,

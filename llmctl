@@ -2,7 +2,7 @@
 # llmctl — LLM server manager for Claude Code.
 # Usage:
 #   llmctl                                     list available models
-#   llmctl start <name> [slot] [--proxy] [--compact] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--temp F] [--top-p F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec] [--output DIR] [--vision SLOT|URL]  start server (+ proxy with --proxy) in background (slot N, default 1)
+#   llmctl start <name> [slot] [--proxy] [--compact] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--temp F] [--top-p F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec] [--output DIR] [--vision SLOT|URL] [--tunnel]  start server (+ proxy with --proxy) in background (slot N, default 1)
 #   llmctl preset <name> [--dry-run] [--force] [--wait N] [--proxy] [--public] [--host ADDR] [--clear-logs] [--verbose] [--gpu-priority L] [--output DIR]  bring the machine to a whole configuration from presets.conf: keep what already matches, stop the rest, start what is missing
 #   llmctl preset-save <name> [--label TEXT] [--dry-run] [--force]  write the running configuration to presets.conf as a preset
 #   llmctl presets                             list the defined presets
@@ -81,6 +81,13 @@ PUBLIC_MAX_PREDICT_DEFAULT=8192   # --public caps generation length unless --max
 # llama-server's --timeout, and so also how long its proxy waits for it: the
 # proxy's own default of 300 s would cut off a prefill the server still allows.
 LLAMA_SERVER_TIMEOUT=600
+
+# ── Reverse tunnel (--tunnel) ───────────────────────────────
+# A ComfyUI slot made reachable through a server on the internet: autossh opens
+# -R PORT:127.0.0.1:PORT there for the UI (and the image API with its repair
+# page), and that server's web server puts its own TLS and a login in front
+# (deploy/vps-comfy-vhost.conf). Nothing listens beyond 127.0.0.1 here.
+TUNNEL_HOST="${LLMCTL_TUNNEL_HOST:-$(cat "$CONFIG_DIR/tunnel-host" 2>/dev/null)}"
 
 # ── How many slots ──────────────────────────────────────────
 # As many as the ports allow. Server and proxy ports interleave from their two
@@ -979,6 +986,9 @@ _start_comfyui() {
     if [[ "$start_proxy" == true ]]; then
         _start_images_server "$slot" "$host" || { _stop_slot "$slot" > /dev/null; exit 1; }
     fi
+    if [[ "$tunnel" == true ]]; then
+        _start_tunnel "$slot" || { _stop_slot "$slot" > /dev/null; exit 1; }
+    fi
     echo ""
     echo "  UI:    $url"
     [[ "$start_proxy" == true ]] && \
@@ -1237,6 +1247,54 @@ _start_images_server() {
     done
     echo "Error: the image API did not listen on port $port_proxy within 10 s. See $log"
     return 1
+}
+
+# The autossh pattern of one forwarded port: what pkill matches to find a tunnel
+# left from an earlier start — autossh's ssh child carries it too, and that is
+# what holds the port on the far side.
+_tunnel_pattern() { echo "-R $1:127.0.0.1:$1"; }
+
+# autossh for a ComfyUI slot: its UI port, and the image API's when it runs.
+# ExitOnForwardFailure makes a port still held on the far side (a session that
+# died without the server noticing) an error rather than a tunnel without a
+# forward; one more try after a pause, as that session times out.
+_start_tunnel() {
+    local slot="$1"
+    local port_server=$(( PORT_BASE_SERVER + slot )) port_proxy=$(( PORT_BASE_PROXY + slot ))
+    local log="$LOG_DIR/tunnel-${slot}.log" pid="" try p
+    local -a fwd=(-R "$port_server:127.0.0.1:$port_server")
+    local ports=":$port_server"
+    if ss -tlnp 2>/dev/null | grep -q ":${port_proxy} "; then
+        fwd+=(-R "$port_proxy:127.0.0.1:$port_proxy"); ports+=", :$port_proxy"
+    fi
+    _check_deps autossh || return 1
+    for try in 1 2; do
+        for p in $port_server $port_proxy; do pkill -f -- "$(_tunnel_pattern "$p")" 2>/dev/null; done
+        sleep 1
+        pid=$(_spawn_detached "$PID_DIR/tunnel-${slot}.pid" "$log" truncate \
+            env AUTOSSH_GATETIME=0 autossh -N -M 0 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+                -o ExitOnForwardFailure=yes -o BatchMode=yes "${fwd[@]}" "$TUNNEL_HOST")
+        sleep 3
+        if [[ -n "$pid" ]] && ps -p "$pid" > /dev/null 2>&1; then
+            echo "Tunnel running (PID: $pid) to $TUNNEL_HOST, forwarding $ports"
+            return 0
+        fi
+        (( try == 1 )) && { echo "  tunnel did not hold — the far side may still have the port; again in 5 s"; sleep 5; }
+    done
+    echo "Error: the tunnel to $TUNNEL_HOST did not come up. See $log"
+    return 1
+}
+
+_stop_tunnel() {
+    local slot="$1" pid="" p
+    [[ -f "$PID_DIR/tunnel-${slot}.pid" ]] && pid=$(cat "$PID_DIR/tunnel-${slot}.pid")
+    rm -f "$PID_DIR/tunnel-${slot}.pid"
+    [[ -n "$pid" ]] && ps -p "$pid" > /dev/null 2>&1 || return 1
+    kill "$pid" 2>/dev/null
+    for p in $(( PORT_BASE_SERVER + slot )) $(( PORT_BASE_PROXY + slot )); do
+        pkill -f -- "$(_tunnel_pattern "$p")" 2>/dev/null
+    done
+    echo "Slot $slot: tunnel (PID: $pid) stopped."
 }
 
 # Start proxy.py for one slot and wait until it listens. Its own function so
@@ -1566,6 +1624,7 @@ cmd_start() {
     local ignore_memory=false   # skip the memory check beside halogen (preset checks the set itself)
     local vision=""             # comfyui: slot or URL of a vision model for the image API's /check
     local vision_slot=""        # … its slot, when given as one: /repair starts and stops it there
+    local tunnel=false          # comfyui: reverse tunnel to $TUNNEL_HOST (see deploy/vps-comfy-vhost.conf)
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -1595,6 +1654,7 @@ cmd_start() {
             --seed) _need_value "$@" || exit 1; seed="$2"; shift 2 ;;
             --ignore-memory) ignore_memory=true; shift ;;
             --vision) _need_value "$@" || exit 1; vision="$2"; shift 2 ;;
+            --tunnel) tunnel=true; shift ;;
             -*) echo "Unknown option: $1"; exit 1 ;;
             *) if [[ -z "$name" ]]; then name="$1"; elif [[ "$slot" == "1" ]]; then slot="$1"; fi; shift ;;
         esac
@@ -1644,6 +1704,14 @@ cmd_start() {
     local port_proxy=$(( PORT_BASE_PROXY + slot ))
 
     _resolve_model "$name" || { echo "Unknown model: $name"; cmd_list; exit 1; }
+    if [[ "$tunnel" == true ]]; then
+        [[ "$_r_backend" == comfyui ]] || { echo "Error: --tunnel is for comfyui models"; exit 1; }
+        if [[ -z "$TUNNEL_HOST" ]]; then
+            echo "Error: --tunnel needs the server to tunnel to: LLMCTL_TUNNEL_HOST, or"
+            echo "       echo user@host > $CONFIG_DIR/tunnel-host"
+            exit 1
+        fi
+    fi
     if [[ -n "$vision" ]]; then
         [[ "$_r_backend" == comfyui && "$start_proxy" == true ]] || \
             { echo "Error: --vision is for the image API: a comfyui model started with --proxy"; exit 1; }
@@ -2153,6 +2221,7 @@ _stop_slot() {
     fi
 
     _stop_proxy "$slot" && stopped=$(( stopped + 1 ))
+    _stop_tunnel "$slot" && stopped=$(( stopped + 1 ))
 
     # Stop the TLS front — closing the public port first would be nicer, but the
     # slot is going down either way and stunnel is the cheapest to restart.
@@ -3572,6 +3641,13 @@ cmd_status() {
             echo "Slot $slot: stunnel     (PID: $stunnel_pid) on $tls_ports  [public, mTLS]"
             found=1
         fi
+
+        local tunnel_pid=""
+        [[ -f "$PID_DIR/tunnel-${slot}.pid" ]] && tunnel_pid=$(cat "$PID_DIR/tunnel-${slot}.pid")
+        if [[ -n "$tunnel_pid" ]] && ps -p "$tunnel_pid" > /dev/null 2>&1; then
+            echo "Slot $slot: tunnel      (PID: $tunnel_pid) to $TUNNEL_HOST"
+            found=1
+        fi
     done
     [[ "$found" -eq 0 ]] && echo "Nothing running."
     # Explicit, or the guard above would make a slot that IS running exit 1.
@@ -3631,7 +3707,7 @@ cmd__complete() {
             case $k in 0) _complete_models ;; 1) echo "$slot_nums" ;; esac
             printf '%s\n' --ignore-memory --proxy --public --compact --max-predict --reasoning --no-reasoning --reasoning-budget \
                 --parallel --ctx --cache-ram --similarity --verbose --clear-logs --host --gpu-priority --mmproj \
-                --spec --no-spec --temp --top-p --print-cmd --output --lang --seed --vision ;;
+                --spec --no-spec --temp --top-p --print-cmd --output --lang --seed --vision --tunnel ;;
         preset)
             (( k == 0 )) && { local e; for e in "${_PRESETS[@]}"; do echo "${e%%|*}"; done; }
             printf '%s\n' --dry-run --force --repair --wait --output --proxy --public --host --clear-logs --verbose --gpu-priority ;;
@@ -4873,6 +4949,7 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "    only --host, --verbose, --clear-logs, --output DIR (where images go) and --proxy apply;"
     printf "  %-20s %s\n" ""                      "    --proxy: OpenAI image API (/v1/images/generations, /edits) on the proxy port"
     printf "  %-20s %s\n" ""                      "    --vision SLOT|URL: a vision model (flash with --mmproj) for /v1/images/check"
+    printf "  %-20s %s\n" ""                      "    --tunnel: autossh -R to \$LLMCTL_TUNNEL_HOST (or ~/.config/llmctl/tunnel-host) for the UI and image API"
     printf "  %-20s %s\n" ""                      "    Every llama start unloads its models first"
     printf "  %-20s %s\n" ""                      "  audiocpp models (backend=audiocpp) run audio.cpp: /v1/audio/transcriptions and …/live"
     printf "  %-20s %s\n" ""                      "    (live speech recognition); only --host and --clear-logs apply"
