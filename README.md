@@ -915,6 +915,13 @@ llmctl update comfy --torch           # …and torch itself
     colours were known, and an old family photograph: skin, sky, trees,
     jeans and the dog's coat came out close to the originals. Turbo 25 s,
     14 steps 79 s, alike enough that Turbo is the one to use.
+    It colours what is there and mends nothing: a face already smeared in
+    the photo comes back smeared, in colour. The Detailer does not save one
+    either — on a face 80 px tall it repaints the smear (at 0.75 a hint of
+    eyes, while the sharp faces around turn into other people). Inpaint
+    does: a box over the face and a description ("a smiling middle-aged
+    woman with light wavy hair") gave a clear face in 25 s — a new one,
+    plausible, a little sharper than the grainy photo around it.
   - `Qwen-Image 2.1 Outpaint`: extend a picture beyond its edges. The canvas
     is padded (256 px left and right by default, set per side on the "New
     border" node) and the new border inpainted; the prompt describes the whole
