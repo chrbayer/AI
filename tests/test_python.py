@@ -303,6 +303,7 @@ class ImageApi(unittest.TestCase):
                          ("qwen-image-21-detailer", "edits"))
         self.assertEqual(images.slug("Qwen-Image 2.1 Colorize Turbo (bf16, 4 Schritte)"),
                          ("qwen-image-21-colorize-turbo", "edits"))
+        self.assertEqual(images.slug("Z-Image Turbo T2I (bf16, 8 Schritte)"), ("z-image-turbo", "generations"))
         self.assertEqual(images.slug("Qwen-Image 2.1 Pose Inpaint Turbo (bf16, 4 Schritte)"),
                          ("qwen-image-21-pose-inpaint-turbo", "edits"))
         for kind in ("Canny", "Pose", "Depth"):

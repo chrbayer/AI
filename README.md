@@ -1014,6 +1014,17 @@ llmctl update comfy --torch           # …and torch itself
   transparent. Through the image API as `qwen-image-21-background-removal`: the
   prompt is the instruction, so send that sentence; the PNG comes back with
   transparency.
+- **Z-Image Turbo.** `Z-Image Turbo T2I (bf16, 8 Schritte)` is ComfyUI's own
+  template for Tongyi-MAI's Z-Image-Turbo (6B, Apache-2.0): photorealistic,
+  8 steps, text-to-image only. 20.7 GB of models (12.3 the DiT, 8.0 the
+  Qwen3-4B encoder, 0.3 the VAE). 18 s per 1024² image, 21 s with loading —
+  on a par with Qwen-Image 2.1 Turbo, with a look of its own (a lighthouse,
+  an old fisherman, a bookshop, a spice market came out clean, faces and
+  hands included). **It runs beside flash**: 19–20 s per image there, no
+  swap to the SSD, but it leaves flash 11.5 GiB instead of 31 for the page
+  cache its n-gram table is read through — prefill held (1036/1385/1396 t/s
+  at 850/6.6K/26K tokens), decode fell 20–30 % (prose 31.5 t/s, code 44)
+  while ComfyUI kept the model loaded. Image API: `z-image-turbo`.
 - **Qwen-Image 2.1 in 4 steps.** `Qwen-Image 2.1 [Heretic] T2I/Edit Turbo (bf16,
   4 Schritte)` add alibaba-pai's official 4-step Acc LoRA and sample 4 steps
   with `euler`: a 1024² image in 16 s instead of 70, an edit in 47 s instead
@@ -1117,7 +1128,8 @@ r = img.images.edit(model="flux2-klein-9b", image=open("turm.png", "rb"),
 - **Models are the bundled workflows**, named after them: `flux2-klein-9b`,
   `flux2-klein-9b-nsfw`, `flux2-dev`, `flux2-dev-turbo`, `flux2-dev-nsfw`,
   `qwen-image-21`, `qwen-image-21-heretic`, `qwen-image-21-turbo`,
-  `qwen-image-21-heretic-turbo` for generations and edits,
+  `qwen-image-21-heretic-turbo` for generations and edits, `z-image-turbo`
+  for generations,
   `qwen-image-21-control`, `qwen-image-21-canny-control`,
   `qwen-image-21-pose-control`, `qwen-image-21-depth-control`,
   `qwen-image-21-colorize` and
