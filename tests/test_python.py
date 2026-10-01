@@ -310,6 +310,18 @@ class ImageApi(unittest.TestCase):
         self.assertEqual(images.slug("Z-Image T2I (bf16, 25 Schritte)"), ("z-image", "generations"))
         self.assertEqual(images.slug("Z-Image Turbo NSFW T2I (bf16, 8 Schritte)"), ("z-image-turbo-nsfw", "generations"))
 
+    def test_layered_takes_a_layer_count(self):
+        self.assertEqual(images.slug("Qwen-Image Layered (bf16, 20 Schritte)"), ("qwen-image-layered", "edits"))
+        g = api("Qwen-Image Layered (bf16, 20 Schritte).json")
+        self.assertIn("layers", images.extras(g))
+        images.set_layers(g, "4")
+        self.assertEqual({n["inputs"]["layers"] for n in g.values() if n["class_type"] == "EmptyQwenImageLayeredLatentImage"}, {4})
+        for bad in (0, 9, "many"):
+            with self.subTest(bad), self.assertRaises(images.Refused):
+                images.set_layers(g, bad)
+        with self.assertRaises(images.Refused):
+            images.set_layers(api("Qwen-Image 2.1 Edit (bf16, dpmpp_2m 14).json"), 3)
+
     def test_model_lists_in_both_object_info_formats(self):
         info = {"UNETLoader": {"input": {"required": {"unet_name": [["a.safetensors"], {}]}}},
                 "UpscaleModelLoader": {"input": {"required": {"model_name": ["COMBO", {"options": ["x4.safetensors"]}]}}}}

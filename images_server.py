@@ -6,7 +6,8 @@
     POST /v1/images/edits         multipart: image (or image[]), mask, prompt, model, n, seed
                                   or JSON: "images": ["data:image/png;base64,...", ...], "mask"
                                   extra: "strength" (ControlNet), "pad" (Outpaint),
-                                  "boxes" + "margin" (Inpaint: a mask made of rectangles)
+                                  "boxes" + "margin" (Inpaint: a mask made of rectangles),
+                                  "layers" (Layered: how many RGBA layers come back)
     POST /v1/images/check         image (+ prompt, max_area): the artifacts a vision model sees,
                                   with boxes to repaint and a prompt for each (needs --vision)
     GET  /v1/models               the workflows whose models ComfyUI has, and the
@@ -84,7 +85,7 @@ def slug(stem):
     name = re.sub(r"\(.*?\)", "", stem)
     # Workflows that start from an image: edits, the upscaler, the detailer, and
     # the ControlNet ones (a control image, a photo's edges, an image to inpaint).
-    kind = "edits" if re.search(r"\b(Edit|Upscale|Control|Canny|Inpaint|Outpaint|Removal|Detailer|Colorize)\b", name) else "generations"
+    kind = "edits" if re.search(r"\b(Edit|Upscale|Control|Canny|Inpaint|Outpaint|Removal|Detailer|Colorize|Layered)\b", name) else "generations"
     name = re.sub(r"\b(T2I|Edit)\b", "", name)
     name = re.sub(r"[^a-z0-9]+", "-", name.lower().replace(".", "")).strip("-")
     return name, kind
@@ -267,6 +268,8 @@ def extras(graph):
         out.append("strength")
     if "ImagePadForOutpaint" in kinds:
         out.append("pad")
+    if "EmptyQwenImageLayeredLatentImage" in kinds:
+        out.append("layers")
     return out
 
 
@@ -311,6 +314,26 @@ def set_strength(graph, strength):
         raise Refused(f"strength is 0 to {STRENGTH_MAX:g}")
     for node in nodes:
         node["inputs"]["strength"] = strength
+
+
+LAYERS_MAX = 8
+
+
+def set_layers(graph, layers):
+    """How many RGBA layers Qwen-Image-Layered splits the picture into: the
+    background and one per thing. More than the scene holds gives empty or
+    doubled ones; two suit a person in front of a scene, four a poster."""
+    nodes = [n for n in graph.values() if n["class_type"] == "EmptyQwenImageLayeredLatentImage"]
+    if not nodes:
+        raise Refused("this workflow does not split into layers — the Layered one does")
+    try:
+        layers = int(layers)
+    except (TypeError, ValueError):
+        raise Refused(f"layers is a number, not '{layers}'") from None
+    if not 1 <= layers <= LAYERS_MAX:
+        raise Refused(f"layers is 1 to {LAYERS_MAX}")
+    for node in nodes:
+        node["inputs"]["layers"] = layers
 
 
 def set_pad(graph, pad):
@@ -401,7 +424,7 @@ def upload(data):
 
 
 def prepare(graph, prompt, size, images, mask=None, strength=None, pad=None, boxes=None, margin=None,
-            negative_prompt=None):
+            negative_prompt=None, layers=None):
     for key in [k for k, n in graph.items() if n["class_type"] in UI_ONLY]:
         del graph[key]
     for node in graph.values():               # into temp, not the user's output
@@ -436,6 +459,8 @@ def prepare(graph, prompt, size, images, mask=None, strength=None, pad=None, box
         set_strength(graph, strength)
     if pad is not None:
         set_pad(graph, pad)
+    if layers not in (None, ""):
+        set_layers(graph, layers)
     if not any(n["class_type"] == "PreviewImage" for n in graph.values()):
         raise Refused("with these images the workflow has nothing left to produce")
 
@@ -560,6 +585,7 @@ def edits():
             mask = request.files["mask"].read() if "mask" in request.files else None
             strength, pad = f.get("strength") or None, f.get("pad") or None
             negative = f.get("negative_prompt")
+            layers = f.get("layers")
             boxes, margin = f.get("boxes") or None, f.get("margin")
         else:
             j = request.get_json(silent=True) or {}
@@ -570,11 +596,12 @@ def edits():
             mask = data_url(j["mask"]) if j.get("mask") else None
             strength, pad = j.get("strength"), j.get("pad")
             negative = j.get("negative_prompt")
+            layers = j.get("layers")
             boxes, margin = j.get("boxes"), j.get("margin")
         return respond(model or default_model("edits"), "edits", prompt, size, n,
                        seed if seed in (None, "") else int(seed), fmt, images,
                        mask=mask, strength=strength, pad=pad, boxes=boxes, margin=margin,
-                       negative_prompt=negative)
+                       negative_prompt=negative, layers=layers)
     return handle(go)
 
 

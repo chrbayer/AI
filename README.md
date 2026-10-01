@@ -1091,6 +1091,28 @@ llmctl update comfy --torch           # …and torch itself
   cache its n-gram table is read through — prefill held (1036/1385/1396 t/s
   at 850/6.6K/26K tokens), decode fell 20–30 % (prose 31.5 t/s, code 44)
   while ComfyUI kept the model loaded. Image API: `z-image-turbo`.
+- **Qwen-Image Layered.** `Qwen-Image Layered (bf16, 20 Schritte)` is ComfyUI's
+  template for Qwen's Qwen-Image-Layered (20B, Apache-2.0): it splits a
+  picture into RGBA layers — the background with what stood in front of it
+  filled in, and each thing on a layer of its own with transparency, to move,
+  recolour, replace or reuse without touching the rest. 50 GB of models (40.9
+  the DiT, 9 the Qwen2.5-VL-7B encoder it needs, 0.3 the VAE). It works at 640
+  px; four layers take ~6.5 min, three ~5.5. The prompt describes the picture.
+  Tried, four layers each:
+  - a concert poster: the dark background, the stars and small print, the
+    title complete — also where the guitar had covered it — and the guitar
+    cut out;
+  - a living room: the room without lamp, armchair and sofa (wall and floor
+    behind them filled in), then each of the three on its own;
+  - a woman on a street: the street without her, completed, and her cut out
+    cleanly — but layers three and four were a white blob and her coat once
+    more. **More layers than the scene holds give junk**: two suit a person in
+    front of a scene, four a poster or a room.
+
+  The template makes two; the image API takes `layers` (1–8) and answers with
+  one transparent PNG per layer, background first. Image API:
+  `qwen-image-layered`. Its sibling that pulls one named thing out of a
+  picture (`image_qwen_image_layered_control`, another 40 GB) is not set up.
 - **Z-Image Turbo 2K Upscale.** `Z-Image Turbo 2K Upscale (bf16, 5 Schritte)` is
   ComfyUI's own template: RealESRGAN ×4 (67 MB) on the picture scaled to 1 MP,
   halved, then a light Z-Image Turbo pass (denoise 0.33) that adds detail — a
