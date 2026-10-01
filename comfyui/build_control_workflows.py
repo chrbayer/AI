@@ -127,6 +127,18 @@ def depth():
     return g
 
 
+def colorize():
+    """A black-and-white photo in colour: its luminance (comfyui_controlnet_aux's
+    Image Luminance) is the control, so every detail stays; the colours come
+    from the prompt."""
+    g = base("The same photograph in natural colour, realistic skin tones, colour film", "Qwen_image_2.1_colorize")
+    g["5"] = {"class_type": "LoadImage", "inputs": {"image": "bw.png"}, "_meta": {"title": "Black-and-white photo"}}
+    g["14"] = {"class_type": "ImageLuminanceDetector", "inputs": {"image": ["6", 0], "gamma_correction": 1.0, "resolution": 1024}}
+    g["15"] = {"class_type": "PreviewImage", "inputs": {"images": ["14", 0]}, "_meta": {"title": "Luminance"}}
+    g["8"]["inputs"]["image"] = ["14", 0]
+    return g
+
+
 def inpaint():
     """Repaint where the mask is (drawn in the mask editor, or transparent in
     the PNG); the prompt describes the whole picture."""
@@ -231,12 +243,14 @@ WORKFLOWS = {
     "Qwen-Image 2.1 Pose Control (bf16, dpmpp_2m 14)": pose,
     "Qwen-Image 2.1 Depth Control (bf16, dpmpp_2m 14)": depth,
     "Qwen-Image 2.1 Inpaint (bf16, dpmpp_2m 14)": inpaint,
+    "Qwen-Image 2.1 Colorize (bf16, dpmpp_2m 14)": colorize,
     "Qwen-Image 2.1 Outpaint (bf16, dpmpp_2m 14)": outpaint,
     "Qwen-Image 2.1 Control Turbo (bf16, 4 Schritte)": turbo(control),
     "Qwen-Image 2.1 Canny Control Turbo (bf16, 4 Schritte)": turbo(canny),
     "Qwen-Image 2.1 Pose Control Turbo (bf16, 4 Schritte)": turbo(pose),
     "Qwen-Image 2.1 Depth Control Turbo (bf16, 4 Schritte)": turbo(depth),
     "Qwen-Image 2.1 Inpaint Turbo (bf16, 4 Schritte)": turbo(inpaint),
+    "Qwen-Image 2.1 Colorize Turbo (bf16, 4 Schritte)": turbo(colorize),
     "Qwen-Image 2.1 Outpaint Turbo (bf16, 4 Schritte)": turbo(outpaint),
     "Artifact Check (flash)": artifact_check,
     "Qwen-Image 2.1 Detailer (bf16, dpmpp_2m 14)": detailer,

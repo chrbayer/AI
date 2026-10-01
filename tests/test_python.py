@@ -301,6 +301,8 @@ class ImageApi(unittest.TestCase):
                          ("qwen-image-21-background-removal", "edits"))
         self.assertEqual(images.slug("Qwen-Image 2.1 Detailer (bf16, dpmpp_2m 14)"),
                          ("qwen-image-21-detailer", "edits"))
+        self.assertEqual(images.slug("Qwen-Image 2.1 Colorize Turbo (bf16, 4 Schritte)"),
+                         ("qwen-image-21-colorize-turbo", "edits"))
 
     def test_the_detailer_keeps_its_own_prompts(self):
         g = api("Qwen-Image 2.1 Detailer (bf16, dpmpp_2m 14).json")

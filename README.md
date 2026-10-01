@@ -904,6 +904,17 @@ llmctl update comfy --torch           # …and torch itself
     style, freer than Canny, which holds every edge. Tried: a modern living
     room became an alpine cabin, sofa, table, lamp, window and shelves where
     they were.
+  - `Qwen-Image 2.1 Colorize`: a black-and-white photo in colour. Its
+    luminance (Image Luminance, from comfyui_controlnet_aux) is the control,
+    so every line and texture stays; the prompt says what colours to give —
+    the default asks for natural colour film, name the dress, car or sky
+    for more. Strength 1.0, the default, is the faithful one: faces, ages
+    and grey hair kept, colours a little reserved; at 0.8 livelier and
+    mostly true, at 0.6 it invents (a bouquet in a 1950s family's hands,
+    pink on a grey cat). Tried on four pictures turned grey, whose real
+    colours were known, and an old family photograph: skin, sky, trees,
+    jeans and the dog's coat came out close to the originals. Turbo 25 s,
+    14 steps 79 s, alike enough that Turbo is the one to use.
   - `Qwen-Image 2.1 Outpaint`: extend a picture beyond its edges. The canvas
     is padded (256 px left and right by default, set per side on the "New
     border" node) and the new border inpainted; the prompt describes the whole
@@ -1084,7 +1095,8 @@ r = img.images.edit(model="flux2-klein-9b", image=open("turm.png", "rb"),
   `qwen-image-21`, `qwen-image-21-heretic`, `qwen-image-21-turbo`,
   `qwen-image-21-heretic-turbo` for generations and edits,
   `qwen-image-21-control`, `qwen-image-21-canny-control`,
-  `qwen-image-21-pose-control`, `qwen-image-21-depth-control` and
+  `qwen-image-21-pose-control`, `qwen-image-21-depth-control`,
+  `qwen-image-21-colorize` and
   `qwen-image-21-inpaint`, `qwen-image-21-outpaint` (256 px left and right)
   and `qwen-image-21-background-removal` for edits (each also as `…-turbo`)
   (the image is the control image, the photo or the picture to inpaint —

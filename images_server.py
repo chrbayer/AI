@@ -83,7 +83,7 @@ def slug(stem):
     name = re.sub(r"\(.*?\)", "", stem)
     # Workflows that start from an image: edits, the upscaler, the detailer, and
     # the ControlNet ones (a control image, a photo's edges, an image to inpaint).
-    kind = "edits" if re.search(r"\b(Edit|Upscale|Control|Canny|Inpaint|Outpaint|Removal|Detailer)\b", name) else "generations"
+    kind = "edits" if re.search(r"\b(Edit|Upscale|Control|Canny|Inpaint|Outpaint|Removal|Detailer|Colorize)\b", name) else "generations"
     name = re.sub(r"\b(T2I|Edit)\b", "", name)
     name = re.sub(r"[^a-z0-9]+", "-", name.lower().replace(".", "")).strip("-")
     return name, kind
