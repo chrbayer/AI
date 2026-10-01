@@ -1109,6 +1109,32 @@ llmctl update comfy --torch           # …and torch itself
   `probe-reasoning` have nothing to do for it. ComfyUI has no authentication, so
   `--host` beyond localhost warns.
 
+### Which model for a picture
+
+The text-to-image models side by side, one session, the machine to itself,
+1024×1024, seed 42, each model's own workflow: a red fox in snow at morning
+light, an old fisherman's portrait at a harbour, and a shop sign reading
+"Bäckerei Sonnenschein – frisch seit 1952". Times are per image; the fox
+includes loading the model.
+
+| Model | Fox | Fisherman | Sign | Spelling of the sign | Look |
+| --- | --- | --- | --- | --- | --- |
+| FLUX.2 klein 9B | 40 s | 20 s | 41 s | "Sonnenschin" | vivid, warm light, a little polished |
+| FLUX.2 dev Turbo | 170 s | 149 s | 157 s | right | close to dev; coloured specks on the fisherman's cap |
+| FLUX.2 dev | 305 s | 288 s | 302 s | right | the best light and the sharpest faces |
+| Qwen-Image 2.1 Turbo | 36 s | 17 s | 36 s | unreadable | grainy, darker, documentary |
+| Qwen-Image 2.1 | 52 s | 51 s | 51 s | right | clean, flat light, bare backgrounds |
+| Qwen-Image 2.1 Heretic | 57 s | 51 s | 57 s | right ("frischseit" tight) | as Qwen-Image for these prompts |
+| Z-Image Turbo | 29 s | 18 s | 30 s | "Sonnenschen" | the most natural photographs, fine skin, soft background |
+
+- **Photographs, fast:** Z-Image Turbo — the best look per second here.
+- **The best picture, time no matter:** FLUX.2 dev, five minutes an image.
+- **Text in the picture, German with umlauts:** Qwen-Image 2.1 at 14 steps
+  (51 s) or FLUX.2 dev; Z-Image and klein drop a letter, Qwen-Image Turbo's
+  4-step LoRA breaks the lettering altogether.
+- **Editing, control, inpainting, colouring, details:** Qwen-Image 2.1 — the
+  ControlNet, Inpaint, Detailer and Colorize workflows are built on it.
+
 ### The image API (`--proxy`)
 
 `llmctl start comfy 9 --proxy` also starts `images_server.py` on the slot's
