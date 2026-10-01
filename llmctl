@@ -369,6 +369,7 @@ COMFYUI_TORCH_INDEX="https://download.pytorch.org/whl/rocm7.2"
 COMFYUI_MODELS_SCRIPT="$LIB_DIR/comfyui_models.py"
 COMFYUI_SHARE="$SHARE_DIR/comfyui"      # bundled workflows/ and patches/
 IMAGES_SERVER_SCRIPT="$LIB_DIR/images_server.py"   # OpenAI image API, a comfyui slot's --proxy
+HF_PARTS_SCRIPT="$LIB_DIR/hf_parts.py"   # joins *.partNofM downloads, keeps their hashes
 # What the image API's /repair page starts on the --vision slot, with --mmproj.
 VISION_MODEL="${LLMCTL_VISION_MODEL:-flash}"
 # Not /tmp: that is a small tmpfs here, and pip unpacks multi-GB torch wheels.
@@ -3826,9 +3827,8 @@ cmd_prune() {
             for r in "${refs[@]}"; do [[ "$r" == "$p" || "$r" == "$first" || "$p" == "$r/"* ]] && { named=true; break; }; done
             [[ "$named" == true ]] && continue
             cand+=("$p"); why+=("no entry in models.conf names it")
-        # Not the parts of a joined download (*.gguf.partNofM): download checks
-        # for them and fetches them again when they are gone — then as blocks
-        # of their own, where now they share the joined file's.
+        # Only *.gguf: the parts of a joined download are gone after the join, and
+        # its X.gguf.parts.json (their hashes, for download --check) is no model.
         done < <(find "$d" -maxdepth 2 -type f -name '*.gguf' -not -path '*/.cache/*' -print0 | sort -z)
     done
     # ComfyUI: what its installed workflows do not name.
@@ -4987,6 +4987,15 @@ _download_model() {
     for pat in "${include_pats[@]}"; do
         include_args+=(--include "$pat")
     done
+    # Parts of a joined file (X.gguf.partNofM) are gone after the join; its
+    # X.gguf.parts.json names them. While the Hub still has exactly those, they
+    # are not to be fetched again.
+    local x
+    if [[ -d "$model_path" && -z "$force" ]]; then
+        while IFS= read -r x; do
+            [[ -n "$x" ]] && include_args+=(--exclude "$x")
+        done < <(python3 "$HF_PARTS_SCRIPT" excludes "$repo" "$model_path" 2>/dev/null)
+    fi
 
     # --check: hf compares with what is in the directory and fetches nothing.
     if [[ "$DL_CHECK" == true ]]; then
@@ -5020,6 +5029,17 @@ _download_model() {
                         END { if (small) printf "    and %d small file(s)\n", small }' <<< "$out"
             DL_PENDING=$(( DL_PENDING + 1 ))
         fi
+        # Joined files: their parts against the Hub, not against local parts.
+        if [[ -d "$model_path" ]]; then
+            local state file count
+            while IFS=$'\t' read -r state file count; do
+                case "$state" in
+                    current) echo "    $file: joined from $count, the same on the Hub" ;;
+                    changed) echo "    $file: its parts changed on the Hub — download fetches and joins them again" ;;
+                    unknown) echo "    $file" ;;
+                esac
+            done < <(python3 "$HF_PARTS_SCRIPT" check "$repo" "$model_path" 2>/dev/null)
+        fi
         return 0
     fi
 
@@ -5027,10 +5047,12 @@ _download_model() {
     mkdir -p "$model_path"
 
     if [[ -n "$force" ]]; then
-        HF_FORCE_DOWNLOAD=1 hf download "$repo" --local-dir "$model_path" "${include_args[@]}"
+        HF_FORCE_DOWNLOAD=1 hf download "$repo" --local-dir "$model_path" "${include_args[@]}" || return 1
     else
-        hf download "$repo" --local-dir "$model_path" "${include_args[@]}"
+        hf download "$repo" --local-dir "$model_path" "${include_args[@]}" || return 1
     fi
+    # Parts on the Hub: checked, joined with cat, recorded, deleted.
+    python3 "$HF_PARTS_SCRIPT" join "$repo" "$model_path"
 }
 
 # ── ComfyUI setup ───────────────────────────────────────────

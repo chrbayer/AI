@@ -1675,11 +1675,33 @@ typed at a terminal (`--dry-run`, or no terminal: list only):
   them), and so is the VoiceDesign model llmctl uses itself;
 - ComfyUI models no installed workflow names (what `list` shows as such).
 
-Never listed: the parts of a download joined into one file
-(`*.gguf.partNofM`). `download` checks for them and fetches them again when
-they are gone — and then they take the space they now share with the joined
-file on btrfs. On btrfs, `prune` reports what deleting would really free
-rather than the size of the files.
+Never listed: a joined file's `X.gguf.parts.json` (see below), and the
+joined file itself counts as named like any other. On btrfs, `prune` reports
+what deleting would really free rather than the size of the files.
+
+### Models split into byte parts
+
+Some repos hold a large GGUF as plain byte parts — `X.gguf.part1of2`,
+`X.gguf.part2of2` (mradermacher's Llama-3.3-70B Q6_K, for one) — which only
+`cat` makes a model of. `download` handles them (`hf_parts.py`):
+
+1. it fetches the parts, then reads each once and checks it against the
+   SHA-256 the Hub keeps for it (its LFS hash);
+2. joins them with `cat` — on btrfs a reflink, no second copy — and checks
+   the size; a joined file already there is kept when its SHA-256 equals
+   that of the parts in a row;
+3. writes `X.gguf.parts.json` beside it: repo, revision, and each part's
+   name, size and SHA-256, plus the joined file's;
+4. deletes the parts, and what hf keeps about them in `.cache`.
+
+From then on the companion stands for the parts. `download` does not fetch
+them again while the Hub still has exactly those (`--exclude`); when the
+Hub's hashes or sizes change, it fetches the new ones and joins anew.
+`download --check` reports a joined file as the same on the Hub or changed,
+from the companion — no local parts needed, no download. Without the Hub
+(offline) the companion is trusted rather than fetching tens of GB.
+gguf-split shards (`X-00001-of-00002.gguf`) are not parts: llama.cpp loads
+those itself, and they stay as they are.
 
 ## Architecture
 
@@ -1687,6 +1709,7 @@ rather than the size of the files.
 - `proxy.py` — optional Flask proxy (`start --proxy`) that forwards requests to the local llama-server and optimizes prompts for caching; port and backend configurable via `LLM_PROXY_PORT` / `LLM_BACKEND_URL`. For halogen it also answers `/v1/messages` (`LLM_TRANSLATE_MESSAGES=1`), clamps token budgets (`LLM_MAX_TOKENS_CAP`) and waits longer (`LLM_PROXY_TIMEOUT`)
 - `anthropic_compat.py` — the Messages ↔ Chat Completions translation `proxy.py` uses for backends without a Messages API
 - `halogen_bench.py` — `bench` for halogen models: prefill and decode speed of a running slot
+- `hf_parts.py` — joins models the Hub holds as byte parts (`*.partNofM`), checks them against its hashes and keeps those in `X.gguf.parts.json`
 - `images_server.py` — OpenAI image API in front of a ComfyUI slot (`start comfy N --proxy`); `comfyui/export_api.py` makes the API-format workflows in `comfyui/api/` it runs
 - `examples/models.conf` — Model definitions (paths, binaries, ROCm env vars); read from `~/.config/llmctl/`
 - `examples/presets.conf` — Named configurations: which models run together, on which slots, with which flags (`llmctl preset <name>`)

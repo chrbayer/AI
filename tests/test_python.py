@@ -11,6 +11,8 @@ numpy, proxy.py needs flask and requests; a helper whose imports are missing is
 skipped rather than failed, so the rest still runs.
 """
 import io
+import contextlib
+import shutil
 import json
 import warnings
 import sys
@@ -580,6 +582,87 @@ class ArtifactNode(unittest.TestCase):
         self.assertEqual(self.n.repair_prompt("", a), "a hand; a cup")
         self.assertEqual(self.n.repair_prompt("A kitchen.", [{"fix": "A hand."}, {"fix": "A cup."}]),
                          "A kitchen. A hand; A cup")
+
+
+import hashlib
+import hf_parts                                                   # comfyui_models: stdlib only
+
+
+class Parts(unittest.TestCase):
+    """Byte parts on the Hub: joined, checked, recorded, deleted — without the Hub."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.data = [b"A" * 1000, b"B" * 700]
+        self.names = ["m.Q6_K.gguf.part1of2", "m.Q6_K.gguf.part2of2"]
+        self.hub = {n: {"size": len(d), "sha256": hashlib.sha256(d).hexdigest()} for n, d in zip(self.names, self.data)}
+        hf_parts.hub_files = lambda repo, revision="main": (self.hub, "c0ffee")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def write_parts(self):
+        for n, d in zip(self.names, self.data):
+            (self.tmp / n).write_bytes(d)
+        meta = self.tmp / ".cache" / "huggingface" / "download"
+        meta.mkdir(parents=True, exist_ok=True)
+        for n in self.names:
+            (meta / (n + ".metadata")).write_text("x")
+
+    def test_complete_sets_only_and_never_split_ggufs(self):
+        g = hf_parts.groups(["a.gguf.part1of2", "a.gguf.part2of2", "b.gguf.part1of3", "b.gguf.part3of3",
+                             "c-00001-of-00002.gguf", "c-00002-of-00002.gguf"])
+        self.assertEqual(g, {"a.gguf": ["a.gguf.part1of2", "a.gguf.part2of2"]})
+
+    def test_join_checks_writes_the_companion_and_deletes_the_parts(self):
+        self.write_parts()
+        with contextlib.redirect_stdout(io.StringIO()):
+            hf_parts.cmd_join("org/repo", str(self.tmp))
+        joined = self.tmp / "m.Q6_K.gguf"
+        self.assertEqual(joined.read_bytes(), b"".join(self.data))
+        c = json.loads((self.tmp / "m.Q6_K.gguf.parts.json").read_text())
+        self.assertEqual(c["sha256"], hashlib.sha256(b"".join(self.data)).hexdigest())
+        self.assertEqual([p["name"] for p in c["parts"]], self.names)
+        self.assertEqual(c["revision"], "c0ffee")
+        self.assertFalse(any((self.tmp / n).exists() for n in self.names))
+        self.assertFalse(list((self.tmp / ".cache").rglob("*.metadata")))
+
+    def test_an_existing_joined_file_is_adopted_when_it_matches(self):
+        self.write_parts()
+        joined = self.tmp / "m.Q6_K.gguf"
+        joined.write_bytes(b"".join(self.data))
+        ino = joined.stat().st_ino
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            hf_parts.cmd_join("org/repo", str(self.tmp))
+        self.assertIn("already joined", out.getvalue())
+        self.assertEqual(joined.stat().st_ino, ino)                 # not rewritten
+        self.assertFalse((self.tmp / self.names[0]).exists())
+
+    def test_a_part_that_differs_from_the_hub_is_kept(self):
+        self.write_parts()
+        self.hub[self.names[1]]["sha256"] = "0" * 64
+        with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit):
+            hf_parts.cmd_join("org/repo", str(self.tmp))
+        self.assertTrue(all((self.tmp / n).exists() for n in self.names))
+        self.assertFalse((self.tmp / "m.Q6_K.gguf.parts.json").exists())
+
+    def test_excludes_and_check_follow_the_hub(self):
+        self.write_parts()
+        with contextlib.redirect_stdout(io.StringIO()):
+            hf_parts.cmd_join("org/repo", str(self.tmp))
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            hf_parts.cmd_excludes("org/repo", str(self.tmp))
+        self.assertEqual(out.getvalue().split(), self.names)
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            hf_parts.cmd_check("org/repo", str(self.tmp))
+        self.assertTrue(out.getvalue().startswith("current\tm.Q6_K.gguf\t2"))
+        self.hub[self.names[0]]["sha256"] = "1" * 64              # a new upload on the Hub
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            hf_parts.cmd_excludes("org/repo", str(self.tmp))
+        self.assertEqual(out.getvalue(), "")                       # download fetches them again
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            hf_parts.cmd_check("org/repo", str(self.tmp))
+        self.assertTrue(out.getvalue().startswith("changed"))
 
 
 if __name__ == "__main__":
