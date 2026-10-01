@@ -322,6 +322,16 @@ class ImageApi(unittest.TestCase):
         with self.assertRaises(images.Refused):
             images.set_layers(api("Qwen-Image 2.1 Edit (bf16, dpmpp_2m 14).json"), 3)
 
+    def test_layered_control_names_its_object(self):
+        name = "Qwen-Image Layered Control (bf16, 20 Schritte)"
+        self.assertEqual(images.slug(name), ("qwen-image-layered-control", "edits"))
+        g = api(name + ".json")
+        self.assertIn("layers", images.extras(g))
+        images.set_prompt(g, "the red electric guitar")
+        self.assertEqual(g["83:6"]["inputs"]["text"], "the red electric guitar")
+        self.assertEqual({n["inputs"]["unet_name"] for n in g.values() if n["class_type"] == "UNETLoader"},
+                         {"qwen_image_layered_control_bf16.safetensors"})
+
     def test_model_lists_in_both_object_info_formats(self):
         info = {"UNETLoader": {"input": {"required": {"unet_name": [["a.safetensors"], {}]}}},
                 "UpscaleModelLoader": {"input": {"required": {"model_name": ["COMBO", {"options": ["x4.safetensors"]}]}}}}

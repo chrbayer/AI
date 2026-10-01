@@ -1111,8 +1111,22 @@ llmctl update comfy --torch           # …and torch itself
 
   The template makes two; the image API takes `layers` (1–8) and answers with
   one transparent PNG per layer, background first. Image API:
-  `qwen-image-layered`. Its sibling that pulls one named thing out of a
-  picture (`image_qwen_image_layered_control`, another 40 GB) is not set up.
+  `qwen-image-layered`.
+- **Qwen-Image Layered Control.** `Qwen-Image Layered Control (bf16, 20
+  Schritte)` is the sibling that pulls **one named thing** out of a picture:
+  the prompt names it ("the red electric guitar", "the woman"), the first
+  layer comes back as that thing alone on transparency. ComfyUI's template
+  (`image_qwen_image_layered_control`) loads the DiT as fp8; here it reads
+  the bf16 file (`qwen_image_layered_control_bf16.safetensors`, another 40.9
+  GB, DiffSynth-Studio, Apache-2.0) with the same encoder and VAE. At 640 px
+  with two layers a run takes ~4 min. Tried: the poster's title text, a
+  sofa and a floor lamp in a living room, the woman on the street — each cut
+  out cleanly; the guitar on the poster came back only at 1024 px (~13 min).
+  The second layer is mostly junk — take the first. One layer alone is not
+  the cheaper way: at 1024 px it gave the guitar but an empty layer for the
+  woman. The model card names posters and graphics as its strength. Image
+  API: `qwen-image-layered-control`, the prompt is the thing to extract,
+  `layers` as above.
 - **Z-Image Turbo 2K Upscale.** `Z-Image Turbo 2K Upscale (bf16, 5 Schritte)` is
   ComfyUI's own template: RealESRGAN ×4 (67 MB) on the picture scaled to 1 MP,
   halved, then a light Z-Image Turbo pass (denoise 0.33) that adds detail — a
