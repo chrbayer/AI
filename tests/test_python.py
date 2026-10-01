@@ -299,6 +299,15 @@ class ImageApi(unittest.TestCase):
         self.assertEqual(images.slug("Qwen-Image 2.1 Outpaint Turbo (bf16, 4 Schritte)"), ("qwen-image-21-outpaint-turbo", "edits"))
         self.assertEqual(images.slug("Qwen-Image 2.1 Background Removal (bf16, euler 25)"),
                          ("qwen-image-21-background-removal", "edits"))
+        self.assertEqual(images.slug("Qwen-Image 2.1 Detailer (bf16, dpmpp_2m 14)"),
+                         ("qwen-image-21-detailer", "edits"))
+
+    def test_the_detailer_keeps_its_own_prompts(self):
+        g = api("Qwen-Image 2.1 Detailer (bf16, dpmpp_2m 14).json")
+        before = sorted(n["inputs"]["prompt"] for n in g.values() if n["class_type"] == "TextEncodeQwenImage21")
+        images.set_prompt(g, "PROMPT")
+        self.assertNotIn("PROMPT", json.dumps(g))
+        self.assertEqual(sorted(n["inputs"]["prompt"] for n in g.values() if n["class_type"] == "TextEncodeQwenImage21"), before)
 
     def test_each_generation_takes_prompt_size_and_seed(self):
         for path in sorted(API.glob("*T2I*.json")):

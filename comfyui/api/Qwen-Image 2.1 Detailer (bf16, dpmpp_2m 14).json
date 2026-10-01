@@ -1,0 +1,248 @@
+{
+ "1": {
+  "inputs": {
+   "unet_name": "qwen_image_2.1_bf16.safetensors",
+   "weight_dtype": "default"
+  },
+  "class_type": "UNETLoader",
+  "_meta": {
+   "title": "Load Diffusion Model"
+  }
+ },
+ "2": {
+  "inputs": {
+   "clip_name": "qwen3vl_8b_bf16.safetensors",
+   "type": "qwen_image",
+   "device": "default"
+  },
+  "class_type": "CLIPLoader",
+  "_meta": {
+   "title": "Load CLIP"
+  }
+ },
+ "3": {
+  "inputs": {
+   "vae_name": "qwen_image_2.1_vae_bf16.safetensors"
+  },
+  "class_type": "VAELoader",
+  "_meta": {
+   "title": "Load VAE"
+  }
+ },
+ "5": {
+  "inputs": {
+   "image": "detail.png"
+  },
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "Bild"
+  }
+ },
+ "9": {
+  "inputs": {
+   "prompt": "a natural, detailed human face with clear eyes, nose and mouth",
+   "negative_prompt": "",
+   "resolution": 1024,
+   "clip": [
+    "2",
+    0
+   ]
+  },
+  "class_type": "TextEncodeQwenImage21",
+  "_meta": {
+   "title": "Gesicht (fixed)"
+  }
+ },
+ "10": {
+  "inputs": {
+   "prompt": "a natural human hand with five well-formed fingers",
+   "negative_prompt": "",
+   "resolution": 1024,
+   "clip": [
+    "2",
+    0
+   ]
+  },
+  "class_type": "TextEncodeQwenImage21",
+  "_meta": {
+   "title": "Hand (fixed)"
+  }
+ },
+ "13": {
+  "inputs": {
+   "filename_prefix": "Qwen_image_2.1_detailer",
+   "images": [
+    "41",
+    0
+   ]
+  },
+  "class_type": "SaveImage",
+  "_meta": {
+   "title": "Save Image"
+  }
+ },
+ "30": {
+  "inputs": {
+   "model_name": "bbox/face_yolov8m.pt"
+  },
+  "class_type": "UltralyticsDetectorProvider",
+  "_meta": {
+   "title": "Gesichter finden"
+  }
+ },
+ "31": {
+  "inputs": {
+   "model_name": "bbox/hand_yolov8s.pt"
+  },
+  "class_type": "UltralyticsDetectorProvider",
+  "_meta": {
+   "title": "Hände finden"
+  }
+ },
+ "32": {
+  "inputs": {
+   "model_name": "sam_vit_h_4b8939.pth",
+   "device_mode": "AUTO"
+  },
+  "class_type": "SAMLoader",
+  "_meta": {
+   "title": "SAM ViT-H"
+  }
+ },
+ "40": {
+  "inputs": {
+   "guide_size": 1024,
+   "guide_size_for": true,
+   "max_size": 1024,
+   "seed": 42,
+   "steps": 14,
+   "cfg": 1,
+   "sampler_name": "dpmpp_2m",
+   "scheduler": "simple",
+   "denoise": 0.45,
+   "feather": 5,
+   "noise_mask": true,
+   "force_inpaint": true,
+   "bbox_threshold": 0.5,
+   "bbox_dilation": 10,
+   "bbox_crop_factor": 3,
+   "sam_detection_hint": "center-1",
+   "sam_dilation": 0,
+   "sam_threshold": 0.93,
+   "sam_bbox_expansion": 0,
+   "sam_mask_hint_threshold": 0.7,
+   "sam_mask_hint_use_negative": "False",
+   "drop_size": 10,
+   "wildcard": "",
+   "cycle": 1,
+   "inpaint_model": false,
+   "noise_mask_feather": 20,
+   "tiled_encode": false,
+   "tiled_decode": false,
+   "image": [
+    "5",
+    0
+   ],
+   "model": [
+    "1",
+    0
+   ],
+   "clip": [
+    "2",
+    0
+   ],
+   "vae": [
+    "3",
+    0
+   ],
+   "positive": [
+    "9",
+    0
+   ],
+   "negative": [
+    "9",
+    1
+   ],
+   "bbox_detector": [
+    "30",
+    0
+   ],
+   "sam_model_opt": [
+    "32",
+    0
+   ]
+  },
+  "class_type": "FaceDetailer",
+  "_meta": {
+   "title": "Gesichter nachbessern"
+  }
+ },
+ "41": {
+  "inputs": {
+   "guide_size": 1024,
+   "guide_size_for": true,
+   "max_size": 1024,
+   "seed": 42,
+   "steps": 14,
+   "cfg": 1,
+   "sampler_name": "dpmpp_2m",
+   "scheduler": "simple",
+   "denoise": 0.6,
+   "feather": 5,
+   "noise_mask": true,
+   "force_inpaint": true,
+   "bbox_threshold": 0.5,
+   "bbox_dilation": 10,
+   "bbox_crop_factor": 3,
+   "sam_detection_hint": "center-1",
+   "sam_dilation": 0,
+   "sam_threshold": 0.93,
+   "sam_bbox_expansion": 0,
+   "sam_mask_hint_threshold": 0.7,
+   "sam_mask_hint_use_negative": "False",
+   "drop_size": 10,
+   "wildcard": "",
+   "cycle": 1,
+   "inpaint_model": false,
+   "noise_mask_feather": 20,
+   "tiled_encode": false,
+   "tiled_decode": false,
+   "image": [
+    "40",
+    0
+   ],
+   "model": [
+    "1",
+    0
+   ],
+   "clip": [
+    "2",
+    0
+   ],
+   "vae": [
+    "3",
+    0
+   ],
+   "positive": [
+    "10",
+    0
+   ],
+   "negative": [
+    "10",
+    1
+   ],
+   "bbox_detector": [
+    "31",
+    0
+   ],
+   "sam_model_opt": [
+    "32",
+    0
+   ]
+  },
+  "class_type": "FaceDetailer",
+  "_meta": {
+   "title": "Hände nachbessern"
+  }
+ }
+}

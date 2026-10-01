@@ -16,3 +16,11 @@ ComfyUI-Qwen-TTS  https://github.com/flybirdxx/ComfyUI-Qwen-TTS  a1328c8a731eff8
 # node uses and which has no build for this Python. Its detector models come
 # from Hugging Face on first use, into the pack's own ckpts/.
 comfyui_controlnet_aux  https://github.com/Fannovel16/comfyui_controlnet_aux  0cd290477128d42cdc3e76a826a402d866e8c684  -onnxruntime-gpu  -mediapipe
+
+# Detailer: finds faces and hands, repaints each crop at a higher resolution and
+# pastes it back (Qwen-Image 2.1 Detailer workflows). SAM 2 is optional there and
+# builds a CUDA extension from git — left out; SAM 1 (segment-anything) is pure
+# Python and outlines the found object for the mask.
+ComfyUI-Impact-Pack  https://github.com/ltdrdata/ComfyUI-Impact-Pack  429d0159ad429e64d2b3916e6e7be9c22d025c3c  -git+https://github.com/facebookresearch/sam2
+# Its YOLO detectors (ultralytics, AGPL-3.0); models from Bingsu/adetailer.
+ComfyUI-Impact-Subpack  https://github.com/ltdrdata/ComfyUI-Impact-Subpack  50c7b71a6a224734cc9b21963c6d1926816a97f1

@@ -42,9 +42,18 @@ MODELS = {   # file -> (directory, url), for the loader nodes' download entries
     "Qwen-Image-2.1-Fun-Controlnet-Union.safetensors": ("model_patches",
         f"{HF}/alibaba-pai/Qwen-Image-2.1-Fun-Controlnet-Union/resolve/"
         "8a4702014d4dabb5f896fcba917e2ee0a961465f/Qwen-Image-2.1-Fun-Controlnet-Union.safetensors"),
+    # Detailer: YOLO face and hand detectors (Bingsu/adetailer, Apache-2.0) and
+    # SAM 1 ViT-H (Meta, Apache-2.0; a Hugging Face mirror, pinned).
+    "bbox/face_yolov8m.pt": ("ultralytics/bbox",
+        f"{HF}/Bingsu/adetailer/resolve/53cc19de382014514d9d4038601d261a7faa9b7b/face_yolov8m.pt"),
+    "bbox/hand_yolov8s.pt": ("ultralytics/bbox",
+        f"{HF}/Bingsu/adetailer/resolve/53cc19de382014514d9d4038601d261a7faa9b7b/hand_yolov8s.pt"),
+    "sam_vit_h_4b8939.pth": ("sams",
+        f"{HF}/ybelkada/segment-anything/resolve/7790786db131bcdc639f24a915d9f2c331d843ee/checkpoints/sam_vit_h_4b8939.pth"),
 }
 LOADER_INPUT = {"UNETLoader": "unet_name", "CLIPLoader": "clip_name", "VAELoader": "vae_name",
-                "ModelPatchLoader": "name", "LoraLoaderModelOnly": "lora_name"}
+                "ModelPatchLoader": "name", "LoraLoaderModelOnly": "lora_name",
+                "UltralyticsDetectorProvider": "model_name", "SAMLoader": "model_name"}
 
 
 def base(prompt, prefix):
@@ -160,6 +169,49 @@ def turbo(make):
     return made
 
 
+FACE_PROMPT = "a natural, detailed human face with clear eyes, nose and mouth"
+HAND_PROMPT = "a natural human hand with five well-formed fingers"
+
+
+def detailer(sam=True):
+    """Faces, then hands: each found one is cropped, repainted at up to 1024 px
+    with Qwen-Image 2.1 and pasted back; SAM outlines it for the mask. Faces at
+    denoise 0.45, which keeps the person (0.6 turned brown eyes blue-green);
+    hands at 0.6, which mends their shape (0.45 only added detail). Tried on
+    seven pictures; the 4-step LoRA made skin coarse and aged, so no Turbo."""
+    def one(image, detector, cond, denoise):
+        return {"class_type": "FaceDetailer", "inputs": {
+            "image": image, "model": ["1", 0], "clip": ["2", 0], "vae": ["3", 0],
+            "guide_size": 1024, "guide_size_for": True, "max_size": 1024, "seed": 42,
+            "steps": 14, "cfg": 1.0, "sampler_name": "dpmpp_2m", "scheduler": "simple",
+            "positive": [cond, 0], "negative": [cond, 1], "denoise": denoise, "feather": 5,
+            "noise_mask": True, "force_inpaint": True, "bbox_threshold": 0.5, "bbox_dilation": 10,
+            "bbox_crop_factor": 3.0, "sam_detection_hint": "center-1", "sam_dilation": 0,
+            "sam_threshold": 0.93, "sam_bbox_expansion": 0, "sam_mask_hint_threshold": 0.7,
+            "sam_mask_hint_use_negative": "False", "drop_size": 10, "bbox_detector": [detector, 0],
+            "wildcard": "", "cycle": 1, "inpaint_model": False, "noise_mask_feather": 20,
+            "tiled_encode": False, "tiled_decode": False,
+            **({"sam_model_opt": ["32", 0]} if sam else {})}}
+    g = {
+        "1": {"class_type": "UNETLoader", "inputs": {"unet_name": "qwen_image_2.1_bf16.safetensors", "weight_dtype": "default"}},
+        "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": "qwen3vl_8b_bf16.safetensors", "type": "qwen_image", "device": "default"}},
+        "3": {"class_type": "VAELoader", "inputs": {"vae_name": "qwen_image_2.1_vae_bf16.safetensors"}},
+        "5": {"class_type": "LoadImage", "inputs": {"image": "detail.png"}, "_meta": {"title": "Bild"}},
+        "9": {"class_type": "TextEncodeQwenImage21", "inputs": {"prompt": FACE_PROMPT, "negative_prompt": "", "resolution": 1024, "clip": ["2", 0]},
+              "_meta": {"title": "Gesicht (fixed)"}},
+        "10": {"class_type": "TextEncodeQwenImage21", "inputs": {"prompt": HAND_PROMPT, "negative_prompt": "", "resolution": 1024, "clip": ["2", 0]},
+               "_meta": {"title": "Hand (fixed)"}},
+        "30": {"class_type": "UltralyticsDetectorProvider", "inputs": {"model_name": "bbox/face_yolov8m.pt"}, "_meta": {"title": "Gesichter finden"}},
+        "31": {"class_type": "UltralyticsDetectorProvider", "inputs": {"model_name": "bbox/hand_yolov8s.pt"}, "_meta": {"title": "Hände finden"}},
+        "40": {**one(["5", 0], "30", "9", 0.45), "_meta": {"title": "Gesichter nachbessern"}},
+        "41": {**one(["40", 0], "31", "10", 0.6), "_meta": {"title": "Hände nachbessern"}},
+        "13": {"class_type": "SaveImage", "inputs": {"images": ["41", 0], "filename_prefix": "Qwen_image_2.1_detailer"}},
+    }
+    if sam:
+        g["32"] = {"class_type": "SAMLoader", "inputs": {"model_name": "sam_vit_h_4b8939.pth", "device_mode": "AUTO"}, "_meta": {"title": "SAM ViT-H"}}
+    return g
+
+
 def artifact_check():
     """A vision model looks for flaws; the picture lands in input/ with them transparent."""
     return {
@@ -187,6 +239,7 @@ WORKFLOWS = {
     "Qwen-Image 2.1 Inpaint Turbo (bf16, 4 Schritte)": turbo(inpaint),
     "Qwen-Image 2.1 Outpaint Turbo (bf16, 4 Schritte)": turbo(outpaint),
     "Artifact Check (flash)": artifact_check,
+    "Qwen-Image 2.1 Detailer (bf16, dpmpp_2m 14)": detailer,
 }
 
 
@@ -217,7 +270,8 @@ def with_downloads(wf):
         name = (n.get("widgets_values") or [None])[0]
         if name in MODELS:
             directory, url = MODELS[name]
-            n.setdefault("properties", {})["models"] = [{"name": name, "url": url, "directory": directory}]
+            # "bbox/face_yolov8m.pt" lies in ultralytics/bbox as face_yolov8m.pt
+            n.setdefault("properties", {})["models"] = [{"name": name.rsplit("/", 1)[-1], "url": url, "directory": directory}]
     return wf
 
 

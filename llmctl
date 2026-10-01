@@ -5183,7 +5183,8 @@ _comfyui_custom_nodes() {
             cp "$target/requirements.txt" "$req"
             for skip in $rest; do
                 case "$skip" in
-                    -*) sed -i -E "s/^[[:space:]]*${skip#-}([[:space:]<>=!~;#].*)?$/# skipped by llmctl: &/" "$req" ;;
+                    # The name taken literally: a git+https:// requirement is full of regex characters.
+                    -*) sed -i -E "s/^[[:space:]]*$(printf '%s' "${skip#-}" | sed 's/[][\\.*^$+?(){}|/]/\\&/g')([[:space:]<>=!~;#].*)?$/# skipped by llmctl: &/" "$req" ;;
                     +*) printf '\n%s\n' "${skip#+}" >> "$req" ;;   # the file may lack a final newline
                 esac
             done

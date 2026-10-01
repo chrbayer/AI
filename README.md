@@ -939,6 +939,36 @@ llmctl update comfy --torch           # …and torch itself
   (`… Turbo (bf16, 4 Schritte)`) with the 4-step Acc LoRA below: 25–38 s,
   control and quality held — pose, depth, canny and inpaint came out as good
   as at 14 steps; the scribble's cabin a little busier.
+- **Detailer.** `Qwen-Image 2.1 Detailer (bf16, dpmpp_2m 14)` finds faces and
+  hands (YOLO detectors from [Bingsu/adetailer](https://huggingface.co/Bingsu/adetailer)),
+  outlines each with SAM ViT-H, crops it, repaints it at up to 1024 px with
+  Qwen-Image 2.1 and pastes it back — so a small hand gets many more pixels
+  than in the whole picture. Faces at denoise 0.45, hands at 0.6. It runs on
+  the custom node packs [ComfyUI-Impact-Pack](https://github.com/ltdrdata/ComfyUI-Impact-Pack)
+  (GPL-3.0) and its Subpack (AGPL-3.0, with ultralytics), installed like the
+  others; SAM 2 (a CUDA extension built from git) is left out, SAM 1 is pure
+  Python. The detectors take 6–50 MB, SAM ViT-H 2.5 GB. Through the image API
+  as `qwen-image-21-detailer`; the request's prompt is ignored, the detailer
+  has its own (nodes titled "(fixed)").
+
+  Tried on seven pictures, the machine to itself, 55 s for one hand or face,
+  ~100 s for two, 6 min for a crowd:
+  - **Hands at 0.6 get their shape mended**: a hand around a cup, two on
+    piano keys, a fretting hand, hands on a bicycle chain came out better
+    formed. At 0.45 the detailer only adds detail (wrinkles, nails) to the
+    same shape.
+  - **Faces drift.** On a clean portrait, brown eyes turned grey-green at
+    0.6, 0.45 and 0.35 alike, with or without "eyes" in its prompt; the
+    face is otherwise the same person. For a picture whose faces are fine,
+    bypass the face pass (Ctrl+B on "Gesichter nachbessern").
+  - **It is no rescue**: a crowd of melted faces stays melted — at 0.6 it
+    grew new ones. Use a new seed for those.
+  - **SAM keeps the surroundings**: without it 1.4–18 % of the picture
+    changed, with it 0.5–12 % — piano keys around the hands stayed as
+    they were. It costs 5–10 % more time.
+  - **No Turbo**: with the 4-step LoRA skin came out coarse and aged, at 0.45
+    and at 0.6, where 14 steps keep it natural.
+  - Missed: hands knitting, partly hidden behind the needles and the wool.
 - **Background removal.** `Qwen-Image 2.1 Background Removal (bf16, euler 25)`
   is ComfyUI's own template on the bf16 models already here: an edit with
   the instruction "Remove the background, and output a PNG image", and
@@ -1056,10 +1086,11 @@ r = img.images.edit(model="flux2-klein-9b", image=open("turm.png", "rb"),
   `qwen-image-21-control`, `qwen-image-21-canny-control`,
   `qwen-image-21-pose-control`, `qwen-image-21-depth-control` and
   `qwen-image-21-inpaint`, `qwen-image-21-outpaint` (256 px left and right)
-  and `qwen-image-21-background-removal` for edits (each also as `…-turbo`) (the image is the control image, the photo
-  or the picture to inpaint — transparent where to redraw, as OpenAI's edits
-  take a mask), and
-  `seedvr2-7b-upscale` for edits (4× upscaling, no prompt). `GET /v1/models`
+  and `qwen-image-21-background-removal` for edits (each also as `…-turbo`)
+  (the image is the control image, the photo or the picture to inpaint —
+  transparent where to redraw, as OpenAI's edits take a mask),
+  `qwen-image-21-detailer` for edits (faces and hands; its own prompts, no
+  Turbo), and `seedvr2-7b-upscale` for edits (4× upscaling, no prompt). `GET /v1/models`
   lists those whose model files ComfyUI has, with the endpoints each serves.
   Without `model`, it is klein.
 - **What a request sets:** `prompt`, `size` (generations; `WxH` rounded to 16,

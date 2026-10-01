@@ -1,0 +1,1770 @@
+{
+ "id": "2a54c048-c19c-4022-b178-0a7a7bf22904",
+ "revision": 0,
+ "last_node_id": 41,
+ "last_link_id": 38,
+ "nodes": [
+  {
+   "id": 1,
+   "type": "UNETLoader",
+   "pos": [
+    100,
+    130
+   ],
+   "size": [
+    270,
+    82
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "unet_name",
+     "name": "unet_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "unet_name"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "weight_dtype",
+     "name": "weight_dtype",
+     "type": "COMBO",
+     "widget": {
+      "name": "weight_dtype"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "MODEL",
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      24,
+      32
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "UNETLoader",
+    "models": [
+     {
+      "name": "qwen_image_2.1_bf16.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/diffusion_models/qwen_image_2.1_bf16.safetensors",
+      "directory": "diffusion_models"
+     }
+    ]
+   },
+   "widgets_values": [
+    "qwen_image_2.1_bf16.safetensors",
+    "default"
+   ],
+   "widgets_values_named": {
+    "unet_name": "qwen_image_2.1_bf16.safetensors",
+    "weight_dtype": "default"
+   }
+  },
+  {
+   "id": 2,
+   "type": "CLIPLoader",
+   "pos": [
+    100,
+    342
+   ],
+   "size": [
+    270,
+    106
+   ],
+   "flags": {},
+   "order": 1,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "clip_name",
+     "name": "clip_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "clip_name"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "type",
+     "name": "type",
+     "type": "COMBO",
+     "widget": {
+      "name": "type"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "device",
+     "name": "device",
+     "shape": 7,
+     "type": "COMBO",
+     "widget": {
+      "name": "device"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "CLIP",
+     "name": "CLIP",
+     "type": "CLIP",
+     "links": [
+      20,
+      21,
+      25,
+      33
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "CLIPLoader",
+    "models": [
+     {
+      "name": "qwen3vl_8b_bf16.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/text_encoders/qwen3vl_8b_bf16.safetensors",
+      "directory": "text_encoders"
+     }
+    ]
+   },
+   "widgets_values": [
+    "qwen3vl_8b_bf16.safetensors",
+    "qwen_image",
+    "default"
+   ],
+   "widgets_values_named": {
+    "clip_name": "qwen3vl_8b_bf16.safetensors",
+    "type": "qwen_image",
+    "device": "default"
+   }
+  },
+  {
+   "id": 3,
+   "type": "VAELoader",
+   "pos": [
+    100,
+    578
+   ],
+   "size": [
+    270,
+    58
+   ],
+   "flags": {},
+   "order": 2,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "vae_name",
+     "name": "vae_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "vae_name"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "VAE",
+     "name": "VAE",
+     "type": "VAE",
+     "links": [
+      26,
+      34
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "VAELoader",
+    "models": [
+     {
+      "name": "qwen_image_2.1_vae_bf16.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/vae/qwen_image_2.1_vae_bf16.safetensors",
+      "directory": "vae"
+     }
+    ]
+   },
+   "widgets_values": [
+    "qwen_image_2.1_vae_bf16.safetensors"
+   ],
+   "widgets_values_named": {
+    "vae_name": "qwen_image_2.1_vae_bf16.safetensors"
+   }
+  },
+  {
+   "id": 5,
+   "type": "LoadImage",
+   "pos": [
+    100,
+    766
+   ],
+   "size": [
+    282.798828125,
+    102
+   ],
+   "flags": {},
+   "order": 3,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "image",
+     "name": "image",
+     "type": "COMBO",
+     "widget": {
+      "name": "image"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "choose file to upload",
+     "name": "upload",
+     "type": "IMAGEUPLOAD",
+     "widget": {
+      "name": "upload"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "IMAGE",
+     "name": "IMAGE",
+     "type": "IMAGE",
+     "links": [
+      23
+     ]
+    },
+    {
+     "localized_name": "MASK",
+     "name": "MASK",
+     "type": "MASK",
+     "links": null
+    }
+   ],
+   "title": "Bild",
+   "properties": {
+    "Node name for S&R": "LoadImage"
+   },
+   "widgets_values": [
+    "detail.png",
+    "image"
+   ],
+   "widgets_values_named": {
+    "image": "detail.png",
+    "upload": "image"
+   }
+  },
+  {
+   "id": 9,
+   "type": "TextEncodeQwenImage21",
+   "pos": [
+    482.798828125,
+    130
+   ],
+   "size": [
+    400,
+    206
+   ],
+   "flags": {},
+   "order": 7,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "clip",
+     "name": "clip",
+     "type": "CLIP",
+     "link": 20
+    },
+    {
+     "localized_name": "image_1",
+     "name": "images.image_1",
+     "shape": 7,
+     "type": "IMAGE",
+     "link": null
+    },
+    {
+     "localized_name": "vae",
+     "name": "vae",
+     "shape": 7,
+     "type": "VAE",
+     "link": null
+    },
+    {
+     "localized_name": "prompt",
+     "name": "prompt",
+     "type": "STRING",
+     "widget": {
+      "name": "prompt"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "negative_prompt",
+     "name": "negative_prompt",
+     "type": "STRING",
+     "widget": {
+      "name": "negative_prompt"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "resolution",
+     "name": "resolution",
+     "type": "INT",
+     "widget": {
+      "name": "resolution"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "positive",
+     "name": "positive",
+     "type": "CONDITIONING",
+     "links": [
+      27
+     ]
+    },
+    {
+     "localized_name": "negative",
+     "name": "negative",
+     "type": "CONDITIONING",
+     "links": [
+      28
+     ]
+    },
+    {
+     "localized_name": "latent",
+     "name": "latent",
+     "type": "LATENT",
+     "links": null
+    }
+   ],
+   "title": "Gesicht (fixed)",
+   "properties": {
+    "Node name for S&R": "TextEncodeQwenImage21"
+   },
+   "widgets_values": [
+    "a natural, detailed human face with clear eyes, nose and mouth",
+    "",
+    1024
+   ],
+   "widgets_values_named": {
+    "prompt": "a natural, detailed human face with clear eyes, nose and mouth",
+    "negative_prompt": "",
+    "resolution": 1024
+   }
+  },
+  {
+   "id": 10,
+   "type": "TextEncodeQwenImage21",
+   "pos": [
+    482.798828125,
+    466
+   ],
+   "size": [
+    400,
+    206
+   ],
+   "flags": {},
+   "order": 8,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "clip",
+     "name": "clip",
+     "type": "CLIP",
+     "link": 21
+    },
+    {
+     "localized_name": "image_1",
+     "name": "images.image_1",
+     "shape": 7,
+     "type": "IMAGE",
+     "link": null
+    },
+    {
+     "localized_name": "vae",
+     "name": "vae",
+     "shape": 7,
+     "type": "VAE",
+     "link": null
+    },
+    {
+     "localized_name": "prompt",
+     "name": "prompt",
+     "type": "STRING",
+     "widget": {
+      "name": "prompt"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "negative_prompt",
+     "name": "negative_prompt",
+     "type": "STRING",
+     "widget": {
+      "name": "negative_prompt"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "resolution",
+     "name": "resolution",
+     "type": "INT",
+     "widget": {
+      "name": "resolution"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "positive",
+     "name": "positive",
+     "type": "CONDITIONING",
+     "links": [
+      35
+     ]
+    },
+    {
+     "localized_name": "negative",
+     "name": "negative",
+     "type": "CONDITIONING",
+     "links": [
+      36
+     ]
+    },
+    {
+     "localized_name": "latent",
+     "name": "latent",
+     "type": "LATENT",
+     "links": null
+    }
+   ],
+   "title": "Hand (fixed)",
+   "properties": {
+    "Node name for S&R": "TextEncodeQwenImage21"
+   },
+   "widgets_values": [
+    "a natural human hand with five well-formed fingers",
+    "",
+    1024
+   ],
+   "widgets_values_named": {
+    "prompt": "a natural human hand with five well-formed fingers",
+    "negative_prompt": "",
+    "resolution": 1024
+   }
+  },
+  {
+   "id": 13,
+   "type": "SaveImage",
+   "pos": [
+    1982.798828125,
+    130
+   ],
+   "size": [
+    270,
+    58
+   ],
+   "flags": {},
+   "order": 11,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "images",
+     "name": "images",
+     "type": "IMAGE",
+     "link": 22
+    },
+    {
+     "localized_name": "filename_prefix",
+     "name": "filename_prefix",
+     "type": "STRING",
+     "widget": {
+      "name": "filename_prefix"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "images",
+     "name": "images",
+     "type": "IMAGE",
+     "links": null
+    }
+   ],
+   "properties": {},
+   "widgets_values": [
+    "Qwen_image_2.1_detailer"
+   ],
+   "widgets_values_named": {
+    "filename_prefix": "Qwen_image_2.1_detailer"
+   }
+  },
+  {
+   "id": 30,
+   "type": "UltralyticsDetectorProvider",
+   "pos": [
+    100,
+    998
+   ],
+   "size": [
+    279.0767578125,
+    78
+   ],
+   "flags": {},
+   "order": 4,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "model_name",
+     "name": "model_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "model_name"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "BBOX_DETECTOR",
+     "name": "BBOX_DETECTOR",
+     "type": "BBOX_DETECTOR",
+     "links": [
+      29
+     ]
+    },
+    {
+     "localized_name": "SEGM_DETECTOR",
+     "name": "SEGM_DETECTOR",
+     "type": "SEGM_DETECTOR",
+     "links": null
+    }
+   ],
+   "title": "Gesichter finden",
+   "properties": {
+    "Node name for S&R": "UltralyticsDetectorProvider",
+    "models": [
+     {
+      "name": "face_yolov8m.pt",
+      "url": "https://huggingface.co/Bingsu/adetailer/resolve/53cc19de382014514d9d4038601d261a7faa9b7b/face_yolov8m.pt",
+      "directory": "ultralytics/bbox"
+     }
+    ]
+   },
+   "widgets_values": [
+    "bbox/face_yolov8m.pt"
+   ],
+   "widgets_values_named": {
+    "model_name": "bbox/face_yolov8m.pt"
+   }
+  },
+  {
+   "id": 31,
+   "type": "UltralyticsDetectorProvider",
+   "pos": [
+    100,
+    1206
+   ],
+   "size": [
+    279.0767578125,
+    78
+   ],
+   "flags": {},
+   "order": 5,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "model_name",
+     "name": "model_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "model_name"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "BBOX_DETECTOR",
+     "name": "BBOX_DETECTOR",
+     "type": "BBOX_DETECTOR",
+     "links": [
+      37
+     ]
+    },
+    {
+     "localized_name": "SEGM_DETECTOR",
+     "name": "SEGM_DETECTOR",
+     "type": "SEGM_DETECTOR",
+     "links": null
+    }
+   ],
+   "title": "Hände finden",
+   "properties": {
+    "Node name for S&R": "UltralyticsDetectorProvider",
+    "models": [
+     {
+      "name": "hand_yolov8s.pt",
+      "url": "https://huggingface.co/Bingsu/adetailer/resolve/53cc19de382014514d9d4038601d261a7faa9b7b/hand_yolov8s.pt",
+      "directory": "ultralytics/bbox"
+     }
+    ]
+   },
+   "widgets_values": [
+    "bbox/hand_yolov8s.pt"
+   ],
+   "widgets_values_named": {
+    "model_name": "bbox/hand_yolov8s.pt"
+   }
+  },
+  {
+   "id": 32,
+   "type": "SAMLoader",
+   "pos": [
+    100,
+    1414
+   ],
+   "size": [
+    270,
+    82
+   ],
+   "flags": {},
+   "order": 6,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "model_name",
+     "name": "model_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "model_name"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "device_mode",
+     "name": "device_mode",
+     "type": "COMBO",
+     "widget": {
+      "name": "device_mode"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "SAM_MODEL",
+     "name": "SAM_MODEL",
+     "type": "SAM_MODEL",
+     "links": [
+      30,
+      38
+     ]
+    }
+   ],
+   "title": "SAM ViT-H",
+   "properties": {
+    "Node name for S&R": "SAMLoader",
+    "models": [
+     {
+      "name": "sam_vit_h_4b8939.pth",
+      "url": "https://huggingface.co/ybelkada/segment-anything/resolve/7790786db131bcdc639f24a915d9f2c331d843ee/checkpoints/sam_vit_h_4b8939.pth",
+      "directory": "sams"
+     }
+    ]
+   },
+   "widgets_values": [
+    "sam_vit_h_4b8939.pth",
+    "AUTO"
+   ],
+   "widgets_values_named": {
+    "model_name": "sam_vit_h_4b8939.pth",
+    "device_mode": "AUTO"
+   }
+  },
+  {
+   "id": 40,
+   "type": "FaceDetailer",
+   "pos": [
+    982.798828125,
+    130
+   ],
+   "size": [
+    400,
+    960
+   ],
+   "flags": {},
+   "order": 9,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "image",
+     "name": "image",
+     "type": "IMAGE",
+     "link": 23
+    },
+    {
+     "localized_name": "model",
+     "name": "model",
+     "type": "MODEL",
+     "link": 24
+    },
+    {
+     "localized_name": "clip",
+     "name": "clip",
+     "type": "CLIP",
+     "link": 25
+    },
+    {
+     "localized_name": "vae",
+     "name": "vae",
+     "type": "VAE",
+     "link": 26
+    },
+    {
+     "localized_name": "positive",
+     "name": "positive",
+     "type": "CONDITIONING",
+     "link": 27
+    },
+    {
+     "localized_name": "negative",
+     "name": "negative",
+     "type": "CONDITIONING",
+     "link": 28
+    },
+    {
+     "localized_name": "bbox_detector",
+     "name": "bbox_detector",
+     "type": "BBOX_DETECTOR",
+     "link": 29
+    },
+    {
+     "localized_name": "sam_model_opt",
+     "name": "sam_model_opt",
+     "shape": 7,
+     "type": "SAM_MODEL",
+     "link": 30
+    },
+    {
+     "localized_name": "segm_detector_opt",
+     "name": "segm_detector_opt",
+     "shape": 7,
+     "type": "SEGM_DETECTOR",
+     "link": null
+    },
+    {
+     "localized_name": "detailer_hook",
+     "name": "detailer_hook",
+     "shape": 7,
+     "type": "DETAILER_HOOK",
+     "link": null
+    },
+    {
+     "localized_name": "scheduler_func_opt",
+     "name": "scheduler_func_opt",
+     "shape": 7,
+     "type": "SCHEDULER_FUNC",
+     "link": null
+    },
+    {
+     "localized_name": "guide_size",
+     "name": "guide_size",
+     "type": "FLOAT",
+     "widget": {
+      "name": "guide_size"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "guide_size_for",
+     "name": "guide_size_for",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "guide_size_for"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "max_size",
+     "name": "max_size",
+     "type": "FLOAT",
+     "widget": {
+      "name": "max_size"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "seed",
+     "name": "seed",
+     "type": "INT",
+     "widget": {
+      "name": "seed"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "steps",
+     "name": "steps",
+     "type": "INT",
+     "widget": {
+      "name": "steps"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "cfg",
+     "name": "cfg",
+     "type": "FLOAT",
+     "widget": {
+      "name": "cfg"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "sampler_name",
+     "name": "sampler_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "sampler_name"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "scheduler",
+     "name": "scheduler",
+     "type": "COMBO",
+     "widget": {
+      "name": "scheduler"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "denoise",
+     "name": "denoise",
+     "type": "FLOAT",
+     "widget": {
+      "name": "denoise"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "feather",
+     "name": "feather",
+     "type": "INT",
+     "widget": {
+      "name": "feather"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "noise_mask",
+     "name": "noise_mask",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "noise_mask"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "force_inpaint",
+     "name": "force_inpaint",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "force_inpaint"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "bbox_threshold",
+     "name": "bbox_threshold",
+     "type": "FLOAT",
+     "widget": {
+      "name": "bbox_threshold"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "bbox_dilation",
+     "name": "bbox_dilation",
+     "type": "INT",
+     "widget": {
+      "name": "bbox_dilation"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "bbox_crop_factor",
+     "name": "bbox_crop_factor",
+     "type": "FLOAT",
+     "widget": {
+      "name": "bbox_crop_factor"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "sam_detection_hint",
+     "name": "sam_detection_hint",
+     "type": "COMBO",
+     "widget": {
+      "name": "sam_detection_hint"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "sam_dilation",
+     "name": "sam_dilation",
+     "type": "INT",
+     "widget": {
+      "name": "sam_dilation"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "sam_threshold",
+     "name": "sam_threshold",
+     "type": "FLOAT",
+     "widget": {
+      "name": "sam_threshold"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "sam_bbox_expansion",
+     "name": "sam_bbox_expansion",
+     "type": "INT",
+     "widget": {
+      "name": "sam_bbox_expansion"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "sam_mask_hint_threshold",
+     "name": "sam_mask_hint_threshold",
+     "type": "FLOAT",
+     "widget": {
+      "name": "sam_mask_hint_threshold"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "sam_mask_hint_use_negative",
+     "name": "sam_mask_hint_use_negative",
+     "type": "COMBO",
+     "widget": {
+      "name": "sam_mask_hint_use_negative"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "drop_size",
+     "name": "drop_size",
+     "type": "INT",
+     "widget": {
+      "name": "drop_size"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "wildcard",
+     "name": "wildcard",
+     "type": "STRING",
+     "widget": {
+      "name": "wildcard"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "cycle",
+     "name": "cycle",
+     "type": "INT",
+     "widget": {
+      "name": "cycle"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "inpaint_model",
+     "name": "inpaint_model",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "inpaint_model"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "noise_mask_feather",
+     "name": "noise_mask_feather",
+     "shape": 7,
+     "type": "INT",
+     "widget": {
+      "name": "noise_mask_feather"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "tiled_encode",
+     "name": "tiled_encode",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "tiled_encode"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "tiled_decode",
+     "name": "tiled_decode",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "tiled_decode"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "image",
+     "name": "image",
+     "type": "IMAGE",
+     "links": [
+      31
+     ]
+    },
+    {
+     "localized_name": "cropped_refined",
+     "name": "cropped_refined",
+     "shape": 6,
+     "type": "IMAGE",
+     "links": null
+    },
+    {
+     "localized_name": "cropped_enhanced_alpha",
+     "name": "cropped_enhanced_alpha",
+     "shape": 6,
+     "type": "IMAGE",
+     "links": null
+    },
+    {
+     "localized_name": "mask",
+     "name": "mask",
+     "type": "MASK",
+     "links": null
+    },
+    {
+     "localized_name": "detailer_pipe",
+     "name": "detailer_pipe",
+     "type": "DETAILER_PIPE",
+     "links": null
+    },
+    {
+     "localized_name": "cnet_images",
+     "name": "cnet_images",
+     "shape": 6,
+     "type": "IMAGE",
+     "links": null
+    }
+   ],
+   "title": "Gesichter nachbessern",
+   "properties": {
+    "Node name for S&R": "FaceDetailer"
+   },
+   "widgets_values": [
+    1024,
+    true,
+    1024,
+    42,
+    "randomize",
+    14,
+    1,
+    "dpmpp_2m",
+    "simple",
+    0.45,
+    5,
+    true,
+    true,
+    0.5,
+    10,
+    3,
+    "center-1",
+    0,
+    0.93,
+    0,
+    0.7,
+    "False",
+    10,
+    "",
+    1,
+    false,
+    20,
+    false,
+    false
+   ],
+   "widgets_values_named": {
+    "guide_size": 1024,
+    "guide_size_for": true,
+    "max_size": 1024,
+    "seed": 42,
+    "control_after_generate": "randomize",
+    "steps": 14,
+    "cfg": 1,
+    "sampler_name": "dpmpp_2m",
+    "scheduler": "simple",
+    "denoise": 0.45,
+    "feather": 5,
+    "noise_mask": true,
+    "force_inpaint": true,
+    "bbox_threshold": 0.5,
+    "bbox_dilation": 10,
+    "bbox_crop_factor": 3,
+    "sam_detection_hint": "center-1",
+    "sam_dilation": 0,
+    "sam_threshold": 0.93,
+    "sam_bbox_expansion": 0,
+    "sam_mask_hint_threshold": 0.7,
+    "sam_mask_hint_use_negative": "False",
+    "drop_size": 10,
+    "wildcard": "",
+    "cycle": 1,
+    "inpaint_model": false,
+    "noise_mask_feather": 20,
+    "tiled_encode": false,
+    "tiled_decode": false
+   }
+  },
+  {
+   "id": 41,
+   "type": "FaceDetailer",
+   "pos": [
+    1482.798828125,
+    130
+   ],
+   "size": [
+    400,
+    960
+   ],
+   "flags": {},
+   "order": 10,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "image",
+     "name": "image",
+     "type": "IMAGE",
+     "link": 31
+    },
+    {
+     "localized_name": "model",
+     "name": "model",
+     "type": "MODEL",
+     "link": 32
+    },
+    {
+     "localized_name": "clip",
+     "name": "clip",
+     "type": "CLIP",
+     "link": 33
+    },
+    {
+     "localized_name": "vae",
+     "name": "vae",
+     "type": "VAE",
+     "link": 34
+    },
+    {
+     "localized_name": "positive",
+     "name": "positive",
+     "type": "CONDITIONING",
+     "link": 35
+    },
+    {
+     "localized_name": "negative",
+     "name": "negative",
+     "type": "CONDITIONING",
+     "link": 36
+    },
+    {
+     "localized_name": "bbox_detector",
+     "name": "bbox_detector",
+     "type": "BBOX_DETECTOR",
+     "link": 37
+    },
+    {
+     "localized_name": "sam_model_opt",
+     "name": "sam_model_opt",
+     "shape": 7,
+     "type": "SAM_MODEL",
+     "link": 38
+    },
+    {
+     "localized_name": "segm_detector_opt",
+     "name": "segm_detector_opt",
+     "shape": 7,
+     "type": "SEGM_DETECTOR",
+     "link": null
+    },
+    {
+     "localized_name": "detailer_hook",
+     "name": "detailer_hook",
+     "shape": 7,
+     "type": "DETAILER_HOOK",
+     "link": null
+    },
+    {
+     "localized_name": "scheduler_func_opt",
+     "name": "scheduler_func_opt",
+     "shape": 7,
+     "type": "SCHEDULER_FUNC",
+     "link": null
+    },
+    {
+     "localized_name": "guide_size",
+     "name": "guide_size",
+     "type": "FLOAT",
+     "widget": {
+      "name": "guide_size"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "guide_size_for",
+     "name": "guide_size_for",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "guide_size_for"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "max_size",
+     "name": "max_size",
+     "type": "FLOAT",
+     "widget": {
+      "name": "max_size"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "seed",
+     "name": "seed",
+     "type": "INT",
+     "widget": {
+      "name": "seed"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "steps",
+     "name": "steps",
+     "type": "INT",
+     "widget": {
+      "name": "steps"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "cfg",
+     "name": "cfg",
+     "type": "FLOAT",
+     "widget": {
+      "name": "cfg"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "sampler_name",
+     "name": "sampler_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "sampler_name"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "scheduler",
+     "name": "scheduler",
+     "type": "COMBO",
+     "widget": {
+      "name": "scheduler"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "denoise",
+     "name": "denoise",
+     "type": "FLOAT",
+     "widget": {
+      "name": "denoise"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "feather",
+     "name": "feather",
+     "type": "INT",
+     "widget": {
+      "name": "feather"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "noise_mask",
+     "name": "noise_mask",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "noise_mask"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "force_inpaint",
+     "name": "force_inpaint",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "force_inpaint"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "bbox_threshold",
+     "name": "bbox_threshold",
+     "type": "FLOAT",
+     "widget": {
+      "name": "bbox_threshold"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "bbox_dilation",
+     "name": "bbox_dilation",
+     "type": "INT",
+     "widget": {
+      "name": "bbox_dilation"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "bbox_crop_factor",
+     "name": "bbox_crop_factor",
+     "type": "FLOAT",
+     "widget": {
+      "name": "bbox_crop_factor"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "sam_detection_hint",
+     "name": "sam_detection_hint",
+     "type": "COMBO",
+     "widget": {
+      "name": "sam_detection_hint"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "sam_dilation",
+     "name": "sam_dilation",
+     "type": "INT",
+     "widget": {
+      "name": "sam_dilation"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "sam_threshold",
+     "name": "sam_threshold",
+     "type": "FLOAT",
+     "widget": {
+      "name": "sam_threshold"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "sam_bbox_expansion",
+     "name": "sam_bbox_expansion",
+     "type": "INT",
+     "widget": {
+      "name": "sam_bbox_expansion"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "sam_mask_hint_threshold",
+     "name": "sam_mask_hint_threshold",
+     "type": "FLOAT",
+     "widget": {
+      "name": "sam_mask_hint_threshold"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "sam_mask_hint_use_negative",
+     "name": "sam_mask_hint_use_negative",
+     "type": "COMBO",
+     "widget": {
+      "name": "sam_mask_hint_use_negative"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "drop_size",
+     "name": "drop_size",
+     "type": "INT",
+     "widget": {
+      "name": "drop_size"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "wildcard",
+     "name": "wildcard",
+     "type": "STRING",
+     "widget": {
+      "name": "wildcard"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "cycle",
+     "name": "cycle",
+     "type": "INT",
+     "widget": {
+      "name": "cycle"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "inpaint_model",
+     "name": "inpaint_model",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "inpaint_model"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "noise_mask_feather",
+     "name": "noise_mask_feather",
+     "shape": 7,
+     "type": "INT",
+     "widget": {
+      "name": "noise_mask_feather"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "tiled_encode",
+     "name": "tiled_encode",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "tiled_encode"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "tiled_decode",
+     "name": "tiled_decode",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "tiled_decode"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "image",
+     "name": "image",
+     "type": "IMAGE",
+     "links": [
+      22
+     ]
+    },
+    {
+     "localized_name": "cropped_refined",
+     "name": "cropped_refined",
+     "shape": 6,
+     "type": "IMAGE",
+     "links": null
+    },
+    {
+     "localized_name": "cropped_enhanced_alpha",
+     "name": "cropped_enhanced_alpha",
+     "shape": 6,
+     "type": "IMAGE",
+     "links": null
+    },
+    {
+     "localized_name": "mask",
+     "name": "mask",
+     "type": "MASK",
+     "links": null
+    },
+    {
+     "localized_name": "detailer_pipe",
+     "name": "detailer_pipe",
+     "type": "DETAILER_PIPE",
+     "links": null
+    },
+    {
+     "localized_name": "cnet_images",
+     "name": "cnet_images",
+     "shape": 6,
+     "type": "IMAGE",
+     "links": null
+    }
+   ],
+   "title": "Hände nachbessern",
+   "properties": {
+    "Node name for S&R": "FaceDetailer"
+   },
+   "widgets_values": [
+    1024,
+    true,
+    1024,
+    42,
+    "randomize",
+    14,
+    1,
+    "dpmpp_2m",
+    "simple",
+    0.6,
+    5,
+    true,
+    true,
+    0.5,
+    10,
+    3,
+    "center-1",
+    0,
+    0.93,
+    0,
+    0.7,
+    "False",
+    10,
+    "",
+    1,
+    false,
+    20,
+    false,
+    false
+   ],
+   "widgets_values_named": {
+    "guide_size": 1024,
+    "guide_size_for": true,
+    "max_size": 1024,
+    "seed": 42,
+    "control_after_generate": "randomize",
+    "steps": 14,
+    "cfg": 1,
+    "sampler_name": "dpmpp_2m",
+    "scheduler": "simple",
+    "denoise": 0.6,
+    "feather": 5,
+    "noise_mask": true,
+    "force_inpaint": true,
+    "bbox_threshold": 0.5,
+    "bbox_dilation": 10,
+    "bbox_crop_factor": 3,
+    "sam_detection_hint": "center-1",
+    "sam_dilation": 0,
+    "sam_threshold": 0.93,
+    "sam_bbox_expansion": 0,
+    "sam_mask_hint_threshold": 0.7,
+    "sam_mask_hint_use_negative": "False",
+    "drop_size": 10,
+    "wildcard": "",
+    "cycle": 1,
+    "inpaint_model": false,
+    "noise_mask_feather": 20,
+    "tiled_encode": false,
+    "tiled_decode": false
+   }
+  }
+ ],
+ "links": [
+  [
+   20,
+   2,
+   0,
+   9,
+   0,
+   "CLIP"
+  ],
+  [
+   21,
+   2,
+   0,
+   10,
+   0,
+   "CLIP"
+  ],
+  [
+   22,
+   41,
+   0,
+   13,
+   0,
+   "IMAGE"
+  ],
+  [
+   23,
+   5,
+   0,
+   40,
+   0,
+   "IMAGE"
+  ],
+  [
+   24,
+   1,
+   0,
+   40,
+   1,
+   "MODEL"
+  ],
+  [
+   25,
+   2,
+   0,
+   40,
+   2,
+   "CLIP"
+  ],
+  [
+   26,
+   3,
+   0,
+   40,
+   3,
+   "VAE"
+  ],
+  [
+   27,
+   9,
+   0,
+   40,
+   4,
+   "CONDITIONING"
+  ],
+  [
+   28,
+   9,
+   1,
+   40,
+   5,
+   "CONDITIONING"
+  ],
+  [
+   29,
+   30,
+   0,
+   40,
+   6,
+   "BBOX_DETECTOR"
+  ],
+  [
+   30,
+   32,
+   0,
+   40,
+   7,
+   "SAM_MODEL"
+  ],
+  [
+   31,
+   40,
+   0,
+   41,
+   0,
+   "IMAGE"
+  ],
+  [
+   32,
+   1,
+   0,
+   41,
+   1,
+   "MODEL"
+  ],
+  [
+   33,
+   2,
+   0,
+   41,
+   2,
+   "CLIP"
+  ],
+  [
+   34,
+   3,
+   0,
+   41,
+   3,
+   "VAE"
+  ],
+  [
+   35,
+   10,
+   0,
+   41,
+   4,
+   "CONDITIONING"
+  ],
+  [
+   36,
+   10,
+   1,
+   41,
+   5,
+   "CONDITIONING"
+  ],
+  [
+   37,
+   31,
+   0,
+   41,
+   6,
+   "BBOX_DETECTOR"
+  ],
+  [
+   38,
+   32,
+   0,
+   41,
+   7,
+   "SAM_MODEL"
+  ]
+ ],
+ "groups": [],
+ "config": {},
+ "extra": {
+  "ds": {
+   "scale": 0.9,
+   "offset": [
+    416,
+    110
+   ]
+  }
+ },
+ "version": 0.4
+}
