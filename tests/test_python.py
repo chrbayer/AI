@@ -307,6 +307,20 @@ class ImageApi(unittest.TestCase):
                          ("qwen-image-21-colorize-turbo", "edits"))
         self.assertEqual(images.slug("Z-Image Turbo T2I (bf16, 8 Schritte)"), ("z-image-turbo", "generations"))
         self.assertEqual(images.slug("Z-Image Turbo Canny Control (bf16, 8 Schritte)"), ("z-image-turbo-canny-control", "edits"))
+        self.assertEqual(images.slug("Z-Image T2I (bf16, 25 Schritte)"), ("z-image", "generations"))
+
+    def test_a_negative_prompt_only_where_guidance_uses_it(self):
+        g = api("Z-Image T2I (bf16, 25 Schritte).json")
+        self.assertIn("negative_prompt", images.extras(g))
+        images.set_negative(g, "NEGATIVE")
+        self.assertIn("NEGATIVE", json.dumps(g))
+        images.set_prompt(g, "POSITIVE")
+        neg = [n for n in g.values() if "Negative" in images.title(n)]
+        self.assertEqual(neg[0]["inputs"]["text"], "NEGATIVE")          # the prompt went elsewhere
+        turbo = api("Z-Image Turbo T2I (bf16, 8 Schritte).json")       # cfg 1: no negative to steer by
+        self.assertNotIn("negative_prompt", images.extras(turbo))
+        with self.assertRaises(images.Refused):
+            images.set_negative(turbo, "x")
         self.assertEqual(images.extras(api("Z-Image Turbo Inpaint (bf16, 8 Schritte).json")), ["mask", "boxes", "strength"])
         self.assertEqual(images.slug("Qwen-Image 2.1 Pose Inpaint Turbo (bf16, 4 Schritte)"),
                          ("qwen-image-21-pose-inpaint-turbo", "edits"))

@@ -2,6 +2,7 @@
 """OpenAI's image API in front of ComfyUI — for llmctl's comfyui slots.
 
     POST /v1/images/generations   {"model", "prompt", "size", "n", "seed", "response_format"}
+                                  extra: "negative_prompt" (workflows with real guidance)
     POST /v1/images/edits         multipart: image (or image[]), mask, prompt, model, n, seed
                                   or JSON: "images": ["data:image/png;base64,...", ...], "mask"
                                   extra: "strength" (ControlNet), "pad" (Outpaint),
@@ -230,9 +231,30 @@ def mask_users(graph):
             if value == [slots[0], 1] and node["class_type"] != "JoinImageWithAlpha"]
 
 
+def negative_nodes(graph):
+    """A workflow's negative prompt, where it does something: a text encoder titled
+    Negative, and a sampler with real guidance (cfg 1 ignores the negative)."""
+    sampled = any(n["class_type"] == "KSampler" and isinstance(n["inputs"].get("cfg"), (int, float))
+                  and n["inputs"]["cfg"] > 1 for n in graph.values())
+    return [n for n in graph.values() if sampled and n["class_type"] == "CLIPTextEncode"
+            and "Negative" in title(n) and isinstance(n["inputs"].get("text"), str)]
+
+
+def set_negative(graph, negative):
+    nodes = negative_nodes(graph)
+    if not nodes:
+        raise Refused("this workflow takes no negative prompt (no guidance to steer away with)")
+    if not isinstance(negative, str):
+        raise Refused("negative_prompt is text")
+    for node in nodes:
+        node["inputs"]["text"] = negative
+
+
 def extras(graph):
     """The extra request fields this workflow takes."""
     out = []
+    if negative_nodes(graph):
+        out.append("negative_prompt")
     if mask_users(graph):
         out += ["mask", "boxes"]
     kinds = {n["class_type"] for n in graph.values()}
@@ -373,7 +395,8 @@ def upload(data):
     return f"{j['subfolder']}/{j['name']}" if j.get("subfolder") else j["name"]
 
 
-def prepare(graph, prompt, size, images, mask=None, strength=None, pad=None, boxes=None, margin=None):
+def prepare(graph, prompt, size, images, mask=None, strength=None, pad=None, boxes=None, margin=None,
+            negative_prompt=None):
     for key in [k for k, n in graph.items() if n["class_type"] in UI_ONLY]:
         del graph[key]
     for node in graph.values():               # into temp, not the user's output
@@ -384,6 +407,8 @@ def prepare(graph, prompt, size, images, mask=None, strength=None, pad=None, box
     # always send it.
     if prompt is not None:
         set_prompt(graph, prompt)
+    if negative_prompt not in (None, ""):
+        set_negative(graph, negative_prompt)
     set_size(graph, size)
     if images is not None:
         slots = image_nodes(graph)
@@ -509,7 +534,7 @@ def generations():
             raise Refused("prompt is required")
         return respond(j.get("model") or default_model("generations"), "generations", j["prompt"],
                        j.get("size"), int(j.get("n") or 1), j.get("seed"),
-                       j.get("response_format") or "b64_json")
+                       j.get("response_format") or "b64_json", negative_prompt=j.get("negative_prompt"))
     return handle(go)
 
 
@@ -529,6 +554,7 @@ def edits():
             n, seed, fmt = int(f.get("n") or 1), f.get("seed"), f.get("response_format") or "b64_json"
             mask = request.files["mask"].read() if "mask" in request.files else None
             strength, pad = f.get("strength") or None, f.get("pad") or None
+            negative = f.get("negative_prompt")
             boxes, margin = f.get("boxes") or None, f.get("margin")
         else:
             j = request.get_json(silent=True) or {}
@@ -538,10 +564,12 @@ def edits():
             n, seed, fmt = int(j.get("n") or 1), j.get("seed"), j.get("response_format") or "b64_json"
             mask = data_url(j["mask"]) if j.get("mask") else None
             strength, pad = j.get("strength"), j.get("pad")
+            negative = j.get("negative_prompt")
             boxes, margin = j.get("boxes"), j.get("margin")
         return respond(model or default_model("edits"), "edits", prompt, size, n,
                        seed if seed in (None, "") else int(seed), fmt, images,
-                       mask=mask, strength=strength, pad=pad, boxes=boxes, margin=margin)
+                       mask=mask, strength=strength, pad=pad, boxes=boxes, margin=margin,
+                       negative_prompt=negative)
     return handle(go)
 
 

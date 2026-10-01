@@ -1025,6 +1025,24 @@ llmctl update comfy --torch           # …and torch itself
   cache its n-gram table is read through — prefill held (1036/1385/1396 t/s
   at 850/6.6K/26K tokens), decode fell 20–30 % (prose 31.5 t/s, code 44)
   while ComfyUI kept the model loaded. Image API: `z-image-turbo`.
+- **Z-Image, the base model.** `Z-Image T2I (bf16, 25 Schritte)` is ComfyUI's
+  template for Tongyi-MAI's undistilled Z-Image: 25 steps at cfg 4, so a
+  real negative prompt — the image API takes it as `negative_prompt` (only
+  for workflows whose guidance uses one). Only the DiT is new (12.3 GB); the
+  encoder and VAE are Turbo's. 106–109 s an image, six times Turbo's 18–19 s.
+  Against Turbo, same prompts and seeds:
+  - **Variety**: four seeds of "a woman sitting in a café" gave four
+    different women, clothes and cafés; Turbo gave the same young woman in the
+    same jumper four times.
+  - **Style**: "Van Gogh: a harbour at night" painted a harbour at night in
+    his brushwork; Turbo copied *The Starry Night*, cypress and all.
+  - **Negative prompt**: "cars, traffic" turned a car-filled street into a
+    busy pedestrian one, a few cars left far off.
+  - Fox and fisherman as good (Turbo a little more polished); the shop sign
+    misspelt by both ("Sonnensschin", "Sonnenschen").
+
+  So: Turbo for speed, the base model when variety, a style or a negative
+  prompt matter. Image API: `z-image`.
 - **Z-Image Turbo with ControlNet.** `Z-Image Turbo Control / Canny Control /
   Pose Control / Depth Control / Inpaint / Colorize (bf16, 8 Schritte)` are
   the Qwen-Image 2.1 control workflows on Z-Image Turbo, with alibaba-pai's
@@ -1189,8 +1207,11 @@ includes loading the model.
 | Qwen-Image 2.1 | 52 s | 51 s | 51 s | right | clean, flat light, bare backgrounds |
 | Qwen-Image 2.1 Heretic | 57 s | 51 s | 57 s | right ("frischseit" tight) | as Qwen-Image for these prompts |
 | Z-Image Turbo | 29 s | 18 s | 30 s | "Sonnenschen" | the most natural photographs, fine skin, soft background |
+| Z-Image (base) | 109 s | 106 s | 106 s | "Sonnensschin" | like Turbo, less polished; far more variety between seeds, follows a style |
 
 - **Photographs, fast:** Z-Image Turbo — the best look per second here.
+- **Variety, styles, negative prompts:** Z-Image base — four seeds, four
+  different pictures, where Turbo repeats itself.
 - **The best picture, time no matter:** FLUX.2 dev, five minutes an image.
 - **Text in the picture, German with umlauts:** Qwen-Image 2.1 at 14 steps
   (51 s) or FLUX.2 dev; Z-Image and klein drop a letter, Qwen-Image Turbo's
