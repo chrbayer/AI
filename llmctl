@@ -1249,6 +1249,39 @@ _start_images_server() {
     return 1
 }
 
+# --vision VALUE for the image API of slot $2: sets vision (a URL) and, when it
+# names a slot, vision_slot — in the caller's scope, for _start_images_server.
+_resolve_vision() {
+    local value="$1" own="$2"
+    vision="$value"; vision_slot=""
+    [[ -z "$value" ]] && return 0
+    if [[ "$value" =~ ^[1-9][0-9]*$ ]]; then
+        _check_slot "$value" || return 1
+        [[ "$value" == "$own" ]] && { echo "Error: --vision names this very slot ($own)"; return 1; }
+        vision_slot="$value"
+        vision="http://127.0.0.1:$(( PORT_BASE_SERVER + value ))"
+    elif [[ ! "$value" =~ ^https?:// ]]; then
+        echo "Error: --vision takes a slot number or a URL; got '$value'"; return 1
+    fi
+}
+
+# The --vision an image API runs with ("" for none), read from its argv.
+_images_server_vision() {
+    local pid
+    pid=$(_slot_proxy_pid "$1") && _read_argv "$pid" || { echo ""; return; }
+    local k
+    for (( k=0; k < ${#_ARGV[@]}; k++ )); do
+        [[ "${_ARGV[k]}" == --vision ]] && { echo "${_ARGV[k+1]}"; return; }
+    done
+    echo ""
+}
+
+_tunnel_up() {
+    local pid=""
+    [[ -f "$PID_DIR/tunnel-$1.pid" ]] && pid=$(cat "$PID_DIR/tunnel-$1.pid")
+    [[ -n "$pid" ]] && ps -p "$pid" > /dev/null 2>&1
+}
+
 # The autossh pattern of one forwarded port: what pkill matches to find a tunnel
 # left from an earlier start — autossh's ssh child carries it too, and that is
 # what holds the port on the far side.
@@ -1715,14 +1748,7 @@ cmd_start() {
     if [[ -n "$vision" ]]; then
         [[ "$_r_backend" == comfyui && "$start_proxy" == true ]] || \
             { echo "Error: --vision is for the image API: a comfyui model started with --proxy"; exit 1; }
-        if [[ "$vision" =~ ^[1-9][0-9]*$ ]]; then
-            _check_slot "$vision" || exit 1
-            [[ "$vision" == "$slot" ]] && { echo "Error: --vision names this very slot ($slot)"; exit 1; }
-            vision_slot="$vision"
-            vision="http://127.0.0.1:$(( PORT_BASE_SERVER + vision ))"
-        elif [[ ! "$vision" =~ ^https?:// ]]; then
-            echo "Error: --vision takes a slot number or a URL; got '$vision'"; exit 1
-        fi
+        _resolve_vision "$vision" "$slot" || exit 1
     fi
     case "$_r_backend" in
         llama) ;;
@@ -2400,6 +2426,7 @@ cmd_preset() {
     # Everything is checked before anything is touched: a name typo or an
     # impossible flag in the last entry must not disturb a running slot.
     local -a e_model=() e_slot=() e_flags=() e_label=() e_cmd=() e_proxy=() e_public=() e_host=()
+    local -a e_tunnel=() e_vision=()
     local word
     local line seen=""
     local -a w
@@ -2455,6 +2482,11 @@ cmd_preset() {
         # A halogen slot always has its proxy, asked for or not.
         if [[ " ${eff[*]} " == *" --proxy "* || "$_r_backend" == halogen ]]; then e_proxy+=(true); else e_proxy+=(false); fi
         [[ " ${eff[*]} " == *" --public "* ]] && e_public+=(true) || e_public+=(false)
+        # A ComfyUI slot's tunnel and the vision model its image API asks.
+        [[ " ${eff[*]} " == *" --tunnel "* ]] && e_tunnel+=(true) || e_tunnel+=(false)
+        local ev="" pv=""
+        for word in "${eff[@]}"; do [[ "$pv" == "--vision" ]] && ev="$word"; pv="$word"; done
+        e_vision+=("$ev")
         # The host a reconciled proxy has to bind, read from the same effective flags.
         local eh="" prev=""
         for word in "${eff[@]}"; do
@@ -2479,9 +2511,16 @@ cmd_preset() {
                 continue
             fi
             if _slot_server_pid "$sl" > /dev/null; then
+                local vision="" vision_slot="" proxy_new=false
+                _resolve_vision "${e_vision[i]}" "$sl" > /dev/null
                 if [[ "${e_proxy[i]}" == true ]] && ! _slot_proxy_pid "$sl" > /dev/null; then
                     echo "Slot $sl: its proxy died — starting it again."
-                    _start_proxy "$sl" "${e_host[i]}" "${e_public[i]}" || true
+                    _start_proxy "$sl" "${e_host[i]}" "${e_public[i]}" && proxy_new=true
+                    n=$(( n + 1 ))
+                fi
+                if [[ "${e_tunnel[i]}" == true ]] && { ! _tunnel_up "$sl" || [[ "$proxy_new" == true ]]; }; then
+                    echo "Slot $sl: its tunnel is down — opening it again."
+                    _start_tunnel "$sl" || true
                     n=$(( n + 1 ))
                 fi
                 continue
@@ -2510,10 +2549,10 @@ cmd_preset() {
     # comparison, so a slot counts as matching only when every flag agrees — model,
     # context, parallel, samplers, mmproj, speculation, reasoning.
     local total=${#e_model[@]} i
-    local -a e_action=() e_proxy_action=()
+    local -a e_action=() e_proxy_action=() e_tunnel_action=()
     local keep_n=0 start_n=0 restart_n=0
     for (( i=0; i<total; i++ )); do
-        local s="${e_slot[i]}" pid="" action="start" proxy_action="none"
+        local s="${e_slot[i]}" pid="" action="start" proxy_action="none" tunnel_action="none"
         if pid=$(_slot_server_pid "$s"); then
             if [[ "$force" == true ]]; then
                 action="restart"
@@ -2532,9 +2571,22 @@ cmd_preset() {
                 proxy_action="start"
             elif [[ "${e_proxy[i]}" == false && "$proxy_up" == true ]]; then
                 proxy_action="stop"
+            elif [[ "${e_proxy[i]}" == true && "$proxy_up" == true ]] && _slot_is_comfyui "$s"; then
+                # The image API asks the vision model the preset names, or none.
+                local vision="" vision_slot=""
+                _resolve_vision "${e_vision[i]}" "$s" > /dev/null
+                [[ "$(_images_server_vision "$s")" == "$vision" ]] || proxy_action="restart"
+            fi
+            # The tunnel follows: started when asked for and down, or when the image
+            # API it forwards comes anew; stopped when the preset has none.
+            if [[ "${e_tunnel[i]}" == true ]]; then
+                if ! _tunnel_up "$s"; then tunnel_action="start"
+                elif [[ "$proxy_action" == start || "$proxy_action" == restart ]]; then tunnel_action="restart"; fi
+            elif _tunnel_up "$s"; then
+                tunnel_action="stop"
             fi
         fi
-        e_action+=("$action"); e_proxy_action+=("$proxy_action")
+        e_action+=("$action"); e_proxy_action+=("$proxy_action"); e_tunnel_action+=("$tunnel_action")
         case "$action" in
             keep)    keep_n=$(( keep_n + 1 )) ;;
             start)   start_n=$(( start_n + 1 )) ;;
@@ -2574,8 +2626,14 @@ cmd_preset() {
             restart) note=$([[ "$force" == true ]] && echo "restart (--force)" || echo "runs a different configuration — stop and start") ;;
         esac
         case "${e_proxy_action[i]}" in
-            start) note+=", add proxy" ;;
-            stop)  note+=", stop proxy" ;;
+            start)   note+=", add proxy" ;;
+            stop)    note+=", stop proxy" ;;
+            restart) note+=", restart the image API (another --vision)" ;;
+        esac
+        case "${e_tunnel_action[i]}" in
+            start)   note+=", add tunnel" ;;
+            stop)    note+=", stop tunnel" ;;
+            restart) note+=", renew tunnel" ;;
         esac
         printf "  slot %-3s %-14s %-24s %s\n" "${e_slot[i]}" "${e_model[i]}" "${e_label[i]}" "$note"
     done
@@ -2605,7 +2663,9 @@ cmd_preset() {
 
     if (( start_n + restart_n == 0 )) && (( ${#foreign[@]} == 0 )); then
         local pending=0 j
-        for (( j=0; j<total; j++ )); do [[ "${e_proxy_action[j]}" == "none" ]] || pending=1; done
+        for (( j=0; j<total; j++ )); do
+            [[ "${e_proxy_action[j]}" == "none" && "${e_tunnel_action[j]}" == "none" ]] || pending=1
+        done
         if (( pending == 0 )); then
             echo ""
             echo "Preset '$_p_name' is already running exactly like this — nothing to do."
@@ -2630,14 +2690,24 @@ cmd_preset() {
         _stop_slot "${e_slot[i]}" > /dev/null && echo "Slot ${e_slot[i]}: stopped (ran a different configuration)."
     done
 
-    # Kept slots: reconcile the proxy alone, and claim the slot for this preset.
+    # Kept slots: reconcile the proxy and the tunnel alone, and claim the slot for
+    # this preset.
     for (( i=0; i<total; i++ )); do
         [[ "${e_action[i]}" == "keep" ]] || continue
+        local vision="" vision_slot=""
+        _resolve_vision "${e_vision[i]}" "${e_slot[i]}" > /dev/null
         case "${e_proxy_action[i]}" in
+            restart) _stop_proxy "${e_slot[i]}" > /dev/null ;&
             start) _start_proxy "${e_slot[i]}" "${e_host[i]}" "${e_public[i]}" || {
                        echo "Error: could not add the proxy to slot ${e_slot[i]}."; exit 1; } ;;
             stop)  _stop_proxy "${e_slot[i]}" > /dev/null && \
                        echo "Slot ${e_slot[i]}: proxy stopped (this preset does not ask for one)." ;;
+        esac
+        case "${e_tunnel_action[i]}" in
+            start|restart) _start_tunnel "${e_slot[i]}" || {
+                       echo "Error: could not open the tunnel for slot ${e_slot[i]}."; exit 1; } ;;
+            stop)  _stop_tunnel "${e_slot[i]}" > /dev/null && \
+                       echo "Slot ${e_slot[i]}: tunnel stopped (this preset does not ask for one)." ;;
         esac
         echo "$_p_name" > "$PID_DIR/preset-${e_slot[i]}"
         printf "Slot %s: %s keeps running (%s).\n" "${e_slot[i]}" "${e_model[i]}" "${e_label[i]}"

@@ -1131,6 +1131,15 @@ far side still holds from a session that died unnoticed makes the first try
 fail (`ExitOnForwardFailure`); llmctl clears its own leftovers and tries again
 after a pause.
 
+As a preset: `llmctl preset comfy-remote` (`comfy 9 --proxy --vision 2
+--tunnel`). On a ComfyUI that already runs, `preset` adds or stops the image
+API and the tunnel on their own instead of restarting it, restarts the image
+API when it asks another vision model, and renews the tunnel when the image
+API comes anew; `preset --repair` (the watchdog of `llmctl service`) opens a
+tunnel again that went down. Tried: switching `comfy` → `comfy-remote` →
+`comfy` stopped and added image API and tunnel with ComfyUI kept running, and
+a killed tunnel came back with `--repair`.
+
 `deploy/vps-comfy-vhost.conf` is the Apache side: its own name with a Let's
 Encrypt certificate, **Basic Auth in front of everything** — ComfyUI has no
 login, and whoever reaches it runs workflows and uploads files — the
