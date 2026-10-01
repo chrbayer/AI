@@ -1142,7 +1142,10 @@ clients from outside send none, so the API stays closed to them. Its
 
 Tried: the tunnel up in 3 s, 8009 and 8089 listening on the server's
 loopback, UI, repair page and its status answering there; `stop` freed both
-ports on the server and left no ssh behind; a restart came up at once.
+ports on the server and left no ssh behind; a restart came up at once. Through
+the server's Apache with this vhost: 401 with a Basic Auth prompt on every
+path without credentials, and with them ComfyUI and the repair page load in
+the browser.
 
 ### Which model for a picture
 
