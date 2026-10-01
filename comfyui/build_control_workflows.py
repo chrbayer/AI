@@ -151,6 +151,28 @@ def inpaint():
     return g
 
 
+def masked(make, prompt, prefix):
+    """A control workflow that repaints only inside the mask: the edges, pose
+    or depth of the whole photo steer what is painted there (#24)."""
+    def made():
+        g = make()
+        g["9"]["inputs"]["prompt"] = prompt
+        g["13"]["inputs"]["filename_prefix"] = prefix
+        g["5"] = {"class_type": "LoadImage", "inputs": {"image": "inpaint.png"},
+                  "_meta": {"title": "Photo — paint the mask over what to redraw"}}
+        g["16"] = {"class_type": "MaskToImage", "inputs": {"mask": ["5", 1]}}
+        g["17"] = {"class_type": "ImageScaleToTotalPixels", "inputs": {"image": ["16", 0], "upscale_method": "bilinear", "megapixels": 1.0, "resolution_steps": 16}}
+        g["18"] = {"class_type": "ImageToMask", "inputs": {"image": ["17", 0], "channel": "red"}}
+        g["8"]["inputs"].update({"inpaint_image": ["6", 0], "mask": ["18", 0]})
+        return g
+    return made
+
+
+canny_inpaint = masked(canny, "The same photo; the masked jacket is now bright red leather", "Qwen_image_2.1_canny_inpaint")
+pose_inpaint = masked(pose, "The same photo; the person now wears a yellow rain jacket and dark trousers", "Qwen_image_2.1_pose_inpaint")
+depth_inpaint = masked(depth, "The same photo; the masked part of the room is now a wooden bookshelf", "Qwen_image_2.1_depth_inpaint")
+
+
 def outpaint():
     """Extend a picture beyond its edges: the canvas padded (ImagePadForOutpaint,
     256 px left and right by default, a 40 px feathered seam), the new border
@@ -245,6 +267,9 @@ WORKFLOWS = {
     "Qwen-Image 2.1 Inpaint (bf16, dpmpp_2m 14)": inpaint,
     "Qwen-Image 2.1 Colorize (bf16, dpmpp_2m 14)": colorize,
     "Qwen-Image 2.1 Outpaint (bf16, dpmpp_2m 14)": outpaint,
+    "Qwen-Image 2.1 Canny Inpaint (bf16, dpmpp_2m 14)": canny_inpaint,
+    "Qwen-Image 2.1 Pose Inpaint (bf16, dpmpp_2m 14)": pose_inpaint,
+    "Qwen-Image 2.1 Depth Inpaint (bf16, dpmpp_2m 14)": depth_inpaint,
     "Qwen-Image 2.1 Control Turbo (bf16, 4 Schritte)": turbo(control),
     "Qwen-Image 2.1 Canny Control Turbo (bf16, 4 Schritte)": turbo(canny),
     "Qwen-Image 2.1 Pose Control Turbo (bf16, 4 Schritte)": turbo(pose),
@@ -252,6 +277,9 @@ WORKFLOWS = {
     "Qwen-Image 2.1 Inpaint Turbo (bf16, 4 Schritte)": turbo(inpaint),
     "Qwen-Image 2.1 Colorize Turbo (bf16, 4 Schritte)": turbo(colorize),
     "Qwen-Image 2.1 Outpaint Turbo (bf16, 4 Schritte)": turbo(outpaint),
+    "Qwen-Image 2.1 Canny Inpaint Turbo (bf16, 4 Schritte)": turbo(canny_inpaint),
+    "Qwen-Image 2.1 Pose Inpaint Turbo (bf16, 4 Schritte)": turbo(pose_inpaint),
+    "Qwen-Image 2.1 Depth Inpaint Turbo (bf16, 4 Schritte)": turbo(depth_inpaint),
     "Artifact Check (flash)": artifact_check,
     "Qwen-Image 2.1 Detailer (bf16, dpmpp_2m 14)": detailer,
 }

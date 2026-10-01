@@ -904,6 +904,23 @@ llmctl update comfy --torch           # …and torch itself
     style, freer than Canny, which holds every edge. Tried: a modern living
     room became an alpine cabin, sofa, table, lamp, window and shelves where
     they were.
+  - `Qwen-Image 2.1 Canny/Pose/Depth Inpaint`: repaint only inside the mask,
+    while the whole photo's edges, pose or depth steer what is painted there
+    (the control branch takes the control image and the mask at once). Tried
+    against plain Inpaint, Turbo, two seeds each:
+    - **Canny keeps the cut**: a black coat masked and asked to be red
+      leather stayed the same coat — buttons, collar, folds — in red leather;
+      plain Inpaint made a different jacket, a zipped biker one.
+    - **Depth keeps the shape**: a tablecloth masked and asked to be a wooden
+      table kept the cloth's drape, now dark; plain Inpaint made a wooden
+      table (and once left a white rest). Use it to change a material, not a
+      thing.
+    - **Pose adds little** where the person stays: a cyclist in a new rain
+      jacket sat the same way with plain Inpaint, which follows what is
+      around the mask. It is for putting someone else into the pose.
+
+    Turbo 25 s each; through the image API as
+    `qwen-image-21-{canny,pose,depth}-inpaint[-turbo]` with `mask` or `boxes`.
   - `Qwen-Image 2.1 Colorize`: a black-and-white photo in colour. Its
     luminance (Image Luminance, from comfyui_controlnet_aux) is the control,
     so every line and texture stays; the prompt says what colours to give —
