@@ -294,13 +294,16 @@ _slot_is_halogen() {
 # in the foreground) leaves the container running, holding the weights and the
 # port, while every PID-based check sees an empty slot.
 _halogen_orphan() {
-    _slot_is_halogen "$1" || return 1
-    [[ "$(podman inspect -f '{{.State.Running}}' "$(_halogen_container "$1")" 2>/dev/null)" == "true" ]] || return 1
+    local name
+    if _slot_is_halogen "$1"; then name=$(_halogen_container "$1")
+    elif _slot_is_gufo "$1"; then name=$(_gufo_container "$1")
+    else return 1; fi
+    [[ "$(podman inspect -f '{{.State.Running}}' "$name" 2>/dev/null)" == "true" ]] || return 1
     # Whatever still holds the port then is podman's own plumbing, not the client:
     # its argv is not the run command, so status would describe an empty slot.
     local pid
     pid=$(_slot_server_pid "$1") || return 0
-    _read_argv "$pid" && _is_halogen_argv && return 1
+    _read_argv "$pid" && _is_container_argv && return 1
     return 0
 }
 
@@ -347,6 +350,69 @@ _halogen_cap_of_slot() {
         cap=$(_argv_env HALOGEN_MAX_TOKENS_CAP)
     fi
     echo "${cap:-$HALOGEN_MAX_TOKENS_CAP}"
+}
+
+# ── gufo backend ────────────────────────────────────────────
+#
+# models.conf entries with _model_backend="gufo" run gufo (github.com/gufo-org/
+# gufo, MIT), an inference engine written for Strix Halo, from its container
+# image. Like halogen: `podman run` in the foreground under _spawn_detached, the
+# container named llmctl-gufo-<slot>, the model's host path in an llmctl.model
+# label. Unlike halogen:
+#
+#   - It reads ordinary GGUFs; settings are command-line flags of `gufo serve
+#     llm`, and models.conf's extra_args are such flags too.
+#   - The weights sit in the container's own RAM (RSS), the KV for every session
+#     in GTT, reserved at start: --ctx and --parallel decide its size.
+#   - Its proxy is optional, as for llama-server: gufo speaks the Messages API.
+#   - SELinux: the container runs with label=disable — otherwise it may neither
+#     read the mounted models nor map /dev/kfd. That concerns this container only.
+#   - It checks the model name of every request: --served-model-name is the
+#     entry's client name, which `llmctl env` hands Claude Code.
+GUFO_API_PORT=8080
+GUFO_CONTAINER_PREFIX="llmctl-gufo-"
+GUFO_REPO="gufo-org/gufo"
+GUFO_SESSIONS_DEFAULT=2          # sessions when neither the entry nor --parallel says
+
+_gufo_container() { echo "${GUFO_CONTAINER_PREFIX}$1"; }
+
+_gufo_slots() {
+    command -v podman > /dev/null || return 0
+    podman ps -a --format '{{.Names}}' 2>/dev/null |
+        sed -n "s/^${GUFO_CONTAINER_PREFIX}\([1-9][0-9]*\)\$/\1/p" | sort -un
+}
+
+_slot_is_gufo() {
+    command -v podman > /dev/null && podman container exists "$(_gufo_container "$1")" 2>/dev/null
+}
+
+_is_gufo_argv() {
+    [[ "${#_ARGV[@]}" -gt 0 && "$(basename "${_ARGV[0]}")" == podman && " ${_ARGV[*]} " == *" --name ${GUFO_CONTAINER_PREFIX}"* ]]
+}
+
+# Either kind of container slot: halogen or gufo.
+_container_slots() { { _halogen_slots; _gufo_slots; } | sort -un; }
+_is_container_argv() { _is_halogen_argv || _is_gufo_argv; }
+
+# The container of a slot, and what runs in it.
+_slot_container() {
+    if _slot_is_halogen "$1"; then _halogen_container "$1"
+    elif _slot_is_gufo "$1"; then _gufo_container "$1"
+    else return 1; fi
+}
+_slot_container_kind() {
+    if _slot_is_halogen "$1"; then echo halogen
+    elif _slot_is_gufo "$1"; then echo gufo
+    else return 1; fi
+}
+
+# A gufo server's memory beyond GTT: its weights, held as the container's RSS.
+_gufo_rss_mib() {
+    local c sum=0
+    for c in $(podman top "$(_gufo_container "$1")" hpid 2>/dev/null | tail -n +2); do
+        sum=$(( sum + $(_proc_rss_mib "$c") ))
+    done
+    echo "$sum"
 }
 
 # ── comfyui backend ─────────────────────────────────────────
@@ -1356,6 +1422,13 @@ _start_proxy() {
         # halogen speaks the Messages API itself since 0.15.1; the proxy's own
         # translation stays for an older image, or to compare.
         [[ "${LLMCTL_HALOGEN_TRANSLATE:-0}" == 1 ]] && backend_env+=(LLM_TRANSLATE_MESSAGES=1)
+    elif [[ "${proxy_kind:-}" == gufo ]] || _slot_is_gufo "$slot"; then
+        # gufo's own /v1/messages hands back the model's thinking inside the text
+        # block, "</think>" and all (0.4.0); its chat completions split it off. So
+        # the proxy translates, unless LLMCTL_GUFO_NATIVE_MESSAGES=1 says gufo
+        # has fixed that.
+        backend_env=(LLM_PROXY_TIMEOUT="$HALOGEN_PROXY_TIMEOUT" LLM_INLINE_IMAGE_URLS=1)
+        [[ "${LLMCTL_GUFO_NATIVE_MESSAGES:-0}" == 1 ]] || backend_env+=(LLM_TRANSLATE_MESSAGES=1)
     else
         backend_env=(LLM_PROXY_TIMEOUT="$LLAMA_SERVER_TIMEOUT")
         # llama-server fetches image URLs itself, from any address — through a
@@ -1624,6 +1697,227 @@ _start_halogen() {
     echo "  Stop:  $PROG stop $slot"
 }
 
+_start_gufo() {
+    local -a refused=()
+    [[ -n "$cache_ram" ]] && refused+=("--cache-ram")
+    [[ -n "$similarity" ]] && refused+=("--similarity")
+    [[ -n "$gpu_priority" ]] && refused+=("--gpu-priority")
+    [[ "$public" == true ]] && refused+=("--public (not wired up for gufo yet)")
+    if (( ${#refused[@]} )); then
+        echo "Error: not available with the gufo backend: ${refused[*]}"
+        exit 1
+    fi
+    local lan=false
+    [[ -n "$host" && "$host" != "127.0.0.1" && "$host" != "localhost" ]] && lan=true
+    _check_deps podman || exit 1
+
+    local model_path="${_r_model//\~/$HOME}"
+    local model_dir; model_dir="$(dirname "$model_path")"
+    local ctx_n="${ctx:-${_r_ctx:-0}}" sessions="${parallel:-$GUFO_SESSIONS_DEFAULT}"
+
+    # gufo serve llm's flags, in a fixed order: preset compares the command word
+    # for word.
+    local -a serve=(gufo serve --host 0.0.0.0 --port "$GUFO_API_PORT" llm
+        --model "/models/$(basename "$model_path")" --served-model-name "$_r_client"
+        --context "$ctx_n" --sessions "$sessions")
+    # The entry's flags, less those a start option overrides: gufo refuses a flag
+    # given twice.
+    local -a own=("${_r_args[@]}") drop=()
+    [[ -n "$temp" ]] && drop+=(--temperature)
+    [[ -n "$top_p" ]] && drop+=(--top-p)
+    [[ -n "$max_predict" ]] && drop+=(--max-tokens)
+    local j
+    for (( j=0; j < ${#own[@]}; j++ )); do
+        if [[ " ${drop[*]} " == *" ${own[j]} "* ]]; then j=$(( j + 1 )); continue; fi
+        serve+=("${own[j]}")
+    done
+
+    # Speculation: the entry's spec_args, the draft's host path mounted as /draft.
+    local draft_mount="" spec_note="off"
+    if [[ "$spec" != off && ${#_r_spec_args[@]} -gt 0 ]]; then
+        local w prev_w=""
+        for w in "${_r_spec_args[@]}"; do
+            w="${w//\~/$HOME}"
+            case "$prev_w" in
+                --dflash-model|--mtp-model)
+                    [[ -f "$w" ]] || { echo "Error: draft not found: $w — run: $PROG download $_r_name"; exit 1; }
+                    draft_mount="$(dirname "$w")"; w="/draft/$(basename "$w")" ;;
+            esac
+            serve+=("$w")
+            prev_w="$w"
+        done
+        spec_note="${_r_spec_args[*]}"
+    fi
+
+    if [[ -n "$reasoning" ]]; then
+        local r="$reasoning"
+        [[ "$r" == "0" ]] && r=off
+        case "$r" in
+            off) serve+=(--think off) ;;
+            on|-1) serve+=(--think on) ;;
+            *)  if [[ " $REASONING_LEVELS " == *" $r "* ]]; then
+                    local pair mapped="$r"
+                    for pair in $_r_reasoning_levels; do [[ "${pair%%=*}" == "$r" ]] && mapped="${pair#*=}"; done
+                    serve+=(--think on --reasoning-effort "$mapped")
+                else
+                    echo "Error: gufo takes --reasoning off, on or a level ($REASONING_LEVELS), not a token budget"; exit 1
+                fi ;;
+        esac
+    fi
+    [[ -n "$temp" ]]  && serve+=(--temperature "$temp")
+    [[ -n "$top_p" ]] && serve+=(--top-p "$top_p")
+    [[ -n "$max_predict" && "$max_predict" != "-1" ]] && serve+=(--max-tokens "$max_predict")
+    [[ "$verbose" == true ]] && serve+=(--log-level debug)
+    if [[ "$use_mmproj" == true ]]; then
+        [[ -n "$_r_mmproj" ]] || { echo "Error: --mmproj requested but model '$name' defines no mmproj"; exit 1; }
+        [[ "$(dirname "${_r_mmproj//\~/$HOME}")" == "$model_dir" ]] ||
+            { echo "Error: gufo finds the vision file beside the model; mmproj of '$name' is elsewhere"; exit 1; }
+        serve+=(--mmproj "/models/$(basename "${_r_mmproj//\~/$HOME}")")
+    fi
+
+    local -a cmd=(podman run --rm --name "$(_gufo_container "$slot")"
+        --label "llmctl.model=$model_path"
+        -p "${host:-127.0.0.1}:${port_server}:${GUFO_API_PORT}"
+        --security-opt label=disable
+        --device /dev/kfd --device /dev/dri --group-add keep-groups
+        --ulimit memlock=-1:-1
+        -v "$model_dir:/models:ro")
+    [[ -n "$draft_mount" ]] && cmd+=(-v "$draft_mount:/draft:ro")
+    cmd+=("$_r_binary" "${serve[@]}")
+
+    if [[ "$print_cmd" == true ]]; then
+        printf '%s\n' "${cmd[*]}"
+        return 0
+    fi
+
+    [[ "$ignore_memory" == true ]] || _memory_check_start "$slot" "${cmd[*]}" true
+    local container; container=$(_gufo_container "$slot")
+    podman container exists "$container" 2>/dev/null && podman rm -f "$container" > /dev/null 2>&1
+    [[ -f "$model_path" ]] || { echo "Error: model not found: $model_path — run: $PROG download $_r_name"; exit 1; }
+    [[ "$compact" == true ]] && { _compact_memory || exit 1; }
+
+    local config_text
+    config_text="$(
+        echo "Model:    $_r_label ($_r_client)"
+        echo "Backend:  gufo — $_r_binary (podman, container $container)"
+        echo "Weights:  $model_path"
+        echo "Host:     ${host:-127.0.0.1 (default)}"
+        [[ "$lan" == true ]] && echo "  WARNING: published beyond localhost ($host) without authentication — trusted networks only."
+        echo "Context:  ${ctx_n/#0/native} per session, $sessions session(s) — KV reserved at start"
+        echo "Speculative: $spec_note"
+        if [[ "$use_mmproj" == true ]]; then echo "Vision:   on (--mmproj; gufo uploads it at the first image)"
+        elif [[ -n "$_r_mmproj" ]]; then echo "Vision:   available but not loaded (pass --mmproj)"; fi
+        [[ -n "$reasoning" ]] && echo "Reasoning: $reasoning"
+        echo "Proxy:    always on :$port_proxy — translates /v1/messages (Claude Code) to chat completions,"
+        echo "          where gufo splits the thinking off; normalizes time stamps, inlines image URLs"
+        echo "----- effective config -----"
+        echo "Command:"
+        printf '  %s\n' "${cmd[*]}"
+        echo "----------------------------"
+    )"
+    echo "$config_text"
+    : > "$server_log"
+    printf '%s\n\n' "$config_text" >> "$server_log"
+    echo "Starting gufo [slot $slot] on port $port_server..."
+    local server_pid=""
+    server_pid=$(_spawn_detached "$PID_DIR/server-${slot}.pid" "$server_log" append "${cmd[@]}")
+    [[ -n "$server_pid" ]] || { echo "Error: podman did not report a PID. See $server_log" >&2; exit 1; }
+    echo "Server running (PID: $server_pid, detached) — gufo loads a 30 GB model in a few seconds"
+    echo "from the file cache, longer from disk."
+    local proxy_kind=gufo
+    _start_proxy "$slot" "$host" "$public" || { _stop_slot "$slot" > /dev/null; exit 1; }
+    echo ""
+    echo "  Logs:  tail -f $server_log"
+    echo "         tail -f $proxy_log"
+    echo "  Env:   $PROG env $_r_name $slot"
+    echo "  Stop:  $PROG stop $slot"
+}
+
+# _describe_server for a gufo server, from its command line in $_ARGV.
+_describe_gufo() {
+    local pid="$1" indent="$2" model label host="" i
+    model=$(_argv_halogen_model) || model=""
+    label=$(_label_for_model_path "$model") || label="$(basename "${model:-unknown}")"
+    for (( i=0; i < ${#_ARGV[@]} - 1; i++ )); do
+        [[ "${_ARGV[i]}" == "-p" ]] && host="${_ARGV[i+1]%%:*}"
+    done
+    echo "${indent}Model:     $label ($(_argv_flag --served-model-name || echo "?"))"
+    local -a params=("ctx $(_argv_flag --context || echo native) per session" "sessions $(_argv_flag --sessions || echo 1)")
+    local v
+    v=$(_argv_flag --max-tokens) && params+=("token cap $v")
+    _argv_flag --mmproj > /dev/null && params+=("vision")
+    [[ -n "$host" && "$host" != "127.0.0.1" ]] && params+=("host $host")
+    local joined="" p
+    for p in "${params[@]}"; do joined+="${joined:+, }$p"; done
+    echo "${indent}Params:    $joined"
+    if v=$(_argv_flag --think); then
+        echo "${indent}Reasoning: $v$(_argv_flag --reasoning-effort > /dev/null && echo ", effort $(_argv_flag --reasoning-effort)")"
+    else
+        echo "${indent}Reasoning: model default"
+    fi
+    echo "${indent}Spec:      $(_argv_flag --speculative || echo off)"
+    awk -v g="$(_slot_gtt_mib "$slot" 2>/dev/null || echo 0)" -v r="$(_gufo_rss_mib "$slot")" -v i="$indent" 'BEGIN {
+        printf "%sMemory:    weights %.1f GiB in RAM, KV and working memory %.1f GiB GTT\n", i, r / 1024, g / 1024 }'
+}
+
+# _capture_slot for a gufo server: its flags read back into start options.
+_capture_gufo_slot() {
+    local slot="$1" model
+    model=$(_argv_halogen_model) || { echo "slot $slot: the container carries no llmctl.model label" >&2; return 1; }
+    local -a candidates=()
+    mapfile -t candidates < <(_names_for_model_path "$model")
+    (( ${#candidates[@]} )) || { echo "slot $slot: $(basename "$model") is not in models.conf — add it there first" >&2; return 1; }
+    local host="" i
+    for (( i=0; i < ${#_ARGV[@]} - 1; i++ )); do
+        [[ "${_ARGV[i]}" == "-p" ]] && host="${_ARGV[i+1]%%:*}"
+    done
+    [[ "$host" == "127.0.0.1" ]] && host=""
+    local ctx_v sess think effort temp top_p cap
+    ctx_v=$(_argv_flag --context); sess=$(_argv_flag --sessions)
+    think=$(_argv_flag --think); effort=$(_argv_flag --reasoning-effort)
+    temp=$(_argv_flag --temperature); top_p=$(_argv_flag --top-p); cap=$(_argv_flag --max-tokens)
+    local name
+    for name in "${candidates[@]}"; do
+        _resolve_model "$name" || continue
+        local -a flags=()
+        [[ -n "$ctx_v" && "$ctx_v" != "${_r_ctx:-0}" ]] && flags+=(--ctx "$ctx_v")
+        [[ -n "$sess" && "$sess" != "$GUFO_SESSIONS_DEFAULT" ]] && flags+=(--parallel "$sess")
+        if [[ "$think" == off ]]; then flags+=(--reasoning off)
+        elif [[ -n "$effort" ]]; then
+            local level=""; level=$(_level_for_effort "$effort" "$_r_reasoning_levels") || level="$effort"
+            flags+=(--reasoning "$level")
+        elif [[ "$think" == on ]]; then flags+=(--reasoning on); fi
+        _argv_flag --speculative > /dev/null || { (( ${#_r_spec_args[@]} )) && flags+=(--spec off); }
+        _argv_flag --mmproj > /dev/null && flags+=(--mmproj)
+        [[ -n "$host" ]] && flags+=(--host "$host")
+        # Values the entry's own flags give are no start options; only a change is.
+        local own_t="" own_p="" own_c="" k
+        for (( k=0; k < ${#_r_args[@]} - 1; k++ )); do
+            case "${_r_args[k]}" in
+                --temperature) own_t="${_r_args[k+1]}" ;;
+                --top-p) own_p="${_r_args[k+1]}" ;;
+                --max-tokens) own_c="${_r_args[k+1]}" ;;
+            esac
+        done
+        [[ -n "$temp" && "$temp" != "$own_t" ]] && flags+=(--temp "$temp")
+        [[ -n "$top_p" && "$top_p" != "$own_p" ]] && flags+=(--top-p "$top_p")
+        [[ -n "$cap" && "$cap" != "$own_c" ]] && flags+=(--max-predict "$cap")
+        _argv_flag --log-level > /dev/null && flags+=(--verbose)
+        local built=""
+        built=$( cmd_start "$name" "$slot" "${flags[@]}" --print-cmd 2>/dev/null ) || continue
+        if [[ "$built" == "${_ARGV[*]}" ]]; then
+            _cap_entry="$name $slot ${flags[*]}"
+            _cap_label="$_r_label"
+            return 0
+        fi
+        _cap_diff_name="$name"; _cap_diff_built="$built"
+    done
+    echo "slot $slot: cannot express the running gufo server as start options." >&2
+    [[ -n "${_cap_diff_built:-}" ]] && printf '  closest is %s:\n    %s\n  while the process runs:\n    %s\n' \
+        "'$_cap_diff_name'" "$_cap_diff_built" "${_ARGV[*]}" >&2
+    return 1
+}
+
 cmd_start() {
     local name=""
     local slot="1"
@@ -1752,10 +2046,10 @@ cmd_start() {
     fi
     case "$_r_backend" in
         llama) ;;
-        # Its proxy is what speaks the Messages API, so it always runs.
-        halogen) start_proxy=true ;;
+        # Their proxy is what speaks the Messages API, so it always runs.
+        halogen|gufo) start_proxy=true ;;
         comfyui|tts|audiocpp) ;;
-        *) echo "Error: model '$name' names an unknown backend '$_r_backend' in models.conf (llama, halogen, comfyui, tts or audiocpp)"; exit 1 ;;
+        *) echo "Error: model '$name' names an unknown backend '$_r_backend' in models.conf (llama, halogen, gufo, comfyui, tts or audiocpp)"; exit 1 ;;
     esac
     if [[ -n "$output_dir" && "$_r_backend" != comfyui ]]; then
         echo "Error: --output is for comfyui models — '$name' generates no images"; exit 1
@@ -1812,6 +2106,10 @@ cmd_start() {
 
     if [[ "$_r_backend" == halogen ]]; then
         _start_halogen
+        return
+    fi
+    if [[ "$_r_backend" == gufo ]]; then
+        _start_gufo
         return
     fi
     if [[ "$_r_backend" == comfyui ]]; then
@@ -2108,7 +2406,7 @@ _is_llmctl_process() {
     local pid="$1" cmdline=""
     cmdline=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null) || return 1
     [[ "$cmdline" == *"--slot-save-path $SLOT_STATE_DIR/"* || "$cmdline" == *"$PROXY_SCRIPT"* ||
-       "$cmdline" == *"--name $HALOGEN_CONTAINER_PREFIX"* ||
+       "$cmdline" == *"--name $HALOGEN_CONTAINER_PREFIX"* || "$cmdline" == *"--name $GUFO_CONTAINER_PREFIX"* ||
        "$cmdline" == *"/main.py --listen "*" --base-directory "* ||
        "$cmdline" == *"$TTS_SERVER_SCRIPT"* || "$cmdline" == *"$IMAGES_SERVER_SCRIPT"* ||
        "$cmdline" == *"--config $AUDIOCPP_CONF_DIR/"* ]]
@@ -2142,7 +2440,7 @@ _active_slots() {
                                                  print a[n], p }')
     # A halogen port is held by podman's network helper, not by anything of ours;
     # its container name is what gives the slot away.
-    for n in $(_halogen_slots); do slots+=("$n"); done
+    for n in $(_container_slots); do slots+=("$n"); done
     (( ${#slots[@]} )) || return 0
     printf '%s\n' "${slots[@]}" | sort -un
 }
@@ -2186,7 +2484,7 @@ _slot_model_label() {
         label=$(_label_for_model_path "$path") || label="ComfyUI"
         echo "$label"; return 0
     fi
-    if _is_halogen_argv; then
+    if _is_container_argv; then
         local path label
         path=$(_argv_halogen_model) || { echo "unknown"; return 1; }
         label=$(_label_for_model_path "$path") || label="$(basename "$path")"
@@ -2218,15 +2516,17 @@ _stop_slot() {
     local stopped=0
 
     local server_pid=""
-    if _slot_is_halogen "$slot"; then
+    local container="" ckind=""
+    if container=$(_slot_container "$slot"); then
+        ckind=$(_slot_container_kind "$slot")
         # podman stop, not a signal to the client: it waits for the container to
         # exit and removes it (--rm), so the name is free for the next start.
         _stop_proxy "$slot" && stopped=$(( stopped + 1 ))
         server_pid=$(_slot_server_pid "$slot") || server_pid=""
-        podman stop -t 30 "$(_halogen_container "$slot")" > /dev/null 2>&1
-        podman rm -f "$(_halogen_container "$slot")" > /dev/null 2>&1
+        podman stop -t 30 "$container" > /dev/null 2>&1
+        podman rm -f "$container" > /dev/null 2>&1
         [[ -n "$server_pid" ]] && kill "$server_pid" 2>/dev/null
-        echo "Slot $slot: halogen (container $(_halogen_container "$slot")) stopped."
+        echo "Slot $slot: $ckind (container $container) stopped."
         stopped=$(( stopped + 1 ))
     elif server_pid=$(_slot_server_pid "$slot"); then
         local kind="llama-server"
@@ -2480,7 +2780,7 @@ cmd_preset() {
         e_model+=("$m"); e_slot+=("$s"); e_flags+=("${eff[*]}"); e_label+=("$_r_label")
         e_cmd+=("$out")
         # A halogen slot always has its proxy, asked for or not.
-        if [[ " ${eff[*]} " == *" --proxy "* || "$_r_backend" == halogen ]]; then e_proxy+=(true); else e_proxy+=(false); fi
+        if [[ " ${eff[*]} " == *" --proxy "* || "$_r_backend" == halogen || "$_r_backend" == gufo ]]; then e_proxy+=(true); else e_proxy+=(false); fi
         [[ " ${eff[*]} " == *" --public "* ]] && e_public+=(true) || e_public+=(false)
         # A ComfyUI slot's tunnel and the vision model its image API asks.
         [[ " ${eff[*]} " == *" --tunnel "* ]] && e_tunnel+=(true) || e_tunnel+=(false)
@@ -2804,8 +3104,9 @@ _footprint_key() { printf '%s' "$1" | sha1sum | cut -c1-16; }
 _slot_gtt_mib() {
     local pid c sum=0
     pid=$(_slot_server_pid "$1") || return 1
-    if _slot_is_halogen "$1"; then
-        for c in $(podman top "$(_halogen_container "$1")" hpid 2>/dev/null | tail -n +2); do
+    local container
+    if container=$(_slot_container "$1"); then
+        for c in $(podman top "$container" hpid 2>/dev/null | tail -n +2); do
             sum=$(( sum + $(_proc_gpu_mib "$c") ))
         done
     else
@@ -2830,6 +3131,8 @@ _slot_gpu_mib() {
     gtt=$(_slot_gtt_mib "$1") || return 1
     if _slot_is_halogen "$1"; then
         echo $(( gtt + $(_halogen_pinned_mib "$1") ))
+    elif _slot_is_gufo "$1"; then
+        echo $(( gtt + $(_gufo_rss_mib "$1") ))
     else
         echo "$gtt"
     fi
@@ -2845,7 +3148,9 @@ _slot_gpu_mib() {
 _memory_check_start() {
     local slot="$1" target="$2" starting_halogen="$3"
     local s hs=""
-    for s in $(_halogen_slots); do [[ "$s" != "$slot" ]] && hs="$s"; done
+    # gufo, like halogen, holds memory outside the GTT pool (its weights as RSS):
+    # beside either, a start has to be weighed.
+    for s in $(_container_slots); do [[ "$s" != "$slot" ]] && hs="$s"; done
     [[ -n "$hs" || "$starting_halogen" == true ]] || return 0
     local total=$(( $(_gtt_total_bytes) / 1048576 ))
     (( total > 0 )) || return 0
@@ -2872,7 +3177,8 @@ _memory_check_start() {
     (( outside < 0 )) && outside=0
     local budget=$(( total - outside - GTT_RESERVE_MIB ))
     (( running + need <= budget )) && return 0
-    local beside="halogen on slot $hs"
+    local beside
+    beside="$(_slot_container_kind "$hs" 2>/dev/null || echo halogen) on slot $hs"
     [[ -n "$hs" ]] || beside="the slots that run"
     echo "Error: not enough memory beside $beside:"
     echo "       this start needs $(_gib "$need") ($how); running: ${held[*]:-nothing} ($(_gib "$running"));"
@@ -2932,6 +3238,27 @@ _estimate_cmd_mib() {
     # read through the page cache, not loaded. 62 GiB pinned weights (v2) and
     # ~20 GiB of KV pool and working memory, as models.conf describes it.
     [[ " ${w[*]} " == *" --name $HALOGEN_CONTAINER_PREFIX"* ]] && { echo $(( 84 * 1024 )); return; }
+    # gufo: the GGUF and its draft (host paths from the label and the mounts),
+    # ~6 GiB of working memory, and the KV it reserves for every session —
+    # ~2 GiB per 32K tokens of context. Measured with Qwen3.8-27B Q8 and
+    # DFlash2, two sessions: 41 / 45 / 54 / 68 GiB at 32K / 64K / 128K / 256K.
+    if [[ " ${w[*]} " == *" --name $GUFO_CONTAINER_PREFIX"* ]]; then
+        local model="" draft_dir="" draft="" ctx_n=0 sess=1 prev=""
+        for (( i=0; i < ${#w[@]}; i++ )); do
+            case "$prev" in
+                --label) [[ "${w[i]}" == llmctl.model=* ]] && model="${w[i]#llmctl.model=}" ;;
+                -v) [[ "${w[i]}" == *:/draft:ro ]] && draft_dir="${w[i]%:/draft:ro}" ;;
+                --dflash-model|--mtp-model) draft="${w[i]##*/}" ;;
+                --context) ctx_n="${w[i]}" ;;
+                --sessions) sess="${w[i]}" ;;
+            esac
+            prev="${w[i]}"
+        done
+        bytes=$(( $(stat -c%s "$model" 2>/dev/null || echo 0) ))
+        [[ -n "$draft_dir" && -n "$draft" ]] && bytes=$(( bytes + $(stat -c%s "$draft_dir/$draft" 2>/dev/null || echo 0) ))
+        echo $(( bytes / 1048576 + 6 * 1024 + 2048 * sess * ctx_n / 32768 ))
+        return
+    fi
     echo $(( bytes / 1048576 ))
 }
 
@@ -2960,7 +3287,7 @@ _preset_memory_check() {
             how="measured"
         else
             mib=$(_estimate_cmd_mib "${e_cmd[i]}"); how="weights only — not measured yet"
-            [[ " ${e_cmd[i]} " == *" --name $HALOGEN_CONTAINER_PREFIX"* ]] && how="estimate — not measured yet"
+            [[ " ${e_cmd[i]} " == *" --name $HALOGEN_CONTAINER_PREFIX"* || " ${e_cmd[i]} " == *" --name $GUFO_CONTAINER_PREFIX"* ]] && how="estimate — not measured yet"
             estimated=1
         fi
         _resolve_model "${e_model[i]}" && [[ "$_r_backend" == comfyui ]] && { comfy="${e_model[i]}"; how="idle; workflows load on top"; }
@@ -3053,6 +3380,10 @@ _capture_slot() {
     _read_argv "$pid" || { echo "slot $slot: cannot read /proc/$pid/cmdline" >&2; return 1; }
     if _is_halogen_argv; then
         _capture_halogen_slot "$slot"
+        return
+    fi
+    if _is_gufo_argv; then
+        _capture_gufo_slot "$slot"
         return
     fi
     if _is_comfyui_argv; then
@@ -3483,6 +3814,10 @@ _describe_server() {
         _describe_halogen "$indent"
         return 0
     fi
+    if _is_gufo_argv; then
+        _describe_gufo "$pid" "$indent"
+        return 0
+    fi
     if _is_comfyui_argv; then
         _describe_comfyui "$pid" "$indent"
         return 0
@@ -3673,7 +4008,7 @@ cmd_status() {
         local indent
         printf -v indent '%*s' $(( 9 + ${#slot} - 1 )) ''
         if _halogen_orphan "$slot"; then
-            echo "Slot $slot: halogen      (container $(_halogen_container "$slot"), no client process)"
+            echo "Slot $slot: $(printf '%-12s' "$(_slot_container_kind "$slot")") (container $(_slot_container "$slot"), no client process)"
             echo "${indent}Note:      its podman client is gone — the container still holds the weights"
             echo "${indent}           and :$port_server. '$PROG stop $slot' ends it; start it again to manage it."
             found=1
@@ -3682,6 +4017,7 @@ cmd_status() {
         if [[ -n "$server_pid" ]] && ps -p "$server_pid" > /dev/null 2>&1; then
             local kind="llama-server"
             _slot_is_halogen "$slot" && kind="halogen     "
+            _slot_is_gufo "$slot" && kind="gufo        "
             _read_argv "$server_pid" && _is_comfyui_argv && kind="comfyui     "
             _read_argv "$server_pid" && _is_tts_argv && kind="tts         "
             _read_argv "$server_pid" && _is_audiocpp_argv && kind="audiocpp    "
@@ -4054,11 +4390,11 @@ cmd_outdated() {
     local -a f
     _check_deps hf python3 || return 2
 
-    printf '\n\033[1mhalogen\033[0m\n'
+    printf '\n\033[1mhalogen and gufo\033[0m\n'
     local seen=""
     for entry in "${_MODELS[@]}"; do
         IFS='|' read -r -a f <<< "$entry"
-        _resolve_model "${f[0]}" && [[ "$_r_backend" == halogen ]] || continue
+        _resolve_model "${f[0]}" && [[ "$_r_backend" == halogen || "$_r_backend" == gufo ]] || continue
         local image="${_r_binary%:*}" tag="${_r_binary##*:}"
         [[ " $seen " == *" $image "* ]] && continue
         seen+=" $image"
@@ -4072,10 +4408,13 @@ cmd_outdated() {
         else
             echo "  $image:$tag — $latest is out"
             newer=$(( newer + 1 ))
-            # The changelog of a ghcr.io/<owner>/<repo> image, if GitHub has one.
+            # The changelog of a ghcr.io/<owner>/<repo> image, if GitHub has one;
+            # gufo's image lives under toolboxes/, its changelog in the main repo.
             local gh_repo="${image#ghcr.io/}"
+            [[ "$_r_backend" == gufo ]] && gh_repo="$GUFO_REPO"
             curl -sf "https://raw.githubusercontent.com/$gh_repo/main/CHANGELOG.md" |
-                awk -v t="$tag" '/^## / { v = $2; if (v == t) exit; print "    " $0 }'
+                awk -v t="$tag" '/^## / { v = $2; gsub(/^\[|\].*$/, "", v)   # "## [0.4.0](…) (date)" too
+                                          if (v == t) exit; print "    ## " v }'
         fi
     done
 
@@ -4271,6 +4610,10 @@ cmd_cache_stats() {
             echo "Slot $slot: speech — no prompt cache"
             continue
         fi
+        if _slot_is_gufo "$slot"; then
+            echo "Slot $slot: gufo — no prompt cache statistics (each response's usage carries its own cache hit)"
+            continue
+        fi
         if _slot_is_halogen "$slot"; then
             # Its log has no per-task token counts; the server keeps its own tally.
             echo "Slot $slot: halogen, from :$(( PORT_BASE_SERVER + slot ))/cache"
@@ -4349,6 +4692,11 @@ cmd_clear_kv() {
         fi
         if _slot_is_tts "$slot"; then
             echo "Slot $slot: speech holds nothing between requests — each one loads and frees its model."
+            continue
+        fi
+        if _slot_is_gufo "$slot"; then
+            echo "Slot $slot: gufo has no endpoint to erase its KV; a session's state is freed when it"
+            echo "        ends. For a hard reset: $PROG stop $slot and start it again."
             continue
         fi
         if _slot_is_halogen "$slot"; then
@@ -4576,8 +4924,8 @@ cmd_env() {
 
     local port_target="$port_server" via="server"
     # halogen speaks no Messages API; only its proxy does, and it always runs.
-    if [[ "$_r_backend" == halogen ]]; then
-        [[ "$want" == direct ]] && echo "Note: halogen is reached through its proxy only — it translates the Messages API." >&2
+    if [[ "$_r_backend" == halogen || "$_r_backend" == gufo ]]; then
+        [[ "$want" == direct ]] && echo "Note: $_r_backend is reached through its proxy only — it translates the Messages API." >&2
         want="proxy"
     fi
     case "$want" in
@@ -4630,6 +4978,14 @@ cmd_env() {
             ctx_now=$(_argv_env HALOGEN_CTX)
         fi
         val[CLAUDE_CODE_MAX_CONTEXT_TOKENS]="${ctx_now:-${_r_ctx:-$HALOGEN_NATIVE_CTX}}"
+    fi
+    # gufo's --context is per session: each request may use all of it.
+    if [[ "$_r_backend" == gufo ]]; then
+        local gctx="" gpid=""
+        if gpid=$(_slot_server_pid "$slot") && _read_argv "$gpid" && _is_gufo_argv; then
+            gctx=$(_argv_flag --context)
+        fi
+        val[CLAUDE_CODE_MAX_CONTEXT_TOKENS]="${gctx:-$_r_ctx}"
     fi
     local var
     for var in "${_ENV_VARS[@]}"; do
@@ -4848,7 +5204,7 @@ bench_model() {
         echo "  Skipping $m_label: model file not found"
         return
     fi
-    if _resolve_model "$m_name" && [[ "$_r_backend" == halogen ]]; then
+    if _resolve_model "$m_name" && [[ "$_r_backend" == halogen || "$_r_backend" == gufo ]]; then
         bench_halogen "$m_name" "$model_path" "$m_label" "$full_mode" "$result_file"
         return
     fi
@@ -4889,7 +5245,7 @@ bench_model() {
 bench_halogen() {
     local m_name="$1" model_path="$2" m_label="$3" full_mode="$4" result_file="$5"
     local slot="" s pid
-    for s in $(_halogen_slots); do
+    for s in $(_container_slots); do
         if pid=$(_slot_server_pid "$s") && _read_argv "$pid" && [[ "$(_argv_halogen_model)" == "$model_path" ]]; then
             slot="$s"; break
         fi
@@ -5015,6 +5371,9 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  halogen models (backend=halogen) run in podman, always with their proxy; other slots"
     printf "  %-20s %s\n" ""                      "    start beside a running one only when their memory fits (--ignore-memory: anyway);"
     printf "  %-20s %s\n" ""                      "    --ctx above 262144 turns on YaRN, --mmproj the vision tower, --cache-ram only takes 0"
+    printf "  %-20s %s\n" ""                      "  gufo models (backend=gufo) run gufo in podman, always with their proxy (it translates"
+    printf "  %-20s %s\n" ""                      "    /v1/messages); --ctx and --parallel size the KV it reserves at start, --spec off drops"
+    printf "  %-20s %s\n" ""                      "    the draft; no --cache-ram, --similarity, --gpu-priority or --public"
     printf "  %-20s %s\n" ""                      "  comfyui models (backend=comfyui) run ComfyUI with its web UI on the server port;"
     printf "  %-20s %s\n" ""                      "    only --host, --verbose, --clear-logs, --output DIR (where images go) and --proxy apply;"
     printf "  %-20s %s\n" ""                      "    --proxy: OpenAI image API (/v1/images/generations, /edits) on the proxy port"
@@ -5086,7 +5445,7 @@ _draft_dir_from_spec() {
     local prev="" word
     for word in "$@"; do
         case "$prev" in
-            -md|--model-draft|--spec-draft-model) dirname "$word"; return 0 ;;
+            -md|--model-draft|--spec-draft-model|--dflash-model|--mtp-model) dirname "$word"; return 0 ;;
         esac
         prev="$word"
     done
@@ -5880,7 +6239,7 @@ _download_target() {
                 _download_draft "$m_hf_draft" "$force" "${sa[@]}"
             fi
             [[ -n "$m_hf_mmproj" ]] && _download_mmproj "$m_hf_mmproj" "$m_mmproj" "$force"
-            [[ "$_r_backend" == halogen ]] && _pull_halogen_image
+            [[ "$_r_backend" == halogen || "$_r_backend" == gufo ]] && _pull_halogen_image
             [[ "$_r_backend" == tts ]] && _tts_setup
             [[ "$_r_backend" == audiocpp ]] && _audiocpp_setup
         done
@@ -5910,7 +6269,7 @@ _download_target() {
     _download_model "$_r_hf_repo" "$model_dir" "$_r_hf_includes" "$force"
     [[ -n "$_r_hf_draft" ]] && _download_draft "$_r_hf_draft" "$force" "${_r_spec_args[@]}"
     [[ -n "$_r_hf_mmproj" ]] && _download_mmproj "$_r_hf_mmproj" "$_r_mmproj" "$force"
-    [[ "$_r_backend" == halogen ]] && _pull_halogen_image
+    [[ "$_r_backend" == halogen || "$_r_backend" == gufo ]] && _pull_halogen_image
     [[ "$_r_backend" == tts ]] && _tts_setup
     [[ "$_r_backend" == audiocpp ]] && _audiocpp_setup
     return 0
@@ -5942,7 +6301,7 @@ _prune_halogen_images() {
     local -a wanted=() stale=()
     for entry in "${_MODELS[@]}"; do
         IFS='|' read -r m_name _ <<< "$entry"
-        _resolve_model "$m_name" && [[ "$_r_backend" == halogen ]] && wanted+=("$_r_binary")
+        _resolve_model "$m_name" && [[ "$_r_backend" == halogen || "$_r_backend" == gufo ]] && wanted+=("$_r_binary")
     done
     _resolve_model "$keep"      # leave _r_* as the caller had them
     local running

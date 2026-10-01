@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Prefill and decode speed of a running halogen server — `llmctl bench` for
-halogen models, where llama-bench cannot read the checkpoint.
+halogen models, where llama-bench cannot read the checkpoint. With --url any
+OpenAI-compatible server (llama-server, gufo) is measured the same way.
 
 Prefill: time to the first token for prompts of several lengths. Each prompt
 starts with a unique random prefix, so the prompt cache cannot help.
@@ -49,8 +50,11 @@ def nonce():
 
 
 class Bench:
-    def __init__(self, base):
+    def __init__(self, base, model=None):
         self.url = f"{base}/v1/chat/completions"
+        # Servers that check the name (gufo) need the one they serve; halogen and
+        # llama-server take any.
+        self.model = model
 
     def run(self, messages, max_tokens):
         """One streamed greedy request; returns (seconds to first token,
@@ -60,6 +64,8 @@ class Bench:
             "temperature": 0, "reasoning_effort": "none", "stream": True,
             "stream_options": {"include_usage": True},
         }
+        if self.model:
+            body["model"] = self.model
         req = urllib.request.Request(self.url, json.dumps(body).encode(),
                                      {"Content-Type": "application/json"})
         t0 = time.perf_counter()
@@ -110,16 +116,22 @@ def main():
     args = ap.parse_args()
 
     base = (args.url or f"http://127.0.0.1:{8000 + args.slot}").rstrip("/")
+    health, served = {}, None
+    try:
+        with urllib.request.urlopen(f"{base}/v1/models", timeout=5) as r:
+            served = (json.load(r).get("data") or [{}])[0].get("id")
+    except Exception as e:
+        sys.exit(f"no server answers on {base} ({e}) — is the slot running? llmctl status")
     try:
         with urllib.request.urlopen(f"{base}/health", timeout=5) as r:
             health = json.load(r)
-    except Exception as e:
-        sys.exit(f"no server answers on {base} ({e}) — is the slot running? llmctl status")
+    except Exception:                          # not every server has one
+        pass
     if health.get("busy") or health.get("in_flight"):
         print("  NOTE: the server is busy with other requests; these numbers will be low.", flush=True)
 
     sizes = args.sizes or [1000, 8000, 32000, 64000]
-    b = Bench(base)
+    b = Bench(base, served)
     started = int(time.time() * 1000)
     results, error = [], None
     try:

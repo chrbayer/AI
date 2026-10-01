@@ -814,6 +814,72 @@ with fragmented memory managed 8–370 t/s of prefill, most requests stalling
 40–200 s in kernel compaction. Keep `vm.compaction_proactiveness` at the kernel
 default (20) — 0 does not prevent the stalls.
 
+## The gufo backend
+
+[gufo](https://github.com/gufo-org/gufo) (MIT) is an inference engine written
+for Strix Halo alone, shipped as a container like halogen. Where halogen runs one
+checkpoint of its own, gufo reads ordinary GGUFs — here the same HauhauCS
+Qwen3.8-27B Q8 that `qwen` runs on llama.cpp, as `qwen-gufo`, with z-lab's
+DFlash2 draft (1.1 GB) for speculation.
+
+```bash
+llmctl download qwen-gufo            # the GGUF, the draft and the image
+llmctl start qwen-gufo 1 --mmproj    # or: llmctl preset qwen-gufo / qwen-gufo-256k
+eval "$(llmctl env qwen-gufo 1)"
+```
+
+**Measured** against `qwen` on llama.cpp, same GGUF, same bench
+(`halogen_bench.py`, which also measures any OpenAI server by `--url`), greedy:
+
+| | prefill 850 / 6.6K / 26K tokens | decode prose | decode code | first token |
+| --- | --- | --- | --- | --- |
+| llama.cpp `qwen` (MTP head) | 312 / 286 / 247 t/s | 11.8 t/s | 19.0 t/s | 0.6–1.0 s |
+| gufo, no draft | 402 / 406 / 381 | 7.0 | 7.0 | 0.38 s |
+| **gufo + DFlash2** (`qwen-gufo`) | 389 / 406 / 379 | 15.3 | 37.4 | 0.39 s |
+
+Prefill 30–55 % faster, code decoding twice as fast; without a draft gufo
+decodes at 7 t/s, the bandwidth limit for 29 GiB of Q8. unsloth's UD-Q8_K_XL,
+gufo's own target, ran no faster than HauhauCS's Q8_K_P. gufo runs MTP for
+Flash-Next only, so the 27B speculates with DFlash2.
+
+What llmctl does for it:
+
+- **The container**: `podman run` as for halogen (`llmctl-gufo-<slot>`, the model
+  directory read-only on `/models`, the draft's on `/draft`), with
+  `--security-opt label=disable` — under SELinux it could otherwise neither
+  read the mounted models nor map `/dev/kfd`. That concerns this container
+  only; no `setsebool` for the whole host.
+- **Settings are flags** of `gufo serve llm`: models.conf's extra_args hold
+  them (`--temperature 0.6 …`), `--ctx` becomes `--context` (per session),
+  `--parallel` `--sessions` (2 by default), `--reasoning off|on|<level>`
+  `--think` / `--reasoning-effort`, `--temp`, `--top-p` and `--max-predict`
+  replace the entry's values, `--spec off` drops the draft, `--verbose`
+  logs at debug. `--served-model-name` is the entry's name: gufo refuses a
+  request for any other model, and `llmctl env` hands Claude Code exactly
+  that one.
+- **Its proxy always runs and translates `/v1/messages`** to chat completions.
+  gufo 0.4.0's own Messages API returns the model's thinking inside the text
+  block, `</think>` and all; its chat completions split it off, and the
+  translation turns that into a proper thinking block. `LLMCTL_GUFO_NATIVE_MESSAGES=1`
+  passes the Messages API through instead, once gufo fixes it.
+- **Vision with `--mmproj`**: gufo looks for `mmproj-BF16.gguf` beside the
+  model and does not find HauhauCS's name on its own, so llmctl passes it;
+  it is uploaded at the first image.
+- **Memory**: the weights sit in the container's RAM (31 GiB), the KV of every
+  session in GTT, reserved at start — 41 / 45 / 54 / 68 GiB in all at
+  32K / 64K / 128K / 256K per session, two sessions. The memory check counts
+  both, as it counts halogen's pinned weights: `flash` (84 GiB) is refused
+  beside it, ComfyUI fits. gufo also keeps conversation snapshots in RAM for
+  its prompt cache, sized by itself from what is free at start (~80 GB at
+  most); 45 GiB at start grew to 50 GiB after a bench and an image.
+- `status`, `stop`, `logs`, `bench`, `preset`, `preset-save`, `prune`,
+  `download` and `outdated` know it; `cache-stats` and `clear-kv` have nothing
+  to ask it. `--public` is not wired up for gufo yet.
+- **Updates**: `outdated` asks the registry for newer tags of the image and
+  shows the version headings of gufo's changelog in between, as for halogen.
+  gufo releases nearly every day; move the tag in models.conf after a bench,
+  and `download` pulls it and offers to remove the old one.
+
 ## The comfyui backend
 
 [ComfyUI](https://github.com/Comfy-Org/ComfyUI) generates and edits images. It is
@@ -1715,6 +1781,7 @@ them are served by the Vulkan build — the ROCm build is opt-in per model
 - **mistral** — Mistral-Medium-3.5-128B, UD-Q5_K_XL, 32K ctx
 - **diamond** — L3.3-70B Magnum Diamond, i1-Q5_K_M, 32K ctx; drafted by the same Llama-3.2-1B (~2.0×)
 - **magnum** — Magnum-v4-72B, Q6_K, 32K ctx; a Qwen2.5-72B fulltune, drafted by Qwen2.5-1.5B-Instruct Q4_K_M (~2.0×)
+- **qwen-gufo** — the same Qwen3.8-27B uncensored Q8 on the [gufo backend](#the-gufo-backend), DFlash2 draft, 64K per session (256K in preset `qwen-gufo-256k`), vision via `--mmproj`; prefill 30–55 % and code decoding ~2× faster than `qwen`
 - **flash** — Qwen3.8-Flash-Next 125B MoE on the [halogen backend](#the-halogen-backend), 4-bit `.hgn`, 256K ctx (512K with YaRN via `--ctx 524288`), vision via `--mmproj` (on in preset `flash`); ~82 GiB, other slots beside it only as they fit
 
 - **embed** — Qwen3-Embedding-8B, Q8_0, 8K ctx; `/v1/embeddings` for [retrieval](#building-blocks-for-retrieval-and-memory)

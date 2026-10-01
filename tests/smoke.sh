@@ -86,6 +86,14 @@ check "llama start rejects --lang"      "for speech (tts)"     -- "$L" start qwe
 check "llama start rejects --output"    "is for comfyui"       -- "$L" start qwen 1 --output /tmp --print-cmd
 check "llama start rejects --vision"    "is for the image API" -- "$L" start qwen 1 --vision 2 --print-cmd
 check "llama start rejects --tunnel"    "is for comfyui models" -- "$L" start qwen 1 --tunnel --print-cmd
+check "gufo start runs the container"   "gufo serve --host 0.0.0.0 --port 8080 llm" -- "$L" start qwen-gufo 1 --print-cmd
+check "gufo start mounts the draft"      "/draft:ro"             -- "$L" start qwen-gufo 1 --print-cmd
+check "gufo start keeps SELinux off it"  "--security-opt label=disable" -- "$L" start qwen-gufo 1 --print-cmd
+check "gufo --spec off drops the draft"  "--sessions 2 --temperature" -- "$L" start qwen-gufo 1 --spec off --print-cmd
+check "gufo --ctx sets the context"      "--context 262144"      -- "$L" start qwen-gufo 1 --ctx 262144 --print-cmd
+check "gufo --temp replaces the entry's" "--temperature 0.3"     -- "$L" start qwen-gufo 1 --temp 0.3 --print-cmd
+check "gufo --reasoning off"             "--think off"           -- "$L" start qwen-gufo 1 --reasoning off --print-cmd
+check "gufo refuses --cache-ram"         "not available with the gufo backend" -- "$L" start qwen-gufo 1 --cache-ram 0 --print-cmd
 check "comfy start refuses --vision without --proxy" "is for the image API" -- "$L" start comfy 9 --vision 2 --print-cmd
 check "llama start rejects a level the model lacks" "has no thinking mode" -- "$L" start qwen-vl 3 --reasoning low --print-cmd
 check "asr start loads its mmproj"      "--mmproj"             -- "$L" start asr 6 --mmproj --print-cmd
