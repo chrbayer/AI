@@ -308,6 +308,7 @@ class ImageApi(unittest.TestCase):
         self.assertEqual(images.slug("Z-Image Turbo T2I (bf16, 8 Schritte)"), ("z-image-turbo", "generations"))
         self.assertEqual(images.slug("Z-Image Turbo Canny Control (bf16, 8 Schritte)"), ("z-image-turbo-canny-control", "edits"))
         self.assertEqual(images.slug("Z-Image T2I (bf16, 25 Schritte)"), ("z-image", "generations"))
+        self.assertEqual(images.slug("Z-Image Turbo NSFW T2I (bf16, 8 Schritte)"), ("z-image-turbo-nsfw", "generations"))
 
     def test_a_negative_prompt_only_where_guidance_uses_it(self):
         g = api("Z-Image T2I (bf16, 25 Schritte).json")

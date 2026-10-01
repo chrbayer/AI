@@ -1091,6 +1091,17 @@ llmctl update comfy --torch           # …and torch itself
   cache its n-gram table is read through — prefill held (1036/1385/1396 t/s
   at 850/6.6K/26K tokens), decode fell 20–30 % (prose 31.5 t/s, code 44)
   while ComfyUI kept the model loaded. Image API: `z-image-turbo`.
+- **Z-Image Turbo NSFW.** `Z-Image Turbo NSFW T2I (bf16, 8 Schritte)` is the
+  Turbo workflow on tewea's NSFW finetune of its DiT
+  (`z_image_turbo_bf16_nsfw_v2`, 12.6 GB, Apache-2.0, pinned; its model card
+  says nothing about the training). Side by side with the original, same
+  seed: a fox and a fisherman came out as good — the finetune costs no general
+  quality — and on two artistic nudes the original already rendered nudity;
+  the finetune showed more, in other poses. Where it differs is for prompts
+  the original avoids: judge it on your own. An abliterated Qwen3-4B encoder
+  (BennyDaBall's, same tensors as Comfy-Org's) changed next to nothing on top,
+  as on klein — an image model's encoder translates the prompt, it does not
+  refuse — so the workflow keeps the stock one. Image API: `z-image-turbo-nsfw`.
 - **Z-Image, the base model.** `Z-Image T2I (bf16, 25 Schritte)` is ComfyUI's
   template for Tongyi-MAI's undistilled Z-Image: 25 steps at cfg 4, so a
   real negative prompt — the image API takes it as `negative_prompt` (only
