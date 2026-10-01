@@ -42,6 +42,17 @@ MODELS = {   # file -> (directory, url), for the loader nodes' download entries
     "Qwen-Image-2.1-Fun-Controlnet-Union.safetensors": ("model_patches",
         f"{HF}/alibaba-pai/Qwen-Image-2.1-Fun-Controlnet-Union/resolve/"
         "8a4702014d4dabb5f896fcba917e2ee0a961465f/Qwen-Image-2.1-Fun-Controlnet-Union.safetensors"),
+    # Z-Image Turbo (Comfy-Org's repack, pinned) and alibaba-pai's Union 2.1 for it,
+    # 2602 8-step: canny, depth, pose, mlsd, hed, scribble, gray, and inpaint.
+    "z_image_turbo_bf16.safetensors": ("diffusion_models",
+        f"{HF}/Comfy-Org/z_image_turbo/resolve/6fc90a3b1b653e935a0d175e260736de25b84df5/split_files/diffusion_models/z_image_turbo_bf16.safetensors"),
+    "qwen_3_4b.safetensors": ("text_encoders",
+        f"{HF}/Comfy-Org/z_image_turbo/resolve/6fc90a3b1b653e935a0d175e260736de25b84df5/split_files/text_encoders/qwen_3_4b.safetensors"),
+    "ae.safetensors": ("vae",
+        f"{HF}/Comfy-Org/z_image_turbo/resolve/6fc90a3b1b653e935a0d175e260736de25b84df5/split_files/vae/ae.safetensors"),
+    "Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors": ("model_patches",
+        f"{HF}/alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1/resolve/"
+        "5155fc56d17821007d6f62ac192c09e0f0e72016/Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors"),
     # Detailer: YOLO face and hand detectors (Bingsu/adetailer, Apache-2.0) and
     # SAM 1 ViT-H (Meta, Apache-2.0; a Hugging Face mirror, pinned).
     "bbox/face_yolov8m.pt": ("ultralytics/bbox",
@@ -149,6 +160,32 @@ def inpaint():
     g["18"] = {"class_type": "ImageToMask", "inputs": {"image": ["17", 0], "channel": "red"}}
     g["8"]["inputs"].update({"inpaint_image": ["6", 0], "mask": ["18", 0]})
     return g
+
+
+def zimage(make, strength=None):
+    """The same control graph on Z-Image Turbo: its DiT, Qwen3-4B encoder and VAE,
+    AuraFlow sampling shift 3, 8 res_multistep steps at cfg 1 (the template's),
+    and alibaba-pai's Union 2.1 (2602, 8-step) as the model patch. The node that
+    applies it is the one the Qwen-Image graphs use."""
+    def made():
+        g = make()
+        prompt = g["9"]["inputs"]["prompt"]
+        g["1"] = {"class_type": "UNETLoader", "inputs": {"unet_name": "z_image_turbo_bf16.safetensors", "weight_dtype": "default"}}
+        g["2"] = {"class_type": "CLIPLoader", "inputs": {"clip_name": "qwen_3_4b.safetensors", "type": "lumina2", "device": "default"}}
+        g["3"] = {"class_type": "VAELoader", "inputs": {"vae_name": "ae.safetensors"}}
+        g["4"]["inputs"]["name"] = "Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors"
+        g["21"] = {"class_type": "ModelSamplingAuraFlow", "inputs": {"model": g["8"]["inputs"]["model"], "shift": 3}}
+        g["8"]["inputs"]["model"] = ["21", 0]
+        g["9"] = {"class_type": "CLIPTextEncode", "inputs": {"text": prompt, "clip": ["2", 0]}, "_meta": {"title": "Positive prompt"}}
+        g["19"] = {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["9", 0]}}
+        g["10"] = {"class_type": "EmptySD3LatentImage", "inputs": {"width": ["7", 0], "height": ["7", 1], "batch_size": 1}}
+        g["11"]["inputs"].update(positive=["9", 0], negative=["19", 0], steps=8, cfg=1.0,
+                                 sampler_name="res_multistep", scheduler="simple")
+        if strength is not None:
+            g["8"]["inputs"]["strength"] = strength
+        g["13"]["inputs"]["filename_prefix"] = g["13"]["inputs"]["filename_prefix"].replace("Qwen_image_2.1", "Z_image_turbo")
+        return g
+    return made
 
 
 def masked(make, prompt, prefix):
@@ -281,6 +318,16 @@ WORKFLOWS = {
     "Qwen-Image 2.1 Pose Inpaint Turbo (bf16, 4 Schritte)": turbo(pose_inpaint),
     "Qwen-Image 2.1 Depth Inpaint Turbo (bf16, 4 Schritte)": turbo(depth_inpaint),
     "Artifact Check (flash)": artifact_check,
+    # Strength 0.8 for the controls: the card's 0.65-1.00, where Qwen-Image's
+    # scribble-friendly 0.5 lets Z-Image drift.
+    "Z-Image Turbo Control (bf16, 8 Schritte)": zimage(control, 0.8),
+    # Canny at 1.0 kept the photo whatever the prompt asked; 0.65 and 0.8 gave the
+    # watercolour on its layout, 0.5 lost the layout.
+    "Z-Image Turbo Canny Control (bf16, 8 Schritte)": zimage(canny, 0.65),
+    "Z-Image Turbo Pose Control (bf16, 8 Schritte)": zimage(pose),
+    "Z-Image Turbo Depth Control (bf16, 8 Schritte)": zimage(depth),
+    "Z-Image Turbo Inpaint (bf16, 8 Schritte)": zimage(inpaint),
+    "Z-Image Turbo Colorize (bf16, 8 Schritte)": zimage(colorize),
     "Qwen-Image 2.1 Detailer (bf16, dpmpp_2m 14)": detailer,
 }
 

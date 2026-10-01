@@ -306,6 +306,8 @@ class ImageApi(unittest.TestCase):
         self.assertEqual(images.slug("Qwen-Image 2.1 Colorize Turbo (bf16, 4 Schritte)"),
                          ("qwen-image-21-colorize-turbo", "edits"))
         self.assertEqual(images.slug("Z-Image Turbo T2I (bf16, 8 Schritte)"), ("z-image-turbo", "generations"))
+        self.assertEqual(images.slug("Z-Image Turbo Canny Control (bf16, 8 Schritte)"), ("z-image-turbo-canny-control", "edits"))
+        self.assertEqual(images.extras(api("Z-Image Turbo Inpaint (bf16, 8 Schritte).json")), ["mask", "boxes", "strength"])
         self.assertEqual(images.slug("Qwen-Image 2.1 Pose Inpaint Turbo (bf16, 4 Schritte)"),
                          ("qwen-image-21-pose-inpaint-turbo", "edits"))
         for kind in ("Canny", "Pose", "Depth"):

@@ -1025,6 +1025,22 @@ llmctl update comfy --torch           # …and torch itself
   cache its n-gram table is read through — prefill held (1036/1385/1396 t/s
   at 850/6.6K/26K tokens), decode fell 20–30 % (prose 31.5 t/s, code 44)
   while ComfyUI kept the model loaded. Image API: `z-image-turbo`.
+- **Z-Image Turbo with ControlNet.** `Z-Image Turbo Control / Canny Control /
+  Pose Control / Depth Control / Inpaint / Colorize (bf16, 8 Schritte)` are
+  the Qwen-Image 2.1 control workflows on Z-Image Turbo, with alibaba-pai's
+  [Z-Image-Turbo-Fun-Controlnet-Union-2.1](https://huggingface.co/alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1)
+  (2602, 8-step, 6.7 GB, Apache-2.0: canny, depth, pose, MLSD, HED,
+  scribble, gray, and inpaint) through the same node. Side by side with the
+  Qwen-Image Turbo variants on the same inputs and seed: pose (a man waving
+  in a park → a dancer in red, arm, hand on hip and stance exact), depth (a
+  living room → an alpine cabin), inpaint (a cake on an empty plate) and
+  colourising came out as good, crisper and more photographic; ~28 s each
+  warm. **Canny needs a lower strength**: at 1.0 it kept the photo whatever
+  the prompt asked, at 0.65–0.8 it painted the asked watercolour on the
+  photo's layout, at 0.5 it lost the layout — the workflow uses 0.65, the
+  others 1.0 (control 0.8). Image API: `z-image-turbo-{control,canny-control,
+  pose-control,depth-control,inpaint,colorize}`; `strength`, and `mask` or
+  `boxes` for inpaint, as for Qwen-Image.
 - **Qwen-Image 2.1 in 4 steps.** `Qwen-Image 2.1 [Heretic] T2I/Edit Turbo (bf16,
   4 Schritte)` add alibaba-pai's official 4-step Acc LoRA and sample 4 steps
   with `euler`: a 1024² image in 16 s instead of 70, an edit in 47 s instead
