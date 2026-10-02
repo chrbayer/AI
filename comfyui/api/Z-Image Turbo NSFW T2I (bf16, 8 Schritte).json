@@ -1,9 +1,9 @@
 {
- "9": {
+ "1": {
   "inputs": {
    "filename_prefix": "z-image-turbo",
    "images": [
-    "57:8",
+    "5",
     0
    ]
   },
@@ -12,7 +12,7 @@
    "title": "Save Image"
   }
  },
- "57:30": {
+ "2": {
   "inputs": {
    "clip_name": "qwen_3_4b.safetensors",
    "type": "lumina2",
@@ -23,7 +23,7 @@
    "title": "Load CLIP"
   }
  },
- "57:29": {
+ "3": {
   "inputs": {
    "vae_name": "ae.safetensors"
   },
@@ -32,10 +32,10 @@
    "title": "Load VAE"
   }
  },
- "57:33": {
+ "4": {
   "inputs": {
    "conditioning": [
-    "57:27",
+    "7",
     0
    ]
   },
@@ -44,14 +44,14 @@
    "title": "Conditioning Zero Out"
   }
  },
- "57:8": {
+ "5": {
   "inputs": {
    "samples": [
-    "57:3",
+    "10",
     0
    ],
    "vae": [
-    "57:29",
+    "3",
     0
    ]
   },
@@ -60,21 +60,11 @@
    "title": "VAE Decode"
   }
  },
- "57:28": {
-  "inputs": {
-   "unet_name": "z_image_turbo_bf16_nsfw_v2.safetensors",
-   "weight_dtype": "default"
-  },
-  "class_type": "UNETLoader",
-  "_meta": {
-   "title": "Load Diffusion Model"
-  }
- },
- "57:27": {
+ "7": {
   "inputs": {
    "text": "Latina female with thick wavy hair, harbor boats and pastel houses behind. Breezy seaside light, warm tones, cinematic close-up. ",
    "clip": [
-    "57:30",
+    "2",
     0
    ]
   },
@@ -83,7 +73,7 @@
    "title": "CLIP Text Encode (Prompt)"
   }
  },
- "57:13": {
+ "8": {
   "inputs": {
    "width": 1024,
    "height": 1024,
@@ -94,12 +84,12 @@
    "title": "EmptySD3LatentImage"
   }
  },
- "57:11": {
+ "9": {
   "inputs": {
    "shift": 3,
    "sampling": "flow",
    "model": [
-    "57:28",
+    "11",
     0
    ]
   },
@@ -108,7 +98,7 @@
    "title": "ModelSamplingAuraFlow"
   }
  },
- "57:3": {
+ "10": {
   "inputs": {
    "seed": 0,
    "steps": 8,
@@ -117,25 +107,35 @@
    "scheduler": "simple",
    "denoise": 1,
    "model": [
-    "57:11",
+    "9",
     0
    ],
    "positive": [
-    "57:27",
+    "7",
     0
    ],
    "negative": [
-    "57:33",
+    "4",
     0
    ],
    "latent_image": [
-    "57:13",
+    "8",
     0
    ]
   },
   "class_type": "KSampler",
   "_meta": {
    "title": "KSampler"
+  }
+ },
+ "11": {
+  "inputs": {
+   "unet_name": "z_image_turbo_bf16_nsfw_v2.safetensors",
+   "weight_dtype": "default"
+  },
+  "class_type": "UNETLoader",
+  "_meta": {
+   "title": "Load Diffusion Model (Unzensiert)"
   }
  }
 }

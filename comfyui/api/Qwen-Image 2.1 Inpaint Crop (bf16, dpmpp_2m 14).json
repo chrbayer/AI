@@ -47,10 +47,38 @@
    "title": "Image — paint the mask over what to redraw"
   }
  },
- "7": {
+ "9": {
+  "inputs": {
+   "prompt": "A red vintage bicycle leaning against the wall, the rest of the street unchanged",
+   "negative_prompt": "",
+   "resolution": 1024,
+   "clip": [
+    "2",
+    0
+   ]
+  },
+  "class_type": "TextEncodeQwenImage21",
+  "_meta": {
+   "title": "Text Encode Qwen Image 2.1"
+  }
+ },
+ "13": {
+  "inputs": {
+   "filename_prefix": "Qwen_image_2.1_inpaint",
+   "images": [
+    "27",
+    0
+   ]
+  },
+  "class_type": "SaveImage",
+  "_meta": {
+   "title": "Save Image"
+  }
+ },
+ "20": {
   "inputs": {
    "image": [
-    "30",
+    "26",
     1
    ]
   },
@@ -59,7 +87,7 @@
    "title": "Get Image Size"
   }
  },
- "8": {
+ "21": {
   "inputs": {
    "strength": 1,
    "start_percent": 0,
@@ -77,11 +105,11 @@
     0
    ],
    "inpaint_image": [
-    "30",
+    "26",
     1
    ],
    "mask": [
-    "30",
+    "26",
     2
    ]
   },
@@ -90,29 +118,14 @@
    "title": "Apply Fun ControlNet"
   }
  },
- "9": {
-  "inputs": {
-   "prompt": "A red vintage bicycle leaning against the wall, the rest of the street unchanged",
-   "negative_prompt": "",
-   "resolution": 1024,
-   "clip": [
-    "2",
-    0
-   ]
-  },
-  "class_type": "TextEncodeQwenImage21",
-  "_meta": {
-   "title": "Text Encode Qwen Image 2.1"
-  }
- },
- "10": {
+ "22": {
   "inputs": {
    "width": [
-    "7",
+    "20",
     0
    ],
    "height": [
-    "7",
+    "20",
     1
    ],
    "batch_size": 1
@@ -122,7 +135,7 @@
    "title": "Empty Latent Image"
   }
  },
- "11": {
+ "23": {
   "inputs": {
    "seed": 42,
    "steps": 14,
@@ -131,7 +144,7 @@
    "scheduler": "simple",
    "denoise": 1,
    "model": [
-    "8",
+    "21",
     0
    ],
    "positive": [
@@ -143,19 +156,19 @@
     1
    ],
    "latent_image": [
-    "10",
+    "22",
     0
    ]
   },
   "class_type": "KSampler",
   "_meta": {
-   "title": "KSampler"
+   "title": "Sampler"
   }
  },
- "12": {
+ "24": {
   "inputs": {
    "samples": [
-    "11",
+    "23",
     0
    ],
    "vae": [
@@ -168,20 +181,7 @@
    "title": "VAE Decode"
   }
  },
- "13": {
-  "inputs": {
-   "filename_prefix": "Qwen_image_2.1_inpaint_crop",
-   "images": [
-    "31",
-    0
-   ]
-  },
-  "class_type": "SaveImage",
-  "_meta": {
-   "title": "Save Image"
-  }
- },
- "30": {
+ "26": {
   "inputs": {
    "downscale_algorithm": "bilinear",
    "upscale_algorithm": "bicubic",
@@ -221,14 +221,14 @@
    "title": "Crop around the mask"
   }
  },
- "31": {
+ "27": {
   "inputs": {
    "stitcher": [
-    "30",
+    "26",
     0
    ],
    "inpainted_image": [
-    "12",
+    "24",
     0
    ]
   },

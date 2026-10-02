@@ -1,9 +1,9 @@
 {
- "9": {
+ "1": {
   "inputs": {
    "filename_prefix": "Flux2_dev",
    "images": [
-    "98:8",
+    "7",
     0
    ]
   },
@@ -12,14 +12,14 @@
    "title": "Save Image"
   }
  },
- "98:22": {
+ "2": {
   "inputs": {
    "model": [
-    "98:102",
+    "13",
     0
    ],
    "conditioning": [
-    "98:26",
+    "3",
     0
    ]
   },
@@ -28,11 +28,11 @@
    "title": "Basic Guider"
   }
  },
- "98:26": {
+ "3": {
   "inputs": {
    "guidance": 4,
    "conditioning": [
-    "98:6",
+    "12",
     0
    ]
   },
@@ -41,7 +41,7 @@
    "title": "FluxGuidance"
   }
  },
- "98:16": {
+ "4": {
   "inputs": {
    "sampler_name": "euler"
   },
@@ -50,7 +50,7 @@
    "title": "KSamplerSelect"
   }
  },
- "98:10": {
+ "5": {
   "inputs": {
    "vae_name": "full_encoder_small_decoder.safetensors"
   },
@@ -59,26 +59,26 @@
    "title": "Load VAE"
   }
  },
- "98:13": {
+ "6": {
   "inputs": {
    "noise": [
-    "98:25",
+    "11",
     0
    ],
    "guider": [
-    "98:22",
+    "2",
     0
    ],
    "sampler": [
-    "98:16",
+    "4",
     0
    ],
    "sigmas": [
-    "98:48",
+    "9",
     0
    ],
    "latent_image": [
-    "98:47",
+    "10",
     0
    ]
   },
@@ -87,14 +87,14 @@
    "title": "SamplerCustomAdvanced"
   }
  },
- "98:8": {
+ "7": {
   "inputs": {
    "samples": [
-    "98:13",
+    "6",
     0
    ],
    "vae": [
-    "98:10",
+    "5",
     0
    ]
   },
@@ -103,7 +103,7 @@
    "title": "VAE Decode"
   }
  },
- "98:38": {
+ "8": {
   "inputs": {
    "clip_name": "mistral_3_small_flux2_fp8.safetensors",
    "type": "flux2",
@@ -114,10 +114,10 @@
    "title": "Load CLIP"
   }
  },
- "98:48": {
+ "9": {
   "inputs": {
    "steps": [
-    "98:103",
+    "16",
     0
    ],
    "width": 1024,
@@ -128,7 +128,7 @@
    "title": "Flux2Scheduler"
   }
  },
- "98:47": {
+ "10": {
   "inputs": {
    "width": 1024,
    "height": 1024,
@@ -139,7 +139,7 @@
    "title": "Empty Flux 2 Latent"
   }
  },
- "98:25": {
+ "11": {
   "inputs": {
    "noise_seed": 1027111520328378
   },
@@ -148,11 +148,11 @@
    "title": "RandomNoise"
   }
  },
- "98:6": {
+ "12": {
   "inputs": {
    "text": "high fashion, vintage couture, street photography, luxury fashion shoot, neo brutalist architecture, pastel paints",
    "clip": [
-    "98:38",
+    "8",
     0
    ]
   },
@@ -161,12 +161,12 @@
    "title": "CLIP Text Encode (Positive Prompt)"
   }
  },
- "98:101": {
+ "13": {
   "inputs": {
    "lora_name": "Flux_2-Turbo-LoRA_comfyui.safetensors",
    "strength_model": 1,
    "model": [
-    "98:12",
+    "19",
     0
    ]
   },
@@ -175,36 +175,7 @@
    "title": "Load LoRA"
   }
  },
- "98:102": {
-  "inputs": {
-   "switch": [
-    "98:104",
-    0
-   ],
-   "on_false": [
-    "98:12",
-    0
-   ],
-   "on_true": [
-    "98:101",
-    0
-   ]
-  },
-  "class_type": "ComfySwitchNode",
-  "_meta": {
-   "title": "Switch(model)"
-  }
- },
- "98:100": {
-  "inputs": {
-   "value": 20
-  },
-  "class_type": "PrimitiveInt",
-  "_meta": {
-   "title": "Steps"
-  }
- },
- "98:99": {
+ "16": {
   "inputs": {
    "value": 8
   },
@@ -213,36 +184,7 @@
    "title": "Steps"
   }
  },
- "98:103": {
-  "inputs": {
-   "switch": [
-    "98:104",
-    0
-   ],
-   "on_false": [
-    "98:100",
-    0
-   ],
-   "on_true": [
-    "98:99",
-    0
-   ]
-  },
-  "class_type": "ComfySwitchNode",
-  "_meta": {
-   "title": "Switch(steps)"
-  }
- },
- "98:104": {
-  "inputs": {
-   "value": true
-  },
-  "class_type": "PrimitiveBoolean",
-  "_meta": {
-   "title": "Enable Turbo LoRA"
-  }
- },
- "98:12": {
+ "19": {
   "inputs": {
    "unet_name": "flux2_dev_fp8mixed.safetensors",
    "weight_dtype": "fp8_e4m3fn"

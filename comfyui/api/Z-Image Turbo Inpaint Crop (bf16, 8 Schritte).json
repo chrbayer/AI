@@ -47,49 +47,6 @@
    "title": "Image — paint the mask over what to redraw"
   }
  },
- "7": {
-  "inputs": {
-   "image": [
-    "30",
-    1
-   ]
-  },
-  "class_type": "GetImageSize",
-  "_meta": {
-   "title": "Get Image Size"
-  }
- },
- "8": {
-  "inputs": {
-   "strength": 1,
-   "start_percent": 0,
-   "end_percent": 1,
-   "model": [
-    "21",
-    0
-   ],
-   "model_patch": [
-    "4",
-    0
-   ],
-   "vae": [
-    "3",
-    0
-   ],
-   "inpaint_image": [
-    "30",
-    1
-   ],
-   "mask": [
-    "30",
-    2
-   ]
-  },
-  "class_type": "ZImageFunControlnet",
-  "_meta": {
-   "title": "Apply Fun ControlNet"
-  }
- },
  "9": {
   "inputs": {
    "text": "A red vintage bicycle leaning against the wall, the rest of the street unchanged",
@@ -103,74 +60,11 @@
    "title": "Positive prompt"
   }
  },
- "10": {
-  "inputs": {
-   "width": [
-    "7",
-    0
-   ],
-   "height": [
-    "7",
-    1
-   ],
-   "batch_size": 1
-  },
-  "class_type": "EmptySD3LatentImage",
-  "_meta": {
-   "title": "EmptySD3LatentImage"
-  }
- },
- "11": {
-  "inputs": {
-   "seed": 42,
-   "steps": 8,
-   "cfg": 1,
-   "sampler_name": "res_multistep",
-   "scheduler": "simple",
-   "denoise": 1,
-   "model": [
-    "8",
-    0
-   ],
-   "positive": [
-    "9",
-    0
-   ],
-   "negative": [
-    "19",
-    0
-   ],
-   "latent_image": [
-    "10",
-    0
-   ]
-  },
-  "class_type": "KSampler",
-  "_meta": {
-   "title": "KSampler"
-  }
- },
- "12": {
-  "inputs": {
-   "samples": [
-    "11",
-    0
-   ],
-   "vae": [
-    "3",
-    0
-   ]
-  },
-  "class_type": "VAEDecode",
-  "_meta": {
-   "title": "VAE Decode"
-  }
- },
  "13": {
   "inputs": {
-   "filename_prefix": "Z_image_turbo_inpaint_crop",
+   "filename_prefix": "Z_image_turbo_inpaint",
    "images": [
-    "31",
+    "30",
     0
    ]
   },
@@ -205,7 +99,113 @@
    "title": "ModelSamplingAuraFlow"
   }
  },
- "30": {
+ "23": {
+  "inputs": {
+   "image": [
+    "29",
+    1
+   ]
+  },
+  "class_type": "GetImageSize",
+  "_meta": {
+   "title": "Get Image Size"
+  }
+ },
+ "24": {
+  "inputs": {
+   "strength": 1,
+   "start_percent": 0,
+   "end_percent": 1,
+   "model": [
+    "21",
+    0
+   ],
+   "model_patch": [
+    "4",
+    0
+   ],
+   "vae": [
+    "3",
+    0
+   ],
+   "inpaint_image": [
+    "29",
+    1
+   ],
+   "mask": [
+    "29",
+    2
+   ]
+  },
+  "class_type": "ZImageFunControlnet",
+  "_meta": {
+   "title": "Apply Fun ControlNet"
+  }
+ },
+ "25": {
+  "inputs": {
+   "width": [
+    "23",
+    0
+   ],
+   "height": [
+    "23",
+    1
+   ],
+   "batch_size": 1
+  },
+  "class_type": "EmptySD3LatentImage",
+  "_meta": {
+   "title": "EmptySD3LatentImage"
+  }
+ },
+ "26": {
+  "inputs": {
+   "seed": 42,
+   "steps": 8,
+   "cfg": 1,
+   "sampler_name": "res_multistep",
+   "scheduler": "simple",
+   "denoise": 1,
+   "model": [
+    "24",
+    0
+   ],
+   "positive": [
+    "9",
+    0
+   ],
+   "negative": [
+    "19",
+    0
+   ],
+   "latent_image": [
+    "25",
+    0
+   ]
+  },
+  "class_type": "KSampler",
+  "_meta": {
+   "title": "KSampler"
+  }
+ },
+ "27": {
+  "inputs": {
+   "samples": [
+    "26",
+    0
+   ],
+   "vae": [
+    "3",
+    0
+   ]
+  },
+  "class_type": "VAEDecode",
+  "_meta": {
+   "title": "VAE Decode"
+  }
+ },
+ "29": {
   "inputs": {
    "downscale_algorithm": "bilinear",
    "upscale_algorithm": "bicubic",
@@ -245,14 +245,14 @@
    "title": "Crop around the mask"
   }
  },
- "31": {
+ "30": {
   "inputs": {
    "stitcher": [
-    "30",
+    "29",
     0
    ],
    "inpainted_image": [
-    "12",
+    "27",
     0
    ]
   },

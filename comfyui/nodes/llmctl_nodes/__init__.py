@@ -183,5 +183,34 @@ class LlmctlArtifactCheck:
                            repair_prompt(prompt, artifacts), report)}
 
 
-NODE_CLASS_MAPPINGS = {"LlmctlArtifactCheck": LlmctlArtifactCheck}
-NODE_DISPLAY_NAME_MAPPINGS = {"LlmctlArtifactCheck": "Artifact Check (llmctl)"}
+class LlmctlControlImage:
+    """Which control a ControlNet workflow uses: the picture as it is (a ready pose,
+    depth or scribble), or its edges, pose or depth made here. Only the chosen one
+    is computed — the others are lazy inputs — and each kind has its own strength."""
+    CATEGORY = "llmctl"
+    FUNCTION = "choose"
+    RETURN_TYPES = ("IMAGE", "FLOAT")
+    RETURN_NAMES = ("control", "strength")
+    KINDS = ("Bild", "Kanten", "Pose", "Tiefe")
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        lazy = {"lazy": True}
+        return {"required": {"steuerung": (list(cls.KINDS), {"default": "Bild"}),
+                             **{f"strength_{k.lower()}": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05})
+                                for k in cls.KINDS}},
+                "optional": {k.lower(): ("IMAGE", lazy) for k in cls.KINDS}}
+
+    def check_lazy_status(self, steuerung, **kw):
+        return [steuerung.lower()]
+
+    def choose(self, steuerung, **kw):
+        image = kw.get(steuerung.lower())
+        if image is None:
+            raise ValueError(f"no input for '{steuerung}'")
+        return (image, kw[f"strength_{steuerung.lower()}"])
+
+
+NODE_CLASS_MAPPINGS = {"LlmctlArtifactCheck": LlmctlArtifactCheck, "LlmctlControlImage": LlmctlControlImage}
+NODE_DISPLAY_NAME_MAPPINGS = {"LlmctlArtifactCheck": "Artifact Check (llmctl)",
+                              "LlmctlControlImage": "Control image (llmctl)"}

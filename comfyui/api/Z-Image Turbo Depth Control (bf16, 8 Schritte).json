@@ -40,11 +40,11 @@
  },
  "5": {
   "inputs": {
-   "image": "room.png"
+   "image": "control.png"
   },
   "class_type": "LoadImage",
   "_meta": {
-   "title": "Photo whose space to keep"
+   "title": "Steuerbild — oder ein Foto, aus dem Kanten, Pose oder Tiefe kommen"
   }
  },
  "6": {
@@ -92,7 +92,7 @@
     0
    ],
    "image": [
-    "14",
+    "42",
     0
    ]
   },
@@ -103,7 +103,7 @@
  },
  "9": {
   "inputs": {
-   "text": "The same room as a cosy wooden alpine cabin interior, warm evening light, photograph",
+   "text": "A knight in ornate silver armour standing in a misty forest clearing, cinematic light, photorealistic",
    "clip": [
     "2",
     0
@@ -179,7 +179,7 @@
  },
  "13": {
   "inputs": {
-   "filename_prefix": "Z_image_turbo_depth",
+   "filename_prefix": "Z_image_turbo_control",
    "images": [
     "12",
     0
@@ -188,32 +188,6 @@
   "class_type": "SaveImage",
   "_meta": {
    "title": "Save Image"
-  }
- },
- "14": {
-  "inputs": {
-   "ckpt_name": "depth_anything_v2_vitl.pth",
-   "resolution": 1024,
-   "image": [
-    "6",
-    0
-   ]
-  },
-  "class_type": "DepthAnythingV2Preprocessor",
-  "_meta": {
-   "title": "Depth Anything V2 - Relative"
-  }
- },
- "15": {
-  "inputs": {
-   "images": [
-    "14",
-    0
-   ]
-  },
-  "class_type": "PreviewImage",
-  "_meta": {
-   "title": "Depth"
   }
  },
  "19": {
@@ -240,6 +214,32 @@
   "class_type": "ModelSamplingAuraFlow",
   "_meta": {
    "title": "ModelSamplingAuraFlow"
+  }
+ },
+ "42": {
+  "inputs": {
+   "ckpt_name": "depth_anything_v2_vitl.pth",
+   "resolution": 1024,
+   "image": [
+    "6",
+    0
+   ]
+  },
+  "class_type": "DepthAnythingV2Preprocessor",
+  "_meta": {
+   "title": "Depth Anything V2 - Relative"
+  }
+ },
+ "44": {
+  "inputs": {
+   "images": [
+    "42",
+    0
+   ]
+  },
+  "class_type": "PreviewImage",
+  "_meta": {
+   "title": "Steuerbild"
   }
  }
 }

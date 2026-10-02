@@ -1,0 +1,56 @@
+# Workflows replaced by one with switches (comfyui/variants.py): sync removes a copy
+# that is still the bundled one (this SHA-256), and leaves one you changed.
+881a395d6fe6f19bd9679644802d0e829c53bd6c6ca92d9ad33a56647d74a031  ACE-Step 1.5 Turbo (bf16, 8 Schritte).json
+5b0445de2e7ced8fc92cfacd897b31bba2e50bea07539a85bead92cdda358531  ACE-Step 1.5 XL Turbo (bf16, 8 Schritte).json
+4c234e5cfabbb76a4f0c9828a0401cf8a7579a68ffbd89ed4b585f291cc69c2e  BiRefNet Background Removal (general, MIT).json
+13413d9fb0e3d8cd58065c848dc198b8f92f4b845fad254df7ed243e1b31cfe7  BiRefNet Matting Background Removal (HR, MIT).json
+a4a6ca185893440df3687df254ef69df89ab364db9898d9a5faa385c15c9d2ec  FLUX.2 dev Edit (fp8, 20 Schritte).json
+37f22863479b55c16ed12b4a7dfddb904be5b7bb51e71f00a68ad2c0bfed0806  FLUX.2 dev NSFW Edit (fp8, 20 Schritte).json
+566cbbaefc9ec5dea9c3c439b97a552e96678df876729d4b77a2ad638bdc046e  FLUX.2 dev NSFW T2I (fp8, 20 Schritte).json
+8c93c02d8472801857a9546ee5a8efe0f9dc37648e2d04e2bc33425b0d869204  FLUX.2 dev T2I (fp8, 20 Schritte).json
+7a4f709d59bde48e9de59a1957c18625df5cc5c7a0aa3182f3875f16bb6833e4  FLUX.2 dev Turbo Edit (fp8, 8 Schritte).json
+356d47bcc9bcfd7bafc60b983d68ff57bf29146b57cfedb60eb775c5bec62c9c  FLUX.2 dev Turbo T2I (fp8, 8 Schritte).json
+d06ba351ac78a651725a0197fc45d319fa9d064bbe666e1f6b760fbd7977a855  FLUX.2 klein 9B Edit (bf16).json
+57ac6dbd105a53abdc494c55cb9d7ada04f7d4b2cb53c734b0a6cd2086d90ae1  FLUX.2 klein 9B NSFW Edit (bf16).json
+c49fa0a9898b611407d4b5635c4482324d63f6b2e93c4a1d8877c70846c3e82c  FLUX.2 klein 9B NSFW T2I (bf16, 4 Schritte).json
+711ea5e95b9c50c749045d1c96f7bfadb812d0e10d1f35afe4d66ed56e9e1020  FLUX.2 klein 9B T2I (bf16, 4 Schritte).json
+ee545e919db6027007d89b3a9624df57122614edb557659d496b8ca6b588adc3  Qwen-Image 2.1 Background Removal (bf16, euler 25).json
+d9a82b5d38aa65973bdcfe8fc2610737bcc76d36bfce041da56b73b2179f8440  Qwen-Image 2.1 Background Removal Turbo (bf16, 4 Schritte).json
+af147fc859b9ba3c7a311f9424e8b211bbafedb056ab72f7f810c559053100cb  Qwen-Image 2.1 Canny Control (bf16, dpmpp_2m 14).json
+acd0008c1b612fcd983d89927cc9da4d8be8fde6db3b611b35538001087ba68d  Qwen-Image 2.1 Canny Control Turbo (bf16, 4 Schritte).json
+a905ae39dd083ce6ae781489f08130eecad6a6e0701aed8a70f000b8a516f47a  Qwen-Image 2.1 Canny Inpaint (bf16, dpmpp_2m 14).json
+f82f4898c341102a9aeb5ce55b52b3ed6fdd3b97db59a78647ee8438842479f4  Qwen-Image 2.1 Canny Inpaint Turbo (bf16, 4 Schritte).json
+66158a9e9b5944be9cc917e2a14b8dcd5343aeb2804911e1caabc43289d818d0  Qwen-Image 2.1 Colorize (bf16, dpmpp_2m 14).json
+0903bb215b3115c4670fb4cf77e02d3380dc2ec752457d3353a32caca7336cf0  Qwen-Image 2.1 Colorize Turbo (bf16, 4 Schritte).json
+2c2f62771067ec2283a9bf77e5ab03ec8a027e90ebdaa6ca349505d76b207f19  Qwen-Image 2.1 Control (bf16, dpmpp_2m 14).json
+2d8a60a3d87affec12656fd74906095e3601fe1b5b0ab9a848da6ea53f5acaba  Qwen-Image 2.1 Control Turbo (bf16, 4 Schritte).json
+65e464bf90f44973837c0adea5fc8e18583d739e2d4fe3d9d8b8864432e9c4fc  Qwen-Image 2.1 Depth Control (bf16, dpmpp_2m 14).json
+789ba3f9037260dfa5327af4fc804b6f723dbbef146e8c8ef67b2416facc5b4e  Qwen-Image 2.1 Depth Control Turbo (bf16, 4 Schritte).json
+c9864f75d3395abcc6d0a28edccf590e428244eb89f1a7874308d775f43b8efd  Qwen-Image 2.1 Depth Inpaint (bf16, dpmpp_2m 14).json
+cdc003b318407a2736c807bd55255318ca4f8ff8a6340f3557f1eeaed9f3d3e9  Qwen-Image 2.1 Depth Inpaint Turbo (bf16, 4 Schritte).json
+1457485294b5887fe6bfb36351e5481e1c2fdc18b33f20047f43221f335033c6  Qwen-Image 2.1 Edit (bf16, dpmpp_2m 14).json
+2282cf01d9d2d4430eda53b3de5a5cc804e5d8d2446be75be6d5e2a01b8239b9  Qwen-Image 2.1 Edit Turbo (bf16, 4 Schritte).json
+9efbded483079fe30403a509683ab2a40df4199c4b0ecbe020ebde8002c54828  Qwen-Image 2.1 Heretic Edit (bf16, dpmpp_2m 14).json
+0e99999ee758c81c176829d536fd4c97bca982d47dd8183dc5b9da2509ad09d4  Qwen-Image 2.1 Heretic Edit Turbo (bf16, 4 Schritte).json
+7ee9c8b73e9742214ebb64c475be4ac3f72a63ca60e90a97f36e374f99945a9a  Qwen-Image 2.1 Heretic T2I (bf16, dpmpp_2m 14).json
+157f1e2579f8fcb5d710f0ddc3893f16df1bbd5888558a86ce8e6f251e0e9de0  Qwen-Image 2.1 Heretic T2I Turbo (bf16, 4 Schritte).json
+960a2b843d230651c3fe16725f31684bb0ff36f7688080213d3bbd0ba60ad550  Qwen-Image 2.1 Inpaint (bf16, dpmpp_2m 14).json
+a80e098277815a3c71b8504879e120746691ab634e743a6ac3b7610e16762ce3  Qwen-Image 2.1 Inpaint Crop (bf16, dpmpp_2m 14).json
+b93702a570bc07442ca0e43f49d9629fccd0e987dcac72af1033b28507ea2e34  Qwen-Image 2.1 Inpaint Crop Turbo (bf16, 4 Schritte).json
+c99c6150b7226409656422ee02fde4882def6f87f478df0b60a3bfd113d91e16  Qwen-Image 2.1 Inpaint Turbo (bf16, 4 Schritte).json
+2989e0b6b96e5e58213673f6c001e70b0a78ab43b22e55825cb1fb80f65504c2  Qwen-Image 2.1 Outpaint (bf16, dpmpp_2m 14).json
+5e7109ee0ed7ed8c2e2c77974c7da6f4c67c843c0cbc048b157d8041ef98717c  Qwen-Image 2.1 Outpaint Turbo (bf16, 4 Schritte).json
+58f63c018bfbd86b73957dc5509e1d3c5d879604d3f35d67f55dff2667485b20  Qwen-Image 2.1 Pose Control (bf16, dpmpp_2m 14).json
+e290624fd5586f9ae413d68a5ceb864cf66b992ff03812a74bb2a99a125ebdfa  Qwen-Image 2.1 Pose Control Turbo (bf16, 4 Schritte).json
+9b7c50a65b6d45b43ea3c50272aecb2399565b4bd0d3ca4716909c2976d2d449  Qwen-Image 2.1 Pose Inpaint (bf16, dpmpp_2m 14).json
+d7fdcc1ba4f2fc51680a24f39480dc2c8518c848a9f3c6f97f5dc51c1dc049f2  Qwen-Image 2.1 Pose Inpaint Turbo (bf16, 4 Schritte).json
+25d33b4badbdd46a5ffeb01743c7603f029f0492b49aa79a639171969813bbd8  Qwen-Image 2.1 T2I (bf16, dpmpp_2m 14).json
+76bd495d0441e095e358ac5f75208978131b40c177b075ee7e5d1bbd6c3e5a04  Qwen-Image 2.1 T2I Turbo (bf16, 4 Schritte).json
+2c8436f03b9bb13635bebc388a5dd7660e57b344fc102d41c3bfff185a0a3bbe  Z-Image Turbo Canny Control (bf16, 8 Schritte).json
+06e427b3f0c8db6662bcfdaee21a2f8c610466ca6df6097f798f29674f6693d0  Z-Image Turbo Control (bf16, 8 Schritte).json
+4a817a974329b77188bcd00ffda16e8617e93f6ef17a6344d756a05a776ff1ff  Z-Image Turbo Depth Control (bf16, 8 Schritte).json
+c2cad6cb1b966d522d8ac3de2c0b6149416c402b8408ad01b4c9addc69d17418  Z-Image Turbo Inpaint (bf16, 8 Schritte).json
+2cdc50481ad6eeaae7be6e3c91c783cfac4961f4216019adc38a9a0683cbb239  Z-Image Turbo Inpaint Crop (bf16, 8 Schritte).json
+39f8e8008d09b3ca35e6b80249fc20a9ba46ccb3a684415e82949fe5c2f13f13  Z-Image Turbo NSFW T2I (bf16, 8 Schritte).json
+c7275e422891bbd5511a5ebb6ccfd3de7e9413ae85ce559a08c6bf7d6bce15d9  Z-Image Turbo Pose Control (bf16, 8 Schritte).json
+15a25cb0d4cff47757c543c4eb76a0163399de886e01a4539f62539aaf04deb2  Z-Image Turbo T2I (bf16, 8 Schritte).json

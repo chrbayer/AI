@@ -44,7 +44,7 @@
   },
   "class_type": "LoadImage",
   "_meta": {
-   "title": "Control image (pose, depth, scribble, lineart, canny …)"
+   "title": "Steuerbild — oder ein Foto, aus dem Kanten, Pose oder Tiefe kommen"
   }
  },
  "6": {
@@ -160,7 +160,7 @@
   },
   "class_type": "KSampler",
   "_meta": {
-   "title": "KSampler"
+   "title": "Sampler"
   }
  },
  "12": {
@@ -190,6 +190,18 @@
   "class_type": "SaveImage",
   "_meta": {
    "title": "Save Image"
+  }
+ },
+ "44": {
+  "inputs": {
+   "images": [
+    "6",
+    0
+   ]
+  },
+  "class_type": "PreviewImage",
+  "_meta": {
+   "title": "Steuerbild"
   }
  }
 }

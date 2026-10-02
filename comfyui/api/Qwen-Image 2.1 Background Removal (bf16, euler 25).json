@@ -1,12 +1,12 @@
 {
- "461": {
+ "1": {
   "inputs": {
    "filename_prefix": "Qwen_image_2.1",
    "format": "png",
    "format.bit_depth": "8-bit",
    "format.input_color_space": "sRGB",
    "images": [
-    "459:457",
+    "7",
     0
    ]
   },
@@ -15,7 +15,7 @@
    "title": "Save Image (Advanced)"
   }
  },
- "470": {
+ "2": {
   "inputs": {
    "image": "angry_broccoli.png"
   },
@@ -24,29 +24,7 @@
    "title": "Load Image"
   }
  },
- "472": {
-  "inputs": {
-   "compare_view": {
-    "__value__": {
-     "0": "",
-     "1": ""
-    }
-   },
-   "image_a": [
-    "470",
-    0
-   ],
-   "image_b": [
-    "461",
-    0
-   ]
-  },
-  "class_type": "ImageCompare",
-  "_meta": {
-   "title": "Compare Images"
-  }
- },
- "459:451": {
+ "3": {
   "inputs": {
    "unet_name": "qwen_image_2.1_bf16.safetensors",
    "weight_dtype": "default"
@@ -56,7 +34,7 @@
    "title": "Load Diffusion Model"
   }
  },
- "459:453": {
+ "4": {
   "inputs": {
    "clip_name": "qwen3vl_8b_bf16.safetensors",
    "type": "qwen_image",
@@ -67,7 +45,7 @@
    "title": "Load CLIP"
   }
  },
- "459:454": {
+ "5": {
   "inputs": {
    "vae_name": "qwen_image_2.1_vae_bf16.safetensors"
   },
@@ -76,7 +54,7 @@
    "title": "Load VAE"
   }
  },
- "459:456": {
+ "6": {
   "inputs": {
    "width": 1024,
    "height": 1024,
@@ -87,14 +65,14 @@
    "title": "Empty Latent Image"
   }
  },
- "459:457": {
+ "7": {
   "inputs": {
    "samples": [
-    "459:458",
+    "8",
     0
    ],
    "vae": [
-    "459:454",
+    "5",
     0
    ]
   },
@@ -103,7 +81,7 @@
    "title": "VAE Decode"
   }
  },
- "459:458": {
+ "8": {
   "inputs": {
    "seed": 733114857276099,
    "steps": 25,
@@ -112,36 +90,36 @@
    "scheduler": "simple",
    "denoise": 1,
    "model": [
-    "459:469",
+    "10",
     0
    ],
    "positive": [
-    "459:474",
+    "11",
     0
    ],
    "negative": [
-    "459:474",
+    "11",
     1
    ],
    "latent_image": [
-    "459:468",
+    "9",
     0
    ]
   },
   "class_type": "KSampler",
   "_meta": {
-   "title": "KSampler"
+   "title": "Sampler"
   }
  },
- "459:468": {
+ "9": {
   "inputs": {
    "switch": false,
    "on_false": [
-    "459:474",
+    "11",
     2
    ],
    "on_true": [
-    "459:456",
+    "6",
     0
    ]
   },
@@ -150,12 +128,12 @@
    "title": "If/Else Switch"
   }
  },
- "459:469": {
+ "10": {
   "inputs": {
    "device": "auto",
    "dtype": "default",
    "model": [
-    "459:451",
+    "3",
     0
    ]
   },
@@ -164,21 +142,21 @@
    "title": "Qwen Image 2.1 Cache"
   }
  },
- "459:474": {
+ "11": {
   "inputs": {
    "prompt": "Remove the background, and output a PNG image",
    "negative_prompt": "",
    "resolution": 0,
    "clip": [
-    "459:453",
+    "4",
     0
    ],
    "images.image_1": [
-    "470",
+    "2",
     0
    ],
    "vae": [
-    "459:454",
+    "5",
     0
    ]
   },

@@ -10,9 +10,9 @@
  },
  "13": {
   "inputs": {
-   "filename_prefix": "BiRefNet_background_matting",
+   "filename_prefix": "BiRefNet_background",
    "images": [
-    "30",
+    "31",
     0
    ]
   },
@@ -21,7 +21,7 @@
    "title": "Save Image"
   }
  },
- "30": {
+ "31": {
   "inputs": {
    "model": "BiRefNet-HR-matting",
    "sensitivity": 1,
@@ -39,7 +39,7 @@
   },
   "class_type": "BiRefNetRMBG",
   "_meta": {
-   "title": "BiRefNet Remove Background (RMBG)"
+   "title": "BiRefNetRMBG (Feine Kanten)"
   }
  }
 }

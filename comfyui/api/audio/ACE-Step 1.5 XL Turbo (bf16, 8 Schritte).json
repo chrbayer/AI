@@ -1,29 +1,26 @@
 {
- "3": {
+ "1": {
   "inputs": {
-   "seed": [
-    "109",
-    0
-   ],
+   "seed": 31,
    "steps": 8,
    "cfg": 1,
    "sampler_name": "euler",
    "scheduler": "simple",
    "denoise": 1,
    "model": [
-    "78",
+    "4",
     0
    ],
    "positive": [
-    "94",
+    "5",
     0
    ],
    "negative": [
-    "47",
+    "3",
     0
    ],
    "latent_image": [
-    "98",
+    "6",
     0
    ]
   },
@@ -32,14 +29,14 @@
    "title": "KSampler"
   }
  },
- "18": {
+ "2": {
   "inputs": {
    "samples": [
-    "3",
+    "1",
     0
    ],
    "vae": [
-    "106",
+    "9",
     0
    ]
   },
@@ -48,10 +45,10 @@
    "title": "VAE Decode Audio"
   }
  },
- "47": {
+ "3": {
   "inputs": {
    "conditioning": [
-    "94",
+    "5",
     0
    ]
   },
@@ -60,12 +57,12 @@
    "title": "Conditioning Zero Out"
   }
  },
- "78": {
+ "4": {
   "inputs": {
    "shift": 3,
    "sampling": "flow",
    "model": [
-    "104",
+    "11",
     0
    ]
   },
@@ -74,15 +71,12 @@
    "title": "ModelSamplingAuraFlow"
   }
  },
- "94": {
+ "5": {
   "inputs": {
-   "tags": "Late Night Trap, 95 BPM, Heavy 808 Bass, Wet Synths, Female Background Vocals, Male Rap Vocals + Seductive Female Vocals, Dark Bedroom Production, Atmospheric Club Vibes, Breathy Whispers, Slap Bass, Deep Sub Bass, Cinematic R&B Soundtrack Feel",
-   "lyrics": "[Verse 1]\nOpen up the canvas, blank slate on my screen\nDrag a checkpoint loader, you know what I mean\nKSampler in the middle, VAE on the right\nClip text encode, yeah I'm building tonight\n[Chorus]\nConnect the nodes, run the queue\nWatch the latent flow right through\nGreen dot to green dot, link it up\nPositive prompt in my cup\n[Verse 2]\nEmpty latent image, set the width and height\nPlug it to the sampler, get the settings right\nCFG at seven, steps at twenty-two\nHit that Queue Prompt button, render coming through\n[Bridge]\nUpscale node, ControlNet in the chain\nLora stacked on Lora driving me insane\nSave image at the end of every single flow\nRed wire means broken — fix it, let it go\n[Outro]\nNodes connected, workflow clean\nBest AI pipeline you ever seen\nComfyUI, yeah we building art\nOne node at a time right from the start",
-   "seed": [
-    "109",
-    0
-   ],
-   "bpm": 95,
+   "tags": "Rock: A powerful, high-energy modern rock track with a raw and rebellious edge.\nDriven by distorted electric guitars, punchy live drums, and a strong bassline.\nThe song builds dynamically from tension to explosion, balancing aggression and emotion.",
+   "lyrics": "[Verse 1]\nStatic in the air, I feel it in my bones\nEvery step I take, I’m carving out my own\nNo more shadows telling me who to be\nI draw the line, now watch me break free\n\n[Pre-Chorus]\nHear the sound, it’s getting louder\nPressure turning into power\nI won’t wait, I won’t fall back\nThis is the moment, this is the attack\n\n[Chorus]\nShout it out, I’m alive tonight\nBurning bright in the dead of night\nHands up, feel the ground shake\nThis is everything I’m gonna take\n\n[Bridge]\nSilence hits before the storm\nHeart beats fast, I transform\n\n[Final Chorus]\nShout it out, I’m alive tonight\nNo more fear, no need to hide\nTurn it up, let the walls break\nThis is the fire you can’t escape",
+   "seed": 31,
+   "bpm": 190,
    "duration": 120,
    "timesignature": "4",
    "language": "en",
@@ -94,7 +88,7 @@
    "top_k": 0,
    "min_p": 0,
    "clip": [
-    "105",
+    "8",
     0
    ]
   },
@@ -103,7 +97,7 @@
    "title": "TextEncodeAceStepAudio1.5"
   }
  },
- "98": {
+ "6": {
   "inputs": {
    "seconds": 120,
    "batch_size": 1
@@ -113,17 +107,7 @@
    "title": "Empty Ace Step 1.5 Latent Audio"
   }
  },
- "104": {
-  "inputs": {
-   "unet_name": "acestep_v1.5_xl_turbo_bf16.safetensors",
-   "weight_dtype": "default"
-  },
-  "class_type": "UNETLoader",
-  "_meta": {
-   "title": "Load Diffusion Model"
-  }
- },
- "105": {
+ "8": {
   "inputs": {
    "clip_name1": "qwen_0.6b_ace15.safetensors",
    "clip_name2": "qwen_4b_ace15.safetensors",
@@ -135,7 +119,7 @@
    "title": "Load CLIP (Dual)"
   }
  },
- "106": {
+ "9": {
   "inputs": {
    "vae_name": "ace_1.5_vae.safetensors"
   },
@@ -144,28 +128,28 @@
    "title": "Load VAE"
   }
  },
- "109": {
+ "10": {
   "inputs": {
-   "value": 0
-  },
-  "class_type": "PrimitiveInt",
-  "_meta": {
-   "title": "Int (Seed)"
-  }
- },
- "111": {
-  "inputs": {
-   "filename_prefix": "audio/ACE_Step1.5_xl_turbo",
-   "format": "mp3",
-   "format.quality": "V0",
+   "filename_prefix": "audio/ComfyUI",
+   "quality": "V0",
    "audio": [
-    "18",
+    "2",
     0
    ]
   },
-  "class_type": "SaveAudioAdvanced",
+  "class_type": "SaveAudioMP3",
   "_meta": {
-   "title": "Save Audio (Advanced)"
+   "title": "Save Audio (MP3) (DEPRECATED)"
+  }
+ },
+ "11": {
+  "inputs": {
+   "unet_name": "acestep_v1.5_xl_turbo_bf16.safetensors",
+   "weight_dtype": "default"
+  },
+  "class_type": "UNETLoader",
+  "_meta": {
+   "title": "Load Diffusion Model (XL)"
   }
  }
 }

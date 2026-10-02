@@ -40,11 +40,11 @@
  },
  "5": {
   "inputs": {
-   "image": "photo.png"
+   "image": "control.png"
   },
   "class_type": "LoadImage",
   "_meta": {
-   "title": "Photo whose layout to keep"
+   "title": "Steuerbild — oder ein Foto, aus dem Kanten, Pose oder Tiefe kommen"
   }
  },
  "6": {
@@ -92,7 +92,7 @@
     0
    ],
    "image": [
-    "14",
+    "40",
     0
    ]
   },
@@ -103,7 +103,7 @@
  },
  "9": {
   "inputs": {
-   "text": "The same scene as a watercolour painting, soft washes, visible paper texture",
+   "text": "A knight in ornate silver armour standing in a misty forest clearing, cinematic light, photorealistic",
    "clip": [
     "2",
     0
@@ -179,7 +179,7 @@
  },
  "13": {
   "inputs": {
-   "filename_prefix": "Z_image_turbo_canny",
+   "filename_prefix": "Z_image_turbo_control",
    "images": [
     "12",
     0
@@ -188,32 +188,6 @@
   "class_type": "SaveImage",
   "_meta": {
    "title": "Save Image"
-  }
- },
- "14": {
-  "inputs": {
-   "low_threshold": 0.4,
-   "high_threshold": 0.8,
-   "image": [
-    "6",
-    0
-   ]
-  },
-  "class_type": "Canny",
-  "_meta": {
-   "title": "Detect Edges (Canny)"
-  }
- },
- "15": {
-  "inputs": {
-   "images": [
-    "14",
-    0
-   ]
-  },
-  "class_type": "PreviewImage",
-  "_meta": {
-   "title": "Edges"
   }
  },
  "19": {
@@ -240,6 +214,32 @@
   "class_type": "ModelSamplingAuraFlow",
   "_meta": {
    "title": "ModelSamplingAuraFlow"
+  }
+ },
+ "40": {
+  "inputs": {
+   "low_threshold": 0.4,
+   "high_threshold": 0.8,
+   "image": [
+    "6",
+    0
+   ]
+  },
+  "class_type": "Canny",
+  "_meta": {
+   "title": "Detect Edges (Canny)"
+  }
+ },
+ "44": {
+  "inputs": {
+   "images": [
+    "40",
+    0
+   ]
+  },
+  "class_type": "PreviewImage",
+  "_meta": {
+   "title": "Steuerbild"
   }
  }
 }

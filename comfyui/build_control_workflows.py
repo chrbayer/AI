@@ -11,6 +11,11 @@ graphs are written here in API format, which is short and exact, and ComfyUI's
 own frontend turns them into UI workflows (app.loadApiJson, then
 graph.serialize), which get the model download entries llmctl reads. Run it
 again after changing a graph, then comfyui/export_api.py.
+
+Variants are switches in one workflow (Turbo, Unzensiert, Steuerung, Nur in der
+Maske, Ausschnitt, Feine Kanten, XL); the template-made families start from
+their API graphs frozen in comfyui/bases/. variants.py says which switch
+setting is which of the image API's models; export_api.py writes those.
 """
 import asyncio
 import json
@@ -23,6 +28,9 @@ import urllib.request
 from pathlib import Path
 
 import websockets
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import variants  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8009
@@ -394,7 +402,264 @@ def artifact_check():
     }
 
 
+# ── switches: one workflow, its variants behind them ─────────
+
+def _new_id(g):
+    return str(max(int(k) for k in g if k.isdigit()) + 1)
+
+
+def _flag(g, name, value=False):
+    """The PrimitiveBoolean titled `name`, made once per graph."""
+    for k, n in g.items():
+        if n["class_type"] == "PrimitiveBoolean" and variants.title(n) == name:
+            return k
+    k = _new_id(g)
+    g[k] = {"class_type": "PrimitiveBoolean", "inputs": {"value": value}, "_meta": {"title": name}}
+    return k
+
+
+def _switch(g, flag, off, on, label):
+    """An If/Else switch between two refs; whoever read `off` reads the switch."""
+    k = _new_id(g)
+    g[k] = {"class_type": "ComfySwitchNode", "inputs": {"switch": [flag, 0]}, "_meta": {"title": label}}
+    variants._replace_refs(g, off, [k, 0])
+    g[k]["inputs"].update(on_false=off, on_true=on)
+    return k
+
+
+def _find(g, cls, which=0):
+    return [k for k, n in g.items() if n["class_type"] == cls][which]
+
+
+def toggle_loader(g, name, loader, **alt):
+    """`name` on: a second copy of the loader with other inputs (another file)."""
+    k = _new_id(g)
+    g[k] = json.loads(json.dumps(g[loader]))
+    g[k]["inputs"].update(alt)
+    g[k].setdefault("_meta", {})["title"] = f"{variants.title(g[loader]) or g[loader]['class_type']} ({name})"
+    _switch(g, _flag(g, name), [loader, 0], [k, 0], name)
+    return g
+
+
+def toggle_insert(g, name, source, node):
+    """`name` on: `node` (a LoRA) between `source` and whatever read it."""
+    k = _new_id(g)
+    g[k] = node
+    _switch(g, _flag(g, name), [source, 0], [k, 0], name)
+    g[k]["inputs"]["model"] = [source, 0]
+    return g
+
+
+def toggle_turbo(g, sampler, root, steps=4, sampler_name="euler"):
+    """Turbo on: the Acc LoRA after `root` (the diffusion model), a copy of every
+    node between it and `sampler`, and a second sampler with 4 euler steps."""
+    flag = _flag(g, "Turbo")
+    lora = next((k for k, n in g.items() if n["class_type"] == "LoraLoaderModelOnly"
+                 and n["inputs"].get("lora_name") == "Qwen-Image-2.1-Fun-Acc-4Step-comfyui.safetensors"), None)
+    if lora is None:
+        lora = _new_id(g)
+        g[lora] = {"class_type": "LoraLoaderModelOnly", "inputs": {"model": [root, 0], "strength_model": 1.0,
+                   "lora_name": "Qwen-Image-2.1-Fun-Acc-4Step-comfyui.safetensors"}, "_meta": {"title": "4-step Acc LoRA (alibaba-pai)"}}
+    # the nodes on a path from root to the sampler's model input
+    up = {}
+
+    def reaches(k):
+        if k not in up:
+            up[k] = k == root or any(variants.is_ref(v) and reaches(v[0]) for v in g[k]["inputs"].values())
+        return up[k]
+    chain, todo = [], [g[sampler]["inputs"]["model"][0]]
+    while todo:
+        k = todo.pop()
+        if k == root or k in chain or not reaches(k):
+            continue
+        chain.append(k)
+        todo += [v[0] for v in g[k]["inputs"].values() if variants.is_ref(v)]
+    copy = {}
+    for k in chain:
+        copy[k] = _new_id(g)
+        g[copy[k]] = json.loads(json.dumps(g[k]))
+    for k in chain:
+        for a, v in g[copy[k]]["inputs"].items():
+            if variants.is_ref(v) and v[0] == root:
+                g[copy[k]]["inputs"][a] = [lora, 0]
+            elif variants.is_ref(v) and v[0] in copy:
+                g[copy[k]]["inputs"][a] = [copy[v[0]], v[1]]
+    s2 = _new_id(g)
+    g[s2] = json.loads(json.dumps(g[sampler]))
+    m = g[sampler]["inputs"]["model"]
+    g[s2]["inputs"]["model"] = [lora, 0] if m[0] == root else [copy[m[0]], m[1]]
+    g[s2]["inputs"].update(steps=steps, sampler_name=sampler_name)
+    g[s2]["_meta"] = {"title": "Sampler (Turbo)"}
+    g[sampler].setdefault("_meta", {})["title"] = "Sampler"
+    _switch(g, flag, [sampler, 0], [s2, 0], "Turbo")
+    return g
+
+
+def toggle_crop(g):
+    """Ausschnitt on: the crop around the mask repainted and stitched back (see crop)."""
+    flag = _flag(g, "Ausschnitt")
+    c = crop(lambda: json.loads(json.dumps(g)))()
+    # A node is shared only if it and everything it reads are unchanged.
+    same = {}
+
+    def unchanged(k):
+        if k not in same:
+            same[k] = k in g and c[k] == g[k] and all(
+                unchanged(v[0]) for v in c[k]["inputs"].values() if variants.is_ref(v) and v[0] in c)
+        return same[k]
+    ren = {k: (k if unchanged(k) else None) for k in c}
+    for k in c:                                     # what the crop branch changed gets new ids
+        if ren[k] is None:
+            ren[k] = _new_id({**g, **{v: None for v in ren.values() if v}})
+    for k, n in c.items():
+        if ren[k] != k:
+            n = json.loads(json.dumps(n))
+            for a, v in n["inputs"].items():
+                if variants.is_ref(v):
+                    n["inputs"][a] = [ren[v[0]], v[1]]
+            g[ren[k]] = n
+    save = _find(g, "SaveImage")
+    del g[ren[save]]
+    _switch(g, flag, g[save]["inputs"]["images"], [ren["31"], 0], "Ausschnitt")
+    return g
+
+
+def control_all(masked=True):
+    """The control image as it is, or the edges, pose or depth of a photo — chosen
+    with Steuerung; with Nur in der Maske only the masked part is repainted."""
+    g = base("A knight in ornate silver armour standing in a misty forest clearing, cinematic light, "
+             "photorealistic", "Qwen_image_2.1_control")
+    g["5"] = {"class_type": "LoadImage", "inputs": {"image": "control.png"},
+              "_meta": {"title": "Steuerbild — oder ein Foto, aus dem Kanten, Pose oder Tiefe kommen"}}
+    g["40"] = canny()["14"]
+    g["41"] = pose()["14"]
+    g["42"] = depth()["14"]
+    # Strength 0.5 for a ready control image (a scribble at 1.0 came back as flat
+    # vector art), 1.0 for the made ones.
+    g["43"] = {"class_type": "LlmctlControlImage", "inputs": {
+        "steuerung": "Bild", "strength_bild": 0.5, "strength_kanten": 1.0, "strength_pose": 1.0, "strength_tiefe": 1.0,
+        "bild": ["6", 0], "kanten": ["40", 0], "pose": ["41", 0], "tiefe": ["42", 0]}, "_meta": {"title": "Steuerung"}}
+    g["44"] = {"class_type": "PreviewImage", "inputs": {"images": ["43", 0]}, "_meta": {"title": "Steuerbild"}}
+    g["8"]["inputs"].update(image=["43", 0], strength=["43", 1])
+    if masked:
+        g["16"] = {"class_type": "MaskToImage", "inputs": {"mask": ["5", 1]}}
+        g["17"] = {"class_type": "ImageScaleToTotalPixels", "inputs": {"image": ["16", 0], "upscale_method": "bilinear", "megapixels": 1.0, "resolution_steps": 16}}
+        g["18"] = {"class_type": "ImageToMask", "inputs": {"image": ["17", 0], "channel": "red"}}
+        g["45"] = json.loads(json.dumps(g["8"]))
+        g["45"]["inputs"].update({"inpaint_image": ["6", 0], "mask": ["18", 0]})
+        _switch(g, _flag(g, "Nur in der Maske"), ["8", 0], ["45", 0], "Nur in der Maske")
+    return g
+
+
+def zimage_control():
+    g = zimage(lambda: control_all(masked=False))()
+    # Z-Image: 0.8 for a ready control (Qwen-Image's 0.5 lets it drift), canny 0.65
+    # (1.0 kept the photo whatever the prompt asked, 0.5 lost the layout).
+    g["43"]["inputs"].update(strength_bild=0.8, strength_kanten=0.65)
+    return g
+
+
+def from_base(name):
+    """A frozen API graph of a ComfyUI template (comfyui/bases/), ids renumbered."""
+    src = json.loads((ROOT / "bases" / f"{name}.json").read_text())
+    src = {k: v for k, v in src.items() if v["class_type"] not in ("ImageCompare", "MarkdownNote", "Note")}
+    ids = {k: str(i + 1) for i, k in enumerate(src)}
+    g = {}
+    for k, n in src.items():
+        n = json.loads(json.dumps(n))
+        for a, v in n["inputs"].items():
+            if variants.is_ref(v) and v[0] in ids:
+                n["inputs"][a] = [ids[v[0]], v[1]]
+        g[ids[k]] = n
+    return g
+
+
+def qwen_template(name, uncensored=True):
+    def made():
+        g = from_base(name)
+        toggle_turbo(g, _find(g, "KSampler"), _find(g, "UNETLoader"))
+        if uncensored:
+            toggle_loader(g, "Unzensiert", _find(g, "CLIPLoader"), clip_name="qwen3vl_8b_bf16_heretic.safetensors")
+        return g
+    return made
+
+
+def flux_dev(name):
+    def made():
+        g = from_base(name)
+        for n in g.values():
+            if n["class_type"] == "PrimitiveBoolean" and variants.title(n).startswith("Enable") and "LoRA" in variants.title(n):
+                n["_meta"]["title"] = "Turbo"
+        return toggle_insert(g, "Unzensiert", _find(g, "UNETLoader"), {"class_type": "LoraLoaderModelOnly", "inputs": {
+            "lora_name": "flux2_dev_female_nude_style_v1.safetensors", "strength_model": 1.0}, "_meta": {"title": "NSFW LoRA"}})
+    return made
+
+
+def flux_klein(name):
+    def made():
+        g = from_base(name)
+        toggle_loader(g, "Unzensiert", _find(g, "CLIPLoader"), clip_name="qwen_3_8b_uncensored.safetensors")
+        return toggle_insert(g, "Unzensiert", _find(g, "UNETLoader"), {"class_type": "LoraLoaderModelOnly", "inputs": {
+            "lora_name": "flux2_klein_9b_nsfw_v2.safetensors", "strength_model": 1.0}, "_meta": {"title": "NSFW LoRA"}})
+    return made
+
+
+def zimage_t2i():
+    g = from_base("zimage_t2i")
+    return toggle_loader(g, "Unzensiert", _find(g, "UNETLoader"), unet_name="z_image_turbo_bf16_nsfw_v2.safetensors")
+
+
+def ace():
+    g = from_base("ace")
+    return toggle_loader(g, "XL", _find(g, "UNETLoader"), unet_name="acestep_v1.5_xl_turbo_bf16.safetensors")
+
+
+def birefnet():
+    g = background("BiRefNet-general", "BiRefNet_background")()
+    return toggle_loader(g, "Feine Kanten", "30", model="BiRefNet-HR-matting")
+
+
+def with_turbo(make):
+    def made():
+        g = make()
+        return toggle_turbo(g, "11", "1")
+    return made
+
+
+def inpaint_all():
+    g = inpaint()
+    toggle_crop(g)
+    for k in [k for k, n in list(g.items()) if n["class_type"] == "KSampler"]:
+        toggle_turbo(g, k, "1")
+    return g
+
+
 WORKFLOWS = {
+    "Qwen-Image 2.1 T2I": qwen_template("qwen_t2i"),
+    "Qwen-Image 2.1 Edit": qwen_template("qwen_edit"),
+    "Qwen-Image 2.1 Background Removal": qwen_template("qwen_bg", uncensored=False),
+    "Qwen-Image 2.1 Control": lambda: toggle_turbo(control_all(), "11", "1"),
+    "Qwen-Image 2.1 Inpaint": inpaint_all,
+    "Qwen-Image 2.1 Outpaint": with_turbo(outpaint),
+    "Qwen-Image 2.1 Colorize": with_turbo(colorize),
+    "Qwen-Image 2.1 Detailer (bf16, dpmpp_2m 14)": detailer,
+    "Z-Image Turbo T2I": zimage_t2i,
+    "Z-Image Turbo Control": zimage_control,
+    "Z-Image Turbo Inpaint": lambda: toggle_crop(zimage(inpaint)()),
+    "Z-Image Turbo Colorize (bf16, 8 Schritte)": zimage(colorize),
+    "FLUX.2 dev T2I": flux_dev("flux_dev_t2i"),
+    "FLUX.2 dev Edit": flux_dev("flux_dev_edit"),
+    "FLUX.2 klein 9B T2I": flux_klein("flux_klein_t2i"),
+    "FLUX.2 klein 9B Edit": flux_klein("flux_klein_edit"),
+    "BiRefNet Background Removal": birefnet,
+    "ACE-Step 1.5": ace,
+    "Artifact Check (flash)": artifact_check,
+    "Florence-2 Caption": caption,
+    "SAM 3 Select": select,
+}
+
+# The workflows each variant once was, for checking the switches (tests, --check).
+SINGLE = {
     "Qwen-Image 2.1 Control (bf16, dpmpp_2m 14)": control,
     "Qwen-Image 2.1 Canny Control (bf16, dpmpp_2m 14)": canny,
     "Qwen-Image 2.1 Pose Control (bf16, dpmpp_2m 14)": pose,
@@ -455,9 +720,17 @@ async def evaluate(ws, expr):
     return r["result"].get("value")
 
 
+# The download entries the template-made workflows carried, by file name.
+DOWNLOADS = json.loads((ROOT / "bases" / "downloads.json").read_text())
+
+
 def with_downloads(wf):
     """The download entry each loader node carries — what llmctl's download reads."""
     for n in wf["nodes"]:
+        known = [v for v in (n.get("widgets_values") or []) if isinstance(v, str) and v in DOWNLOADS and v not in MODELS]
+        if known:
+            n.setdefault("properties", {})["models"] = [{"name": v, **e} for v in known for e in DOWNLOADS[v]]
+            continue
         key = LOADER_INPUT.get(n.get("type"))
         if not key:
             continue
@@ -517,4 +790,5 @@ async def main():
         shutil.rmtree(profile, ignore_errors=True)
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())

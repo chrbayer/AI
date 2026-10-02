@@ -1,9 +1,9 @@
 {
- "9": {
+ "1": {
   "inputs": {
    "filename_prefix": "Flux2",
    "images": [
-    "62:8",
+    "11",
     0
    ]
   },
@@ -12,7 +12,7 @@
    "title": "Save Image"
   }
  },
- "42": {
+ "2": {
   "inputs": {
    "image": "image_flux2_input_ref_image.png"
   },
@@ -21,7 +21,7 @@
    "title": "Load Image"
   }
  },
- "46": {
+ "3": {
   "inputs": {
    "image": "image_flux2_input_Illustration.png"
   },
@@ -30,18 +30,18 @@
    "title": "Load Image"
   }
  },
- "62:48": {
+ "4": {
   "inputs": {
    "steps": [
-    "62:94",
+    "25",
     0
    ],
    "width": [
-    "62:66",
+    "20",
     0
    ],
    "height": [
-    "62:66",
+    "20",
     1
    ]
   },
@@ -50,14 +50,14 @@
    "title": "Flux2Scheduler"
   }
  },
- "62:22": {
+ "5": {
   "inputs": {
    "model": [
-    "62:93",
+    "23",
     0
    ],
    "conditioning": [
-    "62:39",
+    "15",
     0
    ]
   },
@@ -66,7 +66,7 @@
    "title": "Basic Guider"
   }
  },
- "62:10": {
+ "6": {
   "inputs": {
    "vae_name": "flux2-vae.safetensors"
   },
@@ -75,14 +75,14 @@
    "title": "Load VAE"
   }
  },
- "62:40": {
+ "7": {
   "inputs": {
    "pixels": [
-    "62:41",
+    "9",
     0
    ],
    "vae": [
-    "62:10",
+    "6",
     0
    ]
   },
@@ -91,14 +91,14 @@
    "title": "VAE Encode"
   }
  },
- "62:44": {
+ "8": {
   "inputs": {
    "pixels": [
-    "62:45",
+    "19",
     0
    ],
    "vae": [
-    "62:10",
+    "6",
     0
    ]
   },
@@ -107,13 +107,13 @@
    "title": "VAE Encode"
   }
  },
- "62:41": {
+ "9": {
   "inputs": {
    "upscale_method": "area",
    "megapixels": 1,
    "resolution_steps": 1,
    "image": [
-    "46",
+    "3",
     0
    ]
   },
@@ -122,11 +122,11 @@
    "title": "Scale Image to Total Pixels"
   }
  },
- "62:26": {
+ "10": {
   "inputs": {
    "guidance": 4,
    "conditioning": [
-    "62:6",
+    "17",
     0
    ]
   },
@@ -135,14 +135,14 @@
    "title": "FluxGuidance"
   }
  },
- "62:8": {
+ "11": {
   "inputs": {
    "samples": [
-    "62:13",
+    "12",
     0
    ],
    "vae": [
-    "62:10",
+    "6",
     0
    ]
   },
@@ -151,26 +151,26 @@
    "title": "VAE Decode"
   }
  },
- "62:13": {
+ "12": {
   "inputs": {
    "noise": [
-    "62:25",
+    "18",
     0
    ],
    "guider": [
-    "62:22",
+    "5",
     0
    ],
    "sampler": [
-    "62:16",
+    "13",
     0
    ],
    "sigmas": [
-    "62:48",
+    "4",
     0
    ],
    "latent_image": [
-    "62:47",
+    "21",
     0
    ]
   },
@@ -179,7 +179,7 @@
    "title": "SamplerCustomAdvanced"
   }
  },
- "62:16": {
+ "13": {
   "inputs": {
    "sampler_name": "euler"
   },
@@ -188,14 +188,14 @@
    "title": "KSamplerSelect"
   }
  },
- "62:43": {
+ "14": {
   "inputs": {
    "conditioning": [
-    "62:26",
+    "10",
     0
    ],
    "latent": [
-    "62:44",
+    "8",
     0
    ]
   },
@@ -204,14 +204,14 @@
    "title": "Set Reference Latent"
   }
  },
- "62:39": {
+ "15": {
   "inputs": {
    "conditioning": [
-    "62:43",
+    "14",
     0
    ],
    "latent": [
-    "62:40",
+    "7",
     0
    ]
   },
@@ -220,7 +220,7 @@
    "title": "Set Reference Latent"
   }
  },
- "62:12": {
+ "16": {
   "inputs": {
    "unet_name": "flux2_dev_fp8mixed.safetensors",
    "weight_dtype": "fp8_e4m3fn"
@@ -230,11 +230,11 @@
    "title": "Load Diffusion Model"
   }
  },
- "62:6": {
+ "17": {
   "inputs": {
    "text": "Apply the design from Reference Image 1 onto objects in Reference Image 2.\n",
    "clip": [
-    "62:38",
+    "22",
     0
    ]
   },
@@ -243,7 +243,7 @@
    "title": "CLIP Text Encode (Positive Prompt)"
   }
  },
- "62:25": {
+ "18": {
   "inputs": {
    "noise_seed": 315616751694460
   },
@@ -252,13 +252,13 @@
    "title": "RandomNoise"
   }
  },
- "62:45": {
+ "19": {
   "inputs": {
    "upscale_method": "area",
    "megapixels": 1,
    "resolution_steps": 1,
    "image": [
-    "42",
+    "2",
     0
    ]
   },
@@ -267,10 +267,10 @@
    "title": "Scale Image to Total Pixels"
   }
  },
- "62:66": {
+ "20": {
   "inputs": {
    "image": [
-    "62:45",
+    "19",
     0
    ]
   },
@@ -279,14 +279,14 @@
    "title": "Get Image Size"
   }
  },
- "62:47": {
+ "21": {
   "inputs": {
    "width": [
-    "62:66",
+    "20",
     0
    ],
    "height": [
-    "62:66",
+    "20",
     1
    ],
    "batch_size": 1
@@ -296,7 +296,7 @@
    "title": "Empty Flux 2 Latent"
   }
  },
- "62:38": {
+ "22": {
   "inputs": {
    "clip_name": "mistral_3_small_flux2_fp8.safetensors",
    "type": "flux2",
@@ -307,12 +307,12 @@
    "title": "Load CLIP"
   }
  },
- "62:88": {
+ "23": {
   "inputs": {
    "lora_name": "Flux_2-Turbo-LoRA_comfyui.safetensors",
    "strength_model": 1,
    "model": [
-    "62:12",
+    "16",
     0
    ]
   },
@@ -321,71 +321,13 @@
    "title": "Load LoRA"
   }
  },
- "62:90": {
-  "inputs": {
-   "value": 20
-  },
-  "class_type": "PrimitiveInt",
-  "_meta": {
-   "title": "Step"
-  }
- },
- "62:92": {
+ "25": {
   "inputs": {
    "value": 8
   },
   "class_type": "PrimitiveInt",
   "_meta": {
    "title": "Step"
-  }
- },
- "62:93": {
-  "inputs": {
-   "switch": [
-    "62:95",
-    0
-   ],
-   "on_false": [
-    "62:12",
-    0
-   ],
-   "on_true": [
-    "62:88",
-    0
-   ]
-  },
-  "class_type": "ComfySwitchNode",
-  "_meta": {
-   "title": "Switch (Model)"
-  }
- },
- "62:94": {
-  "inputs": {
-   "switch": [
-    "62:95",
-    0
-   ],
-   "on_false": [
-    "62:90",
-    0
-   ],
-   "on_true": [
-    "62:92",
-    0
-   ]
-  },
-  "class_type": "ComfySwitchNode",
-  "_meta": {
-   "title": "Switch (Step)"
-  }
- },
- "62:95": {
-  "inputs": {
-   "value": true
-  },
-  "class_type": "PrimitiveBoolean",
-  "_meta": {
-   "title": "Enable 8steps LoRA"
   }
  }
 }

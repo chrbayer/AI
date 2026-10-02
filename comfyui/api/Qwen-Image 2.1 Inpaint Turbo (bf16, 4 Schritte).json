@@ -74,37 +74,6 @@
    "title": "Get Image Size"
   }
  },
- "8": {
-  "inputs": {
-   "strength": 1,
-   "start_percent": 0,
-   "end_percent": 1,
-   "model": [
-    "20",
-    0
-   ],
-   "model_patch": [
-    "4",
-    0
-   ],
-   "vae": [
-    "3",
-    0
-   ],
-   "inpaint_image": [
-    "6",
-    0
-   ],
-   "mask": [
-    "18",
-    0
-   ]
-  },
-  "class_type": "ZImageFunControlnet",
-  "_meta": {
-   "title": "Apply Fun ControlNet"
-  }
- },
  "9": {
   "inputs": {
    "prompt": "A red vintage bicycle leaning against the wall, the rest of the street unchanged",
@@ -137,40 +106,10 @@
    "title": "Empty Latent Image"
   }
  },
- "11": {
-  "inputs": {
-   "seed": 42,
-   "steps": 4,
-   "cfg": 1,
-   "sampler_name": "euler",
-   "scheduler": "simple",
-   "denoise": 1,
-   "model": [
-    "8",
-    0
-   ],
-   "positive": [
-    "9",
-    0
-   ],
-   "negative": [
-    "9",
-    1
-   ],
-   "latent_image": [
-    "10",
-    0
-   ]
-  },
-  "class_type": "KSampler",
-  "_meta": {
-   "title": "KSampler"
-  }
- },
  "12": {
   "inputs": {
    "samples": [
-    "11",
+    "32",
     0
    ],
    "vae": [
@@ -185,7 +124,7 @@
  },
  "13": {
   "inputs": {
-   "filename_prefix": "Qwen_image_2.1_inpaint_turbo",
+   "filename_prefix": "Qwen_image_2.1_inpaint",
    "images": [
     "12",
     0
@@ -236,7 +175,7 @@
    "title": "Convert Image to Mask"
   }
  },
- "20": {
+ "30": {
   "inputs": {
    "lora_name": "Qwen-Image-2.1-Fun-Acc-4Step-comfyui.safetensors",
    "strength_model": 1,
@@ -248,6 +187,67 @@
   "class_type": "LoraLoaderModelOnly",
   "_meta": {
    "title": "4-step Acc LoRA (alibaba-pai)"
+  }
+ },
+ "31": {
+  "inputs": {
+   "strength": 1,
+   "start_percent": 0,
+   "end_percent": 1,
+   "model": [
+    "30",
+    0
+   ],
+   "model_patch": [
+    "4",
+    0
+   ],
+   "vae": [
+    "3",
+    0
+   ],
+   "inpaint_image": [
+    "6",
+    0
+   ],
+   "mask": [
+    "18",
+    0
+   ]
+  },
+  "class_type": "ZImageFunControlnet",
+  "_meta": {
+   "title": "Apply Fun ControlNet"
+  }
+ },
+ "32": {
+  "inputs": {
+   "seed": 42,
+   "steps": 4,
+   "cfg": 1,
+   "sampler_name": "euler",
+   "scheduler": "simple",
+   "denoise": 1,
+   "model": [
+    "31",
+    0
+   ],
+   "positive": [
+    "9",
+    0
+   ],
+   "negative": [
+    "9",
+    1
+   ],
+   "latent_image": [
+    "10",
+    0
+   ]
+  },
+  "class_type": "KSampler",
+  "_meta": {
+   "title": "Sampler (Turbo)"
   }
  }
 }

@@ -40,11 +40,11 @@
  },
  "5": {
   "inputs": {
-   "image": "inpaint.png"
+   "image": "control.png"
   },
   "class_type": "LoadImage",
   "_meta": {
-   "title": "Photo — paint the mask over what to redraw"
+   "title": "Steuerbild — oder ein Foto, aus dem Kanten, Pose oder Tiefe kommen"
   }
  },
  "6": {
@@ -74,44 +74,9 @@
    "title": "Get Image Size"
   }
  },
- "8": {
-  "inputs": {
-   "strength": 1,
-   "start_percent": 0,
-   "end_percent": 1,
-   "model": [
-    "1",
-    0
-   ],
-   "model_patch": [
-    "4",
-    0
-   ],
-   "vae": [
-    "3",
-    0
-   ],
-   "image": [
-    "14",
-    0
-   ],
-   "inpaint_image": [
-    "6",
-    0
-   ],
-   "mask": [
-    "18",
-    0
-   ]
-  },
-  "class_type": "ZImageFunControlnet",
-  "_meta": {
-   "title": "Apply Fun ControlNet"
-  }
- },
  "9": {
   "inputs": {
-   "prompt": "The same photo; the masked part of the room is now a wooden bookshelf",
+   "prompt": "A knight in ornate silver armour standing in a misty forest clearing, cinematic light, photorealistic",
    "negative_prompt": "",
    "resolution": 1024,
    "clip": [
@@ -150,7 +115,7 @@
    "scheduler": "simple",
    "denoise": 1,
    "model": [
-    "8",
+    "45",
     0
    ],
    "positive": [
@@ -168,7 +133,7 @@
   },
   "class_type": "KSampler",
   "_meta": {
-   "title": "KSampler"
+   "title": "Sampler"
   }
  },
  "12": {
@@ -189,7 +154,7 @@
  },
  "13": {
   "inputs": {
-   "filename_prefix": "Qwen_image_2.1_depth_inpaint",
+   "filename_prefix": "Qwen_image_2.1_control",
    "images": [
     "12",
     0
@@ -198,32 +163,6 @@
   "class_type": "SaveImage",
   "_meta": {
    "title": "Save Image"
-  }
- },
- "14": {
-  "inputs": {
-   "ckpt_name": "depth_anything_v2_vitl.pth",
-   "resolution": 1024,
-   "image": [
-    "6",
-    0
-   ]
-  },
-  "class_type": "DepthAnythingV2Preprocessor",
-  "_meta": {
-   "title": "Depth Anything V2 - Relative"
-  }
- },
- "15": {
-  "inputs": {
-   "images": [
-    "14",
-    0
-   ]
-  },
-  "class_type": "PreviewImage",
-  "_meta": {
-   "title": "Depth"
   }
  },
  "16": {
@@ -264,6 +203,67 @@
   "class_type": "ImageToMask",
   "_meta": {
    "title": "Convert Image to Mask"
+  }
+ },
+ "42": {
+  "inputs": {
+   "ckpt_name": "depth_anything_v2_vitl.pth",
+   "resolution": 1024,
+   "image": [
+    "6",
+    0
+   ]
+  },
+  "class_type": "DepthAnythingV2Preprocessor",
+  "_meta": {
+   "title": "Depth Anything V2 - Relative"
+  }
+ },
+ "44": {
+  "inputs": {
+   "images": [
+    "42",
+    0
+   ]
+  },
+  "class_type": "PreviewImage",
+  "_meta": {
+   "title": "Steuerbild"
+  }
+ },
+ "45": {
+  "inputs": {
+   "strength": 1,
+   "start_percent": 0,
+   "end_percent": 1,
+   "model": [
+    "1",
+    0
+   ],
+   "model_patch": [
+    "4",
+    0
+   ],
+   "vae": [
+    "3",
+    0
+   ],
+   "image": [
+    "42",
+    0
+   ],
+   "inpaint_image": [
+    "6",
+    0
+   ],
+   "mask": [
+    "18",
+    0
+   ]
+  },
+  "class_type": "ZImageFunControlnet",
+  "_meta": {
+   "title": "Apply Fun ControlNet"
   }
  }
 }

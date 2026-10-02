@@ -976,7 +976,9 @@ llmctl update comfy --torch           # …and torch itself
   (7.6 GB, `model_patches/`) is one model for eight kinds of control image —
   canny, depth, pose, scribble, lineart, HED, MLSD, grayscale — and for
   inpainting. ComfyUI loads it as a model patch ("Load Model Patch" + "Apply Fun
-  ControlNet"). Six workflows:
+  ControlNet"). One workflow, `Qwen-Image 2.1 Control`, whose *Steuerung*
+  picks the kind and whose *Nur in der Maske* repaints only the masked part;
+  as the image API's models (and the workflows they were):
   - `Qwen-Image 2.1 Control`: a control image of any of those kinds, the
     prompt paints the rest. Strength 0.5 by default: at 1.0 a scribble came
     back as flat vector art whatever the prompt asked, at 0.5 as the asked-for
@@ -1093,7 +1095,7 @@ llmctl update comfy --torch           # …and torch itself
   - **No Turbo**: with the 4-step LoRA skin came out coarse and aged, at 0.45
     and at 0.6, where 14 steps keep it natural.
   - Missed: hands knitting, partly hidden behind the needles and the wool.
-- **Background removal.** `Qwen-Image 2.1 Background Removal (bf16, euler 25)`
+- **Background removal.** `Qwen-Image 2.1 Background Removal`
   is ComfyUI's own template on the bf16 models already here: an edit with
   the instruction "Remove the background, and output a PNG image", and
   Qwen-Image 2.1 answers with a real alpha channel. Tried: a man in a park cut
@@ -1103,8 +1105,8 @@ llmctl update comfy --torch           # …and torch itself
   transparent. Through the image API as `qwen-image-21-background-removal`: the
   prompt is the instruction, so send that sentence; the PNG comes back with
   transparency.
-- **BiRefNet background removal** (#34). `BiRefNet Background Removal
-  (general, MIT)` and `BiRefNet Matting Background Removal (HR, MIT)` run
+- **BiRefNet background removal** (#34). `BiRefNet Background Removal`
+  (general; *Feine Kanten* switches to HR matting) runs
   ZhengPeng7's BiRefNet through
   [ComfyUI-RMBG](https://github.com/1038lab/ComfyUI-RMBG): no diffusion, the
   photo's own pixels with an alpha channel, in 2–3.5 s instead of 52–65 s
@@ -1211,8 +1213,7 @@ llmctl update comfy --torch           # …and torch itself
   repainting at 2048² from the enlarged picture, invented the most — another
   face with new wrinkles, a wall in a different wood — in 160 s, so it is not
   a workflow here.
-- **Z-Image Turbo NSFW.** `Z-Image Turbo NSFW T2I (bf16, 8 Schritte)` is the
-  Turbo workflow on tewea's NSFW finetune of its DiT
+- **Z-Image Turbo NSFW.** `Z-Image Turbo T2I` with *Unzensiert* runs Turbo on tewea's NSFW finetune of its DiT
   (`z_image_turbo_bf16_nsfw_v2`, 12.6 GB, Apache-2.0, pinned; its model card
   says nothing about the training). Side by side with the original, same
   seed: a fox and a fisherman came out as good — the finetune costs no general
@@ -1268,8 +1269,8 @@ llmctl update comfy --torch           # …and torch itself
   renamed, each MLP pair stacked into one LoRA on `gate_up` (exact), `proj_out`
   as the mean of its four steps (they differ by ~1%). Checked: bit-identical
   to a torch conversion, every key loaded, sharp images.
-- **NSFW workflows.** `FLUX.2 klein 9B NSFW T2I/Edit` and `FLUX.2 dev NSFW
-  T2I/Edit` add a LoRA. For klein it is what makes nudity possible at all:
+- **NSFW.** *Unzensiert* in `FLUX.2 klein 9B T2I/Edit` and `FLUX.2 dev
+  T2I/Edit` adds a LoRA. For klein it is what makes nudity possible at all:
   without it klein dresses a figure the prompt describes as nude. FLUX.2 dev
   renders nudity on its own; there the LoRA shapes the style — a warmer film
   look, different poses and bodies. klein uses
@@ -1309,8 +1310,8 @@ llmctl update comfy --torch           # …and torch itself
   (`export_api.py`) and the workflow builder give the same files with it
   loaded. Its settings are under the rgthree entry of ComfyUI's settings.
 - **Music in ComfyUI (ACE-Step 1.5).** Two of ComfyUI's own templates, no
-  node pack: `ACE-Step 1.5 XL Turbo (bf16, 8 Schritte)` (DiT 10 GB) and
-  `ACE-Step 1.5 Turbo (bf16, 8 Schritte)` (DiT 4.8 GB), both with the 0.6B
+  node pack, as one workflow `ACE-Step 1.5`: XL Turbo (*XL* on, DiT 10 GB)
+  or the 2B Turbo (DiT 4.8 GB), both with the 0.6B
   and 4B Qwen encoders (1.2 + 8.4 GB) and the VAE — 25 GB together,
   Apache-2.0. A song from a style description (tags), lyrics with `[Verse]`
   and `[Chorus]` markers, BPM, key, time signature and language; `[Instrumental]`
@@ -1433,6 +1434,37 @@ llmctl update comfy --torch           # …and torch itself
   `--output` and `--proxy` (the image API, below) apply; everything else is refused. `env`, `bench`, `cache-stats` and
   `probe-reasoning` have nothing to do for it. ComfyUI has no authentication, so
   `--host` beyond localhost warns.
+
+### Workflows with switches
+
+Variants that differ in a model file, a LoRA or a few steps are one workflow
+with switches rather than a workflow each — 31 workflows instead of 69. A
+switch is a boolean on the canvas; ComfyUI runs only the branch it picks (the
+If/Else switch's inputs are lazy), so the other branch loads no model and
+costs nothing.
+
+| Workflow | Switches |
+|---|---|
+| `Qwen-Image 2.1 T2I`, `Qwen-Image 2.1 Edit` | Turbo (Acc LoRA, 4 euler steps instead of 14 dpmpp_2m), Unzensiert (Heretic encoder) |
+| `Qwen-Image 2.1 Control` | Steuerung (Bild, Kanten, Pose, Tiefe — llmctl's *Control image* node, each with its strength), Nur in der Maske, Turbo |
+| `Qwen-Image 2.1 Inpaint` | Ausschnitt (crop and stitch), Turbo |
+| `Qwen-Image 2.1 Outpaint`, `… Colorize`, `… Background Removal` | Turbo |
+| `Z-Image Turbo T2I` | Unzensiert (the NSFW finetune) |
+| `Z-Image Turbo Control` | Steuerung |
+| `Z-Image Turbo Inpaint` | Ausschnitt |
+| `FLUX.2 dev T2I`, `FLUX.2 dev Edit` | Turbo (its 8-step LoRA), Unzensiert (NSFW LoRA) |
+| `FLUX.2 klein 9B T2I`, `FLUX.2 klein 9B Edit` | Unzensiert (uncensored encoder and NSFW LoRA) |
+| `BiRefNet Background Removal` | Feine Kanten (HR matting) |
+| `ACE-Step 1.5` | XL |
+
+The image API keeps a model per variant, under the names it had: export_api.py
+writes each variant's API graph with its switches set and the unused branch
+cut away (`comfyui/variants.py` says which is which), so
+`qwen-image-21-inpaint-crop-turbo` is `Qwen-Image 2.1 Inpaint` with Ausschnitt
+and Turbo on. Each of the 62 image variants was checked against the workflow
+it replaced: the same nodes with the same settings. `llmctl update comfy`
+removes the replaced workflows from ComfyUI's list where they are still as
+bundled (`comfyui/retired_workflows.txt`) and names the ones you changed.
 
 ### ComfyUI from the internet (`--tunnel`)
 
@@ -1669,7 +1701,7 @@ r = img.images.edit(model="flux2-klein-9b", image=open("turm.png", "rb"),
   prompt, run: the node asks the image API's check and shows the picture with
   the numbered boxes, a report and the prompt for the repair. It also leaves
   the picture in `input/` as `artifacts_<hash>.png`, the flaws transparent.
-  Load that file in `Qwen-Image 2.1 Inpaint Crop (Turbo)`: the boxes are its mask,
+  Load that file in `Qwen-Image 2.1 Inpaint` with *Ausschnitt* (and *Turbo*): the boxes are its mask,
   to edit in the MaskEditor (right-click the picture → *Open in MaskEditor*);
   paste the repair prompt and run. Its `vision` switch, *start if needed, stop
   after*, starts flash for the check (after unloading ComfyUI's models) and

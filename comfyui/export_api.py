@@ -23,6 +23,9 @@ from pathlib import Path
 
 import websockets
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import variants  # noqa: E402
+
 ROOT = Path(__file__).resolve().parent
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8009
 UI = f"http://127.0.0.1:{PORT}/"
@@ -81,17 +84,21 @@ async def main():
                     continue                                   # 3D: no image to answer with
                 # music goes to api/audio/, for /v1/audio/music; the image list stays images
                 audio = any(n.get("type", "").startswith("SaveAudio") for n in wf.get("nodes", []))
-                if any(n.get("type", "").startswith("Llmctl") for n in wf.get("nodes", [])):
+                if any(n.get("type", "") == "LlmctlArtifactCheck" for n in wf.get("nodes", [])):
                     continue                                   # it calls the image API itself
                 prompt = await evaluate(ws, f"""(async () => {{
                     await app.loadGraphData({json.dumps(wf)}, true, true, {json.dumps(path.stem)});
                     const p = await app.graphToPrompt();
                     return p.output;
                 }})()""")
-                out = ROOT / "api" / ("audio" if audio else "") / path.name
-                out.parent.mkdir(exist_ok=True)
-                out.write_text(json.dumps(prompt, indent=1, ensure_ascii=False) + "\n")
-                print(f"{len(prompt):3d} nodes  {out.relative_to(ROOT.parent)}")
+                # A workflow with switches gives one API workflow per variant (variants.py).
+                for name, settings in variants.VARIANTS.get(path.stem, [(path.stem, None)]):
+                    graph = variants.resolve(prompt, settings) if settings is not None else prompt
+                    name = name.removeprefix("audio/")
+                    out = ROOT / "api" / ("audio" if audio else "") / f"{name}.json"
+                    out.parent.mkdir(exist_ok=True)
+                    out.write_text(json.dumps(graph, indent=1, ensure_ascii=False) + "\n")
+                    print(f"{len(graph):3d} nodes  {out.relative_to(ROOT.parent)}")
     finally:
         proc.terminate()
         shutil.rmtree(profile, ignore_errors=True)

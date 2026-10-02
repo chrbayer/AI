@@ -40,11 +40,11 @@
  },
  "5": {
   "inputs": {
-   "image": "pose.png"
+   "image": "control.png"
   },
   "class_type": "LoadImage",
   "_meta": {
-   "title": "Photo with the pose to take over"
+   "title": "Steuerbild — oder ein Foto, aus dem Kanten, Pose oder Tiefe kommen"
   }
  },
  "6": {
@@ -92,7 +92,7 @@
     0
    ],
    "image": [
-    "14",
+    "41",
     0
    ]
   },
@@ -103,7 +103,7 @@
  },
  "9": {
   "inputs": {
-   "text": "A dancer in a flowing red dress on a theatre stage, spotlight, photograph",
+   "text": "A knight in ornate silver armour standing in a misty forest clearing, cinematic light, photorealistic",
    "clip": [
     "2",
     0
@@ -179,7 +179,7 @@
  },
  "13": {
   "inputs": {
-   "filename_prefix": "Z_image_turbo_pose",
+   "filename_prefix": "Z_image_turbo_control",
    "images": [
     "12",
     0
@@ -188,37 +188,6 @@
   "class_type": "SaveImage",
   "_meta": {
    "title": "Save Image"
-  }
- },
- "14": {
-  "inputs": {
-   "detect_hand": "enable",
-   "detect_body": "enable",
-   "detect_face": "enable",
-   "resolution": 1024,
-   "bbox_detector": "yolox_l.torchscript.pt",
-   "pose_estimator": "dw-ll_ucoco_384_bs5.torchscript.pt",
-   "scale_stick_for_xinsr_cn": "disable",
-   "image": [
-    "6",
-    0
-   ]
-  },
-  "class_type": "DWPreprocessor",
-  "_meta": {
-   "title": "DWPose Estimator"
-  }
- },
- "15": {
-  "inputs": {
-   "images": [
-    "14",
-    0
-   ]
-  },
-  "class_type": "PreviewImage",
-  "_meta": {
-   "title": "Pose"
   }
  },
  "19": {
@@ -245,6 +214,37 @@
   "class_type": "ModelSamplingAuraFlow",
   "_meta": {
    "title": "ModelSamplingAuraFlow"
+  }
+ },
+ "41": {
+  "inputs": {
+   "detect_hand": "enable",
+   "detect_body": "enable",
+   "detect_face": "enable",
+   "resolution": 1024,
+   "bbox_detector": "yolox_l.torchscript.pt",
+   "pose_estimator": "dw-ll_ucoco_384_bs5.torchscript.pt",
+   "scale_stick_for_xinsr_cn": "disable",
+   "image": [
+    "6",
+    0
+   ]
+  },
+  "class_type": "DWPreprocessor",
+  "_meta": {
+   "title": "DWPose Estimator"
+  }
+ },
+ "44": {
+  "inputs": {
+   "images": [
+    "41",
+    0
+   ]
+  },
+  "class_type": "PreviewImage",
+  "_meta": {
+   "title": "Steuerbild"
   }
  }
 }

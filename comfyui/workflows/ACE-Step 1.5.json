@@ -1,0 +1,1089 @@
+{
+ "id": "e5ceea99-3adf-4ced-ac3f-97b2f7d3263b",
+ "revision": 0,
+ "last_node_id": 13,
+ "last_link_id": 26,
+ "nodes": [
+  {
+   "id": 1,
+   "type": "KSampler",
+   "pos": [
+    1384.90390625,
+    130
+   ],
+   "size": [
+    270,
+    262
+   ],
+   "flags": {},
+   "order": 10,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "model",
+     "name": "model",
+     "type": "MODEL",
+     "link": 14
+    },
+    {
+     "localized_name": "positive",
+     "name": "positive",
+     "type": "CONDITIONING",
+     "link": 15
+    },
+    {
+     "localized_name": "negative",
+     "name": "negative",
+     "type": "CONDITIONING",
+     "link": 16
+    },
+    {
+     "localized_name": "latent_image",
+     "name": "latent_image",
+     "type": "LATENT",
+     "link": 17
+    },
+    {
+     "localized_name": "seed",
+     "name": "seed",
+     "type": "INT",
+     "widget": {
+      "name": "seed"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "steps",
+     "name": "steps",
+     "type": "INT",
+     "widget": {
+      "name": "steps"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "cfg",
+     "name": "cfg",
+     "type": "FLOAT",
+     "widget": {
+      "name": "cfg"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "sampler_name",
+     "name": "sampler_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "sampler_name"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "scheduler",
+     "name": "scheduler",
+     "type": "COMBO",
+     "widget": {
+      "name": "scheduler"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "denoise",
+     "name": "denoise",
+     "type": "FLOAT",
+     "widget": {
+      "name": "denoise"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "LATENT",
+     "name": "LATENT",
+     "type": "LATENT",
+     "links": [
+      18
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "KSampler"
+   },
+   "widgets_values": [
+    31,
+    "randomize",
+    8,
+    1,
+    "euler",
+    "simple",
+    1
+   ],
+   "widgets_values_named": {
+    "seed": 31,
+    "control_after_generate": "randomize",
+    "steps": 8,
+    "cfg": 1,
+    "sampler_name": "euler",
+    "scheduler": "simple",
+    "denoise": 1
+   }
+  },
+  {
+   "id": 2,
+   "type": "VAEDecodeAudio",
+   "pos": [
+    1754.90390625,
+    130
+   ],
+   "size": [
+    164.2388671875,
+    46
+   ],
+   "flags": {},
+   "order": 11,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "samples",
+     "name": "samples",
+     "type": "LATENT",
+     "link": 18
+    },
+    {
+     "localized_name": "vae",
+     "name": "vae",
+     "type": "VAE",
+     "link": 19
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "AUDIO",
+     "name": "AUDIO",
+     "type": "AUDIO",
+     "links": [
+      23
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "VAEDecodeAudio"
+   }
+  },
+  {
+   "id": 3,
+   "type": "ConditioningZeroOut",
+   "pos": [
+    1014.90390625,
+    130
+   ],
+   "size": [
+    204.134765625,
+    26
+   ],
+   "flags": {},
+   "order": 8,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "conditioning",
+     "name": "conditioning",
+     "type": "CONDITIONING",
+     "link": 20
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "CONDITIONING",
+     "name": "CONDITIONING",
+     "type": "CONDITIONING",
+     "links": [
+      16
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "ConditioningZeroOut"
+   }
+  },
+  {
+   "id": 4,
+   "type": "ModelSamplingAuraFlow",
+   "pos": [
+    1014.90390625,
+    286
+   ],
+   "size": [
+    270,
+    82
+   ],
+   "flags": {},
+   "order": 9,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "model",
+     "name": "model",
+     "type": "MODEL",
+     "link": 21
+    },
+    {
+     "localized_name": "shift",
+     "name": "shift",
+     "type": "FLOAT",
+     "widget": {
+      "name": "shift"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "sampling",
+     "name": "sampling",
+     "shape": 7,
+     "type": "COMBO",
+     "widget": {
+      "name": "sampling"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "MODEL",
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      14
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "ModelSamplingAuraFlow"
+   },
+   "widgets_values": [
+    3,
+    "flow"
+   ],
+   "widgets_values_named": {
+    "shift": 3,
+    "sampling": "flow"
+   }
+  },
+  {
+   "id": 5,
+   "type": "TextEncodeAceStepAudio1.5",
+   "pos": [
+    514.90390625,
+    130
+   ],
+   "size": [
+    400,
+    454
+   ],
+   "flags": {},
+   "order": 6,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "clip",
+     "name": "clip",
+     "type": "CLIP",
+     "link": 22
+    },
+    {
+     "localized_name": "tags",
+     "name": "tags",
+     "type": "STRING",
+     "widget": {
+      "name": "tags"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "lyrics",
+     "name": "lyrics",
+     "type": "STRING",
+     "widget": {
+      "name": "lyrics"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "seed",
+     "name": "seed",
+     "type": "INT",
+     "widget": {
+      "name": "seed"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "bpm",
+     "name": "bpm",
+     "type": "INT",
+     "widget": {
+      "name": "bpm"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "duration",
+     "name": "duration",
+     "type": "FLOAT",
+     "widget": {
+      "name": "duration"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "timesignature",
+     "name": "timesignature",
+     "type": "COMBO",
+     "widget": {
+      "name": "timesignature"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "language",
+     "name": "language",
+     "type": "COMBO",
+     "widget": {
+      "name": "language"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "keyscale",
+     "name": "keyscale",
+     "type": "COMBO",
+     "widget": {
+      "name": "keyscale"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "generate_audio_codes",
+     "name": "generate_audio_codes",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "generate_audio_codes"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "cfg_scale",
+     "name": "cfg_scale",
+     "type": "FLOAT",
+     "widget": {
+      "name": "cfg_scale"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "temperature",
+     "name": "temperature",
+     "type": "FLOAT",
+     "widget": {
+      "name": "temperature"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "top_p",
+     "name": "top_p",
+     "type": "FLOAT",
+     "widget": {
+      "name": "top_p"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "top_k",
+     "name": "top_k",
+     "type": "INT",
+     "widget": {
+      "name": "top_k"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "min_p",
+     "name": "min_p",
+     "type": "FLOAT",
+     "widget": {
+      "name": "min_p"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "CONDITIONING",
+     "name": "CONDITIONING",
+     "type": "CONDITIONING",
+     "links": [
+      15,
+      20
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "TextEncodeAceStepAudio1.5"
+   },
+   "widgets_values": [
+    "Rock: A powerful, high-energy modern rock track with a raw and rebellious edge.\nDriven by distorted electric guitars, punchy live drums, and a strong bassline.\nThe song builds dynamically from tension to explosion, balancing aggression and emotion.",
+    "[Verse 1]\nStatic in the air, I feel it in my bones\nEvery step I take, I’m carving out my own\nNo more shadows telling me who to be\nI draw the line, now watch me break free\n\n[Pre-Chorus]\nHear the sound, it’s getting louder\nPressure turning into power\nI won’t wait, I won’t fall back\nThis is the moment, this is the attack\n\n[Chorus]\nShout it out, I’m alive tonight\nBurning bright in the dead of night\nHands up, feel the ground shake\nThis is everything I’m gonna take\n\n[Bridge]\nSilence hits before the storm\nHeart beats fast, I transform\n\n[Final Chorus]\nShout it out, I’m alive tonight\nNo more fear, no need to hide\nTurn it up, let the walls break\nThis is the fire you can’t escape",
+    31,
+    "randomize",
+    190,
+    120,
+    "4",
+    "en",
+    "E minor",
+    true,
+    2,
+    0.85,
+    0.9,
+    0,
+    0
+   ],
+   "widgets_values_named": {
+    "tags": "Rock: A powerful, high-energy modern rock track with a raw and rebellious edge.\nDriven by distorted electric guitars, punchy live drums, and a strong bassline.\nThe song builds dynamically from tension to explosion, balancing aggression and emotion.",
+    "lyrics": "[Verse 1]\nStatic in the air, I feel it in my bones\nEvery step I take, I’m carving out my own\nNo more shadows telling me who to be\nI draw the line, now watch me break free\n\n[Pre-Chorus]\nHear the sound, it’s getting louder\nPressure turning into power\nI won’t wait, I won’t fall back\nThis is the moment, this is the attack\n\n[Chorus]\nShout it out, I’m alive tonight\nBurning bright in the dead of night\nHands up, feel the ground shake\nThis is everything I’m gonna take\n\n[Bridge]\nSilence hits before the storm\nHeart beats fast, I transform\n\n[Final Chorus]\nShout it out, I’m alive tonight\nNo more fear, no need to hide\nTurn it up, let the walls break\nThis is the fire you can’t escape",
+    "seed": 31,
+    "control_after_generate": "randomize",
+    "bpm": 190,
+    "duration": 120,
+    "timesignature": "4",
+    "language": "en",
+    "keyscale": "E minor",
+    "generate_audio_codes": true,
+    "cfg_scale": 2,
+    "temperature": 0.85,
+    "top_p": 0.9,
+    "top_k": 0,
+    "min_p": 0
+   }
+  },
+  {
+   "id": 6,
+   "type": "EmptyAceStep1.5LatentAudio",
+   "pos": [
+    100,
+    130
+   ],
+   "size": [
+    314.90390625,
+    82
+   ],
+   "flags": {},
+   "order": 0,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "seconds",
+     "name": "seconds",
+     "type": "FLOAT",
+     "widget": {
+      "name": "seconds"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "batch_size",
+     "name": "batch_size",
+     "type": "INT",
+     "widget": {
+      "name": "batch_size"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "LATENT",
+     "name": "LATENT",
+     "type": "LATENT",
+     "links": [
+      17
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "EmptyAceStep1.5LatentAudio"
+   },
+   "widgets_values": [
+    120,
+    1
+   ],
+   "widgets_values_named": {
+    "seconds": 120,
+    "batch_size": 1
+   }
+  },
+  {
+   "id": 7,
+   "type": "UNETLoader",
+   "pos": [
+    100,
+    342
+   ],
+   "size": [
+    270,
+    82
+   ],
+   "flags": {},
+   "order": 1,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "unet_name",
+     "name": "unet_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "unet_name"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "weight_dtype",
+     "name": "weight_dtype",
+     "type": "COMBO",
+     "widget": {
+      "name": "weight_dtype"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "MODEL",
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      25
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "UNETLoader",
+    "models": [
+     {
+      "name": "acestep_v1.5_turbo.safetensors",
+      "directory": "diffusion_models",
+      "url": "https://huggingface.co/Comfy-Org/ace_step_1.5_ComfyUI_files/resolve/main/split_files/diffusion_models/acestep_v1.5_turbo.safetensors"
+     }
+    ]
+   },
+   "widgets_values": [
+    "acestep_v1.5_turbo.safetensors",
+    "default"
+   ],
+   "widgets_values_named": {
+    "unet_name": "acestep_v1.5_turbo.safetensors",
+    "weight_dtype": "default"
+   }
+  },
+  {
+   "id": 8,
+   "type": "DualCLIPLoader",
+   "pos": [
+    100,
+    554
+   ],
+   "size": [
+    270,
+    130
+   ],
+   "flags": {},
+   "order": 2,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "clip_name1",
+     "name": "clip_name1",
+     "type": "COMBO",
+     "widget": {
+      "name": "clip_name1"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "clip_name2",
+     "name": "clip_name2",
+     "type": "COMBO",
+     "widget": {
+      "name": "clip_name2"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "type",
+     "name": "type",
+     "type": "COMBO",
+     "widget": {
+      "name": "type"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "device",
+     "name": "device",
+     "shape": 7,
+     "type": "COMBO",
+     "widget": {
+      "name": "device"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "CLIP",
+     "name": "CLIP",
+     "type": "CLIP",
+     "links": [
+      22
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "DualCLIPLoader",
+    "models": [
+     {
+      "name": "qwen_0.6b_ace15.safetensors",
+      "directory": "text_encoders",
+      "url": "https://huggingface.co/Comfy-Org/ace_step_1.5_ComfyUI_files/resolve/main/split_files/text_encoders/qwen_0.6b_ace15.safetensors"
+     },
+     {
+      "name": "qwen_4b_ace15.safetensors",
+      "directory": "text_encoders",
+      "url": "https://huggingface.co/Comfy-Org/ace_step_1.5_ComfyUI_files/resolve/main/split_files/text_encoders/qwen_4b_ace15.safetensors"
+     }
+    ]
+   },
+   "widgets_values": [
+    "qwen_0.6b_ace15.safetensors",
+    "qwen_4b_ace15.safetensors",
+    "ace",
+    "default"
+   ],
+   "widgets_values_named": {
+    "clip_name1": "qwen_0.6b_ace15.safetensors",
+    "clip_name2": "qwen_4b_ace15.safetensors",
+    "type": "ace",
+    "device": "default"
+   }
+  },
+  {
+   "id": 9,
+   "type": "VAELoader",
+   "pos": [
+    100,
+    814
+   ],
+   "size": [
+    270,
+    58
+   ],
+   "flags": {},
+   "order": 3,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "vae_name",
+     "name": "vae_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "vae_name"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "VAE",
+     "name": "VAE",
+     "type": "VAE",
+     "links": [
+      19
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "VAELoader",
+    "models": [
+     {
+      "name": "ace_1.5_vae.safetensors",
+      "directory": "vae",
+      "url": "https://huggingface.co/Comfy-Org/ace_step_1.5_ComfyUI_files/resolve/main/split_files/vae/ace_1.5_vae.safetensors"
+     }
+    ]
+   },
+   "widgets_values": [
+    "ace_1.5_vae.safetensors"
+   ],
+   "widgets_values_named": {
+    "vae_name": "ace_1.5_vae.safetensors"
+   }
+  },
+  {
+   "id": 10,
+   "type": "SaveAudioMP3",
+   "pos": [
+    2019.1427734375002,
+    130
+   ],
+   "size": [
+    323.92734375,
+    136
+   ],
+   "flags": {},
+   "order": 12,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "audio",
+     "name": "audio",
+     "type": "AUDIO",
+     "link": 23
+    },
+    {
+     "localized_name": "filename_prefix",
+     "name": "filename_prefix",
+     "type": "STRING",
+     "widget": {
+      "name": "filename_prefix"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "quality",
+     "name": "quality",
+     "type": "COMBO",
+     "widget": {
+      "name": "quality"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "audioUI",
+     "name": "audioUI",
+     "type": "AUDIO_UI",
+     "widget": {
+      "name": "audioUI"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "audio",
+     "name": "audio",
+     "type": "AUDIO",
+     "links": null
+    }
+   ],
+   "properties": {},
+   "widgets_values": [
+    "audio/ComfyUI",
+    "V0"
+   ],
+   "widgets_values_named": {
+    "filename_prefix": "audio/ComfyUI",
+    "quality": "V0"
+   }
+  },
+  {
+   "id": 11,
+   "type": "UNETLoader",
+   "pos": [
+    100,
+    1002
+   ],
+   "size": [
+    270,
+    82
+   ],
+   "flags": {},
+   "order": 4,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "unet_name",
+     "name": "unet_name",
+     "type": "COMBO",
+     "widget": {
+      "name": "unet_name"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "weight_dtype",
+     "name": "weight_dtype",
+     "type": "COMBO",
+     "widget": {
+      "name": "weight_dtype"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "MODEL",
+     "name": "MODEL",
+     "type": "MODEL",
+     "links": [
+      26
+     ]
+    }
+   ],
+   "title": "Load Diffusion Model (XL)",
+   "properties": {
+    "Node name for S&R": "UNETLoader",
+    "models": [
+     {
+      "name": "acestep_v1.5_xl_turbo_bf16.safetensors",
+      "directory": "diffusion_models",
+      "url": "https://huggingface.co/Comfy-Org/ace_step_1.5_ComfyUI_files/resolve/main/split_files/diffusion_models/acestep_v1.5_xl_turbo_bf16.safetensors"
+     }
+    ]
+   },
+   "widgets_values": [
+    "acestep_v1.5_xl_turbo_bf16.safetensors",
+    "default"
+   ],
+   "widgets_values_named": {
+    "unet_name": "acestep_v1.5_xl_turbo_bf16.safetensors",
+    "weight_dtype": "default"
+   }
+  },
+  {
+   "id": 12,
+   "type": "PrimitiveBoolean",
+   "pos": [
+    100,
+    1214
+   ],
+   "size": [
+    270,
+    58
+   ],
+   "flags": {},
+   "order": 5,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "value",
+     "name": "value",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "value"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "BOOLEAN",
+     "name": "BOOLEAN",
+     "type": "BOOLEAN",
+     "links": [
+      24
+     ]
+    }
+   ],
+   "title": "XL",
+   "properties": {
+    "Node name for S&R": "PrimitiveBoolean"
+   },
+   "widgets_values": [
+    false
+   ],
+   "widgets_values_named": {
+    "value": false
+   }
+  },
+  {
+   "id": 13,
+   "type": "ComfySwitchNode",
+   "pos": [
+    514.90390625,
+    714
+   ],
+   "size": [
+    270,
+    78
+   ],
+   "flags": {},
+   "order": 7,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "on_false",
+     "name": "on_false",
+     "shape": 7,
+     "type": "MODEL",
+     "link": 25
+    },
+    {
+     "localized_name": "on_true",
+     "name": "on_true",
+     "shape": 7,
+     "type": "MODEL",
+     "link": 26
+    },
+    {
+     "localized_name": "switch",
+     "name": "switch",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "switch"
+     },
+     "link": 24
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "output",
+     "name": "output",
+     "type": "MODEL",
+     "links": [
+      21
+     ]
+    }
+   ],
+   "title": "XL",
+   "properties": {
+    "Node name for S&R": "ComfySwitchNode"
+   },
+   "widgets_values": [
+    false
+   ],
+   "widgets_values_named": {
+    "switch": false
+   }
+  }
+ ],
+ "links": [
+  [
+   14,
+   4,
+   0,
+   1,
+   0,
+   "MODEL"
+  ],
+  [
+   15,
+   5,
+   0,
+   1,
+   1,
+   "CONDITIONING"
+  ],
+  [
+   16,
+   3,
+   0,
+   1,
+   2,
+   "CONDITIONING"
+  ],
+  [
+   17,
+   6,
+   0,
+   1,
+   3,
+   "LATENT"
+  ],
+  [
+   18,
+   1,
+   0,
+   2,
+   0,
+   "LATENT"
+  ],
+  [
+   19,
+   9,
+   0,
+   2,
+   1,
+   "VAE"
+  ],
+  [
+   20,
+   5,
+   0,
+   3,
+   0,
+   "CONDITIONING"
+  ],
+  [
+   21,
+   13,
+   0,
+   4,
+   0,
+   "MODEL"
+  ],
+  [
+   22,
+   8,
+   0,
+   5,
+   0,
+   "CLIP"
+  ],
+  [
+   23,
+   2,
+   0,
+   10,
+   0,
+   "AUDIO"
+  ],
+  [
+   24,
+   12,
+   0,
+   13,
+   2,
+   "BOOLEAN"
+  ],
+  [
+   25,
+   7,
+   0,
+   13,
+   0,
+   "MODEL"
+  ],
+  [
+   26,
+   11,
+   0,
+   13,
+   1,
+   "MODEL"
+  ]
+ ],
+ "groups": [],
+ "config": {},
+ "extra": {
+  "ds": {
+   "scale": 0.9,
+   "offset": [
+    416,
+    110
+   ]
+  }
+ },
+ "version": 0.4
+}

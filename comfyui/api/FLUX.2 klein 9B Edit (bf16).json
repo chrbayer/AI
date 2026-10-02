@@ -1,9 +1,9 @@
 {
- "9": {
+ "1": {
   "inputs": {
    "filename_prefix": "Flux2-Klein",
    "images": [
-    "75:65",
+    "6",
     0
    ]
   },
@@ -12,7 +12,7 @@
    "title": "Save Image"
   }
  },
- "76": {
+ "2": {
   "inputs": {
    "image": "bold_outfit_woman.jpeg"
   },
@@ -21,16 +21,7 @@
    "title": "Load Image"
   }
  },
- "121": {
-  "inputs": {
-   "image": "handbag_white.png"
-  },
-  "class_type": "LoadImage",
-  "_meta": {
-   "title": "Load Image"
-  }
- },
- "75:61": {
+ "4": {
   "inputs": {
    "sampler_name": "euler"
   },
@@ -39,26 +30,26 @@
    "title": "KSamplerSelect"
   }
  },
- "75:64": {
+ "5": {
   "inputs": {
    "noise": [
-    "75:73",
+    "7",
     0
    ],
    "guider": [
-    "75:63",
+    "11",
     0
    ],
    "sampler": [
-    "75:61",
+    "4",
     0
    ],
    "sigmas": [
-    "75:62",
+    "12",
     0
    ],
    "latent_image": [
-    "75:66",
+    "10",
     0
    ]
   },
@@ -67,14 +58,14 @@
    "title": "SamplerCustomAdvanced"
   }
  },
- "75:65": {
+ "6": {
   "inputs": {
    "samples": [
-    "75:64",
+    "5",
     0
    ],
    "vae": [
-    "75:72",
+    "16",
     0
    ]
   },
@@ -83,7 +74,7 @@
    "title": "VAE Decode"
   }
  },
- "75:73": {
+ "7": {
   "inputs": {
    "noise_seed": 26416064315367
   },
@@ -92,7 +83,7 @@
    "title": "RandomNoise"
   }
  },
- "75:70": {
+ "8": {
   "inputs": {
    "unet_name": "flux-2-klein-9b.safetensors",
    "weight_dtype": "default"
@@ -102,7 +93,7 @@
    "title": "Load Diffusion Model"
   }
  },
- "75:71": {
+ "9": {
   "inputs": {
    "clip_name": "qwen_3_8b.safetensors",
    "type": "flux2",
@@ -113,14 +104,14 @@
    "title": "Load CLIP"
   }
  },
- "75:66": {
+ "10": {
   "inputs": {
    "width": [
-    "75:99",
+    "13",
     0
    ],
    "height": [
-    "75:99",
+    "13",
     1
    ],
    "batch_size": 1
@@ -130,19 +121,19 @@
    "title": "Empty Flux 2 Latent"
   }
  },
- "75:63": {
+ "11": {
   "inputs": {
    "cfg": 1,
    "model": [
-    "75:70",
+    "8",
     0
    ],
    "positive": [
-    "75:125",
+    "17",
     0
    ],
    "negative": [
-    "75:123",
+    "14",
     0
    ]
   },
@@ -151,15 +142,15 @@
    "title": "CFG Guider"
   }
  },
- "75:62": {
+ "12": {
   "inputs": {
    "steps": 4,
    "width": [
-    "75:99",
+    "13",
     0
    ],
    "height": [
-    "75:99",
+    "13",
     1
    ]
   },
@@ -168,10 +159,10 @@
    "title": "Flux2Scheduler"
   }
  },
- "75:99": {
+ "13": {
   "inputs": {
    "image": [
-    "75:80",
+    "15",
     0
    ]
   },
@@ -180,14 +171,14 @@
    "title": "Get Image Size"
   }
  },
- "75:123": {
+ "14": {
   "inputs": {
    "conditioning": [
-    "75:82",
+    "19",
     0
    ],
    "latent": [
-    "75:124",
+    "20",
     0
    ]
   },
@@ -196,13 +187,13 @@
    "title": "Set Reference Latent"
   }
  },
- "75:80": {
+ "15": {
   "inputs": {
    "upscale_method": "nearest-exact",
    "megapixels": 1,
    "resolution_steps": 1,
    "image": [
-    "76",
+    "2",
     0
    ]
   },
@@ -211,7 +202,7 @@
    "title": "Scale Image to Total Pixels"
   }
  },
- "75:72": {
+ "16": {
   "inputs": {
    "vae_name": "full_encoder_small_decoder.safetensors"
   },
@@ -220,14 +211,14 @@
    "title": "Load VAE"
   }
  },
- "75:125": {
+ "17": {
   "inputs": {
    "conditioning": [
-    "75:74",
+    "18",
     0
    ],
    "latent": [
-    "75:124",
+    "20",
     0
    ]
   },
@@ -236,11 +227,11 @@
    "title": "Set Reference Latent"
   }
  },
- "75:74": {
+ "18": {
   "inputs": {
    "text": "Replace the background with a quiet coastal cliff at overcast sunset. Remove all buildings and streets. Add wind-shaped grass and a distant ocean horizon. Keep the subject’s pose and framing unchanged.",
    "clip": [
-    "75:71",
+    "9",
     0
    ]
   },
@@ -249,10 +240,10 @@
    "title": "CLIP Text Encode (Positive Prompt)"
   }
  },
- "75:82": {
+ "19": {
   "inputs": {
    "conditioning": [
-    "75:74",
+    "18",
     0
    ]
   },
@@ -261,14 +252,14 @@
    "title": "Conditioning Zero Out"
   }
  },
- "75:124": {
+ "20": {
   "inputs": {
    "pixels": [
-    "75:80",
+    "15",
     0
    ],
    "vae": [
-    "75:72",
+    "16",
     0
    ]
   },

@@ -5691,6 +5691,21 @@ _comfyui_sync_workflows() {
         fi
     done
     echo "  workflows: $added added to $c_wf"
+    # Retired ones (now variants of a workflow with switches): gone if untouched.
+    local sum removed=0 kept=()
+    while read -r sum name; do
+        [[ -z "$sum" || "$sum" == \#* || ! -e "$c_wf/$name" ]] && continue
+        if [[ "$(sha256sum "$c_wf/$name" | cut -d' ' -f1)" == "$sum" ]]; then
+            rm -f "$c_wf/$name"; removed=$(( removed + 1 ))
+        else
+            kept+=("$name")
+        fi
+    done < "$COMFYUI_SHARE/retired_workflows.txt" 2>/dev/null
+    (( removed )) && echo "  workflows: $removed replaced by one with switches, removed"
+    if (( ${#kept[@]} )); then
+        echo "  replaced by a workflow with switches, but kept as you changed them:"
+        printf '    %s\n' "${kept[@]}"
+    fi
     if (( ${#differ[@]} )); then
         echo "  kept as you changed them (bundled version differs):"
         printf '    %s\n' "${differ[@]}"

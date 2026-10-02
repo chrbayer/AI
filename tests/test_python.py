@@ -26,6 +26,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 import comfyui_models as cm                                        # stdlib only
+sys.path.insert(0, str(ROOT / "comfyui"))
+import variants                                                     # noqa: E402
 
 ts: Any = None          # typed loosely: a missing import skips its tests below
 proxy: Any = None
@@ -285,17 +287,22 @@ class ImageApi(unittest.TestCase):
         for path in sorted((ROOT / "comfyui" / "workflows").glob("*.json")):
             if "TTS" in path.name:
                 continue
-            if any(n.get("type", "").startswith("Llmctl") for n in json.loads(path.read_text())["nodes"]):
+            if any(n.get("type", "") == "LlmctlArtifactCheck" for n in json.loads(path.read_text())["nodes"]):
                 continue                                          # calls the image API itself
             nodes = json.loads(path.read_text())["nodes"]
+            # a workflow with switches is exported as its variants
+            names = [n for n, _ in variants.VARIANTS.get(path.stem, [(path.stem, None)])]
             if any(n.get("type", "").startswith("SaveAudio") for n in nodes):
-                self.assertTrue((API / "audio" / path.name).exists(), "run comfyui/export_api.py: music goes to api/audio/")
+                for name in names:
+                    self.assertTrue((API / "audio" / f"{name.removeprefix('audio/')}.json").exists(),
+                                    "run comfyui/export_api.py: music goes to api/audio/")
                 continue
             if any(n.get("type", "") in ("Save3DAdvanced", "SaveGLB") for n in nodes):
                 continue                                          # 3D, not for the image API
-            with self.subTest(workflow=path.name):
-                self.assertTrue((API / path.name).exists(),
-                                "run comfyui/export_api.py and commit what it writes")
+            for name in names:
+                with self.subTest(workflow=path.name, api=name):
+                    self.assertTrue((API / f"{name}.json").exists(),
+                                    "run comfyui/export_api.py and commit what it writes")
 
     def test_workflow_names(self):
         self.assertEqual(images.slug("FLUX.2 klein 9B T2I (bf16, 4 Schritte)"), ("flux2-klein-9b", "generations"))
@@ -365,12 +372,46 @@ class ImageApi(unittest.TestCase):
                 node = next(n for n in g.values() if n["class_type"] == "BiRefNetRMBG")
                 self.assertEqual((node["inputs"]["model"], node["inputs"]["background"]), (model, "Alpha"))
                 self.assertFalse(images.set_prompt(g, "anything"))
-                wf = json.loads((ROOT / "comfyui" / "workflows" / f"{name}.json").read_text())
-                entries = [m for n in wf["nodes"] for m in (n.get("properties") or {}).get("models") or []]
+                wf = json.loads((ROOT / "comfyui" / "workflows" / "BiRefNet Background Removal.json").read_text())
+                node = next(n for n in wf["nodes"] if n.get("type") == "BiRefNetRMBG" and n["widgets_values"][0] == model)
+                entries = (node.get("properties") or {}).get("models") or []
                 # birefnet.py is the node's: it rewrites an import in it on every load
                 self.assertEqual({m["name"] for m in entries}, {f"{model}.safetensors", "config.json", "BiRefNet_config.py"})
                 self.assertEqual({m["directory"] for m in entries}, {"RMBG/BiRefNet"})
                 self.assertTrue(all("/resolve/4d000788a9698c7f8d67c8c6ce2b40c768f5b909/" in m["url"] for m in entries))
+
+    def test_switches_and_their_variants(self):
+        wfs = {p.stem: json.loads(p.read_text()) for p in (ROOT / "comfyui" / "workflows").glob("*.json")}
+        for ui, vs in variants.VARIANTS.items():
+            with self.subTest(ui):
+                self.assertIn(ui, wfs)
+                titles = {n.get("title") for n in wfs[ui]["nodes"] if n.get("type") == "PrimitiveBoolean"}
+                if any(n.get("type") == variants.CHOICE for n in wfs[ui]["nodes"]):
+                    titles.add("Steuerung")
+                for name, settings in vs:
+                    self.assertLessEqual(set(settings), titles, name)
+        for ui, wf in wfs.items():                 # a switch without variants would never reach the API
+            if ui not in variants.VARIANTS:
+                self.assertFalse({n.get("title") for n in wf["nodes"] if n.get("type") == "PrimitiveBoolean"} & variants.SWITCH_TITLES, ui)
+        retired = [line.split()[1:] for line in (ROOT / "comfyui" / "retired_workflows.txt").read_text().splitlines()
+                   if line and not line.startswith("#")]
+        for parts in retired:
+            self.assertNotIn(" ".join(parts).removesuffix(".json"), wfs)
+
+    def test_resolving_a_switch_cuts_the_other_branch(self):
+        g = {"1": {"class_type": "UNETLoader", "inputs": {"unet_name": "a"}},
+             "2": {"class_type": "UNETLoader", "inputs": {"unet_name": "b"}},
+             "3": {"class_type": "PrimitiveBoolean", "inputs": {"value": False}, "_meta": {"title": "XL"}},
+             "4": {"class_type": "ComfySwitchNode", "inputs": {"switch": ["3", 0], "on_false": ["1", 0], "on_true": ["2", 0]}},
+             "5": {"class_type": "KSampler", "inputs": {"model": ["4", 0], "seed": 1}},
+             "6": {"class_type": "SaveImage", "inputs": {"images": ["5", 0]}}}
+        on = variants.resolve(g, {"XL": True})
+        self.assertEqual(on["5"]["inputs"]["model"], ["2", 0])
+        self.assertEqual(sorted(on), ["2", "5", "6"])
+        self.assertEqual(variants.canonical(variants.resolve(g, {"XL": False})), variants.canonical(
+            {k: g[k] for k in ("1", "6")} | {"5": {"class_type": "KSampler", "inputs": {"model": ["1", 0], "seed": 9}}}))
+        with self.assertRaises(KeyError):
+            variants.resolve(g, {"Turbo": True})
 
     def test_tools_are_no_models(self):
         old = vars(images.ARGS).get("api")
