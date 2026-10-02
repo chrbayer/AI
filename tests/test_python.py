@@ -898,3 +898,25 @@ class Parts(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+import llama_builds as lb                                          # noqa: E402
+
+
+class LlamaBuilds(unittest.TestCase):
+    def test_gpu_targets(self):
+        self.assertEqual([lb.gfx_name(v) for v in (110501, 100300, 90010, 120001)],
+                         ["gfx1151", "gfx1030", "gfx90a", "gfx1201"])
+        with tempfile.TemporaryDirectory() as d:
+            for node, v in (("0", 0), ("1", 110501)):
+                Path(d, node).mkdir()
+                Path(d, node, "properties").write_text(f"cpu_cores_count 16\ngfx_target_version {v}\n")
+            self.assertEqual(lb.gfx(d), "gfx1151")
+
+    def test_the_rocm_zip_for_a_target_or_its_family(self):
+        assets = [{"name": f"llama-b1330-ubuntu-rocm-{t}-x64.zip"} for t in ("gfx103X", "gfx110X", "gfx1150", "gfx1151", "gfx120X")]
+        assets.append({"name": "llama-b1330-windows-rocm-gfx1151-x64.zip"})
+        pick = lambda t: (lb.lemonade_asset(assets, t) or {}).get("name")
+        self.assertEqual(pick("gfx1151"), "llama-b1330-ubuntu-rocm-gfx1151-x64.zip")
+        self.assertEqual(pick("gfx1032"), "llama-b1330-ubuntu-rocm-gfx103X-x64.zip")
+        self.assertIsNone(pick("gfx942"))

@@ -50,6 +50,11 @@ MODELS_DIR="${LLMCTL_MODELS_DIR:-$DATA_DIR/models}"
 
 PROXY_SCRIPT="$LIB_DIR/proxy.py"
 HALOGEN_BENCH_SCRIPT="$LIB_DIR/halogen_bench.py"
+LLAMA_BUILDS_SCRIPT="$LIB_DIR/llama_builds.py"
+# llama-server builds llmctl installs itself (download/update llama): the Vulkan
+# one from ggml-org, the ROCm one from lemonade-sdk, each at the newest stable
+# llama.cpp release, in <kind>/<build>/ with <kind>/current pointing at the one in use.
+LLAMA_DIR="$DATA_DIR/llama.cpp"
 # A slot is nothing but a number: every port derives from it, so there is no
 # list of slots anywhere and no fixed count. What does bound them is the port
 # layout — the gap between two bases is how many slots fit between them, which
@@ -4421,9 +4426,11 @@ cmd_outdated() {
     # Against the newest stable release (a v-tag, GitHub's "latest"), not master:
     # a build at or past it is current; master's lead is only shown.
     printf '\n\033[1mllama.cpp builds\033[0m\n'
-    local bin path out commit behind stable status
+    local bin path out commit behind stable status kind
     stable=$(_gh_json "repos/ggml-org/llama.cpp/releases/latest" .tag_name)
-    for bin in $(printf '%s\n' "${LLAMA_DEFAULT_BIN:-llama-server}" "${LLAMA_ROCM_BIN:-}" | awk 'NF && !s[$0]++'); do
+    local -a bins=("${LLAMA_DEFAULT_BIN:-llama-server}" "${LLAMA_ROCM_BIN:-}")
+    for kind in vulkan rocm; do [[ -x "$LLAMA_DIR/$kind/current/llama-server" ]] && bins+=("$LLAMA_DIR/$kind/current/llama-server"); done
+    for bin in $(printf '%s\n' "${bins[@]}" | awk 'NF && !s[$0]++'); do
         path=$(command -v "$bin" 2>/dev/null) || { echo "  $bin: not installed"; continue; }
         out=$("$path" --version 2>&1)
         commit=$(grep -oE 'commit [0-9a-f]{7,}|\(([0-9a-f]{7,})\)' <<< "$out" | head -1 | grep -oE '[0-9a-f]{7,}')
@@ -5424,6 +5431,8 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  --from DIR: move an existing ComfyUI checkout into place instead"
     printf "  %-20s %s\n" ""                      "  --check: only tell what would be downloaded, with sizes; exit 0 when nothing"
     printf "  %-20s %s\n" "update <m> [--torch]"   "comfyui: git pull (patches kept), Python dependencies, workflows; --torch: torch too"
+    printf "  %-20s %s\n" "download|update llama"  "prebuilt llama-server for Vulkan (ggml-org) and ROCm (lemonade, this GPU) at the"
+    printf "  %-20s %s\n" ""                      "  newest stable llama.cpp release, into $LLAMA_DIR/<kind>/current; tested before use"
     printf "  %-20s %s\n" "voice list|add|design|rm" "voices the speech (tts) slots speak in: design one from a description, or add a recording"
     printf "  %-20s %s\n" ""                      "  voice export [FILE] / import FILE [--force]: they live nowhere else — back them up"
     printf "  %-20s %s\n" "version"                "print the version"
@@ -6104,6 +6113,100 @@ cmd_voice() {
     esac
 }
 
+# ── llama.cpp builds ─────────────────────────────────────────
+
+# The smallest llama.cpp model on disk, for the load test of a new build.
+_llama_test_model() {
+    local entry name best="" best_size=0 size
+    for entry in "${_MODELS[@]}"; do
+        IFS='|' read -r name _ <<< "$entry"
+        _resolve_model "$name" 2>/dev/null || continue
+        [[ "$_r_backend" == llama && -f "$_r_model" ]] || continue
+        size=$(stat -L -c %s "$_r_model" 2>/dev/null) || continue
+        if [[ -z "$best" ]] || (( size < best_size )); then best="$_r_model"; best_size=$size; fi
+    done
+    echo "$best"
+}
+
+# A build passes when --version names a commit and it serves a small model on the GPU.
+_llama_test_build() {
+    local bin="$1" model port=$(( 18990 + RANDOM % 9 )) pid ok=1 i
+    "$bin" --version 2>&1 | grep -q "commit" || { echo "    --version failed:"; "$bin" --version 2>&1 | tail -3 | sed 's/^/      /'; return 1; }
+    model=$(_llama_test_model)
+    if [[ -z "$model" ]]; then echo "    no llama.cpp model on disk to load — skipped the load test"; return 0; fi
+    "$bin" -m "$model" -ngl 99 -c 2048 --port "$port" --host 127.0.0.1 > "$STATE_DIR/llama-test.log" 2>&1 &
+    pid=$!
+    for i in $(seq 120); do
+        curl -sf "http://127.0.0.1:$port/health" > /dev/null && { ok=0; break; }
+        kill -0 "$pid" 2>/dev/null || break
+        sleep 1
+    done
+    kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null
+    if (( ok )); then
+        echo "    load test with $(basename "$model") failed:"; tail -5 "$STATE_DIR/llama-test.log" | sed 's/^/      /'
+        return 1
+    fi
+    echo "    loads $(basename "$model") and answers /health"
+}
+
+# Bring KIND (vulkan, rocm) to the build the resolver names: download, unpack,
+# test, then move current. Builds other than the new and the previous go.
+_llama_install() {
+    local kind="$1" info="$2" check="$3" build url asset dir cur tmp top
+    build=$(jq -r ".$kind.build // empty" <<< "$info"); url=$(jq -r ".$kind.url // empty" <<< "$info")
+    asset=$(jq -r ".$kind.asset // empty" <<< "$info")
+    if [[ -z "$build" ]]; then echo "  $kind: no build for $(jq -r .tag <<< "$info") found"; return 1; fi
+    dir="$LLAMA_DIR/$kind/$build"
+    cur=$(readlink "$LLAMA_DIR/$kind/current" 2>/dev/null)
+    if [[ "$cur" == "$build" && -x "$dir/llama-server" ]]; then
+        echo "  $kind: $build — current ($(jq -r .tag <<< "$info"))"; return 0
+    fi
+    if [[ "$check" == true ]]; then
+        echo "  $kind: $build to install ($asset, $(( $(jq -r ".$kind.size" <<< "$info") / 1000000 )) MB)${cur:+, now $cur}"
+        DL_PENDING=$(( DL_PENDING + 1 )); return 0
+    fi
+    echo "  $kind: $build ($asset)"
+    mkdir -p "$LLAMA_DIR/$kind"
+    tmp="$LLAMA_DIR/$kind/.$build.part"; rm -rf "$tmp"; mkdir -p "$tmp"
+    curl -fL --progress-bar -o "$tmp/$asset" "$url" || { rm -rf "$tmp"; echo "    download failed"; return 1; }
+    case "$asset" in
+        *.tar.gz) tar xzf "$tmp/$asset" -C "$tmp" ;;
+        *.zip)    python3 -m zipfile -e "$tmp/$asset" "$tmp" ;;
+    esac || { rm -rf "$tmp"; echo "    unpacking failed"; return 1; }
+    rm -f "$tmp/$asset"
+    # The tarball holds one directory (llama-b11146/), the zip its files flat.
+    top=$(find "$tmp" -name llama-server -type f | head -1)
+    [[ -n "$top" ]] || { rm -rf "$tmp"; echo "    no llama-server in $asset"; return 1; }
+    top=$(dirname "$top")
+    chmod +x "$top"/llama-* "$top"/ggml-* 2>/dev/null
+    _llama_test_build "$top/llama-server" || { rm -rf "$tmp"; echo "    $build not installed; $kind stays at ${cur:-nothing}"; return 1; }
+    rm -rf "$dir"; mv "$top" "$dir"; rm -rf "$tmp"
+    ln -sfn "$build" "$LLAMA_DIR/$kind/current"
+    echo "    installed: $LLAMA_DIR/$kind/current/llama-server${cur:+ (was $cur, kept for a rollback)}"
+    local old
+    for old in "$LLAMA_DIR/$kind"/*/; do
+        old=$(basename "$old")
+        [[ "$old" == "$build" || "$old" == "$cur" ]] || rm -rf "${LLAMA_DIR:?}/$kind/$old"
+    done
+}
+
+# download llama / update llama: both builds at the newest stable release.
+_llama_setup() {
+    local check="${1:-false}" info rc=0
+    _check_deps jq curl || return 1
+    echo "==> llama.cpp: the newest stable release and its prebuilt builds"
+    info=$(python3 "$LLAMA_BUILDS_SCRIPT" resolve) || { echo "  cannot ask GitHub"; DL_UNKNOWN=$(( DL_UNKNOWN + 1 )); return 1; }
+    echo "  $(jq -r .tag <<< "$info") (${info:+$(jq -r '.commit[:9]' <<< "$info")})"
+    _llama_install vulkan "$info" "$check" || rc=1
+    if [[ "$(jq -r '.rocm.gfx // empty' <<< "$info")" ]]; then
+        _llama_install rocm "$info" "$check" || rc=1
+    else
+        echo "  rocm: no AMD GPU target found (KFD) — skipped"
+    fi
+    [[ "$check" == true ]] || echo "  models.conf picks them with LLAMA_DEFAULT_BIN=\"$LLAMA_DIR/vulkan/current/llama-server\", LLAMA_ROCM_BIN=\"$LLAMA_DIR/rocm/current/llama-server\""
+    return $rc
+}
+
 cmd_update() {
     local name="" torch=""
     while [[ $# -gt 0 ]]; do
@@ -6113,7 +6216,8 @@ cmd_update() {
             *) name="$1"; shift ;;
         esac
     done
-    [[ -z "$name" ]] && { echo "Usage: $PROG update <comfyui-model> [--torch]"; return 1; }
+    [[ -z "$name" ]] && { echo "Usage: $PROG update <comfyui-model> [--torch] | llama"; return 1; }
+    [[ "$name" == llama ]] && { _llama_setup; return; }
     _resolve_model "$name" || { echo "Unknown model: $name"; return 1; }
     if [[ "$_r_backend" != comfyui ]]; then
         echo "'$name' has nothing to update: its weights come from '$PROG download $name', its server"
@@ -6246,6 +6350,10 @@ _download_target() {
         return
     fi
 
+    if [[ "$target" == llama ]]; then
+        [[ -z "$pattern$from$force" ]] || { echo "Error: download llama takes no pattern, --from or --force"; return 1; }
+        _llama_setup "$DL_CHECK"; return
+    fi
     _resolve_model "$target" || { echo "Unknown model: $target"; echo "Run '$PROG download' to see available models."; return 1; }
 
     if [[ "$_r_backend" == comfyui ]]; then

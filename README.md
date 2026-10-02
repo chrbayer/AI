@@ -20,8 +20,31 @@ your home directory:
 | --- | --- | --- |
 | `~/.config/llmctl/` | `models.conf`, `presets.conf`, `tokens`, `tls/` | `LLMCTL_CONFIG_DIR` (tokens/tls also `LLM_CONF_DIR`, `LLM_TOKEN_FILE`) |
 | `~/.local/share/llmctl/models/` | the GGUF files (`$MODELS_DIR` in `models.conf`), ComfyUI's models in `comfyui/` | `LLMCTL_MODELS_DIR`, or set `MODELS_DIR` in `models.conf` |
-| `~/.local/share/llmctl/` | `benchmarks/`, `claude/<model>[-<slot>]` (Claude Code profiles set by `env`), `comfyui/` (ComfyUI's checkout in `app/`, its workflows, input and output), `tts/` (voices; a voice-design venv only without ComfyUI) | `LLMCTL_DATA_DIR` |
+| `~/.local/share/llmctl/` | `llama.cpp/` (prebuilt llama-server, see below), `benchmarks/`, `claude/<model>[-<slot>]` (Claude Code profiles set by `env`), `comfyui/` (ComfyUI's checkout in `app/`, its workflows, input and output), `tts/` (voices; a voice-design venv only without ComfyUI) | `LLMCTL_DATA_DIR` |
 | `~/.local/state/llmctl/` | `logs/`, `pids/`, `slots/`, `stunnel/` | `LLMCTL_STATE_DIR` |
+
+**llama-server** itself: `llmctl download llama` installs prebuilt builds at
+llama.cpp's newest stable release (a `vX.Y.Z` tag, not every nightly) into
+`~/.local/share/llmctl/llama.cpp/` — `vulkan/` from ggml-org (its
+`ubuntu-vulkan-x64` package of the build made of the release's own commit; it
+needs only the system's Vulkan loader) and `rocm/` from
+[lemonade-sdk/llamacpp-rocm](https://github.com/lemonade-sdk/llamacpp-rocm)
+(the package for this GPU's target, read from KFD — gfx1151 here — with its
+ROCm runtime inside, so no system ROCm; the build is lemonade's oldest one at or
+past the release commit). Each sits in `<kind>/<build>/`, `<kind>/current`
+points at the one in use. A new build becomes current only after `--version`
+names its commit and it loads the smallest llama.cpp model on disk and answers
+`/health`; the one before stays for a rollback. `llmctl update llama` moves on
+when a new release is out, `--check` tells first, `outdated` lists both. Use
+them in `models.conf`:
+
+```bash
+LLAMA_DEFAULT_BIN="$HOME/.local/share/llmctl/llama.cpp/vulkan/current/llama-server"
+LLAMA_ROCM_BIN="$HOME/.local/share/llmctl/llama.cpp/rocm/current/llama-server"
+```
+
+Builds of your own (`/usr/local/bin`, `/opt`) are never touched. ggml-org's own
+ROCm package is not used: it takes ROCm from the system.
 
 `examples/` holds a complete `models.conf` and `presets.conf`. Copy them to edit
 freely, or link them to a checkout so changes — including `preset-save` — stay
