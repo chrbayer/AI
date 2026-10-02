@@ -96,7 +96,8 @@ VARIANTS = {
 SWITCH_TITLES = {"Turbo", "Unzensiert", "Nur in der Maske", "Ausschnitt", "Feine Kanten", "XL"}
 CHOICE = "LlmctlControlImage"
 OUTPUTS = {"SaveImage", "SaveImageAdvanced", "SaveAudio", "SaveAudioMP3", "SaveAudioAdvanced", "SaveAudioOpus",
-           "PreviewImage", "PreviewAny", "PreviewAudio", "Save3DAdvanced", "SaveGLB", "LlmctlArtifactCheck"}
+           "PreviewImage", "PreviewAny", "PreviewAudio", "Save3DAdvanced", "SaveGLB", "LlmctlArtifactCheck",
+           "SaveVideo", "SaveWEBM", "SaveAnimatedWEBP"}
 
 
 def is_ref(v):

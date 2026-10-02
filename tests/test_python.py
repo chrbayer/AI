@@ -297,8 +297,8 @@ class ImageApi(unittest.TestCase):
                     self.assertTrue((API / "audio" / f"{name.removeprefix('audio/')}.json").exists(),
                                     "run comfyui/export_api.py: music goes to api/audio/")
                 continue
-            if any(n.get("type", "") in ("Save3DAdvanced", "SaveGLB") for n in nodes):
-                continue                                          # 3D, not for the image API
+            if any(n.get("type", "") in ("Save3DAdvanced", "SaveGLB", "SaveVideo", "SaveWEBM", "SaveAnimatedWEBP") for n in nodes):
+                continue                                          # 3D and video, not for the image API
             for name in names:
                 with self.subTest(workflow=path.name, api=name):
                     self.assertTrue((API / f"{name}.json").exists(),

@@ -1395,6 +1395,28 @@ llmctl update comfy --torch           # …and torch itself
   sends it to the CPU, where it takes ~40 s for 670,000 faces. Hunyuan3D 2.1,
   the other native 3D template, is not set up: its licence excludes the
   European Union. Not served through the image API.
+- **Video (LTX-2.5)** (#40). Two of ComfyUI's own templates for Lightricks'
+  LTX-2.5, no node pack: `LTX-2.5 Video (int8, distilled)` turns a picture
+  into a clip — or, with *Switch to Text to Video?* on, a prompt alone — and
+  `LTX-2.5 First-Last Frame (int8, distilled)` fills the clip between a first
+  and a last picture. Both make the sound with it (an audio VAE beside the
+  video one). 45 GB: the distilled 22B DiT (int8, 21.5 GB), Gemma-4 12B as
+  its text encoder (15.4 GB), Gemma-4 E2B for the optional prompt
+  enhancement (5.2 GB), the VAEs and a 2× latent upscaler. LTX-2.x Community
+  License: free for personal use and below $10M revenue; the Hugging Face
+  repo is gated — accept the licence there once with the account whose token
+  `download` uses.
+
+  The template samples in two stages: 8 steps at half the size, the latent
+  upscaled 2×, then 3 steps at full size. Width and height go in steps of
+  32, the length is frame rate × seconds + 1. Measured at 1280×704, 5 s at
+  24 fps with sound: a beach scene from a picture in 409 s, a tram in a rainy
+  street from text alone in 450 s (stage 1 ~40 s, stage 2 ~260 s), the beach
+  from a first to a last picture in 895 s — the last one the most natural
+  movement of all. For a quick look, 1024×576 with the second stage left out
+  (its output decoded straight away; sampling at 512×288) gives 2 s in 55 s.
+  A portrait picture is cut to the template's 16:9 unless the size is set.
+  Not served through the image API.
 - **Speech in ComfyUI.** [ComfyUI-Qwen-TTS](https://github.com/flybirdxx/ComfyUI-Qwen-TTS)
   brings Qwen3-TTS; two workflows use it. `Qwen3-TTS Stimme entwerfen` designs
   a voice from a description (VoiceDesign), `Qwen3-TTS Stimme klonen` speaks in

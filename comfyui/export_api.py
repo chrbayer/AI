@@ -80,8 +80,9 @@ async def main():
                 wf = json.loads(path.read_text())
                 if any("TTS" in n.get("type", "") for n in wf.get("nodes", [])):
                     continue                                   # speech has its own server
-                if any(n.get("type", "") in ("Save3DAdvanced", "SaveGLB") for n in wf.get("nodes", [])):
-                    continue                                   # 3D: no image to answer with
+                if any(n.get("type", "") in ("Save3DAdvanced", "SaveGLB", "SaveVideo", "SaveWEBM", "SaveAnimatedWEBP")
+                       for n in wf.get("nodes", [])):
+                    continue                                   # 3D and video: no image to answer with
                 # music goes to api/audio/, for /v1/audio/music; the image list stays images
                 audio = any(n.get("type", "").startswith("SaveAudio") for n in wf.get("nodes", []))
                 if any(n.get("type", "") == "LlmctlArtifactCheck" for n in wf.get("nodes", [])):
