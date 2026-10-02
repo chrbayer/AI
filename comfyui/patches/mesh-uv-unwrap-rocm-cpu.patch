@@ -1,0 +1,14 @@
+diff --git a/comfy_extras/mesh3d/uv_unwrap/parameterize.py b/comfy_extras/mesh3d/uv_unwrap/parameterize.py
+index 383d21d8..61dc489d 100644
+--- a/comfy_extras/mesh3d/uv_unwrap/parameterize.py
++++ b/comfy_extras/mesh3d/uv_unwrap/parameterize.py
+@@ -319,7 +319,8 @@ def lscm_charts_batch(
+         np.put_along_axis(cval, pin_cols, pin_vals, axis=1)
+ 
+         # normal equations + batched solve; the fp64 dense algebra goes to the GPU when available
+-        use_gpu = device is not None and device.type == "cuda"
++        # ROCm: hipBLAS fails the batched fp64 LU (HIPBLAS_STATUS_ALLOC_FAILED), so the CPU branch
++        use_gpu = device is not None and device.type == "cuda" and torch.version.hip is None
+         if use_gpu:
+             A_t = torch.from_numpy(A).to(device)
+             At = A_t.transpose(1, 2)

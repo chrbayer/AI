@@ -1357,6 +1357,43 @@ llmctl update comfy --torch           # …and torch itself
     -d '{"model": "ace-step-15-xl-turbo", "prompt": "German pop ballad, piano, female vocals",
          "lyrics": "[Verse]\nDer Morgen hängt noch grau im Fenster", "duration": 60, "language": "de"}'
   ```
+- **3D models from a picture** (#38). `Pixal3D TRELLIS.2 Image to Model (int8)`
+  is ComfyUI's own template: a photo becomes a textured mesh (GLB in
+  `output/3d/`, PBR: base colour, metallic/roughness, normal map, ambient
+  occlusion). The background is cut away first (BiRefNet), then either
+  **Pixal3D** (the default; it also estimates the photo's geometry and field
+  of view with MoGe) or **TRELLIS.2** (Microsoft, 4B; *Switch to Trellis2*)
+  builds the shape and its colours as voxels, which are meshed, decimated,
+  UV-unwrapped and baked. All MIT; 15.2 GB of models. Tried on a product
+  shot of a handbag, a ceramic fox figurine and a model of a half-timbered
+  house, all made with Z-Image Turbo:
+
+  | | Pixal3D | TRELLIS.2 |
+  |---|---|---|
+  | fox | 437 s | 620 s |
+  | handbag | 735 s | 3788 s |
+  | house | 2308 s | 4734 s |
+
+  Both are kept: on the fox and the house both did well; on the plain white
+  handbag both failed, TRELLIS.2 a little less. TRELLIS.2's texture stage is
+  what takes the time (100–215 s a step here). Files are 23–50 MB at 200,000
+  triangles with 4096 px textures.
+
+  **The triangle count** (`target_face_count` on *DecimateMesh*, 200,000 here
+  instead of the template's 700,000) hardly changes the time: the fine
+  surface is baked into the normal map from the full mesh, and only the
+  steps after the decimation run again. Changing just that number and
+  running once more takes ~45 s while ComfyUI still holds the rest in its
+  cache — a fox at 700,000, 200,000, 100,000 and 50,000 triangles came out
+  in 437 s, then 48, 47 and 45 s, 42 to 17 MB, and all looked very good on
+  a phone (more triangles a little better). After a restart a new count
+  costs the whole run again.
+
+  On ROCm the UV unwrap's batched fp64 solve fails in hipBLAS
+  (`HIPBLAS_STATUS_ALLOC_FAILED`); `comfyui/patches/mesh-uv-unwrap-rocm-cpu.patch`
+  sends it to the CPU, where it takes ~40 s for 670,000 faces. Hunyuan3D 2.1,
+  the other native 3D template, is not set up: its licence excludes the
+  European Union. Not served through the image API.
 - **Speech in ComfyUI.** [ComfyUI-Qwen-TTS](https://github.com/flybirdxx/ComfyUI-Qwen-TTS)
   brings Qwen3-TTS; two workflows use it. `Qwen3-TTS Stimme entwerfen` designs
   a voice from a description (VoiceDesign), `Qwen3-TTS Stimme klonen` speaks in
