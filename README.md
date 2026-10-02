@@ -1285,6 +1285,19 @@ llmctl update comfy --torch           # …and torch itself
   None of the bundled workflows uses its nodes, and the API export
   (`export_api.py`) and the workflow builder give the same files with it
   loaded. Its settings are under the rgthree entry of ComfyUI's settings.
+- **Music in ComfyUI (ACE-Step 1.5).** Two of ComfyUI's own templates, no
+  node pack: `ACE-Step 1.5 XL Turbo (bf16, 8 Schritte)` (DiT 10 GB) and
+  `ACE-Step 1.5 Turbo (bf16, 8 Schritte)` (DiT 4.8 GB), both with the 0.6B
+  and 4B Qwen encoders (1.2 + 8.4 GB) and the VAE — 25 GB together,
+  Apache-2.0. A song from a style description (tags), lyrics with `[Verse]`
+  and `[Chorus]` markers, BPM, key, time signature and language; `[Instrumental]`
+  as lyrics for none. Saved as MP3 in `output/audio/`. 90 s of music take
+  33–34 s with either model (loading 5–9 s): the time goes into the 4B
+  language model that writes the audio codes, not into the DiT, so the
+  bigger one costs only disk. Tried with the same seed: a German pop ballad
+  and an English indie rock song came out without a flaw in the singing
+  with both. Not served through the image API (`export_api.py` leaves
+  workflows that save audio out).
 - **Speech in ComfyUI.** [ComfyUI-Qwen-TTS](https://github.com/flybirdxx/ComfyUI-Qwen-TTS)
   brings Qwen3-TTS; two workflows use it. `Qwen3-TTS Stimme entwerfen` designs
   a voice from a description (VoiceDesign), `Qwen3-TTS Stimme klonen` speaks in

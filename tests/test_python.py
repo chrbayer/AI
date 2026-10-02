@@ -287,6 +287,8 @@ class ImageApi(unittest.TestCase):
                 continue
             if any(n.get("type", "").startswith("Llmctl") for n in json.loads(path.read_text())["nodes"]):
                 continue                                          # calls the image API itself
+            if any(n.get("type", "").startswith("SaveAudio") for n in json.loads(path.read_text())["nodes"]):
+                continue                                          # music, not for the image API
             with self.subTest(workflow=path.name):
                 self.assertTrue((API / path.name).exists(),
                                 "run comfyui/export_api.py and commit what it writes")

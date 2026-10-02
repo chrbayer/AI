@@ -77,6 +77,8 @@ async def main():
                 wf = json.loads(path.read_text())
                 if any("TTS" in n.get("type", "") for n in wf.get("nodes", [])):
                     continue                                   # speech has its own server
+                if any(n.get("type", "").startswith("SaveAudio") for n in wf.get("nodes", [])):
+                    continue                                   # music: no image to answer with
                 if any(n.get("type", "").startswith("Llmctl") for n in wf.get("nodes", [])):
                     continue                                   # it calls the image API itself
                 prompt = await evaluate(ws, f"""(async () => {{
