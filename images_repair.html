@@ -158,8 +158,10 @@ textarea { resize: vertical; min-height: 54px; }
       <p class="hint" id="finalHint">Wird aus Prompt und den gewählten Korrekturen gebildet — Änderungen hier bleiben stehen.</p>
       <div class="row">
         <div><label for="model">Workflow</label>
-          <select id="model"><option value="qwen-image-21-inpaint-turbo">Inpaint Turbo (~26 s)</option>
-                              <option value="qwen-image-21-inpaint">Inpaint (~70 s)</option></select></div>
+          <select id="model"><option value="qwen-image-21-inpaint-crop-turbo">Inpaint Crop Turbo (~27 s je Stelle)</option>
+                              <option value="qwen-image-21-inpaint-crop">Inpaint Crop (~80 s je Stelle)</option>
+                              <option value="qwen-image-21-inpaint-turbo">Inpaint Turbo, ganzes Bild (~26 s)</option>
+                              <option value="qwen-image-21-inpaint">Inpaint, ganzes Bild (~70 s)</option></select></div>
         <div style="max-width:90px"><label for="margin">Rand px</label><input id="margin" type="number" value="16" min="0" max="256"></div>
         <div style="max-width:120px"><label for="seed">Seed</label><input id="seed" type="number" value="7"></div>
       </div>
@@ -412,16 +414,53 @@ $("check").onclick = async () => {
 };
 
 // ── repair ──
+// The crop workflows repaint the mask's box 2.5 times over (CROP_CONTEXT in
+// build_control_workflows.py) at ~1 MP and stitch it back. Boxes whose crops
+// overlap go in one run; the others one after the other, each on the last
+// result, so a flaw far from the rest keeps the whole resolution for itself.
+const CROP_CONTEXT = 2.5;
+function groups(boxes, margin) {
+  const reach = b => { const cx = (b.x1 + b.x2) / 2, cy = (b.y1 + b.y2) / 2;
+    const hw = ((b.x2 - b.x1) / 2 + margin) * CROP_CONTEXT, hh = ((b.y2 - b.y1) / 2 + margin) * CROP_CONTEXT;
+    return [cx - hw, cy - hh, cx + hw, cy + hh]; };
+  const meet = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+  let gs = boxes.map(b => ({ boxes: [b], r: reach(b) }));
+  for (let merged = true; merged;) {
+    merged = false;
+    for (let i = 0; i < gs.length && !merged; i++)
+      for (let j = i + 1; j < gs.length && !merged; j++)
+        if (meet(gs[i].r, gs[j].r)) {
+          const r = gs[i].r, q = gs[j].r;
+          gs[i] = { boxes: gs[i].boxes.concat(gs[j].boxes), r: [Math.min(r[0], q[0]), Math.min(r[1], q[1]), Math.max(r[2], q[2]), Math.max(r[3], q[3])] };
+          gs.splice(j, 1); merged = true;
+        }
+  }
+  return gs.map(g => g.boxes);
+}
+function groupPrompt(boxes) {
+  if (S.finalEdited) return $("final").value;
+  const clean = t => t.trim().replace(/[.\s]+$/, "");
+  const fixes = [...new Set(boxes.filter(b => clean(b.fix)).map(b => clean(b.fix)))];
+  return [clean($("prompt").value), fixes.join("; ")].filter(Boolean).join(". ") || $("final").value;
+}
 async function repair() {
   S.busy = true; buttons(); $("repair").classList.add("spin");
-  const t0 = Date.now(); const tick = setInterval(() => $("repairHint").textContent = `malt neu … ${Math.round((Date.now() - t0) / 1000)} s`, 1000);
+  const t0 = Date.now(); let step = "";
+  const tick = setInterval(() => $("repairHint").textContent = `malt neu${step} … ${Math.round((Date.now() - t0) / 1000)} s`, 1000);
   try {
-    const boxes = S.boxes.filter(b => b.on).map(b => [b.x1, b.y1, b.x2, b.y2].map(Math.round));
-    const r = await jsonPost("v1/images/edits", { model: $("model").value, image: S.src, prompt: $("final").value,
-      boxes, margin: +$("margin").value || 0, seed: +$("seed").value || 0 });
-    S.result = "data:image/png;base64," + r.data[0].b64_json;
+    const model = $("model").value, margin = +$("margin").value || 0, seed = +$("seed").value || 0;
+    const on = S.boxes.filter(b => b.on);
+    const runs = model.includes("-crop") ? groups(on, margin) : [on];
+    let image = S.src, r;
+    for (const [i, g] of runs.entries()) {
+      if (runs.length > 1) step = ` (${i + 1} von ${runs.length})`;
+      r = await jsonPost("v1/images/edits", { model, image, prompt: runs.length > 1 ? groupPrompt(g) : $("final").value,
+        boxes: g.map(b => [b.x1, b.y1, b.x2, b.y2].map(Math.round)), margin, seed });
+      image = "data:image/png;base64," + r.data[0].b64_json;
+    }
+    S.result = image;
     $("res").src = S.result; $("resultView").hidden = false; $("views").classList.add("two");
-    clearInterval(tick); toast(`Fertig in ${Math.round((Date.now() - t0) / 1000)} s (Seed ${r.seed}).`, 3000);
+    clearInterval(tick); toast(`Fertig in ${Math.round((Date.now() - t0) / 1000)} s${runs.length > 1 ? `, ${runs.length} Durchgänge` : ""} (Seed ${r.seed}).`, 3000);
   } catch (e) { clearInterval(tick); toast(e.message); }
   S.busy = false; $("repair").classList.remove("spin"); buttons();
 }

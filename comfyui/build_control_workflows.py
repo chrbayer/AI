@@ -29,6 +29,7 @@ PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8009
 CDP_PORT = 9334
 
 HF = "https://huggingface.co"
+BIREFNET = "4d000788a9698c7f8d67c8c6ce2b40c768f5b909"
 MODELS = {   # file -> (directory, url), for the loader nodes' download entries
     "qwen_image_2.1_bf16.safetensors": ("diffusion_models",
         f"{HF}/Comfy-Org/Qwen-Image-2.1/resolve/main/diffusion_models/qwen_image_2.1_bf16.safetensors"),
@@ -61,10 +62,18 @@ MODELS = {   # file -> (directory, url), for the loader nodes' download entries
         f"{HF}/Bingsu/adetailer/resolve/53cc19de382014514d9d4038601d261a7faa9b7b/hand_yolov8s.pt"),
     "sam_vit_h_4b8939.pth": ("sams",
         f"{HF}/ybelkada/segment-anything/resolve/7790786db131bcdc639f24a915d9f2c331d843ee/checkpoints/sam_vit_h_4b8939.pth"),
+    # Background removal (ComfyUI-RMBG's BiRefNet node; ZhengPeng7's BiRefNet, MIT,
+    # in 1038lab's repack, pinned). birefnet.py, the model code, is left to the
+    # node: it rewrites one import in it on every load, so it never matches the Hub.
+    "BiRefNet-general": [("RMBG/BiRefNet", f"{HF}/1038lab/BiRefNet/resolve/{BIREFNET}/{f}")
+                         for f in ("BiRefNet-general.safetensors", "config.json", "BiRefNet_config.py")],
+    "BiRefNet-HR-matting": [("RMBG/BiRefNet", f"{HF}/1038lab/BiRefNet/resolve/{BIREFNET}/{f}")
+                            for f in ("BiRefNet-HR-matting.safetensors", "config.json", "BiRefNet_config.py")],
 }
 LOADER_INPUT = {"UNETLoader": "unet_name", "CLIPLoader": "clip_name", "VAELoader": "vae_name",
                 "ModelPatchLoader": "name", "LoraLoaderModelOnly": "lora_name",
-                "UltralyticsDetectorProvider": "model_name", "SAMLoader": "model_name"}
+                "UltralyticsDetectorProvider": "model_name", "SAMLoader": "model_name",
+                "BiRefNetRMBG": "model"}
 
 
 def base(prompt, prefix):
@@ -240,8 +249,56 @@ def turbo(make):
     return made
 
 
+def crop(make):
+    """Inpaint on a crop (ComfyUI-Inpaint-CropAndStitch): the masked part and some
+    context around it cut out, scaled to ~1 MP, repainted there and stitched back
+    with a blended seam. The rest of the picture keeps its pixels and its size;
+    a small flaw gets the model's whole resolution instead of a few dozen pixels."""
+    def made():
+        g = make()
+        g["30"] = {"class_type": "InpaintCropImproved", "inputs": {
+            "image": ["5", 0], "mask": ["5", 1], "downscale_algorithm": "bilinear", "upscale_algorithm": "bicubic",
+            "preresize": False, "preresize_mode": "ensure minimum resolution", "preresize_min_width": 1024,
+            "preresize_min_height": 1024, "preresize_max_width": 16384, "preresize_max_height": 16384,
+            "mask_fill_holes": True, "mask_expand_pixels": 0, "mask_invert": False, "mask_blend_pixels": 32,
+            "mask_hipass_filter": 0.1, "extend_for_outpainting": False, "extend_up_factor": 1.0,
+            "extend_down_factor": 1.0, "extend_left_factor": 1.0, "extend_right_factor": 1.0,
+            "context_from_mask_extend_factor": CROP_CONTEXT, "output_resize_to_target_size": True,
+            "output_target_width": 1024, "output_target_height": 1024, "output_padding": "32",
+            "device_mode": "gpu (much faster)"}, "_meta": {"title": "Crop around the mask"}}
+        for k in ("6", "16", "17", "18"):
+            g.pop(k)
+        g["7"]["inputs"]["image"] = ["30", 1]
+        g["8"]["inputs"].update({"inpaint_image": ["30", 1], "mask": ["30", 2]})
+        g["31"] = {"class_type": "InpaintStitchImproved", "inputs": {"stitcher": ["30", 0], "inpainted_image": ["12", 0]},
+                   "_meta": {"title": "Stitch back"}}
+        g["13"]["inputs"]["images"] = ["31", 0]
+        g["13"]["inputs"]["filename_prefix"] += "_crop"
+        return g
+    return made
+
+
+def background(model, prefix):
+    """The subject kept, the background transparent (ComfyUI-RMBG's BiRefNet
+    node): seconds, and the subject's own pixels — nothing is repainted."""
+    def made():
+        return {
+            "5": {"class_type": "LoadImage", "inputs": {"image": "photo.png"}, "_meta": {"title": "Photo — the subject stays, the background goes"}},
+            "30": {"class_type": "BiRefNetRMBG", "inputs": {
+                "image": ["5", 0], "model": model, "sensitivity": 1.0, "mask_blur": 0, "mask_offset": 0,
+                "invert_output": False, "refine_foreground": False, "unload_model": False,
+                "background": "Alpha", "background_color": "#222222"}},
+            "13": {"class_type": "SaveImage", "inputs": {"images": ["30", 0], "filename_prefix": prefix}},
+        }
+    return made
+
+
 FACE_PROMPT = "a natural, detailed human face with clear eyes, nose and mouth"
 HAND_PROMPT = "a natural human hand with five well-formed fingers"
+# The crop: the mask's box, 2.5 times as wide and high. At 1.5 a face seen in
+# profile came back frontal and a hand grew fingers — too little around it to
+# match; at 2.5 both held, and the patch is still painted at ~1 MP.
+CROP_CONTEXT = 2.5
 
 
 def detailer(sam=True):
@@ -329,6 +386,11 @@ WORKFLOWS = {
     "Z-Image Turbo Inpaint (bf16, 8 Schritte)": zimage(inpaint),
     "Z-Image Turbo Colorize (bf16, 8 Schritte)": zimage(colorize),
     "Qwen-Image 2.1 Detailer (bf16, dpmpp_2m 14)": detailer,
+    "Qwen-Image 2.1 Inpaint Crop (bf16, dpmpp_2m 14)": crop(inpaint),
+    "Qwen-Image 2.1 Inpaint Crop Turbo (bf16, 4 Schritte)": crop(turbo(inpaint)),
+    "Z-Image Turbo Inpaint Crop (bf16, 8 Schritte)": crop(zimage(inpaint)),
+    "BiRefNet Background Removal (general, MIT)": background("BiRefNet-general", "BiRefNet_background"),
+    "BiRefNet Matting Background Removal (HR, MIT)": background("BiRefNet-HR-matting", "BiRefNet_background_matting"),
 }
 
 
@@ -358,9 +420,12 @@ def with_downloads(wf):
             continue
         name = (n.get("widgets_values") or [None])[0]
         if name in MODELS:
-            directory, url = MODELS[name]
-            # "bbox/face_yolov8m.pt" lies in ultralytics/bbox as face_yolov8m.pt
-            n.setdefault("properties", {})["models"] = [{"name": name.rsplit("/", 1)[-1], "url": url, "directory": directory}]
+            # "bbox/face_yolov8m.pt" lies in ultralytics/bbox as face_yolov8m.pt;
+            # a list is a model of several files (the BiRefNet ones).
+            files = MODELS[name] if isinstance(MODELS[name], list) else [MODELS[name]]
+            n.setdefault("properties", {})["models"] = [
+                {"name": (url.rsplit("/", 1)[-1] if isinstance(MODELS[name], list) else name.rsplit("/", 1)[-1]),
+                 "url": url, "directory": directory} for directory, url in files]
     return wf
 
 

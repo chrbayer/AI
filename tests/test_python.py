@@ -14,6 +14,7 @@ import io
 import contextlib
 import shutil
 import json
+import re
 import warnings
 import sys
 import tempfile
@@ -332,6 +333,39 @@ class ImageApi(unittest.TestCase):
         self.assertEqual({n["inputs"]["unet_name"] for n in g.values() if n["class_type"] == "UNETLoader"},
                          {"qwen_image_layered_control_bf16.safetensors"})
 
+    def test_inpaint_crop_repaints_a_crop_and_stitches_it_back(self):
+        for name, sl in (("Qwen-Image 2.1 Inpaint Crop (bf16, dpmpp_2m 14)", "qwen-image-21-inpaint-crop"),
+                         ("Qwen-Image 2.1 Inpaint Crop Turbo (bf16, 4 Schritte)", "qwen-image-21-inpaint-crop-turbo"),
+                         ("Z-Image Turbo Inpaint Crop (bf16, 8 Schritte)", "z-image-turbo-inpaint-crop")):
+            with self.subTest(name):
+                self.assertEqual(images.slug(name), (sl, "edits"))
+                g = api(name + ".json")
+                kinds = {n["class_type"] for n in g.values()}
+                self.assertIn("InpaintCropImproved", kinds)
+                self.assertNotIn("ImageScaleToTotalPixels", kinds)     # the picture keeps its size
+                crop = next(n for n in g.values() if n["class_type"] == "InpaintCropImproved")
+                self.assertEqual(crop["inputs"]["context_from_mask_extend_factor"], 2.5)
+                save = next(n for n in g.values() if n["class_type"] == "SaveImage")
+                self.assertEqual(g[save["inputs"]["images"][0]]["class_type"], "InpaintStitchImproved")
+                # an API mask replaces the one the picture's transparency gives the crop
+                self.assertEqual([(n["class_type"], k) for n, k in images.mask_users(g)], [("InpaintCropImproved", "mask")])
+
+    def test_birefnet_removes_the_background_without_a_prompt(self):
+        for name, sl, model in (("BiRefNet Background Removal (general, MIT)", "birefnet-background-removal", "BiRefNet-general"),
+                                ("BiRefNet Matting Background Removal (HR, MIT)", "birefnet-matting-background-removal", "BiRefNet-HR-matting")):
+            with self.subTest(name):
+                self.assertEqual(images.slug(name), (sl, "edits"))
+                g = api(name + ".json")
+                node = next(n for n in g.values() if n["class_type"] == "BiRefNetRMBG")
+                self.assertEqual((node["inputs"]["model"], node["inputs"]["background"]), (model, "Alpha"))
+                self.assertFalse(images.set_prompt(g, "anything"))
+                wf = json.loads((ROOT / "comfyui" / "workflows" / f"{name}.json").read_text())
+                entries = [m for n in wf["nodes"] for m in (n.get("properties") or {}).get("models") or []]
+                # birefnet.py is the node's: it rewrites an import in it on every load
+                self.assertEqual({m["name"] for m in entries}, {f"{model}.safetensors", "config.json", "BiRefNet_config.py"})
+                self.assertEqual({m["directory"] for m in entries}, {"RMBG/BiRefNet"})
+                self.assertTrue(all("/resolve/4d000788a9698c7f8d67c8c6ce2b40c768f5b909/" in m["url"] for m in entries))
+
     def test_model_lists_in_both_object_info_formats(self):
         info = {"UNETLoader": {"input": {"required": {"unet_name": [["a.safetensors"], {}]}}},
                 "UpscaleModelLoader": {"input": {"required": {"model_name": ["COMBO", {"options": ["x4.safetensors"]}]}}}}
@@ -591,6 +625,16 @@ class RepairPage(unittest.TestCase):
 
     def tearDown(self):
         images.ARGS.__dict__.clear(); images.ARGS.__dict__.update(self.args)
+
+    def test_the_page_groups_boxes_by_the_workflows_crop(self):
+        page = (ROOT / "images_repair.html").read_text()
+        builder = (ROOT / "comfyui" / "build_control_workflows.py").read_text()
+        self.assertEqual(re.search(r"const CROP_CONTEXT = ([\d.]+);", page)[1],
+                         re.search(r"^CROP_CONTEXT = ([\d.]+)$", builder, re.M)[1])
+        first = re.search(r'<select id="model"><option value="([^"]+)"', page)[1]
+        self.assertEqual(first, "qwen-image-21-inpaint-crop-turbo")
+        for m in re.findall(r'<option value="(qwen-image-21-inpaint[^"]*)"', page):
+            self.assertIn(m, {images.slug(p.stem)[0] for p in (ROOT / "comfyui" / "api").glob("*.json")})
 
     def test_the_page_is_served(self):
         r = self.client.get("/repair")

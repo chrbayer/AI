@@ -29,3 +29,16 @@ ComfyUI-Impact-Subpack  https://github.com/ltdrdata/ComfyUI-Impact-Subpack  50c7
 # seed control, an image comparer, context nodes, the power lora loader. No
 # models, no requirements. The bundled workflows use none of its nodes.
 rgthree-comfy  https://github.com/rgthree/rgthree-comfy  449c58fcdd612f7733e54c51f6758ead63fa180b
+
+# Background removal and masks: BiRefNet (MIT) for the BiRefNet Background
+# Removal workflows, plus segmentation nodes. Its requirements name onnxruntime-gpu
+# (CUDA) and transparent-background, which only its INSPYRENET model uses and
+# which pulls the original albumentations over comfyui_controlnet_aux's
+# albumentationsx; decord, which its bundled SAM 3 imports at load, has no build
+# for this Python — eva-decord, the maintained fork, has. Its models come from
+# Hugging Face on first use, or from download comfy, into models/RMBG/.
+ComfyUI-RMBG  https://github.com/1038lab/ComfyUI-RMBG  229529e0ea63fb7085848225d74f91f6dc164956  -onnxruntime-gpu  -transparent-background  -decord  +eva-decord
+
+# Inpaint on a crop around the mask, stitched back (the Inpaint Crop workflows).
+# No requirements.
+ComfyUI-Inpaint-CropAndStitch  https://github.com/lquesada/ComfyUI-Inpaint-CropAndStitch  8584b08d851762965df898b421a39075fc5357ae

@@ -1,0 +1,45 @@
+{
+ "5": {
+  "inputs": {
+   "image": "photo.png"
+  },
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "Photo — the subject stays, the background goes"
+  }
+ },
+ "13": {
+  "inputs": {
+   "filename_prefix": "BiRefNet_background_matting",
+   "images": [
+    "30",
+    0
+   ]
+  },
+  "class_type": "SaveImage",
+  "_meta": {
+   "title": "Save Image"
+  }
+ },
+ "30": {
+  "inputs": {
+   "model": "BiRefNet-HR-matting",
+   "sensitivity": 1,
+   "mask_blur": 0,
+   "mask_offset": 0,
+   "invert_output": false,
+   "refine_foreground": false,
+   "unload_model": false,
+   "background": "Alpha",
+   "background_color": "#222222",
+   "image": [
+    "5",
+    0
+   ]
+  },
+  "class_type": "BiRefNetRMBG",
+  "_meta": {
+   "title": "BiRefNet Remove Background (RMBG)"
+  }
+ }
+}

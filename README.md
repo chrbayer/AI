@@ -1080,6 +1080,30 @@ llmctl update comfy --torch           # …and torch itself
   transparent. Through the image API as `qwen-image-21-background-removal`: the
   prompt is the instruction, so send that sentence; the PNG comes back with
   transparency.
+- **BiRefNet background removal** (#34). `BiRefNet Background Removal
+  (general, MIT)` and `BiRefNet Matting Background Removal (HR, MIT)` run
+  ZhengPeng7's BiRefNet through
+  [ComfyUI-RMBG](https://github.com/1038lab/ComfyUI-RMBG): no diffusion, the
+  photo's own pixels with an alpha channel, in 2–3.5 s instead of 52–65 s
+  with Qwen-Image Turbo. 885 MB (general) and 445 MB (HR matting), from
+  1038lab/BiRefNet into `models/comfyui/RMBG/BiRefNet/`. Tried on six
+  pictures against Qwen-Image 2.1 Background Removal Turbo:
+  - Qwen dropped the woman on the street entirely, made the coat of a woman
+    with curly hair half transparent, left out the carafe beside a wine glass
+    and **redrew** a bicycle's spokes — it repaints, BiRefNet cuts out.
+  - *general* keeps solid things solid: both glasses whole, the dog with
+    some grass at its paws, flyaway hair with a few specks of background.
+  - *HR matting* is the one for fine edges: hair strands with soft alpha,
+    the spokes clean and thin (general left them dark with the brick wall
+    in them), fur without the grass — and glass truly transparent, so a
+    carafe nearly vanishes.
+
+  ComfyUI-RMBG's `RMBG-2.0` model looked the same as *general* but is
+  BRIA's, non-commercial; BiRefNet is MIT. The pack also brings face,
+  clothes and body segmentation, SAM 2/3 and GroundingDINO masks, not used
+  by a workflow here yet. Image API: `birefnet-background-removal`,
+  `birefnet-matting-background-removal` — the prompt is ignored, the PNG
+  comes back with transparency.
 - **Z-Image Turbo.** `Z-Image Turbo T2I (bf16, 8 Schritte)` is ComfyUI's own
   template for Tongyi-MAI's Z-Image-Turbo (6B, Apache-2.0): photorealistic,
   8 steps, text-to-image only. 20.7 GB of models (12.3 the DiT, 8.0 the
@@ -1434,7 +1458,7 @@ r = img.images.edit(model="flux2-klein-9b", image=open("turm.png", "rb"),
   c = requests.post("http://localhost:8089/v1/images/check", timeout=3600,
                     files={"image": open("bild.png", "rb")}, data={"prompt": prompt}).json()
   pick = [a for a in c["artifacts"] if a["id"] in (1, 3)]
-  r = img.images.edit(model="qwen-image-21-inpaint-turbo", image=open("bild.png", "rb"),
+  r = img.images.edit(model="qwen-image-21-inpaint-crop-turbo", image=open("bild.png", "rb"),
                       prompt=prompt + ". " + "; ".join(a["fix"] for a in pick),
                       extra_body={"boxes": [a["box"] for a in pick]})
   ```
@@ -1457,6 +1481,22 @@ r = img.images.edit(model="flux2-klein-9b", image=open("turm.png", "rb"),
   repairs 10–29 %; `max_area` 0.05 would have spared both. flash (82 GiB) and the Inpaint
   workflow (~37 GiB of models: DiT, ControlNet, encoder) do not fit into the
   104 GiB together: check first, stop flash, then repair.
+
+  **Repair on a crop** (#35): `qwen-image-21-inpaint-crop-turbo` (and
+  `-crop`, `z-image-turbo-inpaint-crop`) use
+  [ComfyUI-Inpaint-CropAndStitch](https://github.com/lquesada/ComfyUI-Inpaint-CropAndStitch):
+  the mask's box, 2.5 times as wide and high, is cut out, scaled to 1024²,
+  repainted there and stitched back with a 32 px blended seam. The plain
+  Inpaint workflows scale the whole picture to ~1 MP and send every pixel
+  through the VAE — a 2048² photo came back at 1024² — the crop ones return
+  the picture at its size, untouched outside the patch (on a 2048² piano
+  photo every pixel away from the box was identical), and a small flaw gets
+  the model's whole resolution. Inpaint Crop Turbo 27 s, Inpaint Crop 79 s.
+  Context matters: at 1.5 times the box a face in profile came back frontal
+  and a hand grew fingers; at 2.5 both held, and hands on piano keys and
+  knitting came out sharper than from the whole picture. Z-Image Turbo on a
+  crop did faces and the piano well, but made a hand on a coffee cup into
+  glowing orange nails at every context — Qwen-Image is the one to use.
 - **The repair page:** `http://localhost:8089/repair` does all of the above by
   hand. Drop in a picture (or pick one of ComfyUI's latest outputs), give the
   prompt it came from, press *Prüfen*: the flaws appear as numbered boxes over
@@ -1464,7 +1504,11 @@ r = img.images.edit(model="flux2-klein-9b", image=open("turm.png", "rb"),
   grow at their corner and go with ✕ or Delete; dragging on the picture adds
   one of your own. *Reparieren* repaints the ticked ones — the prompt is made
   from the picture's prompt and the fixes, and stays as you edit it — and
-  shows the result beside the picture (hold it for the original). *Nochmal*
+  shows the result beside the picture (hold it for the original). It uses
+  Inpaint Crop Turbo by default: boxes whose crops overlap are repainted in
+  one run, the others one after the other, each with its own fixes in the
+  prompt (a prompt edited by hand goes to every run). The whole-picture
+  Inpaint workflows stay in the list. *Nochmal*
   tries another seed, *Übernehmen & weiter* makes the result the picture to
   check again, *Herunterladen* saves it.
 
@@ -1481,7 +1525,7 @@ r = img.images.edit(model="flux2-klein-9b", image=open("turm.png", "rb"),
   prompt, run: the node asks the image API's check and shows the picture with
   the numbered boxes, a report and the prompt for the repair. It also leaves
   the picture in `input/` as `artifacts_<hash>.png`, the flaws transparent.
-  Load that file in `Qwen-Image 2.1 Inpaint (Turbo)`: the boxes are its mask,
+  Load that file in `Qwen-Image 2.1 Inpaint Crop (Turbo)`: the boxes are its mask,
   to edit in the MaskEditor (right-click the picture → *Open in MaskEditor*);
   paste the repair prompt and run. Its `vision` switch, *start if needed, stop
   after*, starts flash for the check (after unloading ComfyUI's models) and
