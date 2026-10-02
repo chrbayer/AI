@@ -4417,9 +4417,12 @@ cmd_outdated() {
             # gufo's image lives under toolboxes/, its changelog in the main repo.
             local gh_repo="${image#ghcr.io/}"
             [[ "$_r_backend" == gufo ]] && gh_repo="$GUFO_REPO"
+            # Each newer version's heading and the first lines under it.
             curl -sf "https://raw.githubusercontent.com/$gh_repo/main/CHANGELOG.md" |
                 awk -v t="$tag" '/^## / { v = $2; gsub(/^\[|\].*$/, "", v)   # "## [0.4.0](…) (date)" too
-                                          if (v == t) exit; print "    ## " v }'
+                                          if (v == t) exit; print "    ## " v; n = 0; next }
+                                 v != "" && NF && n < 6 { line = $0; gsub(/\]\([^)]*\)/, "]", line); gsub(/\[|\]/, "", line)
+                                          print "      " substr(line, 1, 110); n++ }'
         fi
     done
 
