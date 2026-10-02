@@ -11,6 +11,9 @@
                                   "select" (masked workflows: the mask from a few words, SAM 3);
                                   Qwen-Image Layered without a prompt is described by Florence-2
     POST /v1/images/select        image + prompt: a box for each thing SAM 3 finds that the words name
+    POST /v1/audio/music          {"model", "prompt" (style), "lyrics", "duration", "seed", "bpm",
+                                  "key", "language", "response_format": mp3|flac}: a song or an
+                                  instrumental from the music workflows (comfyui/api/audio/)
     POST /v1/images/check         image (+ prompt, max_area): the artifacts a vision model sees,
                                   with boxes to repaint and a prompt for each (needs --vision)
     GET  /v1/models               the workflows whose models ComfyUI has, and the
@@ -67,6 +70,8 @@ MARGIN_DEFAULT, MARGIN_MAX = 16, 256
 # Around a thing `select` outlines: its own outline gives the repaint its shape
 # back (a floor lamp asked to become a plant came back a lamp at 16 px, a plant at 64).
 SELECT_MARGIN = 64
+# Music: seconds a request may ask for, and the default.
+DURATION_MIN, DURATION_MAX, DURATION_DEFAULT = 5, 300, 60
 # Helper workflows the image API runs itself; no models of their own.
 TOOLS = {"Florence-2 Caption", "SAM 3 Select"}
 # A box over this share of the picture is no place to repaint but a remark on
@@ -97,6 +102,11 @@ def slug(stem):
     name = re.sub(r"\b(T2I|Edit)\b", "", name)
     name = re.sub(r"[^a-z0-9]+", "-", name.lower().replace(".", "")).strip("-")
     return name, kind
+
+
+def music_workflows():
+    """{name: path} for the music workflows (api/audio/), named as the image ones."""
+    return {slug(p.stem)[0]: p for p in sorted((Path(ARGS.api) / "audio").glob("*.json"))}
 
 
 def workflows():
@@ -971,6 +981,96 @@ def repair_image():
     return handle(go)
 
 
+# ── music ────────────────────────────────────────────────────
+
+def set_music(graph, prompt, lyrics=None, duration=None, seed=None, bpm=None, key=None, language=None):
+    """The request into a music workflow: ACE-Step's text encoder, YuE2's style and
+    lyrics, Stable Audio's description; the length wherever a node holds it."""
+    duration = DURATION_DEFAULT if duration in (None, "") else float(duration)
+    if not DURATION_MIN <= duration <= DURATION_MAX:
+        raise Refused(f"duration is {DURATION_MIN} to {DURATION_MAX} seconds")
+    kinds = {n["class_type"] for n in graph.values()}
+    sings = bool(kinds & {"TextEncodeAceStepAudio1.5", "YuE2GenerateMusic"})
+    if lyrics and not sings:
+        raise Refused("this model makes instrumentals and sounds only — no lyrics")
+    for n in graph.values():
+        c, i, t = n["class_type"], n["inputs"], title(n)
+        if c == "TextEncodeAceStepAudio1.5":
+            i.update(tags=prompt, lyrics=lyrics or "[Instrumental]", duration=duration)
+            if bpm not in (None, ""):
+                i["bpm"] = int(bpm)
+            if key:
+                i["keyscale"] = key
+            if language:
+                i["language"] = language
+        elif c == "EmptyAceStep1.5LatentAudio" and not isinstance(i.get("seconds"), list):
+            i["seconds"] = duration
+        elif c == "YuE2GenerateMusic":
+            i["max_duration"] = int(duration)
+        elif c == "PrimitiveStringMultiline" and "Style" in t:
+            i["value"] = prompt
+        elif c == "PrimitiveStringMultiline" and "Lyrics" in t:
+            i["value"] = lyrics or "[Instrumental]"
+        elif c == "PrimitiveStringMultiline" and "description" in t:
+            i["value"] = prompt
+        elif c == "PrimitiveFloat" and "Duration" in t:
+            i["value"] = duration
+    if seed is not None:
+        for n in graph.values():
+            for k in ("seed", "noise_seed"):
+                if isinstance(n["inputs"].get(k), int):
+                    n["inputs"][k] = int(seed)
+    # Into temp, not the gallery: PreviewAudio writes FLAC there. PreviewAny stays —
+    # Stable Audio and YuE2 pass their text on through it.
+    for n in graph.values():
+        if n["class_type"].startswith("SaveAudio"):
+            n["class_type"], n["inputs"] = "PreviewAudio", {"audio": n["inputs"]["audio"]}
+
+
+def to_mp3(flac):
+    r = subprocess.run(["ffmpeg", "-v", "error", "-i", "pipe:0", "-codec:a", "libmp3lame", "-q:a", "0",
+                        "-f", "mp3", "pipe:1"], input=flac, capture_output=True, timeout=300)
+    if r.returncode != 0:
+        raise RuntimeError("ffmpeg: " + r.stderr.decode(errors="replace")[-300:])
+    return r.stdout
+
+
+@app.post("/v1/audio/music")
+def music():
+    def go():
+        j = request.get_json(silent=True) or {}
+        if not isinstance(j.get("prompt"), str) or not j["prompt"].strip():
+            raise Refused("prompt (the style or the description) is required")
+        fmt = j.get("response_format") or "mp3"
+        if fmt not in ("mp3", "flac"):
+            raise Refused("response_format is mp3 or flac")
+        known = music_workflows()
+        name = j.get("model") or ("ace-step-15-xl-turbo" if "ace-step-15-xl-turbo" in known else next(iter(known), ""))
+        if name not in known:
+            raise Refused(f"no music model '{name}' — there are: {', '.join(known)}")
+        graph = json.loads(known[name].read_text())
+        lacking = missing_models(graph)
+        if lacking:
+            raise Refused(f"'{name}' needs models ComfyUI does not have: {', '.join(lacking)} "
+                          f"— llmctl download comfy \"{known[name].stem}\"")
+        seed = random.randrange(2**48) if j.get("seed") in (None, "") else int(j["seed"])
+        set_music(graph, j["prompt"].strip(), j.get("lyrics"), j.get("duration"), seed,
+                  j.get("bpm"), j.get("key"), j.get("language"))
+        t0 = time.time()
+        clips = [a for out in execute(graph).values() for a in out.get("audio", [])]
+        if not clips:
+            raise RuntimeError("the workflow gave no audio")
+        q = {"filename": clips[0]["filename"], "subfolder": clips[0].get("subfolder", ""), "type": clips[0].get("type", "temp")}
+        v = requests.get(f"{ARGS.comfy}/view", params=q, timeout=120)
+        v.raise_for_status()
+        body = v.content if fmt == "flac" else to_mp3(v.content)
+        app.logger.info("music %s: %.0f s of audio in %.1f s, seed %d", name, float(j.get("duration") or DURATION_DEFAULT),
+                        time.time() - t0, seed)
+        return Response(body, mimetype="audio/flac" if fmt == "flac" else "audio/mpeg",
+                        headers={"X-Seed": str(seed), "X-Model": name})
+    return handle(go)
+
+
 @app.get("/v1/models")
 def models():
     def go():
@@ -983,6 +1083,10 @@ def models():
                                        "endpoints": [], "parameters": []})
             m["endpoints"].append(f"/v1/images/{kind}")
             m["parameters"] += [x for x in extras(graph) if x not in m["parameters"]]
+        for name, path in music_workflows().items():
+            if not missing_models(json.loads(path.read_text())):
+                data[name] = {"id": name, "object": "model", "owned_by": "comfyui",
+                              "endpoints": ["/v1/audio/music"], "parameters": []}
         return jsonify({"object": "list", "data": list(data.values())})
     return handle(go)
 

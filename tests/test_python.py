@@ -287,8 +287,12 @@ class ImageApi(unittest.TestCase):
                 continue
             if any(n.get("type", "").startswith("Llmctl") for n in json.loads(path.read_text())["nodes"]):
                 continue                                          # calls the image API itself
-            if any(n.get("type", "").startswith("SaveAudio") for n in json.loads(path.read_text())["nodes"]):
-                continue                                          # music, not for the image API
+            nodes = json.loads(path.read_text())["nodes"]
+            if any(n.get("type", "").startswith("SaveAudio") for n in nodes):
+                self.assertTrue((API / "audio" / path.name).exists(), "run comfyui/export_api.py: music goes to api/audio/")
+                continue
+            if any(n.get("type", "") in ("Save3DAdvanced", "SaveGLB") for n in nodes):
+                continue                                          # 3D, not for the image API
             with self.subTest(workflow=path.name):
                 self.assertTrue((API / path.name).exists(),
                                 "run comfyui/export_api.py and commit what it writes")
@@ -442,6 +446,40 @@ class ImageApi(unittest.TestCase):
         finally:
             images.load, images.caption, images.run = olds
             images.upload = old_upload
+
+    def test_music_requests_fill_each_music_workflow(self):
+        old = vars(images.ARGS).get("api")
+        images.ARGS.api = str(API)
+        try:
+            known = images.music_workflows()
+        finally:
+            images.ARGS.api = old
+        self.assertEqual(set(known), {"ace-step-15-xl-turbo", "ace-step-15-turbo", "stable-audio-3-medium", "yue2-text2music"})
+        g = json.loads(known["ace-step-15-xl-turbo"].read_text())
+        images.set_music(g, "german pop ballad", "[Verse]\nla la", 90, 7, 88, "C major", "de")
+        enc = next(n for n in g.values() if n["class_type"] == "TextEncodeAceStepAudio1.5")["inputs"]
+        self.assertEqual((enc["tags"], enc["lyrics"], enc["duration"], enc["bpm"], enc["keyscale"], enc["language"]),
+                         ("german pop ballad", "[Verse]\nla la", 90, 88, "C major", "de"))
+        lat = next(n for n in g.values() if n["class_type"] == "EmptyAceStep1.5LatentAudio")["inputs"]
+        self.assertTrue(isinstance(lat["seconds"], list) or lat["seconds"] == 90)
+        kinds = {n["class_type"] for n in g.values()}
+        self.assertIn("PreviewAudio", kinds)                        # into temp, not the gallery
+        self.assertFalse({k for k in kinds if k.startswith("SaveAudio")})
+        self.assertTrue(all(n["inputs"]["seed"] == 7 for n in g.values() if isinstance(n["inputs"].get("seed"), int)))
+        y = json.loads(known["yue2-text2music"].read_text())
+        images.set_music(y, "indie rock", None, 30)
+        vals = {images.title(n): n["inputs"].get("value") for n in y.values() if n["class_type"] == "PrimitiveStringMultiline"}
+        self.assertIn("indie rock", vals.values())
+        self.assertIn("[Instrumental]", vals.values())
+        self.assertEqual(next(n for n in y.values() if n["class_type"] == "YuE2GenerateMusic")["inputs"]["max_duration"], 30)
+        a = json.loads(known["stable-audio-3-medium"].read_text())
+        images.set_music(a, "a dusty drum loop", None, 10.7)
+        self.assertIn(10.7, [n["inputs"].get("value") for n in a.values() if n["class_type"] == "PrimitiveFloat"])
+        with self.assertRaises(images.Refused):                      # it does not sing
+            images.set_music(json.loads(known["stable-audio-3-medium"].read_text()), "x", "[Verse] words", 30)
+        for bad in (2, 301):
+            with self.subTest(bad), self.assertRaises(images.Refused):
+                images.set_music(json.loads(known["ace-step-15-turbo"].read_text()), "x", None, bad)
 
     def test_model_lists_in_both_object_info_formats(self):
         info = {"UNETLoader": {"input": {"required": {"unet_name": [["a.safetensors"], {}]}}},

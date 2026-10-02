@@ -1315,8 +1315,25 @@ llmctl update comfy --torch           # …and torch itself
 
   MiniMax Music 3 did not: 530–780 s for 90 s here (it plans ~2250 tokens,
   then its DiT takes 7–11 s a step), the singing unintelligible, the
-  instrumental weaker and 62 s instead of 90. Not kept. Not served through the image API (`export_api.py` leaves
-  workflows that save audio out).
+  instrumental weaker and 62 s instead of 90. Not kept.
+
+  **Music through the image API** (#33): `POST /v1/audio/music` on the
+  slot's image API (port 808N, with `--proxy`) runs these workflows from
+  `comfyui/api/audio/` and answers with the audio itself (MP3, or FLAC with
+  `"response_format": "flac"`; the seed in `X-Seed`). `model`
+  `ace-step-15-xl-turbo` (the default), `ace-step-15-turbo`,
+  `yue2-text2music` or `stable-audio-3-medium`; `prompt` the style or the
+  description; `lyrics` with `[Verse]`/`[Chorus]` (none: an instrumental;
+  Stable Audio refuses lyrics); `duration` 5–300 s (60 by default); for
+  ACE-Step also `bpm`, `key` ("C major") and `language` ("de"). Results go
+  to ComfyUI's temp, not `output/`. Measured: 30 s of German song from ACE
+  XL in 19 s, a 10.7 s loop from Stable Audio in 10 s.
+
+  ```bash
+  curl -s localhost:8089/v1/audio/music -H 'Content-Type: application/json' -o lied.mp3 \
+    -d '{"model": "ace-step-15-xl-turbo", "prompt": "German pop ballad, piano, female vocals",
+         "lyrics": "[Verse]\nDer Morgen hängt noch grau im Fenster", "duration": 60, "language": "de"}'
+  ```
 - **Speech in ComfyUI.** [ComfyUI-Qwen-TTS](https://github.com/flybirdxx/ComfyUI-Qwen-TTS)
   brings Qwen3-TTS; two workflows use it. `Qwen3-TTS Stimme entwerfen` designs
   a voice from a description (VoiceDesign), `Qwen3-TTS Stimme klonen` speaks in

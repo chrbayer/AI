@@ -41,6 +41,7 @@ install:
 	install -Dm644 -t $(SHAREDIR)/examples examples/*.conf
 	install -Dm644 -t $(SHAREDIR)/comfyui/workflows comfyui/workflows/*.json
 	install -Dm644 -t $(SHAREDIR)/comfyui/api comfyui/api/*.json
+	install -Dm644 -t $(SHAREDIR)/comfyui/api/audio comfyui/api/audio/*.json
 	install -Dm644 -t $(SHAREDIR)/comfyui/patches comfyui/patches/*.patch
 	install -Dm644 -t $(SHAREDIR)/comfyui/nodes/llmctl_nodes comfyui/nodes/llmctl_nodes/*.py
 	install -Dm644 comfyui/sources.json $(SHAREDIR)/comfyui/sources.json

@@ -77,8 +77,10 @@ async def main():
                 wf = json.loads(path.read_text())
                 if any("TTS" in n.get("type", "") for n in wf.get("nodes", [])):
                     continue                                   # speech has its own server
-                if any(n.get("type", "").startswith("SaveAudio") for n in wf.get("nodes", [])):
-                    continue                                   # music: no image to answer with
+                if any(n.get("type", "") in ("Save3DAdvanced", "SaveGLB") for n in wf.get("nodes", [])):
+                    continue                                   # 3D: no image to answer with
+                # music goes to api/audio/, for /v1/audio/music; the image list stays images
+                audio = any(n.get("type", "").startswith("SaveAudio") for n in wf.get("nodes", []))
                 if any(n.get("type", "").startswith("Llmctl") for n in wf.get("nodes", [])):
                     continue                                   # it calls the image API itself
                 prompt = await evaluate(ws, f"""(async () => {{
@@ -86,7 +88,8 @@ async def main():
                     const p = await app.graphToPrompt();
                     return p.output;
                 }})()""")
-                out = ROOT / "api" / path.name
+                out = ROOT / "api" / ("audio" if audio else "") / path.name
+                out.parent.mkdir(exist_ok=True)
                 out.write_text(json.dumps(prompt, indent=1, ensure_ascii=False) + "\n")
                 print(f"{len(prompt):3d} nodes  {out.relative_to(ROOT.parent)}")
     finally:
