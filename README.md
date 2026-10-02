@@ -1296,7 +1296,9 @@ llmctl update comfy --torch           # …and torch itself
   language model that writes the audio codes, not into the DiT, so the
   bigger one costs only disk. Tried with the same seed: a German pop ballad
   and an English indie rock song came out without a flaw in the singing
-  with both. Not served through the image API (`export_api.py` leaves
+  with both. For an orchestral instrumental XL was clearly better — one
+  piece — where the 2B Turbo made unrelated snippets with pauses between
+  them: XL for instrumentals. Not served through the image API (`export_api.py` leaves
   workflows that save audio out).
 - **Speech in ComfyUI.** [ComfyUI-Qwen-TTS](https://github.com/flybirdxx/ComfyUI-Qwen-TTS)
   brings Qwen3-TTS; two workflows use it. `Qwen3-TTS Stimme entwerfen` designs
