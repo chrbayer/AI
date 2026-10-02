@@ -1932,7 +1932,8 @@ with tts.audio.speech.with_streaming_response.create(
   is a little less exact than `asr`: three slips in that passage (a missing
   "Prozent", "vier, zwei" for "vier Komma zwei"), one in 22 s of free speech,
   and numbers stay words. ~2.4 GiB on the GPU. `llmctl download asr-live`
-  clones audio.cpp at a pinned commit and builds it with Vulkan and only the
+  clones audio.cpp at a pinned release tag (v0.9.0; `outdated` says when a newer
+  release is out, and `download asr-live` rebuilds a build that is not at the pin) and builds it with Vulkan and only the
   model families `models.conf` names (85 s, 1.8 GB); `outdated` reports newer
   upstream commits. The server takes its models from a JSON file llmctl writes
   per slot under `~/.local/state/llmctl/audiocpp/`.
