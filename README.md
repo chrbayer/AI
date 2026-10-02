@@ -1104,6 +1104,27 @@ llmctl update comfy --torch           # …and torch itself
   by a workflow here yet. Image API: `birefnet-background-removal`,
   `birefnet-matting-background-removal` — the prompt is ignored, the PNG
   comes back with transparency.
+- **Text to mask (SAM 3) and captions (Florence-2)** (#36, #37). Two helper
+  workflows the image API runs itself, usable in the UI as well:
+  `SAM 3 Select` (Meta's SAM 3.1 through ComfyUI-RMBG's SAM3Segment, 1.7 GB
+  from 1038lab's ungated repack, SAM License) outlines what a few words name,
+  one mask per match, in ~5 s with loading; `Florence-2 Caption`
+  ([kijai's ComfyUI-Florence2](https://github.com/kijai/ComfyUI-Florence2),
+  Florence-2 large, MIT, 1.5 GB) describes a picture in detail in 1–3 s.
+  Masks from words, tried on six pictures:
+
+  | words | Florence-2 | SAM 3 |
+  |---|---|---|
+  | the sofa | the big sofa | both sofas, cushions left out |
+  | the floor lamp | ✓ | ✓ |
+  | the woman | her head only | all of her, exactly |
+  | the guitar | ✓ | ✓ |
+  | the left hand | the right hand | both hands |
+  | hair | patchy, face included | clean |
+
+  So SAM 3 makes the masks and Florence-2 the captions; GroundingDINO +
+  SAM 2 (also in ComfyUI-RMBG) failed on its first call here. Neither knows
+  left from right — a box drawn by hand does.
 - **Z-Image Turbo.** `Z-Image Turbo T2I (bf16, 8 Schritte)` is ComfyUI's own
   template for Tongyi-MAI's Z-Image-Turbo (6B, Apache-2.0): photorealistic,
   8 steps, text-to-image only. 20.7 GB of models (12.3 the DiT, 8.0 the
@@ -1134,7 +1155,11 @@ llmctl update comfy --torch           # …and torch itself
     front of a scene, four a poster or a room.
 
   The template makes two; the image API takes `layers` (1–8) and answers with
-  one transparent PNG per layer, background first. Image API:
+  one transparent PNG per layer, background first. The model wants the
+  picture described: **sent without a prompt, the image API has Florence-2
+  describe it** and uses that (a woman on a street, two layers: the street
+  without her and her cut out, 262 s with the caption). In the UI the
+  workflow `Florence-2 Caption` gives the text to paste. Image API:
   `qwen-image-layered`.
 - **Qwen-Image Layered Control.** `Qwen-Image Layered Control (bf16, 20
   Schritte)` is the sibling that pulls **one named thing** out of a picture:
@@ -1430,6 +1455,13 @@ r = img.images.edit(model="flux2-klein-9b", image=open("turm.png", "rb"),
   - `boxes` (Inpaint): instead of a mask, rectangles `[x1, y1, x2, y2]` in the
     image's pixels, each grown by `margin` (16 px by default) — what
     `/v1/images/check` returns.
+  - `select` (Inpaint): instead of a mask, a few English words — `"the floor
+    lamp"`, `"hair"` — and SAM 3 outlines every match; the mask is their
+    outline grown by `margin` (64 px by default here: at 16 the repaint kept
+    the outline's shape, a lamp asked to become a plant came back a lamp).
+    `POST /v1/images/select` with `image` and `prompt` answers with the
+    `segments` alone, a `box` and the `share` of the picture for each — places
+    for `boxes`. See *Text to mask* below.
   - `pad` (Outpaint): pixels to add, one number for every side or
     `{"left", "top", "right", "bottom", "feathering"}` (steps of 8, up to
     2048; feathering 40 by default).
@@ -1508,7 +1540,10 @@ r = img.images.edit(model="flux2-klein-9b", image=open("turm.png", "rb"),
   Inpaint Crop Turbo by default: boxes whose crops overlap are repainted in
   one run, the others one after the other, each with its own fixes in the
   prompt (a prompt edited by hand goes to every run). The whole-picture
-  Inpaint workflows stay in the list. *Nochmal*
+  Inpaint workflows stay in the list. *Stelle per Wort* adds boxes by name:
+  SAM 3 finds what the words name ("the left hand" gives both hands — it
+  knows things, not left and right), each match becomes a box to keep,
+  move or drop, its fix left to write. *Nochmal*
   tries another seed, *Übernehmen & weiter* makes the result the picture to
   check again, *Herunterladen* saves it.
 

@@ -30,6 +30,8 @@ CDP_PORT = 9334
 
 HF = "https://huggingface.co"
 BIREFNET = "4d000788a9698c7f8d67c8c6ce2b40c768f5b909"
+FLORENCE = "21a599d414c4d928c9032694c424fb94458e3594"
+SAM3 = "ea8e153c669a0284a496c0ec65a53b8e4f5ca7e7"
 MODELS = {   # file -> (directory, url), for the loader nodes' download entries
     "qwen_image_2.1_bf16.safetensors": ("diffusion_models",
         f"{HF}/Comfy-Org/Qwen-Image-2.1/resolve/main/diffusion_models/qwen_image_2.1_bf16.safetensors"),
@@ -69,11 +71,21 @@ MODELS = {   # file -> (directory, url), for the loader nodes' download entries
                          for f in ("BiRefNet-general.safetensors", "config.json", "BiRefNet_config.py")],
     "BiRefNet-HR-matting": [("RMBG/BiRefNet", f"{HF}/1038lab/BiRefNet/resolve/{BIREFNET}/{f}")
                             for f in ("BiRefNet-HR-matting.safetensors", "config.json", "BiRefNet_config.py")],
+    # Florence-2 large (Microsoft, MIT) for kijai's ComfyUI-Florence2, which reads
+    # LLM/<name>/ — only what it loads: the repo holds the weights twice
+    # (safetensors and .bin) and its model code, which the node brings itself.
+    "microsoft/Florence-2-large": [("LLM/Florence-2-large", f"{HF}/microsoft/Florence-2-large/resolve/{FLORENCE}/{f}")
+                                   for f in ("model.safetensors", "config.json", "generation_config.json",
+                                             "preprocessor_config.json", "tokenizer.json", "tokenizer_config.json",
+                                             "vocab.json")],
+    # SAM 3.1 (Meta, SAM License) for ComfyUI-RMBG's SAM3Segment, from 1038lab's
+    # ungated repack.
+    "sam3.1_multiplex_fp16": [("sam3", f"{HF}/1038lab/sam3/resolve/{SAM3}/sam3.1_multiplex_fp16.safetensors")],
 }
 LOADER_INPUT = {"UNETLoader": "unet_name", "CLIPLoader": "clip_name", "VAELoader": "vae_name",
                 "ModelPatchLoader": "name", "LoraLoaderModelOnly": "lora_name",
                 "UltralyticsDetectorProvider": "model_name", "SAMLoader": "model_name",
-                "BiRefNetRMBG": "model"}
+                "BiRefNetRMBG": "model", "DownloadAndLoadFlorence2Model": "model", "SAM3Segment": "model_name"}
 
 
 def base(prompt, prefix):
@@ -293,6 +305,35 @@ def background(model, prefix):
     return made
 
 
+def caption():
+    """Florence-2 describes the picture — the prompt Qwen-Image Layered wants.
+    The image API runs it for a Layered edit that comes without a prompt."""
+    return {
+        "1": {"class_type": "LoadImage", "inputs": {"image": "photo.png"}, "_meta": {"title": "Picture"}},
+        "2": {"class_type": "DownloadAndLoadFlorence2Model", "inputs": {"model": "microsoft/Florence-2-large", "precision": "fp16",
+              "convert_to_safetensors": False}},
+        "3": {"class_type": "Florence2Run", "inputs": {"image": ["1", 0], "florence2_model": ["2", 0], "text_input": "",
+              "task": "more_detailed_caption", "fill_mask": True, "keep_model_loaded": False, "max_new_tokens": 1024,
+              "num_beams": 3, "do_sample": False, "output_mask_select": "", "seed": 1}},
+        "4": {"class_type": "PreviewAny", "inputs": {"source": ["3", 2]}, "_meta": {"title": "Caption"}},
+    }
+
+
+def select():
+    """SAM 3 finds what a few words name ("the sofa", "hair"), one mask per
+    match — the image API's `select` and /v1/images/select."""
+    return {
+        "1": {"class_type": "LoadImage", "inputs": {"image": "photo.png"}, "_meta": {"title": "Picture"}},
+        "2": {"class_type": "SAM3Segment", "inputs": {
+            "image": ["1", 0], "model_name": "sam3.1_multiplex_fp16", "prompt": "the sofa", "output_mode": "Separate",
+            "confidence_threshold": 0.5, "max_segments": 0, "segment_pick": 0, "mask_blur": 0, "mask_offset": 0,
+            "device": "Auto", "invert_output": False, "unload_model": True, "background": "Alpha",
+            "background_color": "#222222"}, "_meta": {"title": "What to find"}},
+        "3": {"class_type": "MaskToImage", "inputs": {"mask": ["2", 1]}},
+        "4": {"class_type": "PreviewImage", "inputs": {"images": ["3", 0]}, "_meta": {"title": "Masks"}},
+    }
+
+
 FACE_PROMPT = "a natural, detailed human face with clear eyes, nose and mouth"
 HAND_PROMPT = "a natural human hand with five well-formed fingers"
 # The crop: the mask's box, 2.5 times as wide and high. At 1.5 a face seen in
@@ -391,6 +432,8 @@ WORKFLOWS = {
     "Z-Image Turbo Inpaint Crop (bf16, 8 Schritte)": crop(zimage(inpaint)),
     "BiRefNet Background Removal (general, MIT)": background("BiRefNet-general", "BiRefNet_background"),
     "BiRefNet Matting Background Removal (HR, MIT)": background("BiRefNet-HR-matting", "BiRefNet_background_matting"),
+    "Florence-2 Caption": caption,
+    "SAM 3 Select": select,
 }
 
 

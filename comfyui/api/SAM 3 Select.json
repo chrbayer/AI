@@ -1,0 +1,60 @@
+{
+ "1": {
+  "inputs": {
+   "image": "photo.png"
+  },
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "Picture"
+  }
+ },
+ "2": {
+  "inputs": {
+   "model_name": "sam3.1_multiplex_fp16",
+   "prompt": "the sofa",
+   "output_mode": "Separate",
+   "confidence_threshold": 0.5,
+   "max_segments": 0,
+   "segment_pick": 0,
+   "mask_blur": 0,
+   "mask_offset": 0,
+   "device": "Auto",
+   "invert_output": false,
+   "unload_model": true,
+   "background": "Alpha",
+   "background_color": "#222222",
+   "image": [
+    "1",
+    0
+   ]
+  },
+  "class_type": "SAM3Segment",
+  "_meta": {
+   "title": "What to find"
+  }
+ },
+ "3": {
+  "inputs": {
+   "mask": [
+    "2",
+    1
+   ]
+  },
+  "class_type": "MaskToImage",
+  "_meta": {
+   "title": "Convert Mask to Image"
+  }
+ },
+ "4": {
+  "inputs": {
+   "images": [
+    "3",
+    0
+   ]
+  },
+  "class_type": "PreviewImage",
+  "_meta": {
+   "title": "Masks"
+  }
+ }
+}

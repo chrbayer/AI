@@ -366,6 +366,81 @@ class ImageApi(unittest.TestCase):
                 self.assertEqual({m["directory"] for m in entries}, {"RMBG/BiRefNet"})
                 self.assertTrue(all("/resolve/4d000788a9698c7f8d67c8c6ce2b40c768f5b909/" in m["url"] for m in entries))
 
+    def test_tools_are_no_models(self):
+        old = vars(images.ARGS).get("api")
+        images.ARGS.api = str(API)
+        try:
+            names = {p.stem for p in images.workflows().values()}
+        finally:
+            images.ARGS.api = old
+        self.assertTrue(images.TOOLS)
+        self.assertFalse(images.TOOLS & names)
+        self.assertIn("Qwen-Image 2.1 Inpaint (bf16, dpmpp_2m 14)", names)
+        for name, entries in (("Florence-2 Caption", {"model.safetensors", "config.json", "generation_config.json",
+                                                      "preprocessor_config.json", "tokenizer.json",
+                                                      "tokenizer_config.json", "vocab.json"}),
+                              ("SAM 3 Select", {"sam3.1_multiplex_fp16.safetensors"})):
+            with self.subTest(name):
+                wf = json.loads((ROOT / "comfyui" / "workflows" / f"{name}.json").read_text())
+                got = [m for n in wf["nodes"] for m in (n.get("properties") or {}).get("models") or []]
+                self.assertEqual({m["name"] for m in got}, entries)       # not the .bin twin of the weights
+                self.assertTrue(all("/resolve/" in m["url"] and "/main/" not in m["url"] for m in got))
+        sam = next(n for n in api("SAM 3 Select.json").values() if n["class_type"] == "SAM3Segment")
+        self.assertEqual(sam["inputs"]["output_mode"], "Separate")          # a box per match
+
+    def test_select_makes_the_mask_from_words(self):
+        Image = images.Image
+        if Image is None:
+            self.skipTest("needs Pillow")
+        pic = Image.new("RGB", (200, 100), "white"); buf = io.BytesIO(); pic.save(buf, "PNG"); data = buf.getvalue()
+        m1 = Image.new("L", (200, 100), 0); m1.paste(255, (20, 20, 40, 40))
+        m2 = Image.new("L", (200, 100), 0); m2.paste(255, (150, 50, 160, 60))
+        old = images.segments
+        try:
+            images.segments = lambda d, w: [m1, m2]
+            mask = Image.open(io.BytesIO(images.select_mask(data, "the cups", 0))).getchannel("A")
+            self.assertEqual((mask.getpixel((30, 30)), mask.getpixel((155, 55)), mask.getpixel((100, 80))), (0, 0, 255))
+            grown = Image.open(io.BytesIO(images.select_mask(data, "the cups"))).getchannel("A")
+            self.assertEqual(grown.getpixel((40 + images.SELECT_MARGIN // 2, 30)), 0)   # the default margin reaches out
+            self.assertEqual(grown.getpixel((100, 5)), 255)
+            images.segments = lambda d, w: []
+            with self.assertRaises(images.Refused):
+                images.select_mask(data, "a giraffe")
+        finally:
+            images.segments = old
+        with self.assertRaises(images.Refused):
+            images.segments(data, "  ")
+        g = api("Qwen-Image 2.1 Inpaint Crop Turbo (bf16, 4 Schritte).json")
+        old_upload = images.upload
+        images.upload = lambda d: "x.png"
+        try:
+            with self.assertRaises(images.Refused):
+                images.prepare(g, "p", None, [data], boxes=[[1, 1, 5, 5]], select="the sofa")
+        finally:
+            images.upload = old_upload
+
+    def test_layered_without_a_prompt_is_described(self):
+        seen = {}
+        olds = images.load, images.caption, images.run
+        images.load = lambda name, kind: api("Qwen-Image Layered (bf16, 20 Schritte).json")
+        images.caption = lambda data: "a woman on a street"
+        def run(graph):
+            seen["prompt"] = [n["inputs"].get("text") for n in graph.values() if n["class_type"] == "CLIPTextEncode"]
+            return []
+        images.run = run
+        old_upload = images.upload
+        images.upload = lambda d: "x.png"
+        try:
+            with images.app.app_context():
+                images.respond("qwen-image-layered", "edits", "", None, 1, 1, "b64_json", [b"png"])
+            self.assertIn("a woman on a street", seen["prompt"])
+            with images.app.app_context():
+                images.respond("qwen-image-layered", "edits", "my own", None, 1, 1, "b64_json", [b"png"])
+            self.assertIn("my own", seen["prompt"])
+        finally:
+            images.load, images.caption, images.run = olds
+            images.upload = old_upload
+
     def test_model_lists_in_both_object_info_formats(self):
         info = {"UNETLoader": {"input": {"required": {"unet_name": [["a.safetensors"], {}]}}},
                 "UpscaleModelLoader": {"input": {"required": {"model_name": ["COMBO", {"options": ["x4.safetensors"]}]}}}}
@@ -403,13 +478,13 @@ class ImageApi(unittest.TestCase):
         self.assertNotIn("negative_prompt", images.extras(turbo))
         with self.assertRaises(images.Refused):
             images.set_negative(turbo, "x")
-        self.assertEqual(images.extras(api("Z-Image Turbo Inpaint (bf16, 8 Schritte).json")), ["mask", "boxes", "strength"])
+        self.assertEqual(images.extras(api("Z-Image Turbo Inpaint (bf16, 8 Schritte).json")), ["mask", "boxes", "select", "strength"])
         self.assertEqual(images.slug("Qwen-Image 2.1 Pose Inpaint Turbo (bf16, 4 Schritte)"),
                          ("qwen-image-21-pose-inpaint-turbo", "edits"))
         for kind in ("Canny", "Pose", "Depth"):
             with self.subTest(kind=kind):
                 g = api(f"Qwen-Image 2.1 {kind} Inpaint Turbo (bf16, 4 Schritte).json")
-                self.assertEqual(images.extras(g), ["mask", "boxes", "strength"])
+                self.assertEqual(images.extras(g), ["mask", "boxes", "select", "strength"])
 
     def test_the_detailer_keeps_its_own_prompts(self):
         g = api("Qwen-Image 2.1 Detailer (bf16, dpmpp_2m 14).json")
@@ -471,6 +546,8 @@ class ImageApi(unittest.TestCase):
 
     def test_results_go_to_temp_not_the_gallery(self):
         for path in sorted(API.glob("*.json")):
+            if path.stem in images.TOOLS:
+                continue                                  # run as they are, outputs read directly
             with self.subTest(workflow=path.name):
                 g = json.loads(path.read_text())
                 n = len(images.image_nodes(g))
@@ -505,7 +582,7 @@ class ImageApiExtras(unittest.TestCase):
         return g
 
     def test_each_workflow_names_the_extras_it_takes(self):
-        self.assertEqual(images.extras(api(self.INPAINT)), ["mask", "boxes", "strength"])
+        self.assertEqual(images.extras(api(self.INPAINT)), ["mask", "boxes", "select", "strength"])
         self.assertEqual(images.extras(api(self.OUTPAINT)), ["strength", "pad"])
         self.assertEqual(images.extras(api(self.CONTROL)), ["strength"])
         self.assertEqual(images.extras(api(self.EDIT)), [])
@@ -635,6 +712,12 @@ class RepairPage(unittest.TestCase):
         self.assertEqual(first, "qwen-image-21-inpaint-crop-turbo")
         for m in re.findall(r'<option value="(qwen-image-21-inpaint[^"]*)"', page):
             self.assertIn(m, {images.slug(p.stem)[0] for p in (ROOT / "comfyui" / "api").glob("*.json")})
+
+    def test_the_page_finds_places_by_word(self):
+        page = (ROOT / "images_repair.html").read_text()
+        self.assertIn('id="word"', page)
+        self.assertIn('jsonPost("v1/images/select"', page)
+        self.assertIn("/v1/images/select", [r.rule for r in images.app.url_map.iter_rules()])
 
     def test_the_page_is_served(self):
         r = self.client.get("/repair")

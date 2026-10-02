@@ -7,7 +7,10 @@
                                   or JSON: "images": ["data:image/png;base64,...", ...], "mask"
                                   extra: "strength" (ControlNet), "pad" (Outpaint),
                                   "boxes" + "margin" (Inpaint: a mask made of rectangles),
-                                  "layers" (Layered: how many RGBA layers come back)
+                                  "layers" (Layered: how many RGBA layers come back),
+                                  "select" (masked workflows: the mask from a few words, SAM 3);
+                                  Qwen-Image Layered without a prompt is described by Florence-2
+    POST /v1/images/select        image + prompt: a box for each thing SAM 3 finds that the words name
     POST /v1/images/check         image (+ prompt, max_area): the artifacts a vision model sees,
                                   with boxes to repaint and a prompt for each (needs --vision)
     GET  /v1/models               the workflows whose models ComfyUI has, and the
@@ -61,6 +64,11 @@ SIZE_MIN, SIZE_MAX, SIZE_STEP = 256, 2048, 16
 STRENGTH_MAX = 2.0
 PAD_MAX, PAD_STEP, FEATHER_MAX = 2048, 8, 512
 MARGIN_DEFAULT, MARGIN_MAX = 16, 256
+# Around a thing `select` outlines: its own outline gives the repaint its shape
+# back (a floor lamp asked to become a plant came back a lamp at 16 px, a plant at 64).
+SELECT_MARGIN = 64
+# Helper workflows the image API runs itself; no models of their own.
+TOOLS = {"Florence-2 Caption", "SAM 3 Select"}
 # A box over this share of the picture is no place to repaint but a remark on
 # the whole ("four dishes, not five"); /check lists it apart.
 WHOLE_SHARE = 0.4
@@ -95,7 +103,8 @@ def workflows():
     """{(name, kind): path} for every API workflow bundled."""
     out = {}
     for path in sorted(Path(ARGS.api).glob("*.json")):
-        out.setdefault(slug(path.stem), path)
+        if path.stem not in TOOLS:
+            out.setdefault(slug(path.stem), path)
     return out
 
 
@@ -262,7 +271,7 @@ def extras(graph):
     if negative_nodes(graph):
         out.append("negative_prompt")
     if mask_users(graph):
-        out += ["mask", "boxes"]
+        out += ["mask", "boxes", "select"]
     kinds = {n["class_type"] for n in graph.values()}
     if "ZImageFunControlnet" in kinds:
         out.append("strength")
@@ -424,7 +433,7 @@ def upload(data):
 
 
 def prepare(graph, prompt, size, images, mask=None, strength=None, pad=None, boxes=None, margin=None,
-            negative_prompt=None, layers=None):
+            negative_prompt=None, layers=None, select=None):
     for key in [k for k, n in graph.items() if n["class_type"] in UI_ONLY]:
         del graph[key]
     for node in graph.values():               # into temp, not the user's output
@@ -446,8 +455,12 @@ def prepare(graph, prompt, size, images, mask=None, strength=None, pad=None, box
             raise Refused(f"this workflow takes at most {len(slots)} image(s), got {len(images)}")
         for key, data in zip(slots, images):
             graph[key]["inputs"]["image"] = upload(data)
-        if mask is not None and boxes is not None:
-            raise Refused("a mask or boxes, not both")
+        if sum(x not in (None, "") for x in (mask, boxes, select)) > 1:
+            raise Refused("one of mask, boxes or select")
+        if select not in (None, ""):
+            if not mask_users(graph):
+                raise Refused("this workflow takes no mask — the Inpaint ones do")
+            mask = select_mask(images[0], select, margin)
         if boxes is not None:
             if not mask_users(graph):
                 raise Refused("this workflow takes no mask — the Inpaint ones do")
@@ -467,8 +480,8 @@ def prepare(graph, prompt, size, images, mask=None, strength=None, pad=None, box
 
 # ── running it ───────────────────────────────────────────────
 
-def run(graph):
-    """Queue the workflow, wait for it, return its images as (bytes, view URL)."""
+def execute(graph):
+    """Queue the workflow, wait for it, return its outputs as ComfyUI's history has them."""
     r = requests.post(f"{ARGS.comfy}/prompt",
                       json={"prompt": graph, "client_id": str(uuid.uuid4())}, timeout=60)
     if r.status_code != 200:
@@ -498,8 +511,13 @@ def run(graph):
         requests.post(f"{ARGS.comfy}/queue", json={"delete": [pid]}, timeout=10)
         requests.post(f"{ARGS.comfy}/interrupt", json={"prompt_id": pid}, timeout=10)
         raise TimeoutError(f"no result within {ARGS.timeout} s — stopped it in ComfyUI")
+    return h["outputs"]
+
+
+def run(graph):
+    """Queue the workflow, wait for it, return its images as (bytes, view URL)."""
     out = []
-    for node in h["outputs"].values():
+    for node in execute(graph).values():
         for img in node.get("images", []):
             q = {"filename": img["filename"], "subfolder": img.get("subfolder", ""),
                  "type": img.get("type", "temp")}
@@ -510,12 +528,78 @@ def run(graph):
     return out
 
 
+def tool(name):
+    path = Path(ARGS.api) / f"{name}.json"
+    if not path.is_file():
+        raise Unavailable(f"the helper workflow '{name}' is missing from {ARGS.api}")
+    graph = json.loads(path.read_text())
+    lacking = missing_models(graph)
+    if lacking:
+        raise Refused(f"'{name}' needs models ComfyUI does not have: {', '.join(lacking)} "
+                      f"— llmctl download comfy \"{name}\"")
+    return graph
+
+
+def caption(data):
+    """Florence-2's detailed description of the picture."""
+    graph = tool("Florence-2 Caption")
+    graph[image_nodes(graph)[0]]["inputs"]["image"] = upload(data)
+    for out in execute(graph).values():
+        if out.get("text"):
+            return out["text"][0].strip()
+    raise RuntimeError("Florence-2 gave no caption")
+
+
+def segments(data, words):
+    """One mask (a PIL "L" image, white where it is) for each thing SAM 3 finds."""
+    pillow()
+    if not isinstance(words, str) or not words.strip():
+        raise Refused("select names what to find, in a few words")
+    graph = tool("SAM 3 Select")
+    graph[image_nodes(graph)[0]]["inputs"]["image"] = upload(data)
+    sam = next(n for n in graph.values() if n["class_type"] == "SAM3Segment")
+    sam["inputs"]["prompt"] = words.strip()
+    masks = [Image.open(io.BytesIO(png)).convert("L").point(lambda v: 255 if v > 127 else 0) for png, _ in run(graph)]
+    return [m for m in masks if m.getbbox()]
+
+
+def select_mask(data, words, margin=None):
+    """OpenAI's mask from words: transparent over all SAM 3 finds, grown by `margin`."""
+    from PIL import ImageChops, ImageFilter
+    try:
+        margin = SELECT_MARGIN if margin in (None, "") else int(margin)
+    except (TypeError, ValueError):
+        raise Refused(f"margin is a number of pixels, not '{margin}'") from None
+    if not 0 <= margin <= MARGIN_MAX:
+        raise Refused(f"margin is 0 to {MARGIN_MAX}")
+    found = segments(data, words)
+    if not found:
+        raise Refused(f"SAM 3 finds no '{words.strip()}' in the picture")
+    union = found[0]
+    for m in found[1:]:
+        union = ImageChops.lighter(union, m)
+    if margin:                     # grown: blurred, and whatever the blur reaches
+        union = union.filter(ImageFilter.GaussianBlur(margin / 2)).point(lambda v: 255 if v > 4 else 0)
+    size = image_size(data)
+    if union.size != size:
+        union = union.resize(size)
+    mask = Image.new("RGBA", size, (0, 0, 0, 255))
+    mask.putalpha(ImageChops.invert(union))
+    buf = io.BytesIO()
+    mask.save(buf, "PNG")
+    return buf.getvalue()
+
+
 def respond(name, kind, prompt, size, n, seed, fmt, images=None, **extra):
     if fmt not in ("b64_json", "url"):
         raise Refused("response_format is b64_json or url")
     if not 1 <= n <= 8:
         raise Refused("n is 1 to 8")
     template = load(name, kind)
+    # Qwen-Image Layered wants the picture described; without a prompt Florence-2 does it.
+    if name == "qwen-image-layered" and images and not (prompt or "").strip():
+        prompt = caption(images[0])
+        app.logger.info("layered: Florence-2 caption %r", prompt[:120])
     seed = random.randrange(2**48) if seed is None else int(seed)
     data = []
     t0 = time.time()
@@ -587,6 +671,7 @@ def edits():
             negative = f.get("negative_prompt")
             layers = f.get("layers")
             boxes, margin = f.get("boxes") or None, f.get("margin")
+            select = f.get("select")
         else:
             j = request.get_json(silent=True) or {}
             raw = j.get("images") or j.get("image") or []
@@ -598,10 +683,36 @@ def edits():
             negative = j.get("negative_prompt")
             layers = j.get("layers")
             boxes, margin = j.get("boxes"), j.get("margin")
+            select = j.get("select")
         return respond(model or default_model("edits"), "edits", prompt, size, n,
                        seed if seed in (None, "") else int(seed), fmt, images,
                        mask=mask, strength=strength, pad=pad, boxes=boxes, margin=margin,
-                       negative_prompt=negative, layers=layers)
+                       negative_prompt=negative, layers=layers, select=select)
+    return handle(go)
+
+
+@app.post("/v1/images/select")
+def select_endpoint():
+    """A box [x1, y1, x2, y2] in pixels for each thing SAM 3 finds that the
+    prompt names — places for `boxes`, or for the repair page."""
+    def go():
+        if request.files:
+            data, words = request.files["image"].read(), request.form.get("prompt", "")
+        else:
+            j = request.get_json(silent=True) or {}
+            if not j.get("image"):
+                raise Refused("image is required")
+            data, words = data_url(j["image"]), j.get("prompt", "")
+        t0 = time.time()
+        found = segments(data, words)
+        w, h = image_size(data)
+        out = []
+        for m in found:
+            if m.size != (w, h):
+                m = m.resize((w, h))
+            x1, y1, x2, y2 = m.getbbox()
+            out.append({"box": [x1, y1, x2, y2], "share": round(sum(m.histogram()[255:]) / (w * h), 4)})
+        return jsonify({"segments": out, "seconds": round(time.time() - t0, 1)})
     return handle(go)
 
 

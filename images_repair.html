@@ -145,6 +145,9 @@ textarea { resize: vertical; min-height: 54px; }
     <section class="panel">
       <h2>2 · Fundstellen</h2>
       <div id="list"><p class="hint">Noch nichts geprüft. Eigene Stellen: Rahmen ins Bild ziehen.</p></div>
+      <label for="word">Stelle per Wort (SAM 3, englisch)</label>
+      <div class="row"><input id="word" type="text" placeholder="z. B. the left hand, the sofa, hair">
+        <button id="find" style="max-width:90px">Suchen</button></div>
       <div id="remarksBox" hidden>
         <label>Hinweise ohne Reparatur (zu groß oder das ganze Bild)</label>
         <ul id="remarks" class="remarks"></ul>
@@ -212,6 +215,7 @@ function buttons() {
   $("check").disabled = !have || S.busy || S.vision !== "up";
   $("checkHint").textContent = !have ? "" : S.busy ? $("checkHint").textContent : S.vision === "up" ? S.checkMsg :
     S.controllable ? (S.checkMsg ? S.checkMsg + " " : "") + "Zum Prüfen erst „Vision starten“ (~30 s)." : "Zum Prüfen muss der Vision-Slot laufen.";
+  $("find").disabled = !have || S.busy || !S.comfy || !$("word").value.trim();
   const chosen = S.boxes.filter(b => b.on).length;
   $("repair").disabled = !have || S.busy || !chosen || S.vision !== "down" || !S.comfy;
   const rh = $("repairHint"); rh.className = "hint";
@@ -411,6 +415,26 @@ $("check").onclick = async () => {
     render();
   } catch (e) { clearInterval(tick); S.checkMsg = ""; toast(e.message); }
   S.busy = false; $("check").classList.remove("spin"); buttons();
+};
+
+// ── a place by its name ──
+// SAM 3 outlines each thing the words name; each becomes a box like the
+// check's, its fix left for you to write.
+$("word").oninput = buttons;
+$("word").onkeydown = e => { if (e.key === "Enter" && !$("find").disabled) $("find").click(); };
+$("find").onclick = async () => {
+  const words = $("word").value.trim();
+  S.busy = true; buttons(); $("find").classList.add("spin");
+  try {
+    const r = await jsonPost("v1/images/select", { image: S.src, prompt: words });
+    for (const g of r.segments) {
+      const [x1, y1, x2, y2] = g.box;
+      S.boxes.push({ id: nextId++, n: 0, x1, y1, x2, y2, what: words, fix: "", on: true, own: true });
+    }
+    renumber(); render();
+    toast(r.segments.length ? `${r.segments.length} × „${words}“ in ${r.seconds} s.` : `Kein „${words}“ gefunden.`, 3000);
+  } catch (e) { toast(e.message); }
+  S.busy = false; $("find").classList.remove("spin"); buttons();
 };
 
 // ── repair ──
