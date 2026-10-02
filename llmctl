@@ -5110,8 +5110,13 @@ _roc_env_combos() {
     echo "ROC_ENABLE_PREFETCH=1;HSA_ENABLE_COMPRESSION=1;HSA_ENABLE_SDMA=1"
 }
 
-_rocm_bin="/opt/llama.cpp-rocm/llama-bench"
-_vulkan_bin="llama-bench"
+# llama-bench beside the configured llama-server of each kind.
+_bench_bin() {
+    local server; server=$(command -v "$1" 2>/dev/null) || { echo "llama-bench"; return; }
+    echo "$(dirname "$server")/llama-bench"
+}
+_rocm_bin="$(_bench_bin "${LLAMA_ROCM_BIN:-/opt/llama.cpp-rocm/llama-server}")"
+_vulkan_bin="$(_bench_bin "${LLAMA_DEFAULT_BIN:-llama-server}")"
 _bench_common_args=(-ngl 999 -t 16 -lm mlock -fa 1)
 
 run_bench() {
@@ -6166,9 +6171,15 @@ _llama_install() {
         DL_PENDING=$(( DL_PENDING + 1 )); return 0
     fi
     echo "  $kind: $build ($asset)"
+    if [[ -x "$dir/llama-server" ]]; then           # there from before (a rollback, or a broken link)
+        _llama_test_build "$dir/llama-server" || return 1
+        ln -sfn "$build" "$LLAMA_DIR/$kind/current"
+        echo "    current again: $dir"; return 0
+    fi
     mkdir -p "$LLAMA_DIR/$kind"
     tmp="$LLAMA_DIR/$kind/.$build.part"; rm -rf "$tmp"; mkdir -p "$tmp"
-    curl -fL --progress-bar -o "$tmp/$asset" "$url" || { rm -rf "$tmp"; echo "    download failed"; return 1; }
+    echo "    downloading $(( $(jq -r ".$kind.size" <<< "$info") / 1000000 )) MB"
+    curl -fsSL -o "$tmp/$asset" "$url" || { rm -rf "$tmp"; echo "    download failed"; return 1; }
     case "$asset" in
         *.tar.gz) tar xzf "$tmp/$asset" -C "$tmp" ;;
         *.zip)    python3 -m zipfile -e "$tmp/$asset" "$tmp" ;;
@@ -6186,7 +6197,7 @@ _llama_install() {
     local old
     for old in "$LLAMA_DIR/$kind"/*/; do
         old=$(basename "$old")
-        [[ "$old" == "$build" || "$old" == "$cur" ]] || rm -rf "${LLAMA_DIR:?}/$kind/$old"
+        [[ "$old" == current || "$old" == "$build" || "$old" == "$cur" ]] || rm -rf "${LLAMA_DIR:?}/$kind/$old"
     done
 }
 
