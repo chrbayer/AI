@@ -1298,7 +1298,24 @@ llmctl update comfy --torch           # …and torch itself
   and an English indie rock song came out without a flaw in the singing
   with both. For an orchestral instrumental XL was clearly better — one
   piece — where the 2B Turbo made unrelated snippets with pauses between
-  them: XL for instrumentals. Not served through the image API (`export_api.py` leaves
+  them: XL for instrumentals.
+
+  Two more of ComfyUI's music templates earned their place against it (#41),
+  tried with the same lyrics and styles:
+  - `Stable Audio 3 Medium (8 Schritte)` (Stability AI, Stability Community
+    License, free below $1M revenue; 15 GB with its T5Gemma and Qwen3.5-2B
+    encoders): instrumentals, loops and sound design, no singing. A short
+    idea is written out by Qwen3.5-2B first (*Enable_Reprompt*; categories
+    Music, Instrument, SFX, One-shot). **90 s of orchestra in 14 s**, a
+    10.7 s drum loop in 5 s — strong on the instrumental.
+  - `YuE2 Text2Music (int8, 32 Schritte)` (CC BY-NC 4.0, 4 GB): songs with
+    vocals from style and lyrics, with an optional symbolic plan (ABC) of
+    the melody first. 81–100 s for 90 s; strong in German and English and
+    on the instrumental.
+
+  MiniMax Music 3 did not: 530–780 s for 90 s here (it plans ~2250 tokens,
+  then its DiT takes 7–11 s a step), the singing unintelligible, the
+  instrumental weaker and 62 s instead of 90. Not kept. Not served through the image API (`export_api.py` leaves
   workflows that save audio out).
 - **Speech in ComfyUI.** [ComfyUI-Qwen-TTS](https://github.com/flybirdxx/ComfyUI-Qwen-TTS)
   brings Qwen3-TTS; two workflows use it. `Qwen3-TTS Stimme entwerfen` designs
