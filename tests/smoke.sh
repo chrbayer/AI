@@ -23,11 +23,11 @@ export LLMCTL_MODELS_DIR="$SANDBOX/models"
 export XDG_CONFIG_HOME="$SANDBOX/xdg"      # service writes its units under here
 mkdir -p "$LLMCTL_CONFIG_DIR" "$LLMCTL_DATA_DIR" "$LLMCTL_MODELS_DIR" "$SANDBOX/bin"
 cp "$ROOT/examples/models.conf" "$ROOT/examples/presets.conf" "$LLMCTL_CONFIG_DIR/"
-( umask 077; echo "smoke-test-token" > "$LLMCTL_CONFIG_DIR/tokens" )   # what --tunnel and --public check
+( umask 077; echo "smoke-test-token" > "$LLMCTL_CONFIG_DIR/tokens" )   # what --tunnel checks
 
 # Stubs: the commands llmctl checks for before it builds anything. podman
 # answers "no such container", so no slot looks like a running halogen.
-for b in llama-server llama-tts stunnel git cmake systemctl loginctl journalctl; do
+for b in llama-server llama-tts git cmake systemctl loginctl journalctl; do
     printf '#!/bin/sh\nexit 0\n' > "$SANDBOX/bin/$b"
 done
 printf '#!/bin/sh\nexit 1\n' > "$SANDBOX/bin/podman"
@@ -117,7 +117,7 @@ check "halogen start refuses --spec"    "not available with the halogen backend"
 check "halogen start maps --mmproj"     "HALOGEN_VISION_TOWER=1"                  -- "$L" start flash 1 --mmproj --print-cmd
 check "--tunnel hardens a llama slot"   "--no-webui --no-slots"                  -- env LLMCTL_TUNNEL_HOST=u@h "$L" start qwen 1 --tunnel --print-cmd
 check "--tunnel caps a llama slot"      "--n-predict 8192"                        -- env LLMCTL_TUNNEL_HOST=u@h "$L" start qwen 1 --tunnel --print-cmd
-check "--tunnel and --public exclude each other" "pick one"                       -- env LLMCTL_TUNNEL_HOST=u@h "$L" start qwen 1 --tunnel --public --print-cmd
+check "--public is gone"                "--tunnel is the way out"                -- "$L" start qwen 1 --public --print-cmd
 check "halogen-server mounts its tokenizer" "tokenizer:/tokenizer:ro"             -- "$L" start qwen-halogen 1 --print-cmd
 check "halogen-server sets its slot context" "HALOGEN_SLOT_CTX=131072"             -- "$L" start qwen-halogen 1 --ctx 131072 --print-cmd
 check "halogen-server sizes its prompt cache" "HALOGEN_CACHE_MB=4096"              -- "$L" start qwen-halogen 1 --cache-ram 4096 --print-cmd

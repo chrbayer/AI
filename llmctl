@@ -2,8 +2,8 @@
 # llmctl — LLM server manager for Claude Code.
 # Usage:
 #   llmctl                                     list available models
-#   llmctl start <name> [slot] [--proxy] [--compact] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--temp F] [--top-p F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec] [--output DIR] [--vision SLOT|URL] [--tunnel]  start server (+ proxy with --proxy) in background (slot N, default 1)
-#   llmctl preset <name> [--dry-run] [--force] [--wait N] [--proxy] [--public] [--host ADDR] [--clear-logs] [--verbose] [--gpu-priority L] [--output DIR]  bring the machine to a whole configuration from presets.conf: keep what already matches, stop the rest, start what is missing
+#   llmctl start <name> [slot] [--proxy] [--compact] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--temp F] [--top-p F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec] [--output DIR] [--vision SLOT|URL] [--tunnel]  start server (+ proxy with --proxy) in background (slot N, default 1)
+#   llmctl preset <name> [--dry-run] [--force] [--wait N] [--proxy] [--host ADDR] [--clear-logs] [--verbose] [--gpu-priority L] [--output DIR]  bring the machine to a whole configuration from presets.conf: keep what already matches, stop the rest, start what is missing
 #   llmctl preset-save <name> [--label TEXT] [--dry-run] [--force]  write the running configuration to presets.conf as a preset
 #   llmctl presets                             list the defined presets
 #   llmctl stop [slot]                         stop slot (or all if omitted)
@@ -13,7 +13,6 @@
 #   llmctl update <comfyui-model> [--torch] [--master]  ComfyUI to its newest release (or master) and its deps
 #   llmctl voice list|add|design|rm            voices for speech (tts) slots
 #   llmctl probe-reasoning [model]             show what each model's chat template supports
-#   llmctl gen-certs <public-hostname>         create CA + certificates for --public
 #   eval "$(llmctl env <name> [slot] [--proxy|--direct])"   export Claude Code env vars in this shell
 #   eval "$(llmctl shell-init)"                (in ~/.zshrc) makes `llmctl env|clear` do that eval itself
 #
@@ -72,18 +71,12 @@ LOG_DIR="$STATE_DIR/logs"
 # same flag also enables the save/restore actions, which write into this dir.
 SLOT_STATE_DIR="$STATE_DIR/slots"
 
-# ── Public exposure (--public) ───────────────────────────────
-# Internet traffic never reaches llama-server or the proxy directly: stunnel
-# terminates a mutually authenticated TLS connection from the VPS and forwards
-# to 127.0.0.1. That keeps --public fully independent of --host, which stays
-# what it always was — plain LAN exposure.
-PORT_BASE_TLS_SERVER="${LLMCTL_PORT_BASE_TLS_SERVER:-8440}"  # slot N → port 8440+N  (TLS front for the server)
-PORT_BASE_TLS_PROXY="${LLMCTL_PORT_BASE_TLS_PROXY:-8450}"    # slot N → port 8450+N  (TLS front for the proxy)
+# ── Tokens (--tunnel) ───────────────────────────────────────
+# The logins of a tunnelled LLM slot: its proxy, and llama-server too, accept a
+# request only with one of these (one per line, the file private to the user).
 LLM_CONF_DIR="${LLM_CONF_DIR:-$CONFIG_DIR}"
 TOKEN_FILE="${LLM_TOKEN_FILE:-$LLM_CONF_DIR/tokens}"
-TLS_DIR="$LLM_CONF_DIR/tls"
-STUNNEL_DIR="$STATE_DIR/stunnel"
-PUBLIC_MAX_PREDICT_DEFAULT=8192   # --public caps generation length unless --max-predict says otherwise
+TUNNEL_MAX_PREDICT_DEFAULT=8192   # a tunnelled slot caps generation length unless --max-predict says otherwise
 # llama-server's --timeout, and so also how long its proxy waits for it: the
 # proxy's own default of 300 s would cut off a prefill the server still allows.
 LLAMA_SERVER_TIMEOUT=600
@@ -101,12 +94,9 @@ TUNNEL_PORT_OFFSET="${LLMCTL_TUNNEL_PORT_OFFSET:-10000}"
 
 # ── How many slots ──────────────────────────────────────────
 # As many as the ports allow. Server and proxy ports interleave from their two
-# bases, so the smaller base's range ends where the larger one begins; the same
-# holds for the two TLS fronts, which sit closer together and therefore bound
-# --public more tightly. Both numbers follow the bases, so raising a base raises
-# the limit with it.
+# bases, so the smaller base's range ends where the larger one begins. The number
+# follows the bases, so raising a base raises the limit with it.
 SLOT_MAX=$(( PORT_BASE_PROXY - PORT_BASE_SERVER - 1 ))
-SLOT_MAX_PUBLIC=$(( PORT_BASE_TLS_PROXY - PORT_BASE_TLS_SERVER - 1 ))
 
 # Every command that takes a slot number goes through here. Errors go to stderr,
 # because `env` is read by eval and must not have them land in the shell.
@@ -673,7 +663,6 @@ _start_audiocpp() {
     [[ -n "$top_p" ]] && refused+=("--top-p")
     [[ -n "$max_predict" ]] && refused+=("--max-predict")
     [[ "$start_proxy" == true ]] && refused+=("--proxy")
-    [[ "$public" == true ]] && refused+=("--public")
     [[ -n "$gpu_priority" ]] && refused+=("--gpu-priority")
     [[ "$compact" == true ]] && refused+=("--compact")
     [[ "$verbose" == true ]] && refused+=("--verbose")
@@ -860,7 +849,6 @@ _start_tts() {
     [[ -n "$top_p" ]] && refused+=("--top-p")
     [[ -n "$max_predict" ]] && refused+=("--max-predict")
     [[ "$start_proxy" == true ]] && refused+=("--proxy")
-    [[ "$public" == true ]] && refused+=("--public")
     [[ -n "$gpu_priority" ]] && refused+=("--gpu-priority")
     [[ "$compact" == true ]] && refused+=("--compact")
     [[ "$verbose" == true ]] && refused+=("--verbose")
@@ -1056,7 +1044,6 @@ _start_comfyui() {
     [[ -n "$temp" ]] && refused+=("--temp")
     [[ -n "$top_p" ]] && refused+=("--top-p")
     [[ -n "$max_predict" ]] && refused+=("--max-predict")
-    [[ "$public" == true ]] && refused+=("--public")
     [[ -n "$gpu_priority" ]] && refused+=("--gpu-priority")
     [[ "$compact" == true ]] && refused+=("--compact")
     if (( ${#refused[@]} )); then
@@ -1280,7 +1267,7 @@ _translate_reasoning() {
     return 0
 }
 
-# ── Public exposure helpers ─────────────────────────────────
+# ── Token helpers (--tunnel) ────────────────────────────────
 
 # Count real tokens in the token file (blank lines and # comments don't count).
 _token_count() {
@@ -1291,29 +1278,7 @@ _token_count() {
     echo "${n:-0}"
 }
 
-# Everything --public needs must exist *before* a single port opens.
-_check_public_prereqs() {
-    local ok=true
-
-    if ! command -v stunnel > /dev/null; then
-        echo "Error: --public needs stunnel (sudo dnf install stunnel)"
-        ok=false
-    fi
-    _check_token_file || ok=false
-
-    local f
-    for f in server.pem server.key ca.pem; do
-        if [[ ! -f "$TLS_DIR/$f" ]]; then
-            echo "Error: missing $TLS_DIR/$f — run: $PROG gen-certs <public-hostname>"
-            ok=false
-        fi
-    done
-
-    [[ "$ok" == true ]]
-}
-
-# The tokens a hardened proxy checks (--public, and --tunnel for LLM slots): there,
-# private to the user, and at least one.
+# The tokens a tunnelled LLM slot checks: there, private to the user, and at least one.
 _check_token_file() {
     local ok=true
     if [[ ! -f "$TOKEN_FILE" ]]; then
@@ -1335,44 +1300,6 @@ _check_token_file() {
         fi
     fi
     [[ "$ok" == true ]]
-}
-
-# Generate the stunnel config for one slot. verifyPeer + CAfile mean only a
-# client holding a certificate from our own CA (i.e. the VPS) can complete the
-# handshake — a scanner hitting the port never gets past the TLS layer.
-_write_stunnel_conf() {
-    local slot="$1" with_proxy="$2" conf="$3" with_server="${4:-true}"
-    local port_server=$(( PORT_BASE_SERVER + slot ))
-    local port_proxy=$(( PORT_BASE_PROXY + slot ))
-    local tls_server=$(( PORT_BASE_TLS_SERVER + slot ))
-    local tls_proxy=$(( PORT_BASE_TLS_PROXY + slot ))
-
-    {
-        echo "foreground = yes"
-        echo "pid ="
-        echo "sslVersionMin = TLSv1.2"
-        echo "TIMEOUTidle = 900"
-        if [[ "$with_server" == true ]]; then
-            echo ""
-            echo "[server-${slot}]"
-            echo "accept = 0.0.0.0:${tls_server}"
-            echo "connect = 127.0.0.1:${port_server}"
-            echo "cert = $TLS_DIR/server.pem"
-            echo "key = $TLS_DIR/server.key"
-            echo "CAfile = $TLS_DIR/ca.pem"
-            echo "verifyPeer = yes"
-        fi
-        if [[ "$with_proxy" == true ]]; then
-            echo ""
-            echo "[proxy-${slot}]"
-            echo "accept = 0.0.0.0:${tls_proxy}"
-            echo "connect = 127.0.0.1:${port_proxy}"
-            echo "cert = $TLS_DIR/server.pem"
-            echo "key = $TLS_DIR/server.key"
-            echo "CAfile = $TLS_DIR/ca.pem"
-            echo "verifyPeer = yes"
-        fi
-    } > "$conf"
 }
 
 # The image API in front of a ComfyUI slot, on the slot's proxy port. The pid
@@ -1524,7 +1451,7 @@ _halogen_server_proxy_env() {
 # `preset` can add a missing proxy to a slot whose model already matches —
 # reloading 70B of weights for a process that starts in a second would be absurd.
 _start_proxy() {
-    local slot="$1" host="$2" public="$3"
+    local slot="$1" host="$2" token_mode="$3"   # token_mode: a tunnelled slot
     # A ComfyUI slot's proxy is the image API, not proxy.py.
     if _slot_is_comfyui "$slot"; then
         _start_images_server "$slot" "$host"
@@ -1559,10 +1486,10 @@ _start_proxy() {
     else
         backend_env=(LLM_PROXY_TIMEOUT="$LLAMA_SERVER_TIMEOUT")
         # llama-server fetches image URLs itself, from any address — through a
-        # public proxy that would let a token holder reach this machine and the
+        # tunnelled proxy that would let a token holder reach this machine and the
         # LAN. So the proxy fetches them first, public hosts only, and the
         # server only ever sees data: URLs. (The direct path is not covered.)
-        [[ "$public" == true ]] && backend_env+=(LLM_INLINE_IMAGE_URLS=1)
+        [[ "$token_mode" == true ]] && backend_env+=(LLM_INLINE_IMAGE_URLS=1)
     fi
 
     echo "Starting proxy [slot $slot] on port $port_proxy..."
@@ -1577,7 +1504,7 @@ _start_proxy() {
         env LLM_BACKEND_URL="http://127.0.0.1:${port_server}" \
             LLM_PROXY_HOST="${host:-127.0.0.1}" \
             LLM_PROXY_PORT="${port_proxy}" \
-            LLM_TOKEN_FILE="$([[ "$public" == true ]] && echo "$TOKEN_FILE")" \
+            LLM_TOKEN_FILE="$([[ "$token_mode" == true ]] && echo "$TOKEN_FILE")" \
             "${backend_env[@]}" \
             python3 -u "$PROXY_SCRIPT")
     if [[ -z "$proxy_pid" ]]; then
@@ -1642,9 +1569,9 @@ _start_halogen() {
     fi
     local lan=false
     [[ -n "$host" && "$host" != "127.0.0.1" && "$host" != "localhost" ]] && lan=true
-    if [[ "$public" == true && "$lan" == true ]]; then
-        echo "Error: --public with --host $host would publish halogen on the LAN without a token —"
-        echo "       the server has no authentication of its own. Leave --host out: --public"
+    if [[ "$harden" == true && "$lan" == true ]]; then
+        echo "Error: --tunnel with --host $host would publish halogen on the LAN without a token —"
+        echo "       the server has no authentication of its own. Leave --host out: --tunnel"
         echo "       reaches it through the proxy, which checks the token."
         exit 1
     fi
@@ -1795,11 +1722,9 @@ _start_halogen() {
         fi
         echo "Host:     ${host:-127.0.0.1 (default)}"
         [[ "$lan" == true ]] && echo "  WARNING: published beyond localhost ($host) without authentication — trusted networks only."
-        if [[ "$public" == true ]]; then
-            echo "Public:   enabled (--public) — TLS front for the proxy only: 0.0.0.0:$(( PORT_BASE_TLS_PROXY + slot )) → :$port_proxy"
+        if [[ "$tunnel" == true ]]; then
+            echo "Tunnel:   to $TUNNEL_HOST, the proxy's port :$port_proxy only (--tunnel)"
             echo "  Tokens:  $(_token_count) from $TOKEN_FILE; token budgets capped at $cap"
-        else
-            echo "Public:   disabled — reachable only via localhost/LAN (pass --public to expose via the VPS)"
         fi
         echo "Proxy:    always on :$port_proxy — translates /v1/messages (Claude Code), normalizes time stamps,"
         echo "          clamps token budgets to $cap, fetches http(s) image URLs and passes them inline"
@@ -1864,26 +1789,9 @@ _start_halogen() {
 
     _start_proxy "$slot" "$host" "$harden" "$cap" || { _stop_slot "$slot" > /dev/null; exit 1; }
 
-    local stunnel_log="$LOG_DIR/stunnel-${slot}.log"
-    if [[ "$public" == true ]]; then
-        mkdir -p "$STUNNEL_DIR"
-        local stunnel_conf="$STUNNEL_DIR/slot-${slot}.conf"
-        _write_stunnel_conf "$slot" true "$stunnel_conf" false
-        local stunnel_pid=""
-        stunnel_pid=$(_spawn_detached "$PID_DIR/stunnel-${slot}.pid" "$stunnel_log" truncate \
-            stunnel "$stunnel_conf")
-        sleep 1
-        if [[ -z "$stunnel_pid" ]] || ! ps -p "$stunnel_pid" > /dev/null 2>&1; then
-            echo "Error: stunnel failed to start. See $stunnel_log"
-            exit 1
-        fi
-        echo "TLS front running (PID: $stunnel_pid) on :$(( PORT_BASE_TLS_PROXY + slot ))"
-    fi
-
     echo ""
     echo "  Logs:  tail -f $server_log"
     echo "         tail -f $proxy_log"
-    [[ "$public" == true ]] && echo "         tail -f $stunnel_log"
     echo "  Env:   $PROG env $_r_name $slot"
     echo "  Stop:  $PROG stop $slot"
 }
@@ -1893,7 +1801,6 @@ _start_gufo() {
     [[ -n "$cache_ram" ]] && refused+=("--cache-ram")
     [[ -n "$similarity" ]] && refused+=("--similarity")
     [[ -n "$gpu_priority" ]] && refused+=("--gpu-priority")
-    [[ "$public" == true ]] && refused+=("--public (not wired up for gufo yet)")
     if (( ${#refused[@]} )); then
         echo "Error: not available with the gufo backend: ${refused[*]}"
         exit 1
@@ -2095,7 +2002,7 @@ _capture_gufo_slot() {
         [[ -n "$top_p" && "$top_p" != "$own_p" ]] && flags+=(--top-p "$top_p")
         if _tunnel_up "$slot"; then
             flags+=(--tunnel)
-            [[ "$cap" == "$PUBLIC_MAX_PREDICT_DEFAULT" ]] && cap="$own_c"   # --tunnel's own cap
+            [[ "$cap" == "$TUNNEL_MAX_PREDICT_DEFAULT" ]] && cap="$own_c"   # --tunnel's own cap
         fi
         [[ -n "$cap" && "$cap" != "$own_c" ]] && flags+=(--max-predict "$cap")
         _argv_flag --log-level > /dev/null && flags+=(--verbose)
@@ -2128,7 +2035,6 @@ cmd_start() {
     local gpu_priority=""       # "" = driver default; low|medium|high|realtime (needs patched ggml-vulkan)
     local use_mmproj=false      # true = load the model's mmproj (multimodal projector), if defined
     local start_proxy=false     # true = also start proxy.py (timestamp normalization for prompt caching)
-    local public=false          # true = token auth + hardening + stunnel TLS front for the VPS
     local max_predict=""        # "" = model/server default; N = cap tokens per generation
     local spec=""               # "" = on when the model declares spec_args; on|off forces it
     # Samplers otherwise live in models.conf, per model. These two override them
@@ -2153,7 +2059,7 @@ cmd_start() {
         case "$1" in
             --proxy) start_proxy=true; shift ;;
             --compact) compact=true; shift ;;
-            --public) public=true; shift ;;
+            --public) echo "Error: --public is gone (llmctl 1.62): --tunnel is the way out"; exit 1 ;;
             --max-predict) _need_value "$@" || exit 1; max_predict="$2"; shift 2 ;;
             --reasoning) _need_value "$@" || exit 1; reasoning="$2"; shift 2 ;;
             --reasoning-budget) _need_value "$@" || exit 1; reasoning="$2"; shift 2 ;;   # alias: a budget is a valid --reasoning spec
@@ -2183,16 +2089,8 @@ cmd_start() {
         esac
     done
 
-    [[ -z "$name" ]] && { echo "Usage: $PROG start <model-name> [slot] [--proxy] [--public] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec]"; exit 1; }
+    [[ -z "$name" ]] && { echo "Usage: $PROG start <model-name> [slot] [--proxy] [--tunnel] [--max-predict N] [--reasoning off|on|low|medium|high|max|N] [--no-reasoning] [--reasoning-budget N] [--parallel N] [--ctx N] [--cache-ram N] [--similarity F] [--verbose] [--clear-logs] [--host ADDR] [--gpu-priority low|medium|high|realtime] [--mmproj] [--spec on|off] [--no-spec]"; exit 1; }
     _check_slot "$slot" || exit 1
-    # The TLS fronts sit closer together than the plain ports, so --public runs
-    # out of room first — and silently, since the collision would only surface as
-    # a bind error in stunnel's log.
-    if [[ "$public" == true ]] && (( slot > SLOT_MAX_PUBLIC )); then
-        echo "Error: --public reaches slots 1-$SLOT_MAX_PUBLIC (TLS ports $PORT_BASE_TLS_SERVER+N for the server, $PORT_BASE_TLS_PROXY+N for the proxy); slot $slot would collide."
-        echo "       Set LLMCTL_PORT_BASE_TLS_PROXY higher to make room for more."
-        exit 1
-    fi
     if [[ -n "$parallel" && ! "$parallel" =~ ^[1-9][0-9]*$ ]]; then
         echo "Error: --parallel requires a positive integer (got '$parallel')"; exit 1
     fi
@@ -2217,28 +2115,20 @@ cmd_start() {
     if [[ -n "$top_p" && ! "$top_p" =~ ^(0(\.[0-9]+)?|1(\.0+)?|\.[0-9]+)$ ]]; then
         echo "Error: --top-p requires a fraction from 0 to 1; got '$top_p'"; exit 1
     fi
-    if [[ "$public" == true && "$tunnel" == true ]]; then
-        echo "Error: --tunnel and --public are two ways out; pick one"; exit 1
-    fi
-    if [[ "$public" == true ]]; then
-        _check_public_prereqs || exit 1
-        # --public without a cap would let one request generate until --timeout.
-        [[ -z "$max_predict" ]] && max_predict="$PUBLIC_MAX_PREDICT_DEFAULT"
-    fi
 
     local port_server=$(( PORT_BASE_SERVER + slot ))
     local port_proxy=$(( PORT_BASE_PROXY + slot ))
 
     _resolve_model "$name" || { echo "Unknown model: $name"; cmd_list; exit 1; }
-    # Hardened: the proxy checks tokens and the server shows no more than it must.
-    # --public, and --tunnel for every slot but ComfyUI (whose server sits behind
-    # Basic Auth on the far side).
-    local harden="$public"
+    # Hardened: the proxy checks tokens and the server shows no more than it must —
+    # --tunnel for every slot but ComfyUI (whose server sits behind Basic Auth on
+    # the far side). A cap, too: without one a request could generate until --timeout.
+    local harden=false
     if [[ "$tunnel" == true && "$_r_backend" != comfyui ]]; then
         harden=true
         _check_token_file || exit 1
         case "$_r_backend" in
-            llama|halogen|gufo) [[ -z "$max_predict" ]] && max_predict="$PUBLIC_MAX_PREDICT_DEFAULT" ;;
+            llama|halogen|gufo) [[ -z "$max_predict" ]] && max_predict="$TUNNEL_MAX_PREDICT_DEFAULT" ;;
         esac
     fi
     if [[ "$tunnel" == true ]]; then
@@ -2393,7 +2283,7 @@ cmd_start() {
     # Unconditional, so `clear-kv` works on every slot. The trailing slash is
     # required: llama-server concatenates path + filename without a separator.
     cmd+=(--slot-save-path "$SLOT_STATE_DIR/")
-    # --public authenticates at llama-server itself. proxy.py forwards the
+    # --tunnel authenticates at llama-server itself. proxy.py forwards the
     # Authorization header untouched, so this one key file covers the direct and
     # the proxied endpoint alike. --no-slots matters most: /slots is enabled by
     # default and exposes other clients' prompts.
@@ -2457,34 +2347,22 @@ cmd_start() {
         esac
         echo "ROCm env: ${_r_rocm_env:-—}"
         echo "Host:     ${host:-127.0.0.1 (default)}"
-        # The LAN listener carries no authentication unless --public added a key
-        # file; the TLS front below is a separate, always-authenticated path.
+        # The LAN listener carries no authentication unless --tunnel added a key file.
         if [[ -n "$host" && "$host" != "127.0.0.1" && "$host" != "localhost" && "$host" != "::1" ]]; then
             local where="beyond localhost ($host)"
             [[ "$host" == "0.0.0.0" || "$host" == "::" ]] && where="to ALL interfaces"
-            if [[ "$public" == true ]]; then
-                echo "  NOTE: bound $where; token auth is active (--public)."
+            if [[ "$harden" == true ]]; then
+                echo "  NOTE: bound $where; token auth is active (--tunnel)."
             else
                 echo "  WARNING: bound $where without authentication —"
                 echo "           expose only inside a trusted network."
             fi
         fi
-        if [[ "$public" == true ]]; then
-            echo "Public:   enabled (--public)"
-            echo "  Tokens:  $(_token_count) from $TOKEN_FILE"
-            echo "  TLS in:  0.0.0.0:$(( PORT_BASE_TLS_SERVER + slot )) → server :$port_server (mTLS, client cert required)"
-            if [[ "$start_proxy" == true ]]; then
-                echo "           0.0.0.0:$(( PORT_BASE_TLS_PROXY + slot )) → proxy  :$port_proxy (mTLS, client cert required)"
-            fi
-            echo "  Server:  --no-webui --no-slots, generation capped at ${max_predict} tokens"
-            echo "  Proxy:   path allowlist, token check, concurrency cap; fetches image URLs itself (public hosts only)"
-        elif [[ "$tunnel" == true ]]; then
+        if [[ "$tunnel" == true ]]; then
             echo "Tunnel:   to $TUNNEL_HOST, the proxy's port :$port_proxy only (--tunnel)"
             echo "  Tokens:  $(_token_count) from $TOKEN_FILE — checked by the proxy and by llama-server"
             echo "  Server:  --no-webui --no-slots, generation capped at ${max_predict} tokens"
             echo "  Proxy:   path allowlist, token check, concurrency cap; fetches image URLs itself (public hosts only)"
-        else
-            echo "Public:   disabled — reachable only via localhost/LAN (pass --public to expose via the VPS)"
         fi
         if [[ "$start_proxy" == true ]]; then
             echo "Proxy:    enabled on :$port_proxy (--proxy) — normalizes time/date stamps for the prompt cache"
@@ -2574,35 +2452,12 @@ cmd_start() {
     echo "Server running (PID: $server_pid, detached)"
     _watch_start "$server_pid" "$server_log" "$port_server" || { _stop_slot "$slot" > /dev/null 2>&1; return 1; }
 
-    # Start the TLS front last, so the port only opens once there is a backend
-    # behind it.
-    local stunnel_log="$LOG_DIR/stunnel-${slot}.log"
-    if [[ "$public" == true ]]; then
-        mkdir -p "$STUNNEL_DIR"
-        local stunnel_conf="$STUNNEL_DIR/slot-${slot}.conf"
-        _write_stunnel_conf "$slot" "$start_proxy" "$stunnel_conf"
-        local stunnel_pid=""
-        stunnel_pid=$(_spawn_detached "$PID_DIR/stunnel-${slot}.pid" "$stunnel_log" truncate \
-            stunnel "$stunnel_conf")
-        if [[ -z "$stunnel_pid" ]]; then
-            echo "Error: stunnel did not report a PID. See $stunnel_log"
-            exit 1
-        fi
-
-        sleep 1
-        if ! ps -p "$stunnel_pid" > /dev/null 2>&1; then
-            echo "Error: stunnel failed to start. See $stunnel_log"
-            exit 1
-        fi
-        echo "TLS front running (PID: $stunnel_pid) on :$(( PORT_BASE_TLS_SERVER + slot ))$(
-            [[ "$start_proxy" == true ]] && echo ", :$(( PORT_BASE_TLS_PROXY + slot ))")"
-    fi
+    # The tunnel last, so the port only opens once there is a backend behind it.
     _tunnel_llm_slot
 
     echo ""
     echo "  Logs:  tail -f $server_log"
     [[ "$start_proxy" == true ]] && echo "         tail -f $proxy_log"
-    [[ "$public" == true ]] && echo "         tail -f $stunnel_log"
     echo "  Stop:  $PROG stop $slot"
 }
 
@@ -2684,7 +2539,7 @@ _is_llmctl_process() {
 _active_slots() {
     local -a slots=()
     local f n port pid
-    for f in "$PID_DIR"/server-*.pid "$PID_DIR"/proxy-*.pid "$PID_DIR"/stunnel-*.pid "$PID_DIR"/preset-*; do
+    for f in "$PID_DIR"/server-*.pid "$PID_DIR"/proxy-*.pid "$PID_DIR"/tunnel-*.pid "$PID_DIR"/preset-*; do
         [[ -e "$f" ]] || continue
         n="${f##*/}"; n="${n#*-}"; n="${n%.pid}"
         [[ "$n" =~ ^[1-9][0-9]*$ ]] && slots+=("$n")
@@ -2813,20 +2668,8 @@ _stop_slot() {
     _stop_proxy "$slot" && stopped=$(( stopped + 1 ))
     _stop_tunnel "$slot" && stopped=$(( stopped + 1 ))
 
-    # Stop the TLS front — closing the public port first would be nicer, but the
-    # slot is going down either way and stunnel is the cheapest to restart.
-    local stunnel_pid=""
-    [[ -f "$PID_DIR/stunnel-${slot}.pid" ]] && stunnel_pid=$(cat "$PID_DIR/stunnel-${slot}.pid")
-    if [[ -n "$stunnel_pid" ]] && ps -p "$stunnel_pid" > /dev/null 2>&1; then
-        kill "$stunnel_pid" 2>/dev/null
-        echo "Slot $slot: stunnel (PID: $stunnel_pid) stopped."
-        stopped=$(( stopped + 1 ))
-    fi
-
-    rm -f "$PID_DIR/server-${slot}.pid" "$PID_DIR/proxy-${slot}.pid" "$PID_DIR/stunnel-${slot}.pid"
+    rm -f "$PID_DIR/server-${slot}.pid" "$PID_DIR/proxy-${slot}.pid"
     rm -f "$PID_DIR/preset-${slot}"
-    rm -f "$STUNNEL_DIR/slot-${slot}.conf"
-    rmdir "$STUNNEL_DIR" 2>/dev/null || true
     # Only succeeds while nothing was saved there via ?action=save.
     rmdir "$SLOT_STATE_DIR" 2>/dev/null || true
     return $(( stopped == 0 ))
@@ -2958,12 +2801,12 @@ cmd_preset() {
             --force) force=true; shift ;;
             --repair) repair=true; shift ;;
             --wait) _need_value "$@" || exit 1; wait_limit="$2"; shift 2 ;;
-            --proxy|--public|--clear-logs|--verbose) extra+=("$1"); shift ;;
+            --proxy|--clear-logs|--verbose) extra+=("$1"); shift ;;
             --host|--gpu-priority) _need_value "$@" || exit 1; extra+=("$1" "$2"); shift 2 ;;
             -*) echo "Unknown option for preset: $1"
                 echo "  preset takes --dry-run, --force, --repair, --wait N, and the start options that"
                 echo "  apply to the whole configuration:"
-                echo "    --proxy  --public  --host ADDR  --clear-logs  --verbose  --gpu-priority L"
+                echo "    --proxy  --host ADDR  --clear-logs  --verbose  --gpu-priority L"
                 echo "    --output DIR  (ComfyUI entries only)"
                 echo "  They are appended to every entry, so they win over what the entry itself"
                 echo "  says. Per-model options such as --ctx or --reasoning belong in the entry."
@@ -2989,7 +2832,7 @@ cmd_preset() {
     # ── Read the preset, and ask start what each entry would run ────────────
     # Everything is checked before anything is touched: a name typo or an
     # impossible flag in the last entry must not disturb a running slot.
-    local -a e_model=() e_slot=() e_flags=() e_label=() e_cmd=() e_proxy=() e_public=() e_host=()
+    local -a e_model=() e_slot=() e_flags=() e_label=() e_cmd=() e_proxy=() e_harden=() e_host=()
     local -a e_tunnel=() e_vision=()
     local word
     local line seen=""
@@ -3012,13 +2855,13 @@ cmd_preset() {
         # The entry's own flags first, the command-level ones after, so a --host
         # given here overrides one written into the entry rather than the reverse.
         # Each backend gets the ones that mean something to it: ComfyUI has no
-        # proxy, no public front and no Vulkan queue, and only it takes --output.
+        # proxy and no Vulkan queue, and only it takes --output.
         local -a eff=("${w[@]:2}")
         if [[ "$_r_backend" == comfyui || "$_r_backend" == tts || "$_r_backend" == audiocpp ]]; then
             local k=0
             while (( k < ${#extra[@]} )); do
                 case "${extra[k]}" in
-                    --proxy|--public) k=$(( k + 1 )) ;;
+                    --proxy) k=$(( k + 1 )) ;;
                     --verbose)        [[ "$_r_backend" == comfyui ]] && eff+=("${extra[k]}"); k=$(( k + 1 )) ;;
                     --gpu-priority)   k=$(( k + 2 )) ;;
                     --host)           eff+=("${extra[k]}" "${extra[k+1]}"); k=$(( k + 2 )) ;;
@@ -3043,9 +2886,13 @@ cmd_preset() {
 
         e_model+=("$m"); e_slot+=("$s"); e_flags+=("${eff[*]}"); e_label+=("$_r_label")
         e_cmd+=("$out")
-        # A halogen slot always has its proxy, asked for or not.
-        if [[ " ${eff[*]} " == *" --proxy "* || "$_r_backend" == halogen || "$_r_backend" == gufo ]]; then e_proxy+=(true); else e_proxy+=(false); fi
-        [[ " ${eff[*]} " == *" --public "* ]] && e_public+=(true) || e_public+=(false)
+        # A halogen or gufo slot always has its proxy, asked for or not; so does a
+        # tunnelled LLM slot, in token mode.
+        local tunnelled_llm=false
+        [[ " ${eff[*]} " == *" --tunnel "* && "$_r_backend" != comfyui ]] && tunnelled_llm=true
+        if [[ " ${eff[*]} " == *" --proxy "* || "$_r_backend" == halogen || "$_r_backend" == gufo || "$tunnelled_llm" == true ]]; then
+            e_proxy+=(true); else e_proxy+=(false); fi
+        e_harden+=("$tunnelled_llm")
         # A ComfyUI slot's tunnel and the vision model its image API asks.
         [[ " ${eff[*]} " == *" --tunnel "* ]] && e_tunnel+=(true) || e_tunnel+=(false)
         local ev="" pv=""
@@ -3079,7 +2926,7 @@ cmd_preset() {
                 _resolve_vision "${e_vision[i]}" "$sl" > /dev/null
                 if [[ "${e_proxy[i]}" == true ]] && ! _slot_proxy_pid "$sl" > /dev/null; then
                     echo "Slot $sl: its proxy died — starting it again."
-                    _start_proxy "$sl" "${e_host[i]}" "${e_public[i]}" && proxy_new=true
+                    _start_proxy "$sl" "${e_host[i]}" "${e_harden[i]}" && proxy_new=true
                     n=$(( n + 1 ))
                 fi
                 if [[ "${e_tunnel[i]}" == true ]] && { ! _tunnel_up "$sl" || [[ "$proxy_new" == true ]]; }; then
@@ -3262,7 +3109,7 @@ cmd_preset() {
         _resolve_vision "${e_vision[i]}" "${e_slot[i]}" > /dev/null
         case "${e_proxy_action[i]}" in
             restart) _stop_proxy "${e_slot[i]}" > /dev/null ;&
-            start) _start_proxy "${e_slot[i]}" "${e_host[i]}" "${e_public[i]}" || {
+            start) _start_proxy "${e_slot[i]}" "${e_host[i]}" "${e_harden[i]}" || {
                        echo "Error: could not add the proxy to slot ${e_slot[i]}."; exit 1; } ;;
             stop)  _stop_proxy "${e_slot[i]}" > /dev/null && \
                        echo "Slot ${e_slot[i]}: proxy stopped (this preset does not ask for one)." ;;
@@ -3747,15 +3594,14 @@ _capture_slot() {
     for name in "${candidates[@]}"; do
         _resolve_model "$name" || continue
         local -a flags=()
-        # The token file is --public's or --tunnel's: the tunnel tells which.
-        if [[ "$auth" == true ]] && _tunnel_up "$slot"; then
+        # A token file means --tunnel (it brings the proxy along).
+        if [[ "$auth" == true ]]; then
             flags+=(--tunnel)
         else
             [[ "$proxy_up" == true ]] && flags+=(--proxy)
-            [[ "$auth" == true ]] && flags+=(--public)
         fi
-        # --public and --tunnel bring a cap of their own; only a different one needs saying.
-        [[ -n "$predict" ]] && ! [[ "$auth" == true && "$predict" == "$PUBLIC_MAX_PREDICT_DEFAULT" ]] &&
+        # --tunnel brings a cap of its own; only a different one needs saying.
+        [[ -n "$predict" ]] && ! [[ "$auth" == true && "$predict" == "$TUNNEL_MAX_PREDICT_DEFAULT" ]] &&
             flags+=(--max-predict "$predict")
 
         # Reasoning, read back through _translate_reasoning's own rules.
@@ -3866,18 +3712,16 @@ _capture_halogen_slot() {
         [[ "$effort" == none ]] && { think=0; effort=""; }
         temp=$(_argv_default temperature); top_p=$(_argv_default top_p)
     fi
-    local public=false tunnelled=false
-    [[ -f "$PID_DIR/stunnel-${slot}.pid" ]] && ps -p "$(cat "$PID_DIR/stunnel-${slot}.pid")" > /dev/null 2>&1 && public=true
+    local tunnelled=false
     _tunnel_up "$slot" && tunnelled=true
 
     local name
     for name in "${candidates[@]}"; do
         _resolve_model "$name" || continue
         local -a flags=()
-        [[ "$public" == true ]] && flags+=(--public)
         [[ "$tunnelled" == true ]] && flags+=(--tunnel)
-        # --public and --tunnel imply a cap of their own; only a different one needs saying.
-        if [[ -n "$cap" ]] && ! [[ "$public$tunnelled" == *true* && "$cap" == "$PUBLIC_MAX_PREDICT_DEFAULT" ]]; then
+        # --tunnel implies a cap of its own; only a different one needs saying.
+        if [[ -n "$cap" ]] && ! [[ "$tunnelled" == true && "$cap" == "$TUNNEL_MAX_PREDICT_DEFAULT" ]]; then
             flags+=(--max-predict "$cap")
         fi
         if [[ "$think" == "0" ]]; then
@@ -4391,16 +4235,6 @@ cmd_status() {
             found=1
         fi
 
-        local stunnel_pid=""
-        [[ -f "$PID_DIR/stunnel-${slot}.pid" ]] && stunnel_pid=$(cat "$PID_DIR/stunnel-${slot}.pid")
-        if [[ -n "$stunnel_pid" ]] && ps -p "$stunnel_pid" > /dev/null 2>&1; then
-            local tls_ports=":$(( PORT_BASE_TLS_SERVER + slot ))"
-            ss -tlnp 2>/dev/null | grep -q ":$(( PORT_BASE_TLS_PROXY + slot )) " && \
-                tls_ports="$tls_ports, :$(( PORT_BASE_TLS_PROXY + slot ))"
-            echo "Slot $slot: stunnel     (PID: $stunnel_pid) on $tls_ports  [public, mTLS]"
-            found=1
-        fi
-
         local tunnel_pid=""
         [[ -f "$PID_DIR/tunnel-${slot}.pid" ]] && tunnel_pid=$(cat "$PID_DIR/tunnel-${slot}.pid")
         if [[ -n "$tunnel_pid" ]] && ps -p "$tunnel_pid" > /dev/null 2>&1; then
@@ -4435,7 +4269,7 @@ cmd__complete() {
     (( n >= 2 )) && prev="${w[n-2]}"
     if (( n == 1 )); then
         printf '%s\n' start preset preset-save presets stop status logs cache-stats clear-kv \
-            probe-reasoning gen-certs bench list env clear shell-init download update voice service prune outdated help version
+            probe-reasoning bench list env clear shell-init download update voice service prune outdated help version
         return 0
     fi
     # Positional words before the one completed, options and their values left out.
@@ -4464,12 +4298,12 @@ cmd__complete() {
     case "$sub" in
         start)
             case $k in 0) _complete_models ;; 1) echo "$slot_nums" ;; esac
-            printf '%s\n' --ignore-memory --proxy --public --compact --max-predict --reasoning --no-reasoning --reasoning-budget \
+            printf '%s\n' --ignore-memory --proxy --compact --max-predict --reasoning --no-reasoning --reasoning-budget \
                 --parallel --ctx --cache-ram --similarity --verbose --clear-logs --host --gpu-priority --mmproj \
                 --spec --no-spec --temp --top-p --print-cmd --output --lang --seed --vision --tunnel ;;
         preset)
             (( k == 0 )) && { local e; for e in "${_PRESETS[@]}"; do echo "${e%%|*}"; done; }
-            printf '%s\n' --dry-run --force --repair --wait --output --proxy --public --host --clear-logs --verbose --gpu-priority ;;
+            printf '%s\n' --dry-run --force --repair --wait --output --proxy --host --clear-logs --verbose --gpu-priority ;;
         preset-save) printf '%s\n' --dry-run --force --label ;;
         prune) echo --dry-run ;;
         outdated) echo --quick ;;
@@ -4481,7 +4315,7 @@ cmd__complete() {
             esac ;;
         stop|clear-kv) (( k == 0 )) && _active_slots ;;
         cache-stats)   (( k == 0 )) && _log_slots ;;
-        logs) (( k == 0 )) && _log_slots; printf '%s\n' --proxy --tls -f -n ;;
+        logs) (( k == 0 )) && _log_slots; printf '%s\n' --proxy -f -n ;;
         env)
             case $k in 0) _complete_models llama halogen ;; 1) echo "$slot_nums" ;; esac
             printf '%s\n' --proxy --direct ;;
@@ -5134,18 +4968,17 @@ cmd_outdated() {
 }
 
 # Show a slot's log without knowing where it lives.
-# Usage: logs [slot] [--proxy|--tls] [-f] [-n N]
+# Usage: logs [slot] [--proxy] [-f] [-n N]
 #   no slot: every log there is, with size and last change
 cmd_logs() {
     local slot="" kind=server follow=false lines=50
     while (( $# )); do
         case "$1" in
             --proxy) kind=proxy ;;
-            --tls)   kind=stunnel ;;
             -f|--follow) follow=true ;;
             -n) lines="${2:-}"; shift
                 [[ "$lines" =~ ^[0-9]+$ ]] || { echo "Error: -n takes a number of lines"; return 1; } ;;
-            -*) echo "Usage: $PROG logs [slot] [--proxy|--tls] [-f] [-n N]"; return 1 ;;
+            -*) echo "Usage: $PROG logs [slot] [--proxy] [-f] [-n N]"; return 1 ;;
             *)  slot="$1" ;;
         esac
         shift
@@ -5153,7 +4986,7 @@ cmd_logs() {
     if [[ -z "$slot" ]]; then
         [[ -n "$(compgen -G "$LOG_DIR/*-*.log")" ]] || { echo "No logs yet (start a server first)."; return 0; }
         local f
-        for f in "$LOG_DIR"/{server,proxy,stunnel}-*.log; do
+        for f in "$LOG_DIR"/{server,proxy}-*.log; do
             [[ -f "$f" ]] || continue
             printf '  %-18s %8s  %s\n' "${f##*/}" "$(du -h "$f" | cut -f1)" "$(date -r "$f" '+%Y-%m-%d %H:%M')"
         done | sort -t- -k2 -n
@@ -5265,7 +5098,7 @@ cmd_clear_kv() {
     [[ -n "$want_slot" ]] && { _check_slot "$want_slot" || return 1; }
     _check_deps python3 || return 1
 
-    # A slot started with --public requires a token; reuse the first one, exactly
+    # A tunnelled slot requires a token; reuse the first one, exactly
     # as cmd_env does. A server without --api-key-file ignores the header.
     local token=""
     if [[ -r "$TOKEN_FILE" ]]; then
@@ -5535,9 +5368,9 @@ cmd_env() {
     [[ "$slot" -gt 1 ]] && config_dir+="-${slot}"
     mkdir -p "$config_dir"
 
-    # A slot started with --public demands a token. Reuse the first one from the
-    # token file so the local workflow stays a plain `llmctl env`; a server
-    # started without --public ignores the header anyway.
+    # A tunnelled slot demands a token. Reuse the first one from the token file
+    # so the local workflow stays a plain `llmctl env`; a slot without --tunnel
+    # ignores the header anyway.
     local token="sk-no-key-required" token_src="placeholder"
     if [[ -r "$TOKEN_FILE" ]]; then
         local first
@@ -5622,59 +5455,6 @@ llmctl() {
     esac
 }
 EOF
-}
-
-# Create the private CA and the two certificates the public path needs:
-#   server.pem/.key       — presented by stunnel here; SAN must be the hostname
-#                           the VPS connects to, or SSLProxyCheckPeerName fails
-#   vps-client-combined.pem — copied to the VPS; without it stunnel's verifyPeer
-#                           refuses the handshake, so scanners never get through
-cmd_gen_certs() {
-    local hostname="" force=false
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --force) force=true; shift ;;
-            -*) echo "Unknown option: $1"; return 1 ;;
-            *) [[ -z "$hostname" ]] && hostname="$1"; shift ;;
-        esac
-    done
-    [[ -z "$hostname" ]] && { echo "Usage: $PROG gen-certs <public-hostname> [--force]"; return 1; }
-    _check_deps openssl || return 1
-
-    if [[ -f "$TLS_DIR/ca.pem" && "$force" != true ]]; then
-        echo "Error: $TLS_DIR/ca.pem already exists."
-        echo "       Re-issuing invalidates the client cert already on the VPS. Pass --force if that's intended."
-        return 1
-    fi
-
-    mkdir -p "$TLS_DIR"
-    chmod 700 "$TLS_DIR"
-    ( umask 077 && cd "$TLS_DIR" && \
-      openssl req -x509 -newkey rsa:4096 -sha256 -days 3650 -nodes \
-          -keyout ca.key -out ca.pem -subj "/CN=llm-local-ca" 2>/dev/null && \
-      openssl req -newkey rsa:4096 -nodes -keyout server.key -out server.csr \
-          -subj "/CN=$hostname" 2>/dev/null && \
-      openssl x509 -req -in server.csr -CA ca.pem -CAkey ca.key -CAcreateserial \
-          -out server.pem -days 3650 -sha256 \
-          -extfile <(printf 'subjectAltName=DNS:%s\nextendedKeyUsage=serverAuth\n' "$hostname") 2>/dev/null && \
-      openssl req -newkey rsa:4096 -nodes -keyout vps-client.key -out vps-client.csr \
-          -subj "/CN=vps" 2>/dev/null && \
-      openssl x509 -req -in vps-client.csr -CA ca.pem -CAkey ca.key -CAcreateserial \
-          -out vps-client.pem -days 3650 -sha256 \
-          -extfile <(printf 'extendedKeyUsage=clientAuth\n') 2>/dev/null && \
-      cat vps-client.pem vps-client.key > vps-client-combined.pem && \
-      rm -f server.csr vps-client.csr ) || { echo "Error: certificate generation failed"; return 1; }
-
-    echo "Certificates written to $TLS_DIR (valid 10 years, CN/SAN = $hostname)"
-    echo ""
-    echo "  Stays here:      ca.pem  server.pem  server.key"
-    echo "  Copy to the VPS: vps-client-combined.pem   → SSLProxyMachineCertificateFile"
-    echo "                   ca.pem                    → SSLProxyCACertificateFile"
-    echo ""
-    echo "  scp $TLS_DIR/vps-client-combined.pem $TLS_DIR/ca.pem <vps>:/etc/apache2/llm/"
-    echo ""
-    echo "  Note: the VPS must reach $hostname (DynDNS → your router), and"
-    echo "        vps-client-combined.pem holds a private key — chmod 600 it there."
 }
 
 # ── Benchmark ────────────────────────────────────────────────
@@ -5963,8 +5743,7 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  --gpu-priority low|medium|high|realtime: Vulkan queue priority (needs patched ggml-vulkan)"
     printf "  %-20s %s\n" ""                      "  --verbose: -lv 4, reveals ggml/backend + buffer-size startup logs (more runtime logging too)"
     printf "  %-20s %s\n" ""                      "  --clear-logs: truncate this slot's server/proxy log before starting"
-    printf "  %-20s %s\n" ""                      "  --public: token auth + hardening + mTLS front for the VPS (needs gen-certs)"
-    printf "  %-20s %s\n" ""                      "  --max-predict N: cap tokens per generation (-1=no limit; --public defaults to 8192)"
+    printf "  %-20s %s\n" ""                      "  --max-predict N: cap tokens per generation (-1=no limit; --tunnel defaults to 8192)"
     printf "  %-20s %s\n" ""                      "  --compact: defragment host memory first (sudo) — for models that need large pinned blocks"
     printf "  %-20s %s\n" ""                      "  halogen models (backend=halogen) run in podman, always with their proxy; other slots"
     printf "  %-20s %s\n" ""                      "    start beside a running one only when their memory fits (--ignore-memory: anyway);"
@@ -5973,7 +5752,7 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "    --temp, --top-p become request defaults; no YaRN, no vision, no thinking budget"
     printf "  %-20s %s\n" ""                      "  gufo models (backend=gufo) run gufo in podman, always with their proxy (it translates"
     printf "  %-20s %s\n" ""                      "    /v1/messages); --ctx and --parallel size the KV it reserves at start, --spec off drops"
-    printf "  %-20s %s\n" ""                      "    the draft; no --cache-ram, --similarity, --gpu-priority or --public"
+    printf "  %-20s %s\n" ""                      "    the draft; no --cache-ram, --similarity or --gpu-priority"
     printf "  %-20s %s\n" ""                      "  comfyui models (backend=comfyui) run ComfyUI with its web UI on the server port;"
     printf "  %-20s %s\n" ""                      "    only --host, --verbose, --clear-logs, --output DIR (where images go) and --proxy apply;"
     printf "  %-20s %s\n" ""                      "    --proxy: OpenAI image API (/v1/images/generations, /edits) on the proxy port"
@@ -5994,7 +5773,7 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  --force: reload every model, even one that already matches"
     printf "  %-20s %s\n" ""                      "  --repair: only restart this preset's slots whose server died; stop nothing"
     printf "  %-20s %s\n" ""                      "  --output DIR: where ComfyUI entries put their images"
-    printf "  %-20s %s\n" ""                      "  --proxy --public --host ADDR --clear-logs --verbose --gpu-priority L:"
+    printf "  %-20s %s\n" ""                      "  --proxy --host ADDR --clear-logs --verbose --gpu-priority L:"
     printf "  %-20s %s\n" ""                      "    start options describing how the slots are run and reached, applied to"
     printf "  %-20s %s\n" ""                      "    every entry and winning over what the entry itself says"
     printf "  %-20s %s\n" ""                      "  --wait N: seconds to wait for each model to load (default 300)"
@@ -6010,12 +5789,11 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  custom nodes, installed models (by SHA-256; --quick: size and date); changes nothing"
     printf "  %-20s %s\n" ""                      "  --master: llmctl, llama.cpp, audio.cpp and ComfyUI against master, not their releases"
     printf "  %-20s %s\n" "prune [--dry-run]"      "list the models nothing names any more, with what deleting them frees; asks first"
-    printf "  %-20s %s\n" "logs [slot]"            "a slot's server log (last 50 lines; -n N, -f to follow, --proxy, --tls);"
+    printf "  %-20s %s\n" "logs [slot]"            "a slot's server log (last 50 lines; -n N, -f to follow, --proxy);"
     printf "  %-20s %s\n" ""                      "  without a slot: every log with size and last change"
     printf "  %-20s %s\n" "cache-stats [slot]"     "show prompt-cache hit rate (from the server log)"
     printf "  %-20s %s\n" "clear-kv [slot]"        "drop the KV cache of every server slot (or one slot); ComfyUI: unload its models"
     printf "  %-20s %s\n" "probe-reasoning [m]"    "what each downloaded model's chat template supports vs. models.conf"
-    printf "  %-20s %s\n" "gen-certs <host>"       "create the CA + server/VPS certificates for --public"
     printf "  %-20s %s\n" "musicvideo <song> <pic>..." "a music video on ComfyUI: the pictures sing the song (LTX-2.5), sections"
     printf "  %-20s %s\n" ""                      "  cut to the frame and joined (--sections, --continuous, --dry-run; --help)"
     printf "  %-20s %s\n" "bench [opts] <m>"       "run benchmark (model or 'all'); halogen: measures the running slot"
@@ -6041,8 +5819,7 @@ cmd_help() {
     echo "  Ports:  slot N → server :$(( PORT_BASE_SERVER + 1 ))-$(( PORT_BASE_SERVER + SLOT_MAX ))  proxy :$(( PORT_BASE_PROXY + 1 ))-$(( PORT_BASE_PROXY + SLOT_MAX ))  (N added to the base)"
     echo "          Run as many slots as you like; the port layout is the only limit."
     echo ""
-    echo "  --public adds a TLS front per slot: server :$PORT_BASE_TLS_SERVER+N, proxy :$PORT_BASE_TLS_PROXY+N — slots 1-$SLOT_MAX_PUBLIC"
-    echo "          Forward only those at the router; the plain ports stay local/LAN."
+    echo "  --tunnel reaches the server in tunnel-host: a slot's proxy on its port + $TUNNEL_PORT_OFFSET there."
     echo ""
 }
 
@@ -7169,7 +6946,6 @@ case "${1:-}" in
     _complete)   shift; cmd__complete "$@" 2>/dev/null ;;
     clear-kv)   shift; cmd_clear_kv "$@" ;;
     probe-reasoning) shift; cmd_probe_reasoning "$@" ;;
-    gen-certs)  shift; cmd_gen_certs "$@" ;;
     bench)      shift; cmd_benchmark "$@" ;;
     list)       cmd_list ;;
     help)       cmd_help ;;

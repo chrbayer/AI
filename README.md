@@ -26,7 +26,7 @@ your home directory:
 | `~/.config/llmctl/` | `models.conf`, `presets.conf`, `tokens`, `tls/` | `LLMCTL_CONFIG_DIR` (tokens/tls also `LLM_CONF_DIR`, `LLM_TOKEN_FILE`) |
 | `~/.local/share/llmctl/models/` | the GGUF files (`$MODELS_DIR` in `models.conf`), ComfyUI's models in `comfyui/` | `LLMCTL_MODELS_DIR`, or set `MODELS_DIR` in `models.conf` |
 | `~/.local/share/llmctl/` | `llama.cpp/` (prebuilt llama-server, see below), `benchmarks/`, `claude/<model>[-<slot>]` (Claude Code profiles set by `env`), `comfyui/` (ComfyUI's checkout in `app/`, its workflows, input and output), `tts/` (voices; a voice-design venv only without ComfyUI) | `LLMCTL_DATA_DIR` |
-| `~/.local/state/llmctl/` | `logs/`, `pids/`, `slots/`, `stunnel/` | `LLMCTL_STATE_DIR` |
+| `~/.local/state/llmctl/` | `logs/`, `pids/`, `slots/` | `LLMCTL_STATE_DIR` |
 
 **llama-server** itself: `llmctl download llama` installs prebuilt builds at
 llama.cpp's newest stable release (a `vX.Y.Z` tag, not every nightly) into
@@ -104,7 +104,6 @@ llmctl cache-stats [slot]              # Prompt-cache hit rate, read from the se
 llmctl logs [slot] [-f] [--proxy|--tls] # A slot's log (last 50 lines, -n N); no slot: all logs
 llmctl clear-kv [slot]                 # Drop the KV cache without restarting
 llmctl probe-reasoning [model]         # What each model's chat template supports
-llmctl gen-certs <host>                # CA + server/VPS certificates for --public
 llmctl bench [--full] <model|all>      # Run benchmark (default: default ROCm + Vulkan)
 llmctl bench --full all                # Full test: all 8 ROCm combos + Vulkan
 llmctl bench flash                     # halogen: prefill + decode of the running slot
@@ -140,8 +139,8 @@ bash-completion package.
 | `--gpu-priority low\|medium\|high\|realtime` | Vulkan queue priority (needs the patched ggml-vulkan) |
 | `--verbose` | `-lv 4`, reveals ggml/backend + buffer-size startup logs |
 | `--clear-logs` | truncate this slot's server/proxy log before starting |
-| `--public` | token auth + hardening + mTLS front for the VPS (needs `gen-certs`) |
-| `--max-predict N` | cap tokens per generation (-1 = no limit; `--public` defaults to 8192) |
+| `--tunnel` | reach the slot from outside through a reverse SSH tunnel: the proxy in token mode, hardening (see [LLM slots from the internet](#llm-slots-from-the-internet---tunnel)) |
+| `--max-predict N` | cap tokens per generation (-1 = no limit; `--tunnel` defaults to 8192) |
 | `--print-cmd` | build and validate everything, print the llama-server command, start nothing (this is how `preset` compares a slot against what it should run) |
 | `--output DIR` | ComfyUI only: where generated images go (default `~/.local/share/llmctl/comfyui/output`) |
 
@@ -153,7 +152,7 @@ for clients that stamp every request, pointless for those that don't. (A
 [halogen](#the-halogen-backend) model is the exception: its proxy always runs.)
 
 It waits as long for the server as llama-server's own `--timeout` (600 s), so a
-long prefill is not cut off halfway. With `--public` it also fetches image URLs
+long prefill is not cut off halfway. With `--tunnel` it also fetches image URLs
 itself — public hosts only, redirects included — and passes them on inline:
 llama-server would otherwise fetch any URL a token holder names, `127.0.0.1` and
 the LAN included. That covers the proxied path; the direct one is not.
@@ -183,7 +182,7 @@ The only limit is where the port ranges meet, so it moves with the bases:
 | | Range | Bound by | Override |
 | --- | --- | --- | --- |
 | server / proxy | slots 1–79 | `:8080` is where the proxy ports start | `LLMCTL_PORT_BASE_SERVER`, `LLMCTL_PORT_BASE_PROXY` |
-| `--public` | slots 1–9 | `:8450` is where the TLS proxy ports start | `LLMCTL_PORT_BASE_TLS_SERVER`, `LLMCTL_PORT_BASE_TLS_PROXY` |
+| `--tunnel` | as above | ports on the server: the slot's port + 10000 | `LLMCTL_TUNNEL_PORT_OFFSET` |
 
 Both are checked before anything starts, and `llmctl help` prints the ranges that
 are actually in effect.
@@ -239,11 +238,10 @@ command instead of in the file, and appended to every entry:
 
 ```bash
 llmctl preset wrs --host 0.0.0.0               # the whole set on the LAN
-llmctl preset wrs --host 0.0.0.0 --public      # …with token auth and the TLS front
 llmctl preset wrs --clear-logs --verbose       # a fresh, loud run of the same set
 ```
 
-`--proxy`, `--public`, `--host ADDR`, `--clear-logs`, `--verbose`,
+`--proxy`, `--host ADDR`, `--clear-logs`, `--verbose`,
 `--gpu-priority L` and `--output DIR` are the set. Each entry gets those that
 mean something to its backend: a ComfyUI entry takes `--output` (where its
 images go) but no proxy, public front or GPU priority, and `--output` reaches
@@ -633,7 +631,7 @@ after the model. Its destination is not configured — it is the directory of th
 ### The server outlives its shell
 
 `start` detaches everything it launches — the server, the proxy under `--proxy`,
-the TLS front under `--public` — through `_spawn_detached`. Each runs in its own
+the tunnel under `--tunnel` — through `_spawn_detached`. Each runs in its own
 session with no controlling terminal, so closing the terminal you started it from
 no longer sends it SIGHUP and it survives that shell exiting.
 
@@ -767,7 +765,7 @@ Qwen3.8-27B. The slot model stays the same — `start`, `stop`,
   the backend, since a full 256K prefill alone takes minutes. Images given as
   http(s) URLs — which halogen refuses — are fetched by the proxy and passed on
   inline (Messages, Chat Completions and Responses alike; images only, at most
-  20 MiB). Under `--public` only hosts that resolve to public addresses are
+  20 MiB). Under `--tunnel` only hosts that resolve to public addresses are
   fetched, redirects included, so a token cannot reach this machine or the LAN
   through it. `env` always points
   at the proxy, and also exports `CLAUDE_CODE_MAX_CONTEXT_TOKENS` with the slot's
@@ -785,7 +783,7 @@ Qwen3.8-27B. The slot model stays the same — `start`, `stop`,
   | `--cache-ram 0` | `HALOGEN_PROMPT_CACHE=0`; no other value exists |
   | `--mmproj` | `HALOGEN_VISION_TOWER=1` (the vision file must sit beside the checkpoint) |
   | `--host ADDR` | where podman publishes the port |
-  | `--public` | a TLS front for the **proxy only** — the server has no authentication, so its own port never gets one, and `--public` with a LAN `--host` is refused |
+  | `--tunnel` | the **proxy only** goes out, in token mode — the server has no authentication of its own, so its port never does, and `--tunnel` with a LAN `--host` is refused |
 
   `--similarity`, `--gpu-priority`, `--verbose` and `--spec off` have no
   equivalent and are refused. The MTP draft is always on; it is byte-identical
@@ -953,7 +951,7 @@ What llmctl does for it:
   most); 45 GiB at start grew to 50 GiB after a bench and an image.
 - `status`, `stop`, `logs`, `bench`, `preset`, `preset-save`, `prune`,
   `download` and `outdated` know it; `cache-stats` and `clear-kv` have nothing
-  to ask it. `--public` is not wired up for gufo yet.
+  to ask it. `--tunnel` reaches it from outside, as for the other backends.
 - **Updates**: `outdated` asks the registry for newer tags of the image and
   shows the version headings of gufo's changelog in between, as for halogen.
   gufo releases nearly every day; move the tag in models.conf after a bench,
@@ -1569,8 +1567,8 @@ llmctl update comfy --master          # master instead of the releases (download
   workflows, read the input and output directories and install nodes. The same
   holds for the speech (`tts`) and speech-recognition (`asr`) slots: their
   servers answer whoever reaches them. Keep them on 127.0.0.1, or put something
-  in front that authenticates — `--public` does that for LLM slots (token plus
-  mTLS), but it does not cover these.
+  in front that authenticates — `--tunnel` does that, with tokens for speech and
+  speech recognition and Basic Auth on the server for ComfyUI.
 - **No LLM options.** `--host`, `--verbose` (`--verbose DEBUG`), `--clear-logs`,
   `--output` and `--proxy` (the image API, below) apply; everything else is refused. `env`, `bench`, `cache-stats` and
   `probe-reasoning` have nothing to do for it. ComfyUI has no authentication, so
@@ -2167,8 +2165,8 @@ llmctl start qwen 1 --tunnel        # → https://llm.example.org/s1/v1  (OpenAI
   here, which a server may use itself; the model server's own port never
   leaves the machine. llama
   slots get their proxy started for it, speech and audio.cpp get one too.
-- **The token is the login.** The proxy runs in the mode `--public` gives it:
-  every request needs a token from `~/.config/llmctl/tokens`
+- **The token is the login.** The proxy runs in token mode: every request
+  needs a token from `~/.config/llmctl/tokens`
   (`Authorization: Bearer …` from OpenAI clients, `x-api-key` from Anthropic
   ones such as Claude Code), only the API paths pass (`/v1/chat/completions`,
   `/v1/messages`, `/v1/models`, `/v1/embeddings`, `/v1/rerank`,
@@ -2178,60 +2176,16 @@ llmctl start qwen 1 --tunnel        # → https://llm.example.org/s1/v1  (OpenAI
   Generation is capped at 8192 tokens unless `--max-predict` says otherwise.
   audio.cpp's live route streams its upload, which the proxy reads whole — it
   stays local.
-- **stunnel and certificates are not needed** — that is `--public`'s way, and
-  the two exclude each other.
+- **Tokens** live in `~/.config/llmctl/tokens`, one per line, `#` comments
+  allowed, mode 0600 (enforced). Revoking one means deleting the line and
+  restarting the slot. `llmctl env` picks up the first token, so the local
+  workflow is unchanged.
 - **Before autossh starts, one ssh login is tried.** A key the agent cannot
   sign with (locked after a reboot) or a host that refuses is reported once,
   rather than autossh retrying it in a loop until a server with fail2ban or
   sshguard bans this machine.
 - `status` shows the tunnel, `stop` ends it, `preset` reconciles it,
   `preset --repair` reopens it, `preset-save` records `--tunnel`.
-
-## Exposing models on the internet (`--public`)
-
-`--host` is and stays plain LAN exposure without authentication. `--public` is
-the separate, always-authenticated path to the internet, and the two do not
-interfere:
-
-```
-Client ──443/LE──► VPS Apache ──mTLS──► router ──► stunnel :844N ──► 127.0.0.1:800N
-                   /sN/direct/                                       llama-server
-                   /sN/cached/ ─────────────────► stunnel :845N ──► 127.0.0.1:808N
-                                                                     proxy.py
-```
-
-Only the stunnel ports are forwarded at the router; `:800N` and `:808N` never
-leave the machine. The two TLS bases sit ten apart, so `--public` covers slots
-1–9 — plain slots go far higher (see [Slots](#slots)). stunnel requires a client certificate from a private CA, so a
-scanner hitting the port fails at the TLS handshake — before reaching any HTTP.
-
-**Setup**
-
-```bash
-mkdir -p ~/.config/llmctl && (umask 077 && openssl rand -hex 32 > ~/.config/llmctl/tokens)
-llmctl gen-certs llm-home.example.org        # SAN must be the name the VPS connects to
-# copy ca.pem + vps-client-combined.pem to the VPS (the command prints the scp line)
-# put deploy/vps-llm-vhost.conf on the VPS and adjust the two Define lines
-# forward 8441 (and 8451 with --proxy) at the router to this machine
-
-llmctl start qwen 1 --proxy --public
-```
-
-`--public` implies authentication — there is no way to open the port without it.
-It also passes `--no-webui --no-slots` to llama-server (`GET /slots` is enabled by
-default and shows other clients' prompts) and caps generation at 8192 tokens
-(`--max-predict N` to change, `-1` for no limit). The proxy switches to a path
-allowlist, checks tokens itself, and caps concurrent requests.
-
-The one `/slots` request that stays open from outside is
-`POST /slots/{id}?action=erase` (see above) — clearing your own KV cache from
-away is the point. Its siblings `save` and `restore` write files here, so the
-proxy rejects them and the vhost blocks them on the direct path too.
-
-**Tokens** live in `~/.config/llmctl/tokens`, one per line, `#` comments allowed,
-mode 0600 (enforced). Revoking one means deleting the line and restarting the
-slot. `llmctl env` picks up the first token automatically, so the local
-workflow is unchanged.
 
 ## Models
 
@@ -2391,7 +2345,7 @@ The sources are deleted once the file is made.
 - `templates/` — chat templates referenced from `models.conf` as `$SHARE_DIR/templates/…`
 - `Makefile` — `install`, `install-link`, `uninstall`, `test`
 - `tests/` — `smoke.sh` and `test_python.py`, see [Tests](#tests)
-- `deploy/vps-llm-vhost.conf` — Apache vhost for the VPS in front of `--public`
+- `deploy/vps-llm-tunnel-vhost.conf` — Apache vhost on the server for tunnelled LLM slots (`/sN/`, the token as the login)
 
 ## Tests
 

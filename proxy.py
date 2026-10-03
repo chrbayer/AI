@@ -50,7 +50,7 @@ IMAGE_FETCH_TIMEOUT = 20
 # so neither the client nor anything in between takes the silence for a hang.
 PING_INTERVAL = 10
 
-# Hardened mode. run.sh sets LLM_TOKEN_FILE only for `start --public`; when it is
+# Hardened mode. llmctl sets LLM_TOKEN_FILE only for `start --tunnel`; when it is
 # set, every request must carry a known token and may only reach an allowlisted
 # path, and concurrency/body size are capped. Unset (the LAN/localhost default)
 # leaves the proxy a plain pass-through, exactly as before.
