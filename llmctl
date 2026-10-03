@@ -4421,9 +4421,10 @@ _outdated_self() {
     lead=$(_gh_json "repos/$LLMCTL_REPO/compare/v$latest...master" .ahead_by)
     lead=${lead:+, master is $lead commits further}
     [[ "$lead" == ", master is 0 commits further" ]] && lead=""
+    local counted=false
     if _newer "$latest" "$LLMCTL_VERSION"; then
         echo "  llmctl $LLMCTL_VERSION — $latest is out: $PROG self-update$lead"
-        newer=$(( newer + 1 ))
+        newer=$(( newer + 1 )); counted=true
         _gh_json "repos/$LLMCTL_REPO/releases/tags/v$latest" .body | grep -v '^\s*$' | head -4 | cut -c1-110 | sed 's/^/      /'
     else
         echo "  llmctl $LLMCTL_VERSION — current: $latest is the newest release$lead"
@@ -4433,7 +4434,7 @@ _outdated_self() {
         checkout=$(_version_of "$src")
         if [[ -n "$checkout" ]] && _newer "$checkout" "$LLMCTL_VERSION"; then
             echo "  the checkout in $src is at $checkout, newer than this installation: $PROG self-update"
-            newer=$(( newer + 1 ))
+            [[ "$counted" == true ]] || newer=$(( newer + 1 ))     # one thing to do, said twice
         fi
     fi
 }
