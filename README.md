@@ -2247,7 +2247,8 @@ them are served by the Vulkan build — the ROCm build is opt-in per model
 - **gemma-moe** — Gemma-4-26B-A4B-it MoE uncensored, Q8_0, 128K ctx (uncensored); vision via the stock repo's mmproj, no speculation (MoE)
 - **minimax** — MiniMax-M2.7, UD-IQ3_S, 64K ctx
 - **llama3.3** — Llama-3.3-70B-Instruct abliterated, Q6_K, 32K ctx; drafted by Llama-3.2-1B (~2.7×)
-- **scout** — Llama 4 Scout (109B MoE, 17B active) abliterated v2, i1-Q5_K_M, 64K ctx, vision via `--mmproj` (llama.cpp's own projector); prompts read 2.6–3.4× and written ~1.3× as fast as `llama3.3` (271–283 / 15.2 t/s), but its German is sloppy — typos in most answers — where llama3.3's is clean
+- **scout** — Llama 4 Scout (109B MoE, 17B active) uncensored: Nekotekina's Projected-Abliterated, made Q5_K_M here from its Q8_0; 64K ctx, vision via `--mmproj` (llama.cpp's own projector); prompts read 2.6–3.4× and written ~1.3× as fast as `llama3.3` (271–283 / 15.2 t/s for the abliterated v2 measured). Its German is almost clean, where mradermacher's abliterated v1 and v2 made typos in most answers; it answers everything a censored model tends to refuse but crude jokes
+- **scout-orig** — the same Llama 4 Scout as Meta made it, i1-Q5_K_M: clean German, but it refuses and lectures
 - **r1** — DeepSeek-R1-Distill-Llama-70B Uncensored v2 Unbiased Reasoner, i1-Q5_K_M, 128K ctx
 - **mistral** — Mistral-Medium-3.5-128B, UD-Q5_K_XL, 32K ctx
 - **diamond** — L3.3-70B Magnum Diamond, i1-Q5_K_M, 32K ctx; drafted by the same Llama-3.2-1B (~2.0×)
@@ -2362,6 +2363,20 @@ from the companion — no local parts needed, no download. Without the Hub
 (offline) the companion is trusted rather than fetching tens of GB.
 gguf-split shards (`X-00001-of-00002.gguf`) are not parts: llama.cpp loads
 those itself, and they stay as they are.
+
+### Models made here from a bigger download
+
+A repo may offer a model only too big — Nekotekina's Projected-Abliterated
+Scout only as Q8_0 (106.7 GB) — and the entry names the file made from it
+(`…-Q5_K_M.gguf`). `download` then fetches the repo's GGUF and, the named file
+missing, quantizes it to the type the name carries with llama.cpp's
+`llama-quantize --allow-requantize`, beside the llama-server in use
+(`hf_parts.py derive`). The companion is the same `X.gguf.parts.json`: the
+sources' names, sizes and SHA-256 in place of parts, and the recipe. So
+`download` skips the sources while the Hub has them unchanged, `download
+--check` and `outdated` report the file as made from files the same on the
+Hub, and when they change, `download` fetches them and makes the file again.
+The sources are deleted once the file is made.
 
 ## Architecture
 

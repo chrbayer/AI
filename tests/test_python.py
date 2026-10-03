@@ -14,6 +14,7 @@ import io
 import contextlib
 import shutil
 import json
+import os
 import re
 import warnings
 import sys
@@ -1040,6 +1041,43 @@ class Parts(unittest.TestCase):
         self.assertEqual(c["revision"], "c0ffee")
         self.assertFalse(any((self.tmp / n).exists() for n in self.names))
         self.assertFalse(list((self.tmp / ".cache").rglob("*.metadata")))
+
+    def test_a_made_file_records_its_sources_and_is_made_again(self):
+        # Two Q8_0 shards on the Hub, quantized down here; a stand-in for
+        # llama-quantize copies its input, so the output is known.
+        shards = {"m-Q8_0-00001-of-00002.gguf": b"Q" * 900, "m-Q8_0-00002-of-00002.gguf": b"R" * 400}
+        self.hub = {n: {"size": len(d), "sha256": hashlib.sha256(d).hexdigest()} for n, d in shards.items()}
+        for n, d in shards.items():
+            (self.tmp / n).write_bytes(d)
+        tool = self.tmp / "fake-quantize"
+        tool.write_text('#!/bin/sh\ncp "$2" "$3"\n')
+        tool.chmod(0o755)
+        os.environ["LLAMA_QUANTIZE"] = str(tool)
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                hf_parts.cmd_derive("org/repo", str(self.tmp), "m-Q5_K_M.gguf", "Q5_K_M")
+            c = json.loads((self.tmp / "m-Q5_K_M.gguf.parts.json").read_text())
+            self.assertEqual(c["derive"]["quantize"], "Q5_K_M")
+            self.assertEqual([p["name"] for p in c["parts"]], sorted(shards))
+            self.assertEqual((self.tmp / "m-Q5_K_M.gguf").read_bytes(), b"Q" * 900)   # from the first shard
+            self.assertFalse(any((self.tmp / n).exists() for n in shards))              # the sources are gone
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                hf_parts.cmd_excludes("org/repo", str(self.tmp))
+                hf_parts.cmd_check("org/repo", str(self.tmp))
+            self.assertIn("m-Q8_0-00001-of-00002.gguf", out.getvalue())                 # not fetched again
+            self.assertIn("current\tm-Q5_K_M.gguf\t2 file(s)\tmade (Q5_K_M) from", out.getvalue())
+            # The Hub changes; download fetches the new sources; join makes it again.
+            shards = {"m-Q8_0-00001-of-00002.gguf": b"S" * 950, "m-Q8_0-00002-of-00002.gguf": b"T" * 400}
+            self.hub = {n: {"size": len(d), "sha256": hashlib.sha256(d).hexdigest()} for n, d in shards.items()}
+            for n, d in shards.items():
+                (self.tmp / n).write_bytes(d)
+            with contextlib.redirect_stdout(io.StringIO()):
+                hf_parts.cmd_join("org/repo", str(self.tmp))
+            self.assertEqual((self.tmp / "m-Q5_K_M.gguf").read_bytes(), b"S" * 950)
+            self.assertFalse(any((self.tmp / n).exists() for n in shards))
+        finally:
+            del os.environ["LLAMA_QUANTIZE"]
 
     def test_a_second_repo_in_the_directory_does_not_see_the_parts(self):
         # A vision projector from another repo lands beside the joined model;

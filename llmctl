@@ -6147,11 +6147,15 @@ _download_model() {
         fi
         # Joined files: their parts against the Hub, not against local parts.
         if [[ -d "$model_path" ]]; then
-            local state file count
-            while IFS=$'\t' read -r state file count; do
+            local state file count how
+            while IFS=$'\t' read -r state file count how; do
                 case "$state" in
-                    current) echo "    $file: joined from $count, the same on the Hub" ;;
-                    changed) echo "    $file: its parts changed on the Hub — download fetches and joins them again" ;;
+                    current) echo "    $file: ${how:-joined from} $count, the same on the Hub" ;;
+                    changed) if [[ "$how" == made* ]]; then
+                                 echo "    $file: its sources changed on the Hub — download fetches them and makes it again"
+                             else
+                                 echo "    $file: its parts changed on the Hub — download fetches and joins them again"
+                             fi ;;
                     unknown) echo "    $file" ;;
                 esac
             done < <(python3 "$HF_PARTS_SCRIPT" check "$repo" "$model_path" 2>/dev/null)
@@ -6167,8 +6171,10 @@ _download_model() {
     else
         hf download "$repo" --local-dir "$model_path" "${include_args[@]}" || return 1
     fi
-    # Parts on the Hub: checked, joined with cat, recorded, deleted.
-    python3 "$HF_PARTS_SCRIPT" join "$repo" "$model_path"
+    # Parts on the Hub: checked, joined with cat, recorded, deleted. A file made
+    # here from the repo (quantized down) is made again where its sources came anew.
+    LLAMA_QUANTIZE="$(dirname "$(command -v "${LLAMA_DEFAULT_BIN:-llama-server}" 2>/dev/null || echo "$LLAMA_DIR/vulkan/current/llama-server")")/llama-quantize" \
+        python3 "$HF_PARTS_SCRIPT" join "$repo" "$model_path"
 }
 
 # ── ComfyUI setup ───────────────────────────────────────────
@@ -7059,6 +7065,17 @@ _download_target() {
         model_dir="$(dirname "${_r_model//\~/$HOME}")"
     fi
     _download_model "$_r_hf_repo" "$model_dir" "$_r_hf_includes" "$force"
+    # A model made here from a repo that offers it only bigger (scout): the
+    # download brought the sources; the file named in models.conf comes from
+    # them, quantized to the type its name carries (…-Q5_K_M.gguf). Afterwards
+    # its .parts.json keeps the recipe for every later download.
+    local mf="${_r_model//\~/$HOME}" qtype
+    if [[ "$DL_CHECK" != true && ! -e "$mf" && ! -e "$mf.parts.json" ]] &&
+       qtype=$(grep -oE '(IQ[1-4]_[A-Z]+|Q[2-8]_(K_[SML]|K|0|1))' <<< "$(basename "$mf")" | tail -1) && [[ -n "$qtype" ]]; then
+        echo "  $(basename "$mf"): not on the Hub — making it from what was downloaded ($qtype)"
+        LLAMA_QUANTIZE="$(dirname "$(command -v "${LLAMA_DEFAULT_BIN:-llama-server}" 2>/dev/null || echo "$LLAMA_DIR/vulkan/current/llama-server")")/llama-quantize" \
+            python3 "$HF_PARTS_SCRIPT" derive "$_r_hf_repo" "$(dirname "$mf")" "$(basename "$mf")" "$qtype" || return 1
+    fi
     [[ -n "$_r_hf_draft" ]] && _download_draft "$_r_hf_draft" "$force" "${_r_spec_args[@]}"
     [[ -n "$_r_hf_mmproj" ]] && _download_mmproj "$_r_hf_mmproj" "$_r_mmproj" "$force"
     [[ "$_r_backend" == halogen || "$_r_backend" == gufo ]] && _pull_halogen_image
