@@ -1614,17 +1614,20 @@ through a server of your own that is on the internet, without opening a
 port here:
 
 ```
-Browser ──443 (Let's Encrypt) + Basic Auth──► Apache on the server ──► 127.0.0.1:8009  ComfyUI
-                                                                   └─► 127.0.0.1:8089  /repair, /v1/images
-                         autossh -R 8009, -R 8089 ◄── this machine (connects out)
+Browser ──443 (Let's Encrypt) + Basic Auth──► Apache on the server ──► 127.0.0.1:18009  ComfyUI
+                                                                   └─► 127.0.0.1:18089  /repair, /v1/images
+                        autossh -R 18009, -R 18089 ◄── this machine (connects out)
 ```
 
 `llmctl start comfy 9 --proxy --vision 2 --tunnel` starts autossh beside the
-slot: `-R 8009:127.0.0.1:8009` for the UI and, with `--proxy`, `-R 8089:…`
-for the image API with its repair page — on the server bound to its loopback
-only. The server comes from `LLMCTL_TUNNEL_HOST` or
+slot: `-R 18009:127.0.0.1:8009` for the UI and, with `--proxy`,
+`-R 18089:127.0.0.1:8089` for the image API with its repair page — on the
+server bound to its loopback only, each port 10000 above the one here
+(`LLMCTL_TUNNEL_PORT_OFFSET`), apart from whatever the server runs on its own
+80xx ports (code-server holds 8083 on this one). The server comes from `LLMCTL_TUNNEL_HOST` or
 `~/.config/llmctl/tunnel-host` (`user@host`, a key that logs in without a
-prompt). `stop` ends the tunnel with the slot, `status` shows it. A port the
+prompt; before autossh starts, one login is tried, so a locked key is
+reported once instead of retried in a loop). `stop` ends the tunnel with the slot, `status` shows it. A port the
 far side still holds from a session that died unnoticed makes the first try
 fail (`ExitOnForwardFailure`); llmctl clears its own leftovers and tries again
 after a pause.
@@ -2146,6 +2149,43 @@ hits = requests.post("http://localhost:8008/v1/rerank",
 - **One input, one batch.** A pooled input has to fit into one physical batch,
   so both entries set `-ub`/`-b` to the context size (8,192 tokens). Longer
   passages are refused; split them.
+
+## LLM slots from the internet (`--tunnel`)
+
+The way out this machine actually uses: a reverse SSH tunnel to a server with
+Apache in front, as for ComfyUI (`deploy/vps-llm-tunnel-vhost.conf`). Any slot
+but ComfyUI — llama, halogen, gufo, speech, audio.cpp — takes `--tunnel`:
+
+```bash
+umask 077 && openssl rand -hex 32 > ~/.config/llmctl/tokens   # once; one token per line
+llmctl start qwen 1 --tunnel        # → https://llm.example.org/s1/v1  (OpenAI)
+                                    #   https://llm.example.org/s1     (Anthropic)
+```
+
+- **Only the proxy goes out.** autossh opens port 1808N on the server
+  (808N + `LLMCTL_TUNNEL_PORT_OFFSET`, 10000; ComfyUI's tunnel the same way) for the slot's proxy, apart from the ports
+  here, which a server may use itself; the model server's own port never
+  leaves the machine. llama
+  slots get their proxy started for it, speech and audio.cpp get one too.
+- **The token is the login.** The proxy runs in the mode `--public` gives it:
+  every request needs a token from `~/.config/llmctl/tokens`
+  (`Authorization: Bearer …` from OpenAI clients, `x-api-key` from Anthropic
+  ones such as Claude Code), only the API paths pass (`/v1/chat/completions`,
+  `/v1/messages`, `/v1/models`, `/v1/embeddings`, `/v1/rerank`,
+  `/v1/audio/speech`, `/v1/audio/transcriptions`, …), concurrent requests are
+  capped, and image URLs are fetched by the proxy from public hosts only.
+  llama-server checks the same tokens itself and runs `--no-webui --no-slots`.
+  Generation is capped at 8192 tokens unless `--max-predict` says otherwise.
+  audio.cpp's live route streams its upload, which the proxy reads whole — it
+  stays local.
+- **stunnel and certificates are not needed** — that is `--public`'s way, and
+  the two exclude each other.
+- **Before autossh starts, one ssh login is tried.** A key the agent cannot
+  sign with (locked after a reboot) or a host that refuses is reported once,
+  rather than autossh retrying it in a loop until a server with fail2ban or
+  sshguard bans this machine.
+- `status` shows the tunnel, `stop` ends it, `preset` reconciles it,
+  `preset --repair` reopens it, `preset-save` records `--tunnel`.
 
 ## Exposing models on the internet (`--public`)
 

@@ -94,6 +94,10 @@ LLAMA_SERVER_TIMEOUT=600
 # page), and that server's web server puts its own TLS and a login in front
 # (deploy/vps-comfy-vhost.conf). Nothing listens beyond 127.0.0.1 here.
 TUNNEL_HOST="${LLMCTL_TUNNEL_HOST:-$(cat "$CONFIG_DIR/tunnel-host" 2>/dev/null)}"
+# A tunnelled port lands on the server this much higher (8082 → 18082, ComfyUI's
+# 8009/8089 → 18009/18089): apart from the ports here, which a server may well
+# use for something of its own — on this one code-server holds 8083.
+TUNNEL_PORT_OFFSET="${LLMCTL_TUNNEL_PORT_OFFSET:-10000}"
 
 # ── How many slots ──────────────────────────────────────────
 # As many as the ports allow. Server and proxy ports interleave from their two
@@ -1295,7 +1299,23 @@ _check_public_prereqs() {
         echo "Error: --public needs stunnel (sudo dnf install stunnel)"
         ok=false
     fi
+    _check_token_file || ok=false
 
+    local f
+    for f in server.pem server.key ca.pem; do
+        if [[ ! -f "$TLS_DIR/$f" ]]; then
+            echo "Error: missing $TLS_DIR/$f — run: $PROG gen-certs <public-hostname>"
+            ok=false
+        fi
+    done
+
+    [[ "$ok" == true ]]
+}
+
+# The tokens a hardened proxy checks (--public, and --tunnel for LLM slots): there,
+# private to the user, and at least one.
+_check_token_file() {
+    local ok=true
     if [[ ! -f "$TOKEN_FILE" ]]; then
         echo "Error: no token file at $TOKEN_FILE"
         echo "       Create one (0600, one token per line), e.g.:"
@@ -1314,15 +1334,6 @@ _check_public_prereqs() {
             ok=false
         fi
     fi
-
-    local f
-    for f in server.pem server.key ca.pem; do
-        if [[ ! -f "$TLS_DIR/$f" ]]; then
-            echo "Error: missing $TLS_DIR/$f — run: $PROG gen-certs <public-hostname>"
-            ok=false
-        fi
-    done
-
     [[ "$ok" == true ]]
 }
 
@@ -1428,9 +1439,11 @@ _tunnel_up() {
 # The autossh pattern of one forwarded port: what pkill matches to find a tunnel
 # left from an earlier start — autossh's ssh child carries it too, and that is
 # what holds the port on the far side.
-_tunnel_pattern() { echo "-R $1:127.0.0.1:$1"; }
+_tunnel_pattern() { echo "-R $(( $1 + TUNNEL_PORT_OFFSET )):127.0.0.1:$1"; }
 
-# autossh for a ComfyUI slot: its UI port, and the image API's when it runs.
+# autossh for a slot. ComfyUI: its UI port, and the image API's when it runs.
+# Any other slot: its proxy's port only, the proxy in token mode — the server's
+# own port never leaves this machine.
 # ExitOnForwardFailure makes a port still held on the far side (a session that
 # died without the server noticing) an error rather than a tunnel without a
 # forward; one more try after a pause, as that session times out.
@@ -1438,12 +1451,33 @@ _start_tunnel() {
     local slot="$1"
     local port_server=$(( PORT_BASE_SERVER + slot )) port_proxy=$(( PORT_BASE_PROXY + slot ))
     local log="$LOG_DIR/tunnel-${slot}.log" pid="" try p
-    local -a fwd=(-R "$port_server:127.0.0.1:$port_server")
-    local ports=":$port_server"
-    if ss -tlnp 2>/dev/null | grep -q ":${port_proxy} "; then
-        fwd+=(-R "$port_proxy:127.0.0.1:$port_proxy"); ports+=", :$port_proxy"
+    local -a fwd=()
+    local ports=""
+    if _slot_is_comfyui "$slot"; then
+        fwd=(-R "$(( port_server + TUNNEL_PORT_OFFSET )):127.0.0.1:$port_server")
+        ports=":$port_server → :$(( port_server + TUNNEL_PORT_OFFSET ))"
+        if ss -tlnp 2>/dev/null | grep -q ":${port_proxy} "; then
+            fwd+=(-R "$(( port_proxy + TUNNEL_PORT_OFFSET )):127.0.0.1:$port_proxy")
+            ports+=", :$port_proxy → :$(( port_proxy + TUNNEL_PORT_OFFSET ))"
+        fi
+    else
+        ss -tlnp 2>/dev/null | grep -q ":${port_proxy} " ||
+            { echo "Error: slot $slot has no proxy on :$port_proxy to tunnel"; return 1; }
+        fwd=(-R "$(( port_proxy + TUNNEL_PORT_OFFSET )):127.0.0.1:$port_proxy")
+        ports=":$port_proxy → :$(( port_proxy + TUNNEL_PORT_OFFSET )) (proxy, token required)"
     fi
     _check_deps autossh || return 1
+    # One login first, so a key the agent cannot sign with (locked after a
+    # reboot, say) or a host that refuses is said here once — autossh would
+    # retry it in a loop, and a server with fail2ban or sshguard then bans us.
+    local why
+    if ! why=$(ssh -o BatchMode=yes -o ConnectTimeout=10 "$TUNNEL_HOST" true 2>&1); then
+        echo "Error: cannot log in to $TUNNEL_HOST — no tunnel started:"
+        sed 's/^/  /' <<< "$why" | tail -n 3
+        [[ "$why" == *agent* || "$why" == *"Permission denied"* ]] &&
+            echo "  Is the SSH key unlocked? ssh-add, then start again."
+        return 1
+    fi
     for try in 1 2; do
         for p in $port_server $port_proxy; do pkill -f -- "$(_tunnel_pattern "$p")" 2>/dev/null; done
         sleep 1
@@ -1828,7 +1862,7 @@ _start_halogen() {
     echo "weights in the file cache, a few minutes from disk."
     _watch_start "$server_pid" "$server_log" "$port_server" || { _stop_slot "$slot" > /dev/null 2>&1; exit 1; }
 
-    _start_proxy "$slot" "$host" "$public" "$cap" || { _stop_slot "$slot" > /dev/null; exit 1; }
+    _start_proxy "$slot" "$host" "$harden" "$cap" || { _stop_slot "$slot" > /dev/null; exit 1; }
 
     local stunnel_log="$LOG_DIR/stunnel-${slot}.log"
     if [[ "$public" == true ]]; then
@@ -1983,7 +2017,7 @@ _start_gufo() {
     echo "from the file cache, longer from disk."
     _watch_start "$server_pid" "$server_log" "$port_server" || { _stop_slot "$slot" > /dev/null 2>&1; exit 1; }
     local proxy_kind=gufo
-    _start_proxy "$slot" "$host" "$public" || { _stop_slot "$slot" > /dev/null; exit 1; }
+    _start_proxy "$slot" "$host" "$harden" || { _stop_slot "$slot" > /dev/null; exit 1; }
     echo ""
     echo "  Logs:  tail -f $server_log"
     echo "         tail -f $proxy_log"
@@ -2059,6 +2093,10 @@ _capture_gufo_slot() {
         done
         [[ -n "$temp" && "$temp" != "$own_t" ]] && flags+=(--temp "$temp")
         [[ -n "$top_p" && "$top_p" != "$own_p" ]] && flags+=(--top-p "$top_p")
+        if _tunnel_up "$slot"; then
+            flags+=(--tunnel)
+            [[ "$cap" == "$PUBLIC_MAX_PREDICT_DEFAULT" ]] && cap="$own_c"   # --tunnel's own cap
+        fi
         [[ -n "$cap" && "$cap" != "$own_c" ]] && flags+=(--max-predict "$cap")
         _argv_flag --log-level > /dev/null && flags+=(--verbose)
         local built=""
@@ -2179,6 +2217,9 @@ cmd_start() {
     if [[ -n "$top_p" && ! "$top_p" =~ ^(0(\.[0-9]+)?|1(\.0+)?|\.[0-9]+)$ ]]; then
         echo "Error: --top-p requires a fraction from 0 to 1; got '$top_p'"; exit 1
     fi
+    if [[ "$public" == true && "$tunnel" == true ]]; then
+        echo "Error: --tunnel and --public are two ways out; pick one"; exit 1
+    fi
     if [[ "$public" == true ]]; then
         _check_public_prereqs || exit 1
         # --public without a cap would let one request generate until --timeout.
@@ -2189,8 +2230,18 @@ cmd_start() {
     local port_proxy=$(( PORT_BASE_PROXY + slot ))
 
     _resolve_model "$name" || { echo "Unknown model: $name"; cmd_list; exit 1; }
+    # Hardened: the proxy checks tokens and the server shows no more than it must.
+    # --public, and --tunnel for every slot but ComfyUI (whose server sits behind
+    # Basic Auth on the far side).
+    local harden="$public"
+    if [[ "$tunnel" == true && "$_r_backend" != comfyui ]]; then
+        harden=true
+        _check_token_file || exit 1
+        case "$_r_backend" in
+            llama|halogen|gufo) [[ -z "$max_predict" ]] && max_predict="$PUBLIC_MAX_PREDICT_DEFAULT" ;;
+        esac
+    fi
     if [[ "$tunnel" == true ]]; then
-        [[ "$_r_backend" == comfyui ]] || { echo "Error: --tunnel is for comfyui models"; exit 1; }
         if [[ -z "$TUNNEL_HOST" ]]; then
             echo "Error: --tunnel needs the server to tunnel to: LLMCTL_TUNNEL_HOST, or"
             echo "       echo user@host > $CONFIG_DIR/tunnel-host"
@@ -2203,7 +2254,7 @@ cmd_start() {
         _resolve_vision "$vision" "$slot" || exit 1
     fi
     case "$_r_backend" in
-        llama) ;;
+        llama) [[ "$tunnel" == true ]] && start_proxy=true ;;   # the tunnel reaches the proxy only
         # Their proxy is what speaks the Messages API, so it always runs.
         halogen|gufo) start_proxy=true ;;
         comfyui|tts|audiocpp) ;;
@@ -2262,12 +2313,25 @@ cmd_start() {
         echo "Cleared logs for slot $slot"
     fi
 
+    # --tunnel for an LLM slot, once its server (and proxy) run: speech and audio.cpp
+    # get a proxy in token mode first, as they run without one otherwise.
+    _tunnel_llm_slot() {
+        [[ "$tunnel" == true && "$print_cmd" != true ]] || return 0
+        if [[ "$_r_backend" == tts || "$_r_backend" == audiocpp ]]; then
+            _start_proxy "$slot" "$host" true || { _stop_slot "$slot" > /dev/null; exit 1; }
+        fi
+        _start_tunnel "$slot" || { _stop_slot "$slot" > /dev/null; exit 1; }
+        echo "  From outside: the server's /s$slot/ path (deploy/vps-llm-tunnel-vhost.conf), with a token from $TOKEN_FILE"
+    }
+
     if [[ "$_r_backend" == halogen ]]; then
         _start_halogen
+        _tunnel_llm_slot
         return
     fi
     if [[ "$_r_backend" == gufo ]]; then
         _start_gufo
+        _tunnel_llm_slot
         return
     fi
     if [[ "$_r_backend" == comfyui ]]; then
@@ -2276,10 +2340,12 @@ cmd_start() {
     fi
     if [[ "$_r_backend" == tts ]]; then
         _start_tts
+        _tunnel_llm_slot
         return
     fi
     if [[ "$_r_backend" == audiocpp ]]; then
         _start_audiocpp
+        _tunnel_llm_slot
         return
     fi
 
@@ -2331,7 +2397,7 @@ cmd_start() {
     # Authorization header untouched, so this one key file covers the direct and
     # the proxied endpoint alike. --no-slots matters most: /slots is enabled by
     # default and exposes other clients' prompts.
-    if [[ "$public" == true ]]; then
+    if [[ "$harden" == true ]]; then
         cmd+=(--api-key-file "$TOKEN_FILE" --no-webui --no-slots)
     fi
     # A cap on generated tokens; without it a single request can hold the GPU
@@ -2364,7 +2430,7 @@ cmd_start() {
     # prompt cache warm, which a client that sends no such stamps does not need.
     # Without it, clients talk to llama-server directly (see cmd_env).
     if [[ "$start_proxy" == true ]]; then
-        _start_proxy "$slot" "$host" "$public" || exit 1
+        _start_proxy "$slot" "$host" "$harden" || exit 1
     fi
 
     # Start llama-server in background
@@ -2410,6 +2476,11 @@ cmd_start() {
             if [[ "$start_proxy" == true ]]; then
                 echo "           0.0.0.0:$(( PORT_BASE_TLS_PROXY + slot )) → proxy  :$port_proxy (mTLS, client cert required)"
             fi
+            echo "  Server:  --no-webui --no-slots, generation capped at ${max_predict} tokens"
+            echo "  Proxy:   path allowlist, token check, concurrency cap; fetches image URLs itself (public hosts only)"
+        elif [[ "$tunnel" == true ]]; then
+            echo "Tunnel:   to $TUNNEL_HOST, the proxy's port :$port_proxy only (--tunnel)"
+            echo "  Tokens:  $(_token_count) from $TOKEN_FILE — checked by the proxy and by llama-server"
             echo "  Server:  --no-webui --no-slots, generation capped at ${max_predict} tokens"
             echo "  Proxy:   path allowlist, token check, concurrency cap; fetches image URLs itself (public hosts only)"
         else
@@ -2526,6 +2597,7 @@ cmd_start() {
         echo "TLS front running (PID: $stunnel_pid) on :$(( PORT_BASE_TLS_SERVER + slot ))$(
             [[ "$start_proxy" == true ]] && echo ", :$(( PORT_BASE_TLS_PROXY + slot ))")"
     fi
+    _tunnel_llm_slot
 
     echo ""
     echo "  Logs:  tail -f $server_log"
@@ -3675,9 +3747,16 @@ _capture_slot() {
     for name in "${candidates[@]}"; do
         _resolve_model "$name" || continue
         local -a flags=()
-        [[ "$proxy_up" == true ]] && flags+=(--proxy)
-        [[ "$auth" == true ]] && flags+=(--public)
-        [[ -n "$predict" ]] && flags+=(--max-predict "$predict")
+        # The token file is --public's or --tunnel's: the tunnel tells which.
+        if [[ "$auth" == true ]] && _tunnel_up "$slot"; then
+            flags+=(--tunnel)
+        else
+            [[ "$proxy_up" == true ]] && flags+=(--proxy)
+            [[ "$auth" == true ]] && flags+=(--public)
+        fi
+        # --public and --tunnel bring a cap of their own; only a different one needs saying.
+        [[ -n "$predict" ]] && ! [[ "$auth" == true && "$predict" == "$PUBLIC_MAX_PREDICT_DEFAULT" ]] &&
+            flags+=(--max-predict "$predict")
 
         # Reasoning, read back through _translate_reasoning's own rules.
         if [[ "$reason" == "off" ]]; then
@@ -3787,16 +3866,18 @@ _capture_halogen_slot() {
         [[ "$effort" == none ]] && { think=0; effort=""; }
         temp=$(_argv_default temperature); top_p=$(_argv_default top_p)
     fi
-    local public=false
+    local public=false tunnelled=false
     [[ -f "$PID_DIR/stunnel-${slot}.pid" ]] && ps -p "$(cat "$PID_DIR/stunnel-${slot}.pid")" > /dev/null 2>&1 && public=true
+    _tunnel_up "$slot" && tunnelled=true
 
     local name
     for name in "${candidates[@]}"; do
         _resolve_model "$name" || continue
         local -a flags=()
         [[ "$public" == true ]] && flags+=(--public)
-        # --public implies a cap of its own; only a different one needs saying.
-        if [[ -n "$cap" ]] && ! [[ "$public" == true && "$cap" == "$PUBLIC_MAX_PREDICT_DEFAULT" ]]; then
+        [[ "$tunnelled" == true ]] && flags+=(--tunnel)
+        # --public and --tunnel imply a cap of their own; only a different one needs saying.
+        if [[ -n "$cap" ]] && ! [[ "$public$tunnelled" == *true* && "$cap" == "$PUBLIC_MAX_PREDICT_DEFAULT" ]]; then
             flags+=(--max-predict "$cap")
         fi
         if [[ "$think" == "0" ]]; then
@@ -3860,6 +3941,7 @@ _capture_comfyui_slot() {
     out=$(_argv_flag --output-directory) && flags+=(--output "$out")
     [[ "$(_argv_flag --verbose)" == DEBUG ]] && flags+=(--verbose)
     _slot_proxy_pid "$slot" > /dev/null && flags+=(--proxy)
+    _tunnel_up "$slot" && flags+=(--tunnel)
     for name in "${candidates[@]}"; do
         _resolve_model "$name" || continue
         local built=""
@@ -5897,6 +5979,8 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "    --proxy: OpenAI image API (/v1/images/generations, /edits) on the proxy port"
     printf "  %-20s %s\n" ""                      "    --vision SLOT|URL: a vision model (flash with --mmproj) for /v1/images/check"
     printf "  %-20s %s\n" ""                      "    --tunnel: autossh -R to \$LLMCTL_TUNNEL_HOST (or ~/.config/llmctl/tunnel-host) for the UI and image API"
+    printf "  %-20s %s\n" ""                      "  --tunnel (any other model): the slot's proxy in token mode, its port only through autossh"
+    printf "  %-20s %s\n" ""                      "    (deploy/vps-llm-tunnel-vhost.conf: /sN/ on the server); tokens from ~/.config/llmctl/tokens"
     printf "  %-20s %s\n" ""                      "    Every llama start unloads its models first"
     printf "  %-20s %s\n" ""                      "  audiocpp models (backend=audiocpp) run audio.cpp: /v1/audio/transcriptions and …/live"
     printf "  %-20s %s\n" ""                      "    (live speech recognition); only --host and --clear-logs apply"

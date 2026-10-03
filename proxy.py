@@ -68,8 +68,14 @@ ALLOWED_PATHS = frozenset([
     "/v1/completions",
     "/v1/responses",
     "/v1/embeddings",
+    "/v1/rerank",
     "/v1/messages",
     "/v1/messages/count_tokens",
+    # speech (tts) and audio.cpp, when tunnelled; audio.cpp's live route streams
+    # its upload, which this proxy reads whole — not offered
+    "/v1/audio/speech",
+    "/v1/audio/voices",
+    "/v1/audio/transcriptions",
 ])
 
 # The one exception to the allowlist: POST /slots/{id}?action=erase frees a

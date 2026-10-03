@@ -23,6 +23,7 @@ export LLMCTL_MODELS_DIR="$SANDBOX/models"
 export XDG_CONFIG_HOME="$SANDBOX/xdg"      # service writes its units under here
 mkdir -p "$LLMCTL_CONFIG_DIR" "$LLMCTL_DATA_DIR" "$LLMCTL_MODELS_DIR" "$SANDBOX/bin"
 cp "$ROOT/examples/models.conf" "$ROOT/examples/presets.conf" "$LLMCTL_CONFIG_DIR/"
+( umask 077; echo "smoke-test-token" > "$LLMCTL_CONFIG_DIR/tokens" )   # what --tunnel and --public check
 
 # Stubs: the commands llmctl checks for before it builds anything. podman
 # answers "no such container", so no slot looks like a running halogen.
@@ -85,7 +86,7 @@ check "llama start takes --ctx"         "--ctx-size 4096"      -- "$L" start qwe
 check "llama start rejects --lang"      "for speech (tts)"     -- "$L" start qwen 1 --lang de --print-cmd
 check "llama start rejects --output"    "is for comfyui"       -- "$L" start qwen 1 --output /tmp --print-cmd
 check "llama start rejects --vision"    "is for the image API" -- "$L" start qwen 1 --vision 2 --print-cmd
-check "llama start rejects --tunnel"    "is for comfyui models" -- "$L" start qwen 1 --tunnel --print-cmd
+check "--tunnel wants a server"          "needs the server to tunnel to" -- env LLMCTL_TUNNEL_HOST= "$L" start qwen 1 --tunnel --print-cmd
 check "gufo start runs the container"   "gufo serve --host 0.0.0.0 --port 8080 llm" -- "$L" start qwen-gufo 1 --print-cmd
 check "gufo start mounts the draft"      "/draft:ro"             -- "$L" start qwen-gufo 1 --print-cmd
 check "gufo start keeps SELinux off it"  "--security-opt label=disable" -- "$L" start qwen-gufo 1 --print-cmd
@@ -114,6 +115,9 @@ check "halogen start sets its context"  "HALOGEN_CTX=262144"                    
 check "halogen start turns YaRN on"     "HALOGEN_ROPE_YARN=2"                     -- "$L" start flash 1 --ctx 524288 --print-cmd
 check "halogen start refuses --spec"    "not available with the halogen backend"  -- "$L" start flash 1 --spec off --print-cmd
 check "halogen start maps --mmproj"     "HALOGEN_VISION_TOWER=1"                  -- "$L" start flash 1 --mmproj --print-cmd
+check "--tunnel hardens a llama slot"   "--no-webui --no-slots"                  -- env LLMCTL_TUNNEL_HOST=u@h "$L" start qwen 1 --tunnel --print-cmd
+check "--tunnel caps a llama slot"      "--n-predict 8192"                        -- env LLMCTL_TUNNEL_HOST=u@h "$L" start qwen 1 --tunnel --print-cmd
+check "--tunnel and --public exclude each other" "pick one"                       -- env LLMCTL_TUNNEL_HOST=u@h "$L" start qwen 1 --tunnel --public --print-cmd
 check "halogen-server mounts its tokenizer" "tokenizer:/tokenizer:ro"             -- "$L" start qwen-halogen 1 --print-cmd
 check "halogen-server sets its slot context" "HALOGEN_SLOT_CTX=131072"             -- "$L" start qwen-halogen 1 --ctx 131072 --print-cmd
 check "halogen-server sizes its prompt cache" "HALOGEN_CACHE_MB=4096"              -- "$L" start qwen-halogen 1 --cache-ram 4096 --print-cmd
