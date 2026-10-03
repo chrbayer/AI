@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""watch.py CONF TEMPLATES_DIR — new model versions and awaited ComfyUI templates (see watch.conf)."""
+"""watch.py CONF TEMPLATES_DIR — new model versions, new repos and awaited ComfyUI templates (see watch.conf)."""
 import json, re, shutil, subprocess, sys, urllib.request
 from pathlib import Path
 
@@ -31,14 +31,28 @@ def main(conf, templates):
             vers = {}
             for r in repos:
                 m = re.match(rx, r)
-                if m and m.group(1):
-                    vers.setdefault(m.group(1), r)
+                if m and m.group(1) and (m.group(1) not in vers or len(r) < len(vers[m.group(1)])):
+                    vers[m.group(1)] = r          # the base repo, not a quantisation of it
             newer = sorted((v for v in vers if version_key(v) > version_key(used)), key=version_key)
             if newer:
                 print(f"  {label}: {newer[-1]} is out ({author}/{vers[newer[-1]]}); in use {used}")
                 found += 1
             else:
                 print(f"  {label}: {used} in use — nothing newer from {author}")
+        elif parts[0] == "new" and len(parts) == 5:
+            _, author, rx, known, label = parts
+            try:
+                repos = hf_models(author)
+            except OSError as e:
+                print(f"  {label}: cannot ask Hugging Face ({e})")
+                continue
+            seen = set(known.split(","))
+            fresh = [r for r in repos if re.match(rx, r) and r not in seen]
+            if fresh:
+                print(f"  {label}: new from {author}: {', '.join(fresh[:4])}")
+                found += 1
+            else:
+                print(f"  {label}: nothing new from {author}")
         elif parts[0] == "template" and len(parts) >= 3:
             rx, issue = parts[1], parts[2]
             what = parts[3] + (" " + parts[4] if len(parts) > 4 else "") if len(parts) > 3 else ""
