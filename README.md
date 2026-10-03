@@ -998,7 +998,10 @@ llmctl update comfy --master          # master instead of the releases (download
   `comfyui/custom_nodes.txt` pins, unless a pack tags a release made after
   its pin — `update` takes that and `outdated` reports it; new commits are
   only shown. (Most packs tag rarely: Impact-Pack's newest tag, 8.28, lies
-  8 commits behind its pin, rgthree's 407.)
+  8 commits behind its pin, rgthree's 407.) With `--master` the packs follow
+  their main branch too, tags or not: `outdated --master` reports a pack
+  whose branch is past its pin, `update --master` moves it there. A plain
+  `update` never moves a pack back: past its pin, it stays.
 - **Setup.** `download` does whatever is still missing: a git checkout of
   ComfyUI, a venv with torch built for ROCm 7.2 (`COMFYUI_PYTHON` picks the
   interpreter, default `python3.13`), `requirements.txt` held to that torch, the

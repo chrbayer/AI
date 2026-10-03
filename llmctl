@@ -10,7 +10,7 @@
 #   llmctl status                              show running state, model and key parameters per slot
 #   llmctl clear-kv [slot]                     drop the KV cache without restarting (all slots, or one); ComfyUI: unload its models
 #   llmctl download <name|all> [PATTERN] [--from DIR|--check]  fetch models; for ComfyUI set it up and fetch what its workflows name
-#   llmctl update <comfyui-model> [--torch] [--master]  ComfyUI to its newest release (or master) and its deps
+#   llmctl update <comfyui-model> [--torch] [--master]  ComfyUI to its newest release (or master, node packs too) and its deps
 #   llmctl voice list|add|design|rm            voices for speech (tts) slots
 #   llmctl probe-reasoning [model]             show what each model's chat template supports
 #   eval "$(llmctl env <name> [slot] [--proxy|--direct])"   export Claude Code env vars in this shell
@@ -4903,6 +4903,10 @@ cmd_outdated() {
             if [[ "$status" == ahead ]]; then
                 echo "  custom nodes $dir (${pin:0:9}, pinned) — $tag is out, after the pin: $PROG update ${f[0]}"
                 newer=$(( newer + 1 ))
+            elif [[ "$master" == true && -n "$behind" ]]; then
+                # Against its main branch, tags or not.
+                echo "  custom nodes $dir (${pin:0:9}, pinned) — behind its main branch${behind}: $PROG update ${f[0]} --master"
+                newer=$(( newer + 1 ))
             else
                 echo "  custom nodes $dir (${pin:0:9}, pinned) — current${tag:+: $tag, its newest release, is older}$behind"
             fi
@@ -5787,7 +5791,7 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  service start / stop (now) / disable / status"
     printf "  %-20s %s\n" "outdated [--quick]"     "what has a newer version: halogen image, llama.cpp builds, the speech PR, ComfyUI,"
     printf "  %-20s %s\n" ""                      "  custom nodes, installed models (by SHA-256; --quick: size and date); changes nothing"
-    printf "  %-20s %s\n" ""                      "  --master: llmctl, llama.cpp, audio.cpp and ComfyUI against master, not their releases"
+    printf "  %-20s %s\n" ""                      "  --master: llmctl, llama.cpp, audio.cpp, ComfyUI and its node packs against master, not their releases"
     printf "  %-20s %s\n" "prune [--dry-run]"      "list the models nothing names any more, with what deleting them frees; asks first"
     printf "  %-20s %s\n" "logs [slot]"            "a slot's server log (last 50 lines; -n N, -f to follow, --proxy);"
     printf "  %-20s %s\n" ""                      "  without a slot: every log with size and last change"
@@ -6092,7 +6096,7 @@ _comfyui_sync_workflows() {
 }
 
 # Install the custom node packs comfyui/custom_nodes.txt names, each at its pinned
-# commit, into --base-directory's custom_nodes/ (where ComfyUI looks), and their
+# commit (or a release tag after it; with "master", its main branch), into --base-directory's custom_nodes/ (where ComfyUI looks), and their
 # requirements into ComfyUI's venv with torch held to its ROCm build; "-name"
 # after the commit drops a requirement, "+name" adds one.
 # The newest version tag of a node pack's repo (local after a fetch, or remote
@@ -6120,9 +6124,20 @@ _comfyui_custom_nodes() {
         git -C "$target" fetch -q --tags origin 2>/dev/null
         local want="$commit" label="${commit:0:12}" tag
         tag=$(_node_pack_tag "$target")
-        if [[ -n "$tag" ]] && ! git -C "$target" merge-base --is-ancestor "$tag" "$commit" 2>/dev/null &&
+        if [[ "${1:-}" == master ]]; then
+            # update --master: the pack's main branch, tags or not.
+            git -C "$target" remote set-head origin --auto > /dev/null 2>&1
+            want=$(git -C "$target" rev-parse origin/HEAD 2>/dev/null) || want="$commit"
+            label="${want:0:12} (its main branch; the pin is ${commit:0:12})"
+        elif [[ -n "$tag" ]] && ! git -C "$target" merge-base --is-ancestor "$tag" "$commit" 2>/dev/null &&
            git -C "$target" merge-base --is-ancestor "$commit" "$tag" 2>/dev/null; then
             want="$tag" label="$tag (released after the pin ${commit:0:12})"
+        fi
+        # Never backwards: past what it would get (a --master from before), it stays.
+        if [[ "${1:-}" != master ]] && git -C "$target" merge-base --is-ancestor "$want" HEAD 2>/dev/null; then
+            want=$(git -C "$target" rev-parse HEAD)
+            [[ "$want" != "$(git -C "$target" rev-parse "$commit^{commit}" 2>/dev/null)" ]] &&
+                label="${want:0:12} (past the pin ${commit:0:12}; staying put)"
         fi
         if [[ "$(git -C "$target" rev-parse HEAD 2>/dev/null)" != "$(git -C "$target" rev-parse "$want^{commit}" 2>/dev/null)" ]]; then
             git -C "$target" -c advice.detachedHead=false checkout -q "$want" ||
@@ -6717,7 +6732,7 @@ cmd_update() {
     echo "==> Python dependencies"
     _comfyui_python_deps "$torch" || return 1
     echo "==> Custom nodes"
-    _comfyui_custom_nodes
+    if [[ "$master" == true ]]; then _comfyui_custom_nodes master; else _comfyui_custom_nodes; fi
     echo "==> GPU"
     _comfyui_gpu_check || return 1
     echo "==> Workflows"
