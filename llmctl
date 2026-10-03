@@ -3376,14 +3376,14 @@ _estimate_cmd_mib() {
     # KV pool (64 KiB per position and slot) and ~4.5 GiB of working memory —
     # 20.5 GiB of GPU memory for one 256K slot, measured.
     if [[ " ${w[*]} " == *" --name $HALOGEN_CONTAINER_PREFIX"* && "$(_halogen_flavor "${w[${#w[@]}-1]}")" == server ]]; then
-        local ckpt="" mdir="" cache_mb=0 slots=1 sctx=$HALOGEN_NATIVE_CTX prev=""
+        local ckpt="" mdir="" cache_mb=0 kv_slots=1 sctx=$HALOGEN_NATIVE_CTX prev=""
         for (( i=0; i < ${#w[@]}; i++ )); do
             case "$prev" in
                 -v) [[ "${w[i]}" == *:/models:ro ]] && mdir="${w[i]%:/models:ro}" ;;
                 -e) case "${w[i]}" in
                         HALOGEN_CHECKPOINT=*) ckpt="${w[i]#*=/models/}" ;;
                         HALOGEN_CACHE_MB=*) cache_mb="${w[i]#*=}" ;;
-                        HALOGEN_KV_SLOTS=*) slots="${w[i]#*=}" ;;
+                        HALOGEN_KV_SLOTS=*) kv_slots="${w[i]#*=}" ;;
                         HALOGEN_SLOT_CTX=*) sctx="${w[i]#*=}" ;;
                     esac ;;
             esac
@@ -3392,7 +3392,7 @@ _estimate_cmd_mib() {
         # No cache size: the server takes most of what is free; say 50 GiB.
         [[ " ${w[*]} " == *" HALOGEN_CACHE_MB="* ]] || cache_mb=50000
         bytes=$(stat -c%s "$mdir/$ckpt" 2>/dev/null || echo 0)
-        echo $(( bytes / 1048576 + cache_mb + slots * sctx / 16 + 4608 ))
+        echo $(( bytes / 1048576 + cache_mb + kv_slots * sctx / 16 + 4608 ))
         return
     fi
     [[ " ${w[*]} " == *" --name $HALOGEN_CONTAINER_PREFIX"* ]] && { echo $(( 84 * 1024 )); return; }
@@ -6406,7 +6406,7 @@ cmd_voice() {
             tar -xzf "$archive" -C "$tmp" || { rm -rf "$tmp"; return 1; }
             # Decided per voice, not per file: a voice is its audio in any of the
             # three formats, and its .txt goes wherever the audio goes.
-            local n=0 kept=0 stem ext here audio
+            local n=0 present=0 stem ext here audio
             local -a stems
             mapfile -t stems < <(cd "$tmp" && for f in *.{wav,mp3,flac,txt}; do
                 [[ -f "$f" ]] && echo "${f%.*}"; done | sort -u)
@@ -6418,7 +6418,7 @@ cmd_voice() {
                     [[ -f "$tmp/$stem.$ext" ]] && audio="$stem.$ext"
                 done
                 if [[ "$here" == true && "$force" != true ]]; then
-                    [[ -n "$audio" ]] && kept=$(( kept + 1 ))
+                    [[ -n "$audio" ]] && present=$(( present + 1 ))
                     continue
                 fi
                 if [[ -n "$audio" ]]; then
@@ -6433,7 +6433,7 @@ cmd_voice() {
             rm -rf "$tmp"
             _comfyui_voice_links_all
             local note=""
-            (( kept )) && note=", kept $kept already here (--force replaces them)"
+            (( present )) && note=", kept $present already here (--force replaces them)"
             echo "Imported $n voice(s)$note."
             ;;
         rm)
