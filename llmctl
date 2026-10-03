@@ -4619,6 +4619,18 @@ cmd_outdated() {
         (( PIPESTATUS[0] == 1 )) && newer=$(( newer + 1 ))
     done
 
+    # New model versions beyond the files in use, and the ComfyUI templates open
+    # issues wait for (comfyui/watch.conf).
+    if [[ -f "$COMFYUI_SHARE/watch.conf" ]]; then
+        printf '\n\033[1mWatch\033[0m (new model versions, templates issues wait for)\n'
+        local tdir="" e
+        for e in "${_MODELS[@]}"; do
+            _resolve_model "${e%%|*}" && [[ "$_r_backend" == comfyui ]] && { _comfyui_paths; break; }
+        done
+        [[ -n "${c_app:-}" ]] && tdir=$(ls -d "$c_app"/.venv/lib/python*/site-packages/comfyui_workflow_templates_json/templates 2>/dev/null | head -1)
+        python3 "$LIB_DIR/watch.py" "$COMFYUI_SHARE/watch.conf" "${tdir:-/nonexistent}" || newer=$(( newer + 1 ))
+    fi
+
     printf '\n\033[1mModels\033[0m (installed ones, against their Hugging Face repos)\n'
     DL_CHECK=true DL_PENDING=0 DL_UNKNOWN=0
     local model_dir report

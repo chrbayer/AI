@@ -2149,6 +2149,17 @@ newer):
 
 A changed model is fetched again by deleting it and running `download`.
 
+### Watching for new versions
+
+`outdated` ends with a *Watch* section from `comfyui/watch.conf`: for each model
+family in use (LTX, Qwen-Image, Z-Image, FLUX, ACE-Step, TRELLIS, Stable Audio)
+whether its author on Hugging Face has published a higher version than the one
+in use — a new version is a new repo (`Lightricks/LTX-2.6`), which the checks
+of the files in use would never see — and, for open issues that wait for a
+ComfyUI template (an LTX-2.5 picture+audio workflow for #43, say), whether
+ComfyUI's template list has it now. A line in `watch.conf` adds a family or a
+template to wait for.
+
 ### Pruning what nothing names
 
 `llmctl prune` lists what no longer belongs to anything, with its size on

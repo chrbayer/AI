@@ -961,3 +961,25 @@ class LlamaBuilds(unittest.TestCase):
         self.assertEqual(pick("gfx1151"), "llama-b1330-ubuntu-rocm-gfx1151-x64.zip")
         self.assertEqual(pick("gfx1032"), "llama-b1330-ubuntu-rocm-gfx103X-x64.zip")
         self.assertIsNone(pick("gfx942"))
+
+
+import watch                                                        # noqa: E402
+
+
+class Watch(unittest.TestCase):
+    def test_versions_and_awaited_templates(self):
+        self.assertGreater(watch.version_key("2.10"), watch.version_key("2.9"))
+        self.assertGreater(watch.version_key("3"), watch.version_key("2.5"))
+        with tempfile.TemporaryDirectory() as d:
+            t = Path(d, "templates"); t.mkdir()
+            for n in ("video_ltx2_5_i2v", "video_ltx2_5_ia2v"):
+                (t / f"{n}.json").write_text("{}")
+            conf = Path(d, "watch.conf")
+            conf.write_text("# comment\ntemplate ^video_ltx2_5_.*ia2v #43 talking avatar\n"
+                            "template ^video_ltx2_5_.*id_lora #45 identity\n")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                rc = watch.main(str(conf), str(t))
+            self.assertEqual(rc, 1)
+            self.assertIn("#43: ComfyUI has video_ltx2_5_ia2v", out.getvalue())
+            self.assertIn("#45: waiting", out.getvalue())
