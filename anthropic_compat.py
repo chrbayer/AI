@@ -205,8 +205,10 @@ def _convert_tool_choice(tc):
     return "auto"
 
 
-def messages_to_chat(body, max_tokens_cap=None):
-    """Translate a Messages request body into a Chat Completions one."""
+def messages_to_chat(body, max_tokens_cap=None, thinking_off_effort=None):
+    """Translate a Messages request body into a Chat Completions one.
+    thinking_off_effort: for a backend that ignores `thinking` (halogen-server),
+    the reasoning_effort that turns thinking off instead."""
     chat = {"model": body.get("model"), "messages": []}
 
     system = body.get("system")
@@ -239,7 +241,10 @@ def messages_to_chat(body, max_tokens_cap=None):
 
     thinking = body.get("thinking") or {}
     if thinking.get("type") == "disabled":
-        chat["thinking"] = {"type": "disabled"}
+        if thinking_off_effort:
+            chat["reasoning_effort"] = thinking_off_effort
+        else:
+            chat["thinking"] = {"type": "disabled"}
     elif thinking.get("type") == "enabled":
         chat["thinking"] = {"type": "enabled"}
         if thinking.get("budget_tokens"):
@@ -247,7 +252,7 @@ def messages_to_chat(body, max_tokens_cap=None):
     # "adaptive" (and no thinking field at all) leave it to the server default.
 
     effort = (body.get("output_config") or {}).get("effort")
-    if effort in _EFFORT and chat.get("thinking", {}).get("type") != "disabled":
+    if effort in _EFFORT and chat.get("thinking", {}).get("type") != "disabled" and "reasoning_effort" not in chat:
         chat["reasoning_effort"] = _EFFORT[effort]
 
     if body.get("stream"):

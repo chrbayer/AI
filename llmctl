@@ -271,6 +271,22 @@ _check_deps() {
 #     /v1/messages through (LLMCTL_HALOGEN_TRANSLATE=1: translates it instead).
 #   - Settings are environment variables of the container: models.conf's
 #     extra_args hold KEY=VAL pairs, and start options map onto them.
+#
+# The same backend runs halogen-server (image ghcr.io/peonist-ai/halogen), the
+# engine for the dense Qwen3.8-27B checkpoint — the "server" flavor, told apart
+# by its image. It shares the container handling above but differs in what it
+# takes:
+#   - it reads the tokenizer from /tokenizer: the checkpoint's tokenizer/ dir;
+#   - context and parallelism are HALOGEN_SLOT_CTX and HALOGEN_KV_SLOTS (each
+#     slot holds its full context; more than one slot turns speculation off),
+#     no YaRN, no vision;
+#   - the prompt cache lives in host memory, sized by HALOGEN_CACHE_MB, which
+#     --cache-ram sets (its default takes most of what is free);
+#   - reasoning and samplers have no server-wide setting, so --reasoning, --temp
+#     and --top-p become request defaults the proxy fills in (label
+#     llmctl.defaults on the container);
+#   - no Messages API: the proxy translates /v1/messages, and Claude Code's
+#     "thinking off" goes out as reasoning_effort "none".
 HALOGEN_NATIVE_CTX=262144        # Qwen3.8-Flash-Next's trained context; more takes YaRN
 HALOGEN_API_PORT=8731            # the API port inside the container
 HALOGEN_CONTAINER_PREFIX="llmctl-halogen-"
@@ -282,7 +298,14 @@ HALOGEN_PROXY_TIMEOUT=3600       # a full 256K prefill alone takes ~4 minutes
 # minutes (see --compact).
 HALOGEN_MIN_CONTIG_GIB=40
 
+HALOGEN_SERVER_REPO="peonist-ai/halogen-server"   # the server flavor's source, changelog
+
 _halogen_container() { echo "${HALOGEN_CONTAINER_PREFIX}$1"; }
+
+# flash or server, from the image name.
+_halogen_flavor() { [[ "$1" == *halogen-flash-server* ]] && echo flash || echo server; }
+# ... of the halogen server in $_ARGV, whose last word is the image.
+_argv_halogen_flavor() { _halogen_flavor "${_ARGV[${#_ARGV[@]}-1]}"; }
 
 # Slots with a halogen container, running or not, ascending.
 _halogen_slots() {
@@ -322,13 +345,25 @@ _argv_env() {
     return 1
 }
 
-# The host model path a halogen server's argv carries in its llmctl.model label.
-_argv_halogen_model() {
-    local i
+# The value of a container's `--label KEY=VAL` in $_ARGV, or nothing.
+_argv_label() {
+    local key="$1" i
     for (( i=0; i < ${#_ARGV[@]} - 1; i++ )); do
-        [[ "${_ARGV[i]}" == "--label" && "${_ARGV[i+1]}" == llmctl.model=* ]] && { echo "${_ARGV[i+1]#*=}"; return 0; }
+        [[ "${_ARGV[i]}" == "--label" && "${_ARGV[i+1]}" == "$key="* ]] && { echo "${_ARGV[i+1]#*=}"; return 0; }
     done
     return 1
+}
+
+# The host model path a halogen server's argv carries in its llmctl.model label.
+_argv_halogen_model() { _argv_label llmctl.model; }
+
+# One field of the request defaults (llmctl.defaults, compact JSON) of the
+# halogen server in $_ARGV: a string's value unquoted, a number as written.
+_argv_default() {
+    local d
+    d=$(_argv_label llmctl.defaults) || return 1
+    [[ "$d" =~ \"$1\":\"?([^\",}]*) ]] || return 1
+    echo "${BASH_REMATCH[1]}"
 }
 
 _is_halogen_argv() {
@@ -413,9 +448,12 @@ _slot_container_kind() {
 }
 
 # A gufo server's memory beyond GTT: its weights, held as the container's RSS.
-_gufo_rss_mib() {
+_gufo_rss_mib() { _container_rss_mib "$(_gufo_container "$1")"; }
+
+# The resident memory of a container's processes, in MiB.
+_container_rss_mib() {
     local c sum=0
-    for c in $(podman top "$(_gufo_container "$1")" hpid 2>/dev/null | tail -n +2); do
+    for c in $(podman top "$1" hpid 2>/dev/null | tail -n +2); do
         sum=$(( sum + $(_proc_rss_mib "$c") ))
     done
     echo "$sum"
@@ -1408,6 +1446,19 @@ _stop_tunnel() {
     echo "Slot $slot: tunnel (PID: $pid) stopped."
 }
 
+# The proxy's extra environment for a halogen-server slot (one word per line):
+# it has no Messages API, takes thinking off as reasoning_effort "none", and
+# gets the request defaults its container carries. Nothing for halogen-flash.
+_halogen_server_proxy_env() {
+    local pid d
+    pid=$(_slot_server_pid "$1") && _read_argv "$pid" && _is_halogen_argv || return 0
+    [[ "$(_argv_halogen_flavor)" == server ]] || return 0
+    echo "LLM_TRANSLATE_MESSAGES=1"
+    echo "LLM_THINKING_OFF_EFFORT=none"
+    d=$(_argv_label llmctl.defaults) && echo "LLM_REQUEST_DEFAULTS=$d"
+    return 0
+}
+
 # Start proxy.py for one slot and wait until it listens. Its own function so
 # `preset` can add a missing proxy to a slot whose model already matches —
 # reloading 70B of weights for a process that starts in a second would be absurd.
@@ -1434,6 +1485,9 @@ _start_proxy() {
         # halogen speaks the Messages API itself since 0.15.1; the proxy's own
         # translation stays for an older image, or to compare.
         [[ "${LLMCTL_HALOGEN_TRANSLATE:-0}" == 1 ]] && backend_env+=(LLM_TRANSLATE_MESSAGES=1)
+        local -a server_env=()
+        mapfile -t server_env < <(_halogen_server_proxy_env "$slot")
+        backend_env+=("${server_env[@]}")
     elif [[ "${proxy_kind:-}" == gufo ]] || _slot_is_gufo "$slot"; then
         # gufo's own /v1/messages hands back the model's thinking inside the text
         # block, "</think>" and all (0.4.0); its chat completions split it off. So
@@ -1507,8 +1561,16 @@ _stop_proxy() {
 # cmd_start for a halogen model. Runs inside cmd_start and reads its locals
 # (bash scoping is dynamic): the options are parsed and checked there already.
 _start_halogen() {
+    local flavor; flavor=$(_halogen_flavor "$_r_binary")
     local -a refused=()
-    [[ -n "$cache_ram" && "$cache_ram" != "0" ]] && refused+=("--cache-ram $cache_ram (only 0 = prompt cache off)")
+    if [[ "$flavor" == server ]]; then
+        [[ -n "$cache_ram" && ! "$cache_ram" =~ ^[0-9]+$ ]] && refused+=("--cache-ram $cache_ram (MiB, 0 = prompt cache off)")
+        [[ "$use_mmproj" == true ]] && refused+=("--mmproj (halogen-server is text only)")
+        [[ "$reasoning" =~ ^[1-9][0-9]*$ ]] && refused+=("--reasoning $reasoning (no thinking budget; use a level or off)")
+        [[ -n "$ctx" ]] && (( ctx > HALOGEN_NATIVE_CTX )) && refused+=("--ctx $ctx (at most $HALOGEN_NATIVE_CTX, no YaRN)")
+    else
+        [[ -n "$cache_ram" && "$cache_ram" != "0" ]] && refused+=("--cache-ram $cache_ram (only 0 = prompt cache off)")
+    fi
     [[ -n "$similarity" ]] && refused+=("--similarity")
     [[ -n "$gpu_priority" ]] && refused+=("--gpu-priority")
     [[ "$verbose" == true ]] && refused+=("--verbose")
@@ -1545,35 +1607,59 @@ _start_halogen() {
     done
 
     local ctx_n="${ctx:-${_r_ctx:-$HALOGEN_NATIVE_CTX}}"
-    _henv HALOGEN_CTX "$ctx_n"
-    local yarn=""
-    if (( ctx_n > HALOGEN_NATIVE_CTX )); then
-        yarn=$(( (ctx_n + HALOGEN_NATIVE_CTX - 1) / HALOGEN_NATIVE_CTX ))
-        _henv HALOGEN_ROPE_YARN "$yarn"
-    fi
-    # The pool holds every running conversation's KV; one request must fit.
-    if [[ -z "${val[HALOGEN_KV_POOL_POSITIONS]:-}" ]] || (( val[HALOGEN_KV_POOL_POSITIONS] < ctx_n )); then
-        _henv HALOGEN_KV_POOL_POSITIONS "$ctx_n"
-    fi
-    [[ -n "$parallel" ]] && _henv HALOGEN_KV_SLOTS "$parallel"
-
-    if [[ -n "$reasoning" ]]; then
-        local r="$reasoning"
-        [[ "$r" == "0" ]] && r=off
-        if [[ "$r" == off ]]; then
-            _henv HALOGEN_ENABLE_THINKING 0
-        elif [[ " $REASONING_LEVELS " == *" $r "* ]]; then
-            local pair mapped=""
-            for pair in $_r_reasoning_levels; do [[ "${pair%%=*}" == "$r" ]] && mapped="${pair#*=}"; done
-            _henv HALOGEN_REASONING_EFFORT "$mapped"
-        elif [[ "$r" =~ ^[1-9][0-9]*$ ]]; then
-            _henv HALOGEN_MAX_THINKING_TOKENS "$r"
+    local yarn="" defaults=""
+    if [[ "$flavor" == server ]]; then
+        _henv HALOGEN_SLOT_CTX "$ctx_n"
+        [[ -n "$parallel" ]] && _henv HALOGEN_KV_SLOTS "$parallel"
+        [[ -n "$cache_ram" ]] && _henv HALOGEN_CACHE_MB "$cache_ram"
+        # What the server has no setting for, the proxy puts into requests that
+        # do not say otherwise — compact JSON, as it travels in a label.
+        local -a d=()
+        if [[ -n "$reasoning" ]]; then
+            local r="$reasoning" pair mapped=""
+            [[ "$r" == "0" ]] && r=off
+            if [[ "$r" == off ]]; then
+                d+=('"reasoning_effort":"none"')
+            elif [[ " $REASONING_LEVELS " == *" $r "* ]]; then
+                for pair in $_r_reasoning_levels; do [[ "${pair%%=*}" == "$r" ]] && mapped="${pair#*=}"; done
+                d+=("\"reasoning_effort\":\"$mapped\"")
+            fi
         fi
-        # on and -1: the server's own default (thinking on, effort xhigh).
+        [[ -n "$temp" ]]  && d+=("\"temperature\":$temp")
+        [[ -n "$top_p" ]] && d+=("\"top_p\":$top_p")
+        if (( ${#d[@]} )); then
+            defaults=$(IFS=,; echo "{${d[*]}}")
+        fi
+    else
+        _henv HALOGEN_CTX "$ctx_n"
+        if (( ctx_n > HALOGEN_NATIVE_CTX )); then
+            yarn=$(( (ctx_n + HALOGEN_NATIVE_CTX - 1) / HALOGEN_NATIVE_CTX ))
+            _henv HALOGEN_ROPE_YARN "$yarn"
+        fi
+        # The pool holds every running conversation's KV; one request must fit.
+        if [[ -z "${val[HALOGEN_KV_POOL_POSITIONS]:-}" ]] || (( val[HALOGEN_KV_POOL_POSITIONS] < ctx_n )); then
+            _henv HALOGEN_KV_POOL_POSITIONS "$ctx_n"
+        fi
+        [[ -n "$parallel" ]] && _henv HALOGEN_KV_SLOTS "$parallel"
+
+        if [[ -n "$reasoning" ]]; then
+            local r="$reasoning"
+            [[ "$r" == "0" ]] && r=off
+            if [[ "$r" == off ]]; then
+                _henv HALOGEN_ENABLE_THINKING 0
+            elif [[ " $REASONING_LEVELS " == *" $r "* ]]; then
+                local pair mapped=""
+                for pair in $_r_reasoning_levels; do [[ "${pair%%=*}" == "$r" ]] && mapped="${pair#*=}"; done
+                _henv HALOGEN_REASONING_EFFORT "$mapped"
+            elif [[ "$r" =~ ^[1-9][0-9]*$ ]]; then
+                _henv HALOGEN_MAX_THINKING_TOKENS "$r"
+            fi
+            # on and -1: the server's own default (thinking on, effort xhigh).
+        fi
+        [[ -n "$temp" ]]  && _henv HALOGEN_TEMPERATURE "$temp"
+        [[ -n "$top_p" ]] && _henv HALOGEN_TOP_P "$top_p"
+        [[ "$cache_ram" == "0" ]] && _henv HALOGEN_PROMPT_CACHE 0
     fi
-    [[ -n "$temp" ]]  && _henv HALOGEN_TEMPERATURE "$temp"
-    [[ -n "$top_p" ]] && _henv HALOGEN_TOP_P "$top_p"
-    [[ "$cache_ram" == "0" ]] && _henv HALOGEN_PROMPT_CACHE 0
     local cap="$HALOGEN_MAX_TOKENS_CAP"
     if [[ -n "$max_predict" && "$max_predict" != "-1" ]]; then
         cap="$max_predict"
@@ -1594,13 +1680,16 @@ _start_halogen() {
     local k
     for k in "${keys[@]}"; do env_args+=(-e "$k=${val[$k]}"); done
 
+    local -a labels=(--label "llmctl.model=$model_path") mounts=(-v "$model_dir:/models:ro")
+    [[ -n "$defaults" ]] && labels+=(--label "llmctl.defaults=$defaults")
+    [[ "$flavor" == server ]] && mounts+=(-v "$model_dir/tokenizer:/tokenizer:ro")
     local -a cmd=(podman run --rm --name "$(_halogen_container "$slot")"
-        --label "llmctl.model=$model_path"
+        "${labels[@]}"
         -p "${host:-127.0.0.1}:${port_server}:${HALOGEN_API_PORT}"
         --device /dev/kfd --device /dev/dri --group-add keep-groups
         --ipc=host --ulimit memlock=-1:-1
         "${env_args[@]}"
-        -v "$model_dir:/models:ro"
+        "${mounts[@]}"
         "$_r_binary")
 
     if [[ "$print_cmd" == true ]]; then
@@ -1619,10 +1708,13 @@ _start_halogen() {
     if [[ ! -f "$model_path" ]]; then
         echo "Error: checkpoint not found: $model_path — run: $PROG download $_r_name"; exit 1
     fi
+    if [[ "$flavor" == server && ! -f "$model_dir/tokenizer/tokenizer.json" ]]; then
+        echo "Error: no tokenizer beside the checkpoint ($model_dir/tokenizer) — run: $PROG download $_r_name"; exit 1
+    fi
 
     [[ "$compact" == true ]] && { _compact_memory || exit 1; }
     local contig; contig=$(_contig_gib)
-    if (( contig < HALOGEN_MIN_CONTIG_GIB )); then
+    if [[ "$flavor" == flash ]] && (( contig < HALOGEN_MIN_CONTIG_GIB )); then
         echo "Note: only $contig GiB of host memory are free in 2 MiB blocks (want >= $HALOGEN_MIN_CONTIG_GIB)."
         if [[ "$compact" == true ]]; then
             echo "      Stop other large programs (a VM, ComfyUI, …) or reboot, or prefill may stall for minutes."
@@ -1650,23 +1742,48 @@ _start_halogen() {
         fi
         echo "Proxy:    always on :$port_proxy — translates /v1/messages (Claude Code), normalizes time stamps,"
         echo "          clamps token budgets to $cap, fetches http(s) image URLs and passes them inline"
-        echo "Context:  $ctx_n${yarn:+ (YaRN x$yarn over the native $HALOGEN_NATIVE_CTX)}"
-        echo "Parallel: ${val[HALOGEN_KV_SLOTS]:-4 (server default)} over a pool of ${val[HALOGEN_KV_POOL_POSITIONS]} positions"
-        case "${val[HALOGEN_PROMPT_CACHE]:-}" in
-            0) echo "PromptCache: off (--cache-ram 0)" ;;
-            *) echo "PromptCache: on (server default)" ;;
-        esac
-        if [[ -n "$reasoning" ]]; then
-            echo "Reasoning: $reasoning — ${val[HALOGEN_ENABLE_THINKING]:+thinking off by default}${val[HALOGEN_REASONING_EFFORT]:+default effort ${val[HALOGEN_REASONING_EFFORT]}}${val[HALOGEN_MAX_THINKING_TOKENS]:+thinking budget ${val[HALOGEN_MAX_THINKING_TOKENS]} tokens}"
+        if [[ "$flavor" == server ]]; then
+            _render_halogen_server_config
         else
-            echo "Reasoning: server default (thinking on, effort xhigh; requests may override)"
+            echo "Context:  $ctx_n${yarn:+ (YaRN x$yarn over the native $HALOGEN_NATIVE_CTX)}"
+            echo "Parallel: ${val[HALOGEN_KV_SLOTS]:-4 (server default)} over a pool of ${val[HALOGEN_KV_POOL_POSITIONS]} positions"
+            case "${val[HALOGEN_PROMPT_CACHE]:-}" in
+                0) echo "PromptCache: off (--cache-ram 0)" ;;
+                *) echo "PromptCache: on (server default)" ;;
+            esac
+            if [[ -n "$reasoning" ]]; then
+                echo "Reasoning: $reasoning — ${val[HALOGEN_ENABLE_THINKING]:+thinking off by default}${val[HALOGEN_REASONING_EFFORT]:+default effort ${val[HALOGEN_REASONING_EFFORT]}}${val[HALOGEN_MAX_THINKING_TOKENS]:+thinking budget ${val[HALOGEN_MAX_THINKING_TOKENS]} tokens}"
+            else
+                echo "Reasoning: server default (thinking on, effort xhigh; requests may override)"
+            fi
+            echo "Speculative: on (MTP head, byte-identical to plain decoding)"
+            [[ -n "$temp$top_p" ]] && echo "Samplers: ${temp:+temp $temp}${temp:+${top_p:+, }}${top_p:+top-p $top_p} (server defaults; requests may override)"
         fi
-        echo "Speculative: on (MTP head, byte-identical to plain decoding)"
-        [[ -n "$temp$top_p" ]] && echo "Samplers: ${temp:+temp $temp}${temp:+${top_p:+, }}${top_p:+top-p $top_p} (server defaults; requests may override)"
         echo "----- effective config -----"
         echo "Command:"
         printf '  %s\n' "${cmd[*]}"
         echo "----------------------------"
+    }
+    _render_halogen_server_config() {
+        local slots="${val[HALOGEN_KV_SLOTS]:-1}" drafter="${val[HALOGEN_DRAFTER]:-2}"
+        echo "Context:  $ctx_n per slot"
+        if (( slots > 1 )); then
+            echo "Parallel: $slots slots — speculation off, each stream at serial speed"
+        else
+            echo "Parallel: 1 slot (with speculative decoding)"
+        fi
+        case "${val[HALOGEN_CACHE_MB]:-}" in
+            "") echo "PromptCache: on, sized by the server from free memory" ;;
+            0)  echo "PromptCache: off (--cache-ram 0)" ;;
+            *)  echo "PromptCache: ${val[HALOGEN_CACHE_MB]} MiB of host memory (~70 KB per cached token)" ;;
+        esac
+        if [[ -n "$defaults" ]]; then
+            echo "Reasoning: request defaults $defaults (the proxy fills them in; requests may override)"
+        else
+            echo "Reasoning: template default (effort xhigh; requests may override)"
+        fi
+        local -a dn=(serial MTP DFlash2)
+        echo "Speculative: ${dn[drafter]:-drafter $drafter} by default, byte-identical to plain decoding; requests may pick another"
     }
     local config_text; config_text="$(_render_halogen_config)"
     echo "$config_text"
@@ -3137,12 +3254,18 @@ _halogen_pinned_mib() {
 }
 
 # What a slot takes from memory: its GTT, and for halogen the pinned weights
-# too — they come out of the same RAM the GTT pool is carved from.
+# too — they come out of the same RAM the GTT pool is carved from. halogen-server
+# maps its checkpoint and keeps its prompt cache in host memory, gufo holds its
+# weights there: their resident memory counts.
 _slot_gpu_mib() {
-    local gtt
+    local gtt pid
     gtt=$(_slot_gtt_mib "$1") || return 1
     if _slot_is_halogen "$1"; then
-        echo $(( gtt + $(_halogen_pinned_mib "$1") ))
+        if pid=$(_slot_server_pid "$1") && _read_argv "$pid" && [[ "$(_argv_halogen_flavor)" == server ]]; then
+            echo $(( gtt + $(_container_rss_mib "$(_halogen_container "$1")") ))
+        else
+            echo $(( gtt + $(_halogen_pinned_mib "$1") ))
+        fi
     elif _slot_is_gufo "$1"; then
         echo $(( gtt + $(_gufo_rss_mib "$1") ))
     else
@@ -3249,6 +3372,29 @@ _estimate_cmd_mib() {
     # halogen: its files are no guide — the n-gram table beside the weights is
     # read through the page cache, not loaded. 62 GiB pinned weights (v2) and
     # ~20 GiB of KV pool and working memory, as models.conf describes it.
+    # halogen-server: the checkpoint (mapped), the prompt cache it was given, the
+    # KV pool (64 KiB per position and slot) and ~4.5 GiB of working memory —
+    # 20.5 GiB of GPU memory for one 256K slot, measured.
+    if [[ " ${w[*]} " == *" --name $HALOGEN_CONTAINER_PREFIX"* && "$(_halogen_flavor "${w[${#w[@]}-1]}")" == server ]]; then
+        local ckpt="" mdir="" cache_mb=0 slots=1 sctx=$HALOGEN_NATIVE_CTX prev=""
+        for (( i=0; i < ${#w[@]}; i++ )); do
+            case "$prev" in
+                -v) [[ "${w[i]}" == *:/models:ro ]] && mdir="${w[i]%:/models:ro}" ;;
+                -e) case "${w[i]}" in
+                        HALOGEN_CHECKPOINT=*) ckpt="${w[i]#*=/models/}" ;;
+                        HALOGEN_CACHE_MB=*) cache_mb="${w[i]#*=}" ;;
+                        HALOGEN_KV_SLOTS=*) slots="${w[i]#*=}" ;;
+                        HALOGEN_SLOT_CTX=*) sctx="${w[i]#*=}" ;;
+                    esac ;;
+            esac
+            prev="${w[i]}"
+        done
+        # No cache size: the server takes most of what is free; say 50 GiB.
+        [[ " ${w[*]} " == *" HALOGEN_CACHE_MB="* ]] || cache_mb=50000
+        bytes=$(stat -c%s "$mdir/$ckpt" 2>/dev/null || echo 0)
+        echo $(( bytes / 1048576 + cache_mb + slots * sctx / 16 + 4608 ))
+        return
+    fi
     [[ " ${w[*]} " == *" --name $HALOGEN_CONTAINER_PREFIX"* ]] && { echo $(( 84 * 1024 )); return; }
     # gufo: the GGUF and its draft (host paths from the label and the mounts),
     # ~6 GiB of working memory, and the KV it reserves for every session —
@@ -3569,6 +3715,15 @@ _capture_halogen_slot() {
     temp=$(_argv_env HALOGEN_TEMPERATURE); top_p=$(_argv_env HALOGEN_TOP_P)
     cap=$(_argv_env HALOGEN_MAX_TOKENS_CAP); cache=$(_argv_env HALOGEN_PROMPT_CACHE)
     vision=$(_argv_env HALOGEN_VISION_TOWER)
+    # halogen-server: its own context variable, a cache size, and request defaults
+    # where halogen-flash has environment variables.
+    local cache_mb=""
+    if [[ "$(_argv_halogen_flavor)" == server ]]; then
+        ctx=$(_argv_env HALOGEN_SLOT_CTX); cache_mb=$(_argv_env HALOGEN_CACHE_MB)
+        effort=$(_argv_default reasoning_effort)
+        [[ "$effort" == none ]] && { think=0; effort=""; }
+        temp=$(_argv_default temperature); top_p=$(_argv_default top_p)
+    fi
     local public=false
     [[ -f "$PID_DIR/stunnel-${slot}.pid" ]] && ps -p "$(cat "$PID_DIR/stunnel-${slot}.pid")" > /dev/null 2>&1 && public=true
 
@@ -3596,6 +3751,9 @@ _capture_halogen_slot() {
         [[ -n "$slots" && "$slots" != "$own_slots" ]] && flags+=(--parallel "$slots")
         [[ -n "$ctx" && "$ctx" != "${_r_ctx:-$HALOGEN_NATIVE_CTX}" ]] && flags+=(--ctx "$ctx")
         [[ "$cache" == "0" ]] && flags+=(--cache-ram 0)
+        local own_cache=""
+        for kv in "${_r_args[@]}"; do [[ "$kv" == HALOGEN_CACHE_MB=* ]] && own_cache="${kv#*=}"; done
+        [[ -n "$cache_mb" && "$cache_mb" != "$own_cache" ]] && flags+=(--cache-ram "$cache_mb")
         [[ -n "$vision" ]] && flags+=(--mmproj)
         [[ -n "$host" ]] && flags+=(--host "$host")
         [[ -n "$temp" ]] && flags+=(--temp "$temp")
@@ -3937,6 +4095,10 @@ _describe_halogen() {
         [[ "${_ARGV[i]}" == "-p" ]] && host="${_ARGV[i+1]%%:*}"
     done
     echo "${indent}Model:     $label ($(_argv_env HALOGEN_MODEL_ID || echo "?"))"
+    if [[ "$(_argv_halogen_flavor)" == server ]]; then
+        _describe_halogen_server "$indent" "$host"
+        return
+    fi
     local ctx yarn
     ctx=$(_argv_env HALOGEN_CTX); yarn=$(_argv_env HALOGEN_ROPE_YARN)
     local -a params=("ctx ${ctx:-$HALOGEN_NATIVE_CTX}${yarn:+ (YaRN x$yarn)}"
@@ -3966,6 +4128,40 @@ _describe_halogen() {
         echo "${indent}Memory:    real use — free(1) counts the pinned weights as cache:"
         echo "${indent}           $(_halogen_mem_line "$LOG_DIR/server-${slot}.log")"
     fi
+}
+
+# _describe_halogen for halogen-server.
+_describe_halogen_server() {
+    local indent="$1" host="$2" v slots
+    slots=$(_argv_env HALOGEN_KV_SLOTS) || slots=1
+    local -a params=("ctx $(_argv_env HALOGEN_SLOT_CTX || echo "$HALOGEN_NATIVE_CTX")" "parallel $slots")
+    v=$(_argv_env HALOGEN_MAX_TOKENS_CAP) && params+=("token cap $v")
+    case "$(_argv_env HALOGEN_CACHE_MB)" in
+        "") params+=("prompt-cache auto") ;;
+        0)  params+=("prompt-cache off") ;;
+        *)  params+=("prompt-cache $(_argv_env HALOGEN_CACHE_MB) MiB") ;;
+    esac
+    [[ -n "$host" && "$host" != "127.0.0.1" ]] && params+=("host $host")
+    local joined="" p
+    for p in "${params[@]}"; do joined+="${joined:+, }$p"; done
+    echo "${indent}Params:    $joined"
+    if v=$(_argv_default reasoning_effort); then
+        echo "${indent}Reasoning: request default effort $v"
+    else
+        echo "${indent}Reasoning: template default (effort xhigh)"
+    fi
+    local -a dn=(serial MTP DFlash2)
+    v=$(_argv_env HALOGEN_DRAFTER) || v=2
+    if (( slots > 1 )); then
+        echo "${indent}Spec:      off ($slots slots)"
+    else
+        echo "${indent}Spec:      ${dn[v]:-drafter $v} by default"
+    fi
+    local gtt rss
+    gtt=$(_slot_gtt_mib "$slot" 2>/dev/null) || gtt=0
+    rss=$(_container_rss_mib "$(_halogen_container "$slot")")
+    awk -v g="$gtt" -v r="$rss" -v i="$indent" 'BEGIN {
+        printf "%sMemory:    GPU (GTT) %.1f GiB, RAM %.1f GiB (mapped checkpoint and prompt cache)\n", i, g / 1024, r / 1024 }'
 }
 
 # _describe_server for ComfyUI: where its UI is, what it is doing, and how much
@@ -4517,6 +4713,7 @@ cmd_outdated() {
             # gufo's image lives under toolboxes/, its changelog in the main repo.
             local gh_repo="${image#ghcr.io/}"
             [[ "$_r_backend" == gufo ]] && gh_repo="$GUFO_REPO"
+            [[ "$_r_backend" == halogen && "$(_halogen_flavor "$image")" == server ]] && gh_repo="$HALOGEN_SERVER_REPO"
             # Each newer version's heading and the first lines under it.
             curl -sf "https://raw.githubusercontent.com/$gh_repo/main/CHANGELOG.md" |
                 awk -v t="$tag" '/^## / { v = $2; gsub(/^\[|\].*$/, "", v)   # "## [0.4.0](…) (date)" too
@@ -4752,7 +4949,10 @@ c = json.load(sys.stdin)
 hits, misses = c.get("hits", 0), c.get("misses", 0)
 rate = 100 * hits / (hits + misses) if hits + misses else 0
 entries, cap, saved = c.get("entries"), c.get("max_entries"), c.get("prompt_tokens_saved", 0)
-print(f"  entries={entries}/{cap}  hits={hits}  misses={misses}  "
+# halogen-server sizes its cache in bytes, not entries.
+used, room = c.get("bytes", 0) / 2**30, c.get("cap_bytes", 0) / 2**30
+size = f"entries={entries}/{cap}" if cap is not None else f"entries={entries} ({used:.1f} of {room:.1f} GiB)"
+print(f"  {size}  hits={hits}  misses={misses}  "
       f"hit_rate={rate:.1f}%  prompt_tokens_saved={saved}")
 ' || echo "  the server does not answer (still loading?)"
             continue
@@ -5104,7 +5304,7 @@ cmd_env() {
     if [[ "$_r_backend" == halogen ]]; then
         local ctx_now="" spid=""
         if spid=$(_slot_server_pid "$slot") && _read_argv "$spid" && _is_halogen_argv; then
-            ctx_now=$(_argv_env HALOGEN_CTX)
+            ctx_now=$(_argv_env HALOGEN_CTX || _argv_env HALOGEN_SLOT_CTX)
         fi
         val[CLAUDE_CODE_MAX_CONTEXT_TOKENS]="${ctx_now:-${_r_ctx:-$HALOGEN_NATIVE_CTX}}"
     fi
@@ -5505,6 +5705,8 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  halogen models (backend=halogen) run in podman, always with their proxy; other slots"
     printf "  %-20s %s\n" ""                      "    start beside a running one only when their memory fits (--ignore-memory: anyway);"
     printf "  %-20s %s\n" ""                      "    --ctx above 262144 turns on YaRN, --mmproj the vision tower, --cache-ram only takes 0"
+    printf "  %-20s %s\n" ""                      "    halogen-server (Qwen3.8-27B): --cache-ram N sizes its prompt cache (MiB), --reasoning,"
+    printf "  %-20s %s\n" ""                      "    --temp, --top-p become request defaults; no YaRN, no vision, no thinking budget"
     printf "  %-20s %s\n" ""                      "  gufo models (backend=gufo) run gufo in podman, always with their proxy (it translates"
     printf "  %-20s %s\n" ""                      "    /v1/messages); --ctx and --parallel size the KV it reserves at start, --spec off drops"
     printf "  %-20s %s\n" ""                      "    the draft; no --cache-ram, --similarity, --gpu-priority or --public"

@@ -5,7 +5,7 @@ OpenAI-compatible server (llama-server, gufo) is measured the same way.
 
 Prefill: time to the first token for prompts of several lengths. Each prompt
 starts with a unique random prefix, so the prompt cache cannot help.
-Decode: tokens/s after the first token, streamed, greedy with the MTP draft on,
+Decode: tokens/s after the first token, streamed, greedy with the server's draft on,
 once on prose and once on code (code drafts better: it copies its own context).
 
     halogen_bench.py [--slot N | --url URL] [--record FILE ...] [sizes ...]
@@ -142,7 +142,7 @@ def main():
             r = b.prefill(s)
             results.append(r)
             print(f"      {r['tokens']:>7} tokens  {r['seconds']:8.2f} s  {r['tok_s']:8.1f} tok/s", flush=True)
-        print("    decode (output), greedy, MTP on:", flush=True)
+        print("    decode (output), greedy, the server's default draft on:", flush=True)
         for task, prompt in DECODE_TASKS:
             r = b.decode(task, prompt, args.decode_tokens)
             results.append(r)

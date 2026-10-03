@@ -711,7 +711,9 @@ A models.conf entry with `_model_backend="halogen"` runs
 [halogen-flash-server](https://github.com/peonist-ai/halogen-flash-server)
 instead of llama-server: a closed-source engine for one model family
 (Qwen3.8-Flash-Next, 125B MoE) on Strix Halo, shipped as a container and
-reading its own `.hgn` weights. The slot model stays the same — `start`, `stop`,
+reading its own `.hgn` weights. The same backend also runs
+[halogen-server](#halogen-server-qwen38-27b), its sibling for the dense
+Qwen3.8-27B. The slot model stays the same — `start`, `stop`,
 `status`, `env`, `preset`, `preset-save` all work — with these differences:
 
 - **It runs in podman.** The server PID is the `podman run` client (its argv is
@@ -836,6 +838,41 @@ boot with `amd_iommu=off amdgpu.noretry=0` on the kernel line; the same server
 with fragmented memory managed 8–370 t/s of prefill, most requests stalling
 40–200 s in kernel compaction. Keep `vm.compaction_proactiveness` at the kernel
 default (20) — 0 does not prevent the stalls.
+
+### halogen-server (Qwen3.8-27B)
+
+`qwen-halogen` runs [halogen-server](https://github.com/peonist-ai/halogen-server)
+(image `ghcr.io/peonist-ai/halogen`) with
+[peonist-ai/halogen-qwen3.8-27b](https://huggingface.co/peonist-ai/halogen-qwen3.8-27b):
+the stock (not uncensored) Qwen3.8-27B, FFN in 4 bit for prefill (unsloth's
+NVFP4 values), the rest FP8, with an MTP head and a DFlash2 block drafter. Text
+only. llmctl tells it from halogen-flash-server by the image and handles it like
+the above, except:
+
+| Option | halogen-server |
+| --- | --- |
+| `--ctx N` | `HALOGEN_SLOT_CTX`, at most 262144 (no YaRN) |
+| `--parallel N` | `HALOGEN_KV_SLOTS`; each slot holds its full context (64 KiB per position), and more than one turns speculation off |
+| `--cache-ram N` | `HALOGEN_CACHE_MB` (MiB, 0 = off): the prompt cache, in host memory at ~70 KB per token. Unset, the server takes most of what is free; models.conf sets 20000 |
+| `--reasoning off\|level`, `--temp`, `--top-p` | request defaults: the server has no setting for them, so the container carries them (label `llmctl.defaults`) and the proxy fills them into chat requests that set none themselves. A thinking budget does not exist. Without, the template thinks at effort xhigh |
+| `--mmproj` | refused |
+
+The checkpoint's `tokenizer/` is mounted as `/tokenizer`. The server has no
+Messages API, so the proxy translates `/v1/messages`, and since it ignores
+`thinking`, Claude Code's "thinking off" goes out as `reasoning_effort: none`.
+The default drafter is DFlash2 (`HALOGEN_DRAFTER=2`), which suits code; a
+request may pick another (`"drafter"`). `status` shows GPU memory and the
+container's RAM (the mapped checkpoint and the prompt cache); `outdated` reads
+the changelog of halogen-server.
+
+Measured against `qwen` (llama.cpp) and `qwen-gufo` (both HauhauCS Q8), greedy,
+thinking off:
+
+| | qwen-halogen | qwen-gufo | qwen |
+| --- | --- | --- | --- |
+| prefill 850 / 6.6K / 26K / 53K tokens | **690 / 677 / 580 / 491** | 380 / 378 / 366 / 343 | 298 / 283 / 245 / 204 |
+| decode prose / code (t/s) | 14.6 / **45.3** (DFlash2), **17.0** / 38.1 (MTP) | 15.3 / 37.2 | 11.9 / 18.7 |
+| memory | 20.5 GiB GPU + 33.4 GiB checkpoint + prompt cache | 44.1 GiB GPU + 31.4 GiB RAM | ~47 GiB |
 
 ## The gufo backend
 
@@ -2127,6 +2164,7 @@ them are served by the Vulkan build — the ROCm build is opt-in per model
 - **diamond** — L3.3-70B Magnum Diamond, i1-Q5_K_M, 32K ctx; drafted by the same Llama-3.2-1B (~2.0×)
 - **magnum** — Magnum-v4-72B, Q6_K, 32K ctx; a Qwen2.5-72B fulltune, drafted by Qwen2.5-1.5B-Instruct Q4_K_M (~2.0×)
 - **qwen-gufo** — the same Qwen3.8-27B uncensored Q8 on the [gufo backend](#the-gufo-backend), DFlash2 draft, 64K per session (256K in preset `qwen-gufo-256k`), vision via `--mmproj`; prefill 30–55 % and code decoding ~2× faster than `qwen`
+- **qwen-halogen** — Qwen3.8-27B stock (not uncensored) on [halogen-server](#halogen-server-qwen38-27b), ~6.3 bpw, DFlash2 draft, 256K ctx, text only; prefill ~1.8× `qwen-gufo`, code decoding 45 t/s — meant for code
 - **flash** — Qwen3.8-Flash-Next 125B MoE on the [halogen backend](#the-halogen-backend), 4-bit `.hgn`, 256K ctx (512K with YaRN via `--ctx 524288`), vision via `--mmproj` (on in preset `flash`); ~82 GiB, other slots beside it only as they fit
 
 - **embed** — Qwen3-Embedding-8B, Q8_0, 8K ctx; `/v1/embeddings` for [retrieval](#building-blocks-for-retrieval-and-memory)

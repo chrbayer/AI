@@ -114,6 +114,13 @@ check "halogen start sets its context"  "HALOGEN_CTX=262144"                    
 check "halogen start turns YaRN on"     "HALOGEN_ROPE_YARN=2"                     -- "$L" start flash 1 --ctx 524288 --print-cmd
 check "halogen start refuses --spec"    "not available with the halogen backend"  -- "$L" start flash 1 --spec off --print-cmd
 check "halogen start maps --mmproj"     "HALOGEN_VISION_TOWER=1"                  -- "$L" start flash 1 --mmproj --print-cmd
+check "halogen-server mounts its tokenizer" "tokenizer:/tokenizer:ro"             -- "$L" start qwen-halogen 1 --print-cmd
+check "halogen-server sets its slot context" "HALOGEN_SLOT_CTX=131072"             -- "$L" start qwen-halogen 1 --ctx 131072 --print-cmd
+check "halogen-server sizes its prompt cache" "HALOGEN_CACHE_MB=4096"              -- "$L" start qwen-halogen 1 --cache-ram 4096 --print-cmd
+check "halogen-server takes reasoning as a request default" 'llmctl.defaults={"reasoning_effort":"none"}' -- "$L" start qwen-halogen 1 --reasoning off --print-cmd
+check "halogen-server refuses YaRN"     "at most 262144"                          -- "$L" start qwen-halogen 1 --ctx 524288 --print-cmd
+check "halogen-server refuses --mmproj" "text only"                               -- "$L" start qwen-halogen 1 --mmproj --print-cmd
+check "halogen-server refuses a thinking budget" "no thinking budget"             -- "$L" start qwen-halogen 1 --reasoning 2000 --print-cmd
 
 # ── comfyui backend ──────────────────────────────────────────
 check "comfyui start names its dirs"    "--base-directory"       -- "$L" start comfy 9 --print-cmd

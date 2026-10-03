@@ -26,6 +26,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 import comfyui_models as cm                                        # stdlib only
+import anthropic_compat as ac                                       # stdlib only
 sys.path.insert(0, str(ROOT / "comfyui"))
 import variants                                                     # noqa: E402
 
@@ -196,6 +197,54 @@ class Transcripts(unittest.TestCase):
         text, lang = proxy._split_transcript("language None<asr_text>...")
         self.assertEqual(text, "...")
         self.assertIsNone(lang)
+
+
+@unittest.skipIf(proxy is None, "proxy.py needs flask and requests")
+class RequestDefaults(unittest.TestCase):
+    """halogen-server has no server-wide reasoning or sampler setting: the proxy
+    fills them into requests that say nothing themselves."""
+    def setUp(self):
+        self.saved = proxy.REQUEST_DEFAULTS
+        proxy.REQUEST_DEFAULTS = {"reasoning_effort": "medium", "temperature": 0.6}
+
+    def tearDown(self):
+        proxy.REQUEST_DEFAULTS = self.saved
+
+    def test_a_silent_request_gets_them(self):
+        chat = {"messages": []}
+        proxy.apply_defaults(chat)
+        self.assertEqual(chat, {"messages": [], "reasoning_effort": "medium", "temperature": 0.6})
+
+    def test_a_request_keeps_its_own(self):
+        chat = {"reasoning_effort": "low", "temperature": 0}
+        proxy.apply_defaults(chat)
+        self.assertEqual(chat, {"reasoning_effort": "low", "temperature": 0})
+
+    def test_thinking_set_another_way_takes_no_effort(self):
+        # The server refuses two thinking controls that disagree.
+        for chat in ({"enable_thinking": False}, {"chat_template_kwargs": {"reasoning_effort": "high"}}):
+            proxy.apply_defaults(chat)
+            self.assertNotIn("reasoning_effort", chat)
+            self.assertEqual(chat["temperature"], 0.6)
+
+
+class ThinkingOff(unittest.TestCase):
+    BODY = {"model": "m", "max_tokens": 100, "thinking": {"type": "disabled"},
+            "output_config": {"effort": "high"}, "messages": [{"role": "user", "content": "Hi"}]}
+
+    def test_by_default_it_travels_as_thinking(self):
+        chat = ac.messages_to_chat(self.BODY)
+        self.assertEqual(chat["thinking"], {"type": "disabled"})
+        self.assertNotIn("reasoning_effort", chat)
+
+    def test_halogen_server_gets_an_effort_instead(self):
+        chat = ac.messages_to_chat(self.BODY, None, "none")
+        self.assertNotIn("thinking", chat)
+        self.assertEqual(chat["reasoning_effort"], "none")
+
+    def test_an_effort_still_passes_with_thinking_on(self):
+        body = dict(self.BODY, thinking={"type": "enabled"})
+        self.assertEqual(ac.messages_to_chat(body, None, "none")["reasoning_effort"], "high")
 
 
 class Sources(unittest.TestCase):
