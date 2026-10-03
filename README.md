@@ -1417,6 +1417,21 @@ llmctl update comfy --torch           # …and torch itself
   (its output decoded straight away; sampling at 512×288) gives 2 s in 55 s.
   A portrait picture is cut to the template's 16:9 unless the size is set.
   Not served through the image API.
+- **Talking and singing pictures** (#43). `LTX-2.5 Talking (int8, distilled)`
+  makes a picture speak or sing along to an audio file: the voice is encoded
+  with LTX's audio VAE and held fixed by a noise mask while the video is made
+  to it — ComfyUI's picture+audio template does this for LTX-2.3; here it runs
+  on the LTX-2.5 models already in place. llmctl's *Audio to whole seconds*
+  node pads the audio with silence to the video's length — whole seconds, then
+  exactly N frames / 24, to the sample — and makes the video that long. That is
+  what makes it work: with a voice of 6.1 s under a 7 s video the lips ran on
+  for 20 frames after the voice had stopped and drifted from it; padded, they
+  follow it closely and stop with it. The sound under the finished video is the
+  original audio, not what comes back through LTX's audio VAE: that round trip
+  moved the voice 60 ms ahead of the lips and cut 70 ms off its end. A close-up, the face filling the
+  frame, follows better than a head-and-shoulders shot. A 7 s clip at
+  1280×704 takes ~12 min. Voices from the speech slot or the Qwen3-TTS
+  workflows, songs from ACE-Step or YuE2 fit straight in.
 - **Smoother video** (#44). `Video Frame Interpolation (FILM)` is ComfyUI's own
   template: Google's FILM (69 MB) puts frames between the frames of a video,
   2× by default (up to 16×), the frame rate raised with it and the sound kept.

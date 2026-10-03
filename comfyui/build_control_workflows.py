@@ -634,7 +634,47 @@ def inpaint_all():
     return g
 
 
+def talking():
+    """LTX-2.5 picture + audio to video (#43): the voice (or song) is encoded with
+    LTX's audio VAE and held fixed by a noise mask, and the video is made to it —
+    the person speaks or sings along. The audio is padded to whole seconds and
+    the video made exactly that long: with a shorter audio the lips ran on after
+    the voice had stopped. The audio is made exactly as long as the video — N
+    frames / rate, to the sample — not just to the second. ComfyUI's ia2v
+    template does this for LTX-2.3."""
+    g = from_base("ltx_i2v")
+    find = lambda cls, t=None: next(k for k, n in g.items() if n["class_type"] == cls and (t is None or variants.title(n) == t))
+    empty = find("LTXVEmptyLatentAudio")
+    audio_vae = g[empty]["inputs"]["audio_vae"]
+    a, fit, enc, mask, held = (str(int(_new_id(g)) + i) for i in range(5))
+    g[a] = {"class_type": "LoadAudio", "inputs": {"audio": "voice.wav"}, "_meta": {"title": "Voice or song"}}
+    rate = find("PrimitiveInt", "Frame Rate")
+    g[fit] = {"class_type": "LlmctlAudioFit", "inputs": {"audio": [a, 0], "frame_rate": [rate, 0], "extra_seconds": 0}}
+    g[enc] = {"class_type": "LTXVAudioVAEEncode", "inputs": {"audio": [fit, 0], "audio_vae": audio_vae}}
+    g[mask] = {"class_type": "SolidMask", "inputs": {"value": 0.0, "width": 64, "height": 64}}
+    g[held] = {"class_type": "SetLatentNoiseMask", "inputs": {"samples": [enc, 0], "mask": [mask, 0]},
+               "_meta": {"title": "Audio held as it is"}}
+    variants._replace_refs(g, [empty, 0], [held, 0])
+    del g[empty]
+    duration = find("PrimitiveInt", "Duration")
+    variants._replace_refs(g, [duration, 0], [fit, 1])
+    del g[duration]
+    g[find("PrimitiveStringMultiline", "Prompt")]["inputs"]["value"] = (
+        "The person speaks to the camera, the lips moving clearly with every word, natural small head movements "
+        "and blinks; static close-up shot.")
+    g[find("SaveVideo")]["inputs"]["filename_prefix"] = "video/LTX-2.5_talking"
+    # The sound under the video is the original, not what comes back through the
+    # audio VAE: that round trip moved the voice 60 ms earlier than the lips (which
+    # follow the encoded original) and cut 70 ms off its end.
+    create = find("CreateVideo")
+    decode = g[create]["inputs"]["audio"][0]
+    g[create]["inputs"]["audio"] = [fit, 0]
+    del g[decode]
+    return g
+
+
 WORKFLOWS = {
+    "LTX-2.5 Talking (int8, distilled)": talking,
     "Qwen-Image 2.1 T2I": qwen_template("qwen_t2i"),
     "Qwen-Image 2.1 Edit": qwen_template("qwen_edit"),
     "Qwen-Image 2.1 Background Removal": qwen_template("qwen_bg", uncensored=False),

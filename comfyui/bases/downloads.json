@@ -161,6 +161,18 @@
    "url": "https://huggingface.co/black-forest-labs/FLUX.2-small-decoder/resolve/main/full_encoder_small_decoder.safetensors"
   }
  ],
+ "gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors": [
+  {
+   "directory": "text_encoders",
+   "url": "https://huggingface.co/Lightricks/LTX-2.5/resolve/main/text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors"
+  }
+ ],
+ "gemma4_e2b_it_int8_convrot.safetensors": [
+  {
+   "directory": "text_encoders",
+   "url": "https://huggingface.co/Comfy-Org/gemma-4/resolve/main/text_encoders/gemma4_e2b_it_int8_convrot.safetensors"
+  }
+ ],
  "generation_config.json": [
   {
    "directory": "LLM/Florence-2-large",
@@ -171,6 +183,30 @@
   {
    "directory": "ultralytics/bbox",
    "url": "https://huggingface.co/Bingsu/adetailer/resolve/53cc19de382014514d9d4038601d261a7faa9b7b/hand_yolov8s.pt"
+  }
+ ],
+ "ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors": [
+  {
+   "directory": "diffusion_models",
+   "url": "https://huggingface.co/Lightricks/LTX-2.5/resolve/main/diffusion_models/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors"
+  }
+ ],
+ "ltx-2.5-audio-vae-bf16.safetensors": [
+  {
+   "directory": "vae",
+   "url": "https://huggingface.co/Lightricks/LTX-2.5/resolve/main/vae/ltx-2.5-audio-vae-bf16.safetensors"
+  }
+ ],
+ "ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors": [
+  {
+   "directory": "latent_upscale_models",
+   "url": "https://huggingface.co/Lightricks/LTX-2.5/resolve/main/latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors"
+  }
+ ],
+ "ltx-2.5-video-vae-bf16.safetensors": [
+  {
+   "directory": "vae",
+   "url": "https://huggingface.co/Lightricks/LTX-2.5/resolve/main/vae/ltx-2.5-video-vae-bf16.safetensors"
   }
  ],
  "mistral_3_small_flux2_fp8.safetensors": [

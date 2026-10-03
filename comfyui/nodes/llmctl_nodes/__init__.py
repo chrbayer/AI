@@ -211,6 +211,40 @@ class LlmctlControlImage:
         return (image, kw[f"strength_{steuerung.lower()}"])
 
 
-NODE_CLASS_MAPPINGS = {"LlmctlArtifactCheck": LlmctlArtifactCheck, "LlmctlControlImage": LlmctlControlImage}
+class LlmctlAudioFit:
+    """The audio padded with silence to the length of the video that is to move with
+    it, and that video's length. LTX's picture+audio needs them equal to the sample:
+    a video of N frames lasts N / frame rate seconds (LTX's lengths are whole seconds
+    × rate + 1 frame), and audio shorter than that drifts from the lips — 6.1 s of
+    voice under a 7 s video had them run on after it had stopped."""
+    CATEGORY = "llmctl"
+    FUNCTION = "fit"
+    RETURN_TYPES = ("AUDIO", "INT", "INT")
+    RETURN_NAMES = ("audio", "seconds", "frames")
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"audio": ("AUDIO",),
+                             "frame_rate": ("INT", {"default": 24, "min": 1, "max": 120}),
+                             "extra_seconds": ("INT", {"default": 0, "min": 0, "max": 30,
+                                                       "tooltip": "silence after the voice, in whole seconds"})}}
+
+    def fit(self, audio, frame_rate, extra_seconds):
+        import math
+        import torch
+        wave, rate = audio["waveform"], audio["sample_rate"]
+        seconds = max(1, math.ceil(wave.shape[-1] / rate - 1e-6)) + extra_seconds
+        frames = seconds * frame_rate + 1
+        want = round(frames * rate / frame_rate)          # N frames last N / rate seconds
+        if wave.shape[-1] < want:
+            wave = torch.cat([wave, wave.new_zeros(*wave.shape[:-1], want - wave.shape[-1])], dim=-1)
+        else:
+            wave = wave[..., :want]
+        return ({"waveform": wave, "sample_rate": rate}, seconds, frames)
+
+
+NODE_CLASS_MAPPINGS = {"LlmctlArtifactCheck": LlmctlArtifactCheck, "LlmctlControlImage": LlmctlControlImage,
+                       "LlmctlAudioFit": LlmctlAudioFit}
 NODE_DISPLAY_NAME_MAPPINGS = {"LlmctlArtifactCheck": "Artifact Check (llmctl)",
-                              "LlmctlControlImage": "Control image (llmctl)"}
+                              "LlmctlControlImage": "Control image (llmctl)",
+                              "LlmctlAudioFit": "Audio to whole seconds (llmctl)"}
