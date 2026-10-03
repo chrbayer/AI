@@ -190,6 +190,9 @@ def main():
             assert len(size) == 2 and all(x % 32 == 0 and 256 <= x <= 2048 for x in size)
         except (ValueError, AssertionError):
             sys.exit("--size: WxH, each a multiple of 32 between 256 and 2048")
+    for tool in ("ffmpeg", "ffprobe"):
+        if not shutil.which(tool):
+            sys.exit(f"{tool} is missing")
     total = float(probe(a.song, "-show_entries", "format=duration"))
     count = math.ceil(total / a.seconds - 1e-6)
     plan = read_sections(a.sections, count, a.prompt)
@@ -206,9 +209,6 @@ def main():
     if a.dry_run:
         return
 
-    for tool in ("ffmpeg", "ffprobe"):
-        if not shutil.which(tool):
-            sys.exit(f"{tool} is missing")
     if not a.url:
         sys.exit("musicvideo renders on ComfyUI, which is not running — llmctl start comfy 9")
     comfy = Comfy(a.url)

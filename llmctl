@@ -6982,7 +6982,7 @@ cmd_musicvideo() {
     case "${1:-}" in
         ""|-h|--help) python3 "$LIB_DIR/musicvideo.py" --help | sed "s|^usage: musicvideo.py|usage: $PROG musicvideo|"; return ;;
     esac
-    _check_deps python3 ffmpeg ffprobe || return 1
+    _check_deps python3 || return 1          # ffmpeg: musicvideo.py checks, where it needs it
     # No ComfyUI: an empty URL, which only a run that renders minds (not --dry-run).
     local slot url=""
     slot=$(_comfyui_slots | head -1)
