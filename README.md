@@ -1437,6 +1437,13 @@ llmctl update comfy --torch           # …and torch itself
   2× by default (up to 16×), the frame rate raised with it and the sound kept.
   A 5 s LTX clip at 1280×704 went from 24 to 48 fps (241 frames) in 64 s,
   visibly smoother in waves and hair. Takes any video file in `input/`.
+  `SeedVR2 3B Video Upscale (int8)` (ComfyUI's template, 3.5 GB) sharpens and
+  enlarges a video: the 5 s beach clip from 1280×704 to 1920×1056 came out with
+  real detail in hair, coat and surf, not just a softer enlargement — but it
+  is slow here: 595 s for one second of video, 2864 s for all five with *Split
+  Latent* on. Without that switch the whole clip went into one step that had
+  not finished after 40 minutes; leave it on for anything longer than a second.
+  Best kept for a finished clip.
 - **Speech in ComfyUI.** [ComfyUI-Qwen-TTS](https://github.com/flybirdxx/ComfyUI-Qwen-TTS)
   brings Qwen3-TTS; two workflows use it. `Qwen3-TTS Stimme entwerfen` designs
   a voice from a description (VoiceDesign), `Qwen3-TTS Stimme klonen` speaks in
