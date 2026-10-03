@@ -21,7 +21,7 @@
 #         Slots are not a fixed set — any N the ports have room for works.
 
 PROG=llmctl
-LLMCTL_VERSION=1.58.0
+LLMCTL_VERSION=1.58.1
 LLMCTL_REPO="chrbayer/AI"          # its releases (vX.Y.Z) are what self-update and outdated follow
 
 # ── Where things live ───────────────────────────────────────
