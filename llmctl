@@ -4681,6 +4681,25 @@ _outdated_self() {
     lead=${lead:+, master is $lead commits further}
     [[ "$lead" == ", master is 0 commits further" ]] && lead=""
     local counted=false
+    if [[ "${master:-false}" == true ]]; then
+        # Against master: the checkout's commit where there is one, else how far
+        # master is past the release installed.
+        src=$(_self_source)
+        local head behind=""
+        [[ -n "$src" ]] && head=$(git -C "$src" rev-parse HEAD 2>/dev/null) &&
+            behind=$(_gh_json "repos/$LLMCTL_REPO/compare/$head...master" .ahead_by)
+        [[ -z "$behind" ]] && ! _newer "$latest" "$LLMCTL_VERSION" &&
+            behind=$(_gh_json "repos/$LLMCTL_REPO/compare/v$LLMCTL_VERSION...master" .ahead_by)
+        if [[ "$behind" =~ ^[1-9] ]]; then
+            echo "  llmctl $LLMCTL_VERSION — $behind commits behind master: $PROG self-update --master ($latest is the newest release)"
+            newer=$(( newer + 1 ))
+        elif [[ -n "$behind" ]]; then
+            echo "  llmctl $LLMCTL_VERSION — current with master ($latest is the newest release)"
+        else
+            echo "  llmctl $LLMCTL_VERSION: cannot compare with master"
+        fi
+        return
+    fi
     if _newer "$latest" "$LLMCTL_VERSION"; then
         echo "  llmctl $LLMCTL_VERSION — $latest is out: $PROG self-update$lead"
         newer=$(( newer + 1 )); counted=true
@@ -4785,8 +4804,14 @@ cmd_self_update() {
 }
 
 cmd_outdated() {
-    local quick=false
-    [[ "${1:-}" == --quick ]] && quick=true
+    local quick=false master=false a
+    for a in "$@"; do
+        case "$a" in
+            --quick) quick=true ;;
+            --master) master=true ;;
+            *) echo "Usage: $PROG outdated [--quick] [--master]"; return 2 ;;
+        esac
+    done
     local newer=0 entry name
     local -a f
     _check_deps hf python3 || return 2
@@ -4831,6 +4856,10 @@ cmd_outdated() {
     stable=$(_gh_json "repos/ggml-org/llama.cpp/releases/latest" .tag_name)
     local -a bins=("${LLAMA_DEFAULT_BIN:-llama-server}" "${LLAMA_ROCM_BIN:-}")
     for kind in vulkan rocm; do [[ -x "$LLAMA_DIR/$kind/current/llama-server" ]] && bins+=("$LLAMA_DIR/$kind/current/llama-server"); done
+    # --master: against the newest builds of master (ggml-org's for Vulkan,
+    # lemonade's for ROCm), not the release.
+    local builds=""
+    [[ "$master" == true ]] && builds=$(python3 "$LLAMA_BUILDS_SCRIPT" resolve-master 2>/dev/null)
     for bin in $(printf '%s\n' "${bins[@]}" | awk 'NF && !s[$0]++'); do
         path=$(command -v "$bin" 2>/dev/null) || { echo "  $bin: not installed"; continue; }
         out=$("$path" --version 2>&1)
@@ -4838,7 +4867,20 @@ cmd_outdated() {
         if [[ -z "$commit" ]]; then echo "  $path: no commit in --version"; continue; fi
         behind=$(_gh_json "repos/ggml-org/llama.cpp/compare/$commit...master" .ahead_by)
         [[ -n "$stable" ]] && status=$(_gh_json "repos/ggml-org/llama.cpp/compare/$stable...$commit" .status)
-        if [[ -z "$stable" || -z "${status:-}" ]]; then
+        if [[ "$master" == true ]]; then
+            local want="" build=""
+            case "$(readlink -f "$path")" in
+                */rocm/*) want=$(jq -r '.rocm.commit // empty' <<< "$builds"); build=$(jq -r '.rocm.build // empty' <<< "$builds") ;;
+                *)        want=$(jq -r '.vulkan.commit // empty' <<< "$builds"); build=$(jq -r '.vulkan.build // empty' <<< "$builds") ;;
+            esac
+            if [[ -z "$want" ]]; then echo "  $path ($commit): cannot ask for master's builds"
+            elif [[ "$want" == "$commit"* || "$commit" == "$want"* ]]; then
+                echo "  $path ($commit) — current: master's newest build ($build)${stable:+; $stable is the newest stable release}"
+            else
+                echo "  $path ($commit) — master's newest build is $build${behind:+, $behind commits on}: $PROG update llama --master"
+                newer=$(( newer + 1 ))
+            fi
+        elif [[ -z "$stable" || -z "${status:-}" ]]; then
             echo "  $path ($commit): cannot compare with a release${behind:+ ($behind commits behind master)}"
         elif [[ "$status" == identical || "$status" == ahead ]]; then
             echo "  $path ($commit) — current: $stable is the newest stable release${behind:+, master is $behind commits further}"
@@ -4872,13 +4914,21 @@ cmd_outdated() {
     printf '\n\033[1maudio.cpp\033[0m\n'
     if [[ -d "$AUDIOCPP_DIR/.git" ]]; then
         local built; built=$(git -C "$AUDIOCPP_DIR" rev-parse HEAD 2>/dev/null)
-        # Against the newest release tag: built at it, or past it (--master), is current.
-        local DL_MASTER=false; _audiocpp_wanted
+        # Against the newest release tag (--master: main): built at it, or past it, is current.
+        local DL_MASTER="$master"; _audiocpp_wanted
         # Its version: the release tag it is built at, else its commit.
         local at=""; [[ "$built" == "$AC_SHA" ]] && at="$AC_REF"
         local lead; lead=$(_gh_json "repos/0xShug0/audio.cpp/compare/$built...main" .ahead_by)
         [[ "$lead" =~ ^[1-9] ]] && lead=", main is $lead commits further" || lead=""
-        if git -C "$AUDIOCPP_DIR" merge-base --is-ancestor "$AC_SHA" "$built" 2>/dev/null; then
+        if [[ "$master" == true ]]; then
+            if [[ "$built" == "$AC_SHA" ]] || git -C "$AUDIOCPP_DIR" merge-base --is-ancestor "$AC_SHA" "$built" 2>/dev/null; then
+                echo "  audio.cpp (${built:0:9}) — current with main"
+            else
+                local by; by=$(sed -E 's/.* ([0-9]+) commits.*/\1/' <<< "$lead")
+                echo "  audio.cpp (${built:0:9}) — ${by:+$by commits }behind main: $PROG download asr-live --master"
+                newer=$(( newer + 1 ))
+            fi
+        elif git -C "$AUDIOCPP_DIR" merge-base --is-ancestor "$AC_SHA" "$built" 2>/dev/null; then
             echo "  audio.cpp (${at:-${built:0:9}}) — current: $AC_REF is the newest release$lead"
         else
             echo "  audio.cpp (${at:-${built:0:9}}) — $AC_REF is the newest release: $PROG download asr-live builds it$lead"
@@ -4906,7 +4956,17 @@ cmd_outdated() {
             lead=$(git -C "$c_app" rev-list --count HEAD..origin/master 2>/dev/null)
             [[ "$lead" =~ ^[1-9] ]] && lead=", $lead commits behind origin/master" || lead=""
         fi
-        if [[ -z "$newest" ]]; then echo "  ComfyUI ($version$on_master): cannot list its releases"
+        if [[ "$master" == true ]]; then
+            # Against origin/master as GitHub has it now.
+            local tip; tip=$(git ls-remote "$COMFYUI_GIT" refs/heads/master 2>/dev/null | cut -f1)
+            if [[ -z "$tip" ]]; then echo "  ComfyUI ($version$on_master): cannot ask for master"
+            elif [[ "$tip" == "$here" ]] || git -C "$c_app" merge-base --is-ancestor "$tip" HEAD 2>/dev/null; then
+                echo "  ComfyUI ($version$on_master) — current with master${newest:+ ($newest is the newest release)}"
+            else
+                echo "  ComfyUI ($version$on_master) — behind master (${tip:0:9}): $PROG update ${f[0]} --master${newest:+ ($newest is the newest release)}"
+                newer=$(( newer + 1 ))
+            fi
+        elif [[ -z "$newest" ]]; then echo "  ComfyUI ($version$on_master): cannot list its releases"
         elif git -C "$c_app" merge-base --is-ancestor "$newest" HEAD 2>/dev/null; then
             echo "  ComfyUI ($version$on_master) — current: $newest is the newest release$lead"
         else
@@ -5864,6 +5924,7 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  service start / stop (now) / disable / status"
     printf "  %-20s %s\n" "outdated [--quick]"     "what has a newer version: halogen image, llama.cpp builds, the speech PR, ComfyUI,"
     printf "  %-20s %s\n" ""                      "  custom nodes, installed models (by SHA-256; --quick: size and date); changes nothing"
+    printf "  %-20s %s\n" ""                      "  --master: llmctl, llama.cpp, audio.cpp and ComfyUI against master, not their releases"
     printf "  %-20s %s\n" "prune [--dry-run]"      "list the models nothing names any more, with what deleting them frees; asks first"
     printf "  %-20s %s\n" "logs [slot]"            "a slot's server log (last 50 lines; -n N, -f to follow, --proxy, --tls);"
     printf "  %-20s %s\n" ""                      "  without a slot: every log with size and last change"

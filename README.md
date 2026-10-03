@@ -2248,7 +2248,10 @@ checkout is newer than the installed copy.
 ### What has a newer version
 
 `llmctl outdated` asks, and changes nothing (exit 0: all current, 1: something
-newer):
+newer). Everything is measured against releases; `--master` measures llmctl,
+the llama.cpp builds, audio.cpp and ComfyUI against master instead — what
+`self-update --master`, `update llama --master`, `download asr-live --master`
+and `update comfy --master` would bring — with the newest release beside it:
 
 - **halogen**: the image tag in `models.conf` against the registry's newest,
   with the changelog headings in between;
