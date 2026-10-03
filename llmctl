@@ -4481,14 +4481,16 @@ cmd_outdated() {
     if [[ -d "$AUDIOCPP_DIR/.git" ]]; then
         local release; release=$(_gh_json "repos/0xShug0/audio.cpp/releases/latest" .tag_name)
         local built; built=$(git -C "$AUDIOCPP_DIR" rev-parse HEAD 2>/dev/null)
+        local lead; lead=$(_gh_json "repos/0xShug0/audio.cpp/compare/$AUDIOCPP_COMMIT...main" .ahead_by)
+        lead=${lead:+, main is $lead commits further}
         if [[ -z "$release" ]]; then echo "  audio.cpp ($AUDIOCPP_TAG, pinned): cannot ask GitHub"
         elif [[ "$release" != "$AUDIOCPP_TAG" ]]; then
-            echo "  audio.cpp ($AUDIOCPP_TAG, pinned) — $release is out; move AUDIOCPP_TAG/AUDIOCPP_COMMIT after trying it"
+            echo "  audio.cpp ($AUDIOCPP_TAG, pinned) — $release is out; move AUDIOCPP_TAG/AUDIOCPP_COMMIT after trying it$lead"
             newer=$(( newer + 1 ))
         elif [[ "$built" != "$AUDIOCPP_COMMIT" ]]; then
             echo "  audio.cpp — built at ${built:0:9}, not at $AUDIOCPP_TAG: $PROG download asr-live"
             newer=$(( newer + 1 ))
-        else echo "  audio.cpp ($AUDIOCPP_TAG) — current, the newest release"; fi
+        else echo "  audio.cpp ($AUDIOCPP_TAG) — current: $AUDIOCPP_TAG is the newest release$lead"; fi
     else
         echo "  not set up"
     fi

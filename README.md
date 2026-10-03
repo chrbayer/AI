@@ -1417,6 +1417,11 @@ llmctl update comfy --torch           # …and torch itself
   (its output decoded straight away; sampling at 512×288) gives 2 s in 55 s.
   A portrait picture is cut to the template's 16:9 unless the size is set.
   Not served through the image API.
+- **Smoother video** (#44). `Video Frame Interpolation (FILM)` is ComfyUI's own
+  template: Google's FILM (69 MB) puts frames between the frames of a video,
+  2× by default (up to 16×), the frame rate raised with it and the sound kept.
+  A 5 s LTX clip at 1280×704 went from 24 to 48 fps (241 frames) in 64 s,
+  visibly smoother in waves and hair. Takes any video file in `input/`.
 - **Speech in ComfyUI.** [ComfyUI-Qwen-TTS](https://github.com/flybirdxx/ComfyUI-Qwen-TTS)
   brings Qwen3-TTS; two workflows use it. `Qwen3-TTS Stimme entwerfen` designs
   a voice from a description (VoiceDesign), `Qwen3-TTS Stimme klonen` speaks in
