@@ -2105,6 +2105,27 @@ them are served by the Vulkan build — the ROCm build is opt-in per model
 
 Multimodal projectors are only loaded on an explicit `--mmproj`.
 
+### Updating llmctl itself
+
+`llmctl self-update` brings llmctl to its newest release (a `vX.Y.Z` tag on
+GitHub, never an untagged master). Where it came from decides how:
+
+- run from a checkout (`make install-link`): the checkout is fast-forwarded to
+  the release if it is behind, and that is all;
+- installed with `make install`, which notes the checkout it was run from in
+  `share/llmctl/source`: the checkout is fast-forwarded if it is behind the
+  release, then `sudo make install` from it — so a checkout that is ahead of
+  the release (your own commits) is installed as it is;
+- installed without a checkout: the release's archive is downloaded and
+  installed with `sudo make install`.
+
+A checkout with uncommitted changes, or one that has diverged from the release,
+is left alone. `--check` only tells what it would do. Afterwards it names the
+steps that may apply (`update comfy`, `download llama`, `download asr-live`)
+without running them. `outdated` lists llmctl first: the newest release and
+the first lines of its notes, how far master is past it, and whether the
+checkout is newer than the installed copy.
+
 ### What has a newer version
 
 `llmctl outdated` asks, and changes nothing (exit 0: all current, 1: something

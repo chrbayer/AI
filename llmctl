@@ -22,6 +22,7 @@
 
 PROG=llmctl
 LLMCTL_VERSION=1.50.0
+LLMCTL_REPO="chrbayer/AI"          # its releases (vX.Y.Z) are what self-update and outdated follow
 
 # ── Where things live ───────────────────────────────────────
 # The program itself (this file, proxy.py, templates, example configs) is
@@ -4131,6 +4132,7 @@ cmd__complete() {
         preset-save) printf '%s\n' --dry-run --force --label ;;
         prune) echo --dry-run ;;
         outdated) echo --quick ;;
+        self-update) echo --check ;;
         service)
             case $k in
                 0) printf '%s\n' enable disable start stop status ;;
@@ -4394,6 +4396,96 @@ for k in sys.argv[1].lstrip(".").split("."):
 print("" if j is None else str(j).lower() if isinstance(j, bool) else j)' "$2" 2>/dev/null
     fi
 }
+# ── llmctl itself ────────────────────────────────────────────
+
+# The git checkout this llmctl comes from: the one it runs in (install-link), or
+# the one `make install` was run from (share/llmctl/source). Empty without one.
+_self_source() {
+    local src=""
+    if [[ "$SHARE_DIR" == "$LIB_DIR" ]]; then src="$SHARE_DIR"
+    elif [[ -f "$SHARE_DIR/source" ]]; then src=$(cat "$SHARE_DIR/source")
+    fi
+    [[ -n "$src" && -d "$src/.git" && -f "$src/llmctl" ]] && echo "$src"
+}
+
+_version_of() { sed -n 's/^LLMCTL_VERSION=\([0-9.]*\).*/\1/p' "$1/llmctl" 2>/dev/null; }
+
+# newer A B: A is a later version than B
+_newer() { [[ "$1" != "$2" && "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" == "$1" ]]; }
+
+_outdated_self() {
+    printf '\033[1mllmctl\033[0m\n'
+    local latest lead src checkout
+    latest=$(_gh_json "repos/$LLMCTL_REPO/releases/latest" .tag_name); latest=${latest#v}
+    if [[ -z "$latest" ]]; then echo "  llmctl $LLMCTL_VERSION: cannot ask GitHub"; return; fi
+    lead=$(_gh_json "repos/$LLMCTL_REPO/compare/v$latest...master" .ahead_by)
+    lead=${lead:+, master is $lead commits further}
+    [[ "$lead" == ", master is 0 commits further" ]] && lead=""
+    if _newer "$latest" "$LLMCTL_VERSION"; then
+        echo "  llmctl $LLMCTL_VERSION — $latest is out: $PROG self-update$lead"
+        newer=$(( newer + 1 ))
+        _gh_json "repos/$LLMCTL_REPO/releases/tags/v$latest" .body | grep -v '^\s*$' | head -4 | cut -c1-110 | sed 's/^/      /'
+    else
+        echo "  llmctl $LLMCTL_VERSION — current: $latest is the newest release$lead"
+    fi
+    src=$(_self_source)
+    if [[ -n "$src" && "$src" != "$SHARE_DIR" ]]; then
+        checkout=$(_version_of "$src")
+        if [[ -n "$checkout" ]] && _newer "$checkout" "$LLMCTL_VERSION"; then
+            echo "  the checkout in $src is at $checkout, newer than this installation: $PROG self-update"
+            newer=$(( newer + 1 ))
+        fi
+    fi
+}
+
+# self-update: to the newest release — or to the checkout, where that is newer.
+cmd_self_update() {
+    local check=false
+    [[ "${1:-}" == --check ]] && check=true
+    local latest src checkout tmp
+    latest=$(_gh_json "repos/$LLMCTL_REPO/releases/latest" .tag_name); latest=${latest#v}
+    [[ -n "$latest" ]] || { echo "Error: cannot ask GitHub for llmctl's newest release"; return 1; }
+    src=$(_self_source)
+    echo "  installed $LLMCTL_VERSION, newest release $latest${src:+, checkout $src}"
+
+    if [[ -n "$src" ]]; then
+        git -C "$src" fetch -q --tags origin 2>/dev/null || echo "  (cannot fetch — going by what the checkout has)"
+        if ! git -C "$src" merge-base --is-ancestor "v$latest" HEAD 2>/dev/null; then
+            # the checkout is behind the release: fast-forward it, never over local work
+            if [[ -n "$(git -C "$src" status --porcelain --untracked-files=no)" ]]; then
+                echo "Error: $src has local changes; commit or stash them, then run self-update again"; return 1
+            fi
+            if [[ "$check" == true ]]; then echo "  would fast-forward $src to v$latest"
+            else
+                git -C "$src" merge -q --ff-only "v$latest" ||
+                    { echo "Error: $src has diverged from v$latest — not touched"; return 1; }
+                echo "  $src fast-forwarded to v$latest"
+            fi
+        fi
+        if [[ "$src" == "$SHARE_DIR" ]]; then          # install-link: the checkout is the program
+            [[ "$check" == true ]] || echo "  llmctl runs from $src: $(_version_of "$src") now"
+            return 0
+        fi
+        checkout=$(_version_of "$src")
+        [[ "$check" == true ]] && _newer "$latest" "$checkout" && checkout=$latest
+        if ! _newer "$checkout" "$LLMCTL_VERSION"; then echo "  nothing newer to install"; return 0; fi
+        if [[ "$check" == true ]]; then echo "  would install $checkout from $src (sudo make install)"; return 1; fi
+        echo "  installing $checkout from $src — sudo asks for your password"
+        sudo make -C "$src" install > /dev/null || { echo "Error: make install failed"; return 1; }
+    else
+        if ! _newer "$latest" "$LLMCTL_VERSION"; then echo "  nothing newer to install"; return 0; fi
+        if [[ "$check" == true ]]; then echo "  would download v$latest and install it (sudo make install)"; return 1; fi
+        tmp=$(mktemp -d)
+        curl -fsSL "https://github.com/$LLMCTL_REPO/archive/refs/tags/v$latest.tar.gz" | tar xz -C "$tmp" --strip-components=1 ||
+            { rm -rf "$tmp"; echo "Error: cannot download v$latest"; return 1; }
+        echo "  installing $latest — sudo asks for your password"
+        sudo make -C "$tmp" install > /dev/null || { rm -rf "$tmp"; echo "Error: make install failed"; return 1; }
+        rm -rf "$tmp"
+    fi
+    echo "  installed: $("$(command -v "$PROG" || echo /usr/local/bin/llmctl)" version)"
+    echo "  then, if they apply: $PROG update comfy, $PROG download llama, $PROG download asr-live"
+}
+
 cmd_outdated() {
     local quick=false
     [[ "${1:-}" == --quick ]] && quick=true
@@ -4401,6 +4493,7 @@ cmd_outdated() {
     local -a f
     _check_deps hf python3 || return 2
 
+    _outdated_self
     printf '\n\033[1mhalogen and gufo\033[0m\n'
     local seen=""
     for entry in "${_MODELS[@]}"; do
@@ -5456,6 +5549,7 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  newest stable llama.cpp release, into $LLAMA_DIR/<kind>/current; tested before use"
     printf "  %-20s %s\n" "voice list|add|design|rm" "voices the speech (tts) slots speak in: design one from a description, or add a recording"
     printf "  %-20s %s\n" ""                      "  voice export [FILE] / import FILE [--force]: they live nowhere else — back them up"
+    printf "  %-20s %s\n" "self-update [--check]" "llmctl to its newest release (or its checkout, where newer); --check: only tell"
     printf "  %-20s %s\n" "version"                "print the version"
     echo ""
     echo "  Ports:  slot N → server :$(( PORT_BASE_SERVER + 1 ))-$(( PORT_BASE_SERVER + SLOT_MAX ))  proxy :$(( PORT_BASE_PROXY + 1 ))-$(( PORT_BASE_PROXY + SLOT_MAX ))  (N added to the base)"
@@ -6491,6 +6585,7 @@ case "${1:-}" in
     service)     shift; cmd_service "$@" ;;
     prune)       shift; cmd_prune "$@" ;;
     outdated)    shift; cmd_outdated "$@" ;;
+    self-update) shift; cmd_self_update "$@" ;;
     _complete)   shift; cmd__complete "$@" 2>/dev/null ;;
     clear-kv)   shift; cmd_clear_kv "$@" ;;
     probe-reasoning) shift; cmd_probe_reasoning "$@" ;;

@@ -31,6 +31,8 @@ install:
 	install -Dm644 proxy.py $(LIBDIR)/proxy.py
 	install -Dm644 anthropic_compat.py $(LIBDIR)/anthropic_compat.py
 	install -Dm644 halogen_bench.py $(LIBDIR)/halogen_bench.py
+	# where this copy came from, for `llmctl self-update` (a git checkout, or nothing)
+	mkdir -p $(SHAREDIR) && echo "$(CURDIR)" > $(SHAREDIR)/source
 	install -Dm644 llama_builds.py $(LIBDIR)/llama_builds.py
 	install -Dm644 comfyui_models.py $(LIBDIR)/comfyui_models.py
 	install -Dm644 tts_server.py $(LIBDIR)/tts_server.py
