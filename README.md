@@ -1,6 +1,11 @@
 # llmctl — LLM Server Manager
 
-Script-based tool to manage local LLM inference servers and proxies for Claude Code.
+One command for a local AI machine (AMD Strix Halo): language models on
+llama.cpp, halogen and gufo behind OpenAI- and Anthropic-compatible proxies (for
+Claude Code and other clients), speech in and out, and pictures, video, music and
+3D on ComfyUI with an image API. It starts, stops and combines them in slots and
+presets, checks that they fit in memory, downloads models, measures them, and
+tells what has a newer version.
 
 ## Installation & directories
 
@@ -35,7 +40,10 @@ past the release commit). Each sits in `<kind>/<build>/`, `<kind>/current`
 points at the one in use. A new build becomes current only after `--version`
 names its commit and it loads the smallest llama.cpp model on disk and answers
 `/health`; the one before stays for a rollback. `llmctl update llama` moves on
-when a new release is out, `--check` tells first, `outdated` lists both. Use
+when a new release is out, `--check` tells first, `outdated` lists both.
+`--master` (`download llama --master`, `update llama --master`) takes the
+newest builds instead: ggml-org's newest bNNNNN with a Vulkan package and
+lemonade's newest for the GPU target. Use
 them in `models.conf`:
 
 ```bash
@@ -635,6 +643,17 @@ control `setsid` finds itself a process group leader and forks instead of
 exec-ing, so `$!` would name the wrapper and the PID file would point at a
 process that has already gone.
 
+### A server that dies while starting
+
+`start` watches the new server for 20 s (`LLMCTL_START_WATCH`, in seconds; 0
+turns it off). One that exits in that time — a model or vision projector it
+cannot load, memory it cannot get — makes `start` fail with the lines of its log
+that say why, and the slot is cleared, rather than "Server running" over a
+process that is gone and that only `status` or the log would show. One that
+answers in that time is reported up; one still loading is left to load. `preset`
+already waits for each slot and rolls back a half-started preset; it now hears
+of such a failure at once instead of after its wait.
+
 ### What `status` reports
 
 Besides the PIDs and ports, `status` names the model each slot serves and the
@@ -964,10 +983,24 @@ saved workflows), `input/`, `output/`, `temp/` and `custom_nodes/`
 llmctl download comfy                 # set it up, fetch every model its workflows name
 llmctl download comfy klein           # …only what the workflows with "klein" in the name need
 llmctl start comfy 9                  # web UI on http://127.0.0.1:8009
-llmctl update comfy                   # git pull, Python dependencies, new workflows
+llmctl update comfy                   # to the newest release, Python dependencies, new workflows
 llmctl update comfy --torch           # …and torch itself
+llmctl update comfy --master          # master instead of the releases (download comfy --master too)
 ```
 
+- **Releases.** ComfyUI tags a release about once a week (vX.Y.0 on master,
+  patch releases vX.Y.1, .2 … with backported fixes on a `release/vX.Y`
+  branch). The checkout follows the newest tag: `download` checks it out,
+  `update` moves onto a newer one, and `outdated` counts ComfyUI as current
+  when it is on the newest tag or past it — not every commit on master.
+  `update --master` follows master instead, for a fix or template that is
+  only there (`download comfy --master` sets a new one up on master); a
+  checkout on master is reported with its version (`v0.38.0+28, master`) and
+  how far origin/master is ahead. The custom node packs stay on the commits
+  `comfyui/custom_nodes.txt` pins, unless a pack tags a release made after
+  its pin — `update` takes that and `outdated` reports it; new commits are
+  only shown. (Most packs tag rarely: Impact-Pack's newest tag, 8.28, lies
+  8 commits behind its pin, rgthree's 407.)
 - **Setup.** `download` does whatever is still missing: a git checkout of
   ComfyUI, a venv with torch built for ROCm 7.2 (`COMFYUI_PYTHON` picks the
   interpreter, default `python3.13`), `requirements.txt` held to that torch, the
@@ -1469,6 +1502,20 @@ llmctl update comfy --torch           # …and torch itself
   frame, follows better than a head-and-shoulders shot. A 7 s clip at
   1280×704 takes ~12 min. Voices from the speech slot or the Qwen3-TTS
   workflows, songs from ACE-Step or YuE2 fit straight in.
+- **Music videos** (#47): `llmctl musicvideo <song> <picture>...` makes one on
+  the running ComfyUI. The song is cut into sections (`--seconds`, 5 by
+  default); in each the pictures take turns to sing it (LTX-2.5 Talking), or a
+  sections file has a scene play instead — `scene: <prompt>` from the text
+  alone, `scene <picture>: <prompt>` from a picture, `sing <picture>: <prompt>`
+  for a section of its own. Every clip is cut to exactly the frames of its
+  section and the whole song goes underneath, so the picture stays on the sound
+  from the first frame to the last (a 15 s test: 360 frames, 15.000 s).
+  `--continuous` starts each section from the last frame of the one before.
+  Finished sections are kept beside the output (`<out>.parts/`, with what they
+  were made from): a run that stops, or one with a few sections changed, renders
+  only what is missing. `--dry-run` shows the plan and the time it takes —
+  about 6–7 min per 5 s section at 1280×704. Songs from ACE-Step or YuE2
+  (`/v1/audio/music`), singers from Z-Image and Qwen-Image Edit fit straight in.
 - **Smoother video** (#44). `Video Frame Interpolation (FILM)` is ComfyUI's own
   template: Google's FILM (69 MB) puts frames between the frames of a video,
   2× by default (up to 16×), the frame rate raised with it and the sound kept.
@@ -2026,10 +2073,11 @@ with tts.audio.speech.with_streaming_response.create(
   is a little less exact than `asr`: three slips in that passage (a missing
   "Prozent", "vier, zwei" for "vier Komma zwei"), one in 22 s of free speech,
   and numbers stay words. ~2.4 GiB on the GPU. `llmctl download asr-live`
-  clones audio.cpp at a pinned release tag (v0.9.0; `outdated` says when a newer
-  release is out, and `download asr-live` rebuilds a build that is not at the pin) and builds it with Vulkan and only the
-  model families `models.conf` names (85 s, 1.8 GB); `outdated` reports newer
-  upstream commits. The server takes its models from a JSON file llmctl writes
+  clones audio.cpp at its newest release tag and builds it with Vulkan and only
+  the model families `models.conf` names (85 s, 1.8 GB); when a newer release
+  is out, `outdated` says so and `download asr-live` rebuilds at it
+  (`--master`: at main; v0.9.0 is the fallback when GitHub cannot be asked).
+  New commits on main are only shown. The server takes its models from a JSON file llmctl writes
   per slot under `~/.local/state/llmctl/audiocpp/`.
 
   **When the speaker has finished** follows from the same stream: while
@@ -2159,6 +2207,7 @@ them are served by the Vulkan build — the ROCm build is opt-in per model
 - **gemma-moe** — Gemma-4-26B-A4B-it MoE uncensored, Q8_0, 128K ctx (uncensored); vision via the stock repo's mmproj, no speculation (MoE)
 - **minimax** — MiniMax-M2.7, UD-IQ3_S, 64K ctx
 - **llama3.3** — Llama-3.3-70B-Instruct abliterated, Q6_K, 32K ctx; drafted by Llama-3.2-1B (~2.7×)
+- **scout** — Llama 4 Scout (109B MoE, 17B active) abliterated v2, i1-Q5_K_M, 64K ctx, vision via `--mmproj` (llama.cpp's own projector); prompts read 2.6–3.4× and written ~1.3× as fast as `llama3.3` (271–283 / 15.2 t/s), but its German is sloppy — typos in most answers — where llama3.3's is clean
 - **r1** — DeepSeek-R1-Distill-Llama-70B Uncensored v2 Unbiased Reasoner, i1-Q5_K_M, 128K ctx
 - **mistral** — Mistral-Medium-3.5-128B, UD-Q5_K_XL, 32K ctx
 - **diamond** — L3.3-70B Magnum Diamond, i1-Q5_K_M, 32K ctx; drafted by the same Llama-3.2-1B (~2.0×)
@@ -2176,7 +2225,9 @@ Multimodal projectors are only loaded on an explicit `--mmproj`.
 ### Updating llmctl itself
 
 `llmctl self-update` brings llmctl to its newest release (a `vX.Y.Z` tag on
-GitHub, never an untagged master). Where it came from decides how:
+GitHub; `--master` takes master instead, installed whenever asked, as its
+version number stays the last release's until the next). Where it came from
+decides how:
 
 - run from a checkout (`make install-link`): the checkout is fast-forwarded to
   the release if it is behind, and that is all;
@@ -2205,7 +2256,7 @@ newer):
   against the newest stable release (a `v` tag, e.g. v0.5.0) — at or past it
   is current; how far `master` has moved on is only shown;
 - **the speech server's PR**: merged yet, or commits past the one we build;
-- **ComfyUI** against its upstream, and each custom node's pinned commit;
+- **ComfyUI** against its newest release tag (not master), and each custom node's pinned commit;
 - **installed models against their Hugging Face repos, by content.** GGUFs and
   halogen through hf's own record of each file's SHA-256, taken at download.
   ComfyUI's models are read and hashed once — ~140 GB in 42 s here, four files

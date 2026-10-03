@@ -80,11 +80,13 @@ async def main():
                 wf = json.loads(path.read_text())
                 if any("TTS" in n.get("type", "") for n in wf.get("nodes", [])):
                     continue                                   # speech has its own server
-                if any(n.get("type", "") in ("Save3DAdvanced", "SaveGLB", "SaveVideo", "SaveWEBM", "SaveAnimatedWEBP")
+                if any(n.get("type", "") in ("Save3DAdvanced", "SaveGLB", "SaveWEBM", "SaveAnimatedWEBP")
                        for n in wf.get("nodes", [])):
-                    continue                                   # 3D and video: no image to answer with
-                # music goes to api/audio/, for /v1/audio/music; the image list stays images
+                    continue                                   # 3D: no image to answer with
+                # music goes to api/audio/, for /v1/audio/music, video to api/video/, for
+                # `llmctl musicvideo`; the image list stays images
                 audio = any(n.get("type", "").startswith("SaveAudio") for n in wf.get("nodes", []))
+                video = any(n.get("type", "") == "SaveVideo" for n in wf.get("nodes", []))
                 if any(n.get("type", "") == "LlmctlArtifactCheck" for n in wf.get("nodes", [])):
                     continue                                   # it calls the image API itself
                 prompt = await evaluate(ws, f"""(async () => {{
@@ -96,7 +98,7 @@ async def main():
                 for name, settings in variants.VARIANTS.get(path.stem, [(path.stem, None)]):
                     graph = variants.resolve(prompt, settings) if settings is not None else prompt
                     name = name.removeprefix("audio/")
-                    out = ROOT / "api" / ("audio" if audio else "") / f"{name}.json"
+                    out = ROOT / "api" / ("audio" if audio else "video" if video else "") / f"{name}.json"
                     out.parent.mkdir(exist_ok=True)
                     out.write_text(json.dumps(graph, indent=1, ensure_ascii=False) + "\n")
                     print(f"{len(graph):3d} nodes  {out.relative_to(ROOT.parent)}")

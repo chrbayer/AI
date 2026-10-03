@@ -10,7 +10,7 @@
 #   llmctl status                              show running state, model and key parameters per slot
 #   llmctl clear-kv [slot]                     drop the KV cache without restarting (all slots, or one); ComfyUI: unload its models
 #   llmctl download <name|all> [PATTERN] [--from DIR|--check]  fetch models; for ComfyUI set it up and fetch what its workflows name
-#   llmctl update <comfyui-model> [--torch]    pull ComfyUI and its Python dependencies forward
+#   llmctl update <comfyui-model> [--torch] [--master]  ComfyUI to its newest release (or master) and its deps
 #   llmctl voice list|add|design|rm            voices for speech (tts) slots
 #   llmctl probe-reasoning [model]             show what each model's chat template supports
 #   llmctl gen-certs <public-hostname>         create CA + certificates for --public
@@ -633,8 +633,10 @@ _slot_is_tts() {
 #   extra_args   family=<audio.cpp family> task=<asr|tts|…> (KEY=VAL)
 AUDIOCPP_GIT="https://github.com/0xShug0/audio.cpp.git"
 # audio.cpp follows its release tags, not main; outdated says when a new one is out.
+# audio.cpp follows its newest release tag (download --master: main). This one,
+# tried here, is what it falls back to when GitHub cannot be asked.
 AUDIOCPP_TAG=v0.9.0
-AUDIOCPP_COMMIT=795c45fbde0a7d29c93b22199728ff5caaec02e5   # v0.9.0, tried here
+AUDIOCPP_COMMIT=795c45fbde0a7d29c93b22199728ff5caaec02e5
 AUDIOCPP_DIR="$DATA_DIR/audio.cpp"
 AUDIOCPP_CONF_DIR="$STATE_DIR/audiocpp"
 
@@ -726,6 +728,7 @@ PY
     server_pid=$(_spawn_detached "$PID_DIR/server-${slot}.pid" "$server_log" append "${cmd[@]}")
     [[ -n "$server_pid" ]] || { echo "Error: audio.cpp did not report a PID. See $server_log" >&2; exit 1; }
     echo "Server running (PID: $server_pid, detached)"
+    _watch_start "$server_pid" "$server_log" "$port_server" || { _stop_slot "$slot" > /dev/null 2>&1; exit 1; }
     echo ""
     echo "  Try:   curl -s $url/v1/audio/transcriptions -F file=@aufnahme.wav -F model=$_r_client"
     echo "  Live:  ffmpeg -f pulse -i default -ar 16000 -ac 1 -f s16le - | curl -sN -T - -H 'Expect:' \\"
@@ -785,29 +788,51 @@ _audiocpp_families() {
     done
     echo "$fams"
 }
+# The audio.cpp to build: AC_REF (a tag, or main under --master) and AC_SHA.
+_audiocpp_wanted() {
+    local refs
+    AC_REF="" AC_SHA=""
+    if [[ "${DL_MASTER:-false}" == true ]]; then
+        AC_SHA=$(git ls-remote "$AUDIOCPP_GIT" refs/heads/main 2>/dev/null | cut -f1)
+        [[ -n "$AC_SHA" ]] && AC_REF=main
+    else
+        refs=$(git ls-remote --tags "$AUDIOCPP_GIT" 'v*' 2>/dev/null)
+        AC_REF=$(sed -n 's#.*refs/tags/\(v[0-9]*\.[0-9]*\.[0-9]*\)$#\1#p' <<< "$refs" | sort -V | tail -1)
+        if [[ -n "$AC_REF" ]]; then
+            # An annotated tag lists its commit on a ^{} line of its own.
+            AC_SHA=$(awk -v t="refs/tags/$AC_REF^{}" '$2 == t { print $1 }' <<< "$refs")
+            [[ -n "$AC_SHA" ]] || AC_SHA=$(awk -v t="refs/tags/$AC_REF" '$2 == t { print $1 }' <<< "$refs")
+        fi
+    fi
+    if [[ -z "$AC_REF" || -z "$AC_SHA" ]]; then
+        AC_REF="$AUDIOCPP_TAG" AC_SHA="$AUDIOCPP_COMMIT"
+    fi
+}
+
 _audiocpp_setup() {
     local bin="${_r_binary//\~/$HOME}"
+    _audiocpp_wanted
     if [[ "$DL_CHECK" == true ]]; then
-        if [[ -x "$bin" && "$(git -C "$AUDIOCPP_DIR" rev-parse HEAD 2>/dev/null)" == "$AUDIOCPP_COMMIT" ]]; then
-            echo "  audio.cpp: built ($AUDIOCPP_TAG)"
-        elif [[ -x "$bin" ]]; then echo "  audio.cpp: to rebuild at $AUDIOCPP_TAG (~2 min)"; DL_PENDING=$(( DL_PENDING + 1 ))
-        else echo "  audio.cpp: to clone and build at $AUDIOCPP_TAG (Vulkan, ~2 min)"; DL_PENDING=$(( DL_PENDING + 1 )); fi
+        if [[ -x "$bin" && "$(git -C "$AUDIOCPP_DIR" rev-parse HEAD 2>/dev/null)" == "$AC_SHA" ]]; then
+            echo "  audio.cpp: built ($AC_REF)"
+        elif [[ -x "$bin" ]]; then echo "  audio.cpp: to rebuild at $AC_REF (~2 min)"; DL_PENDING=$(( DL_PENDING + 1 ))
+        else echo "  audio.cpp: to clone and build at $AC_REF (Vulkan, ~2 min)"; DL_PENDING=$(( DL_PENDING + 1 )); fi
         return 0
     fi
     local head; head=$(git -C "$AUDIOCPP_DIR" rev-parse HEAD 2>/dev/null)
-    if [[ -x "$bin" && "$head" == "$AUDIOCPP_COMMIT" ]]; then
-        echo "  audio.cpp in $AUDIOCPP_DIR ($AUDIOCPP_TAG)"
+    if [[ -x "$bin" && "$head" == "$AC_SHA" ]]; then
+        echo "  audio.cpp in $AUDIOCPP_DIR ($AC_REF)"
         return 0
     fi
-    [[ -x "$bin" ]] && echo "  audio.cpp: built at ${head:0:9}, rebuilding at $AUDIOCPP_TAG"
+    [[ -x "$bin" ]] && echo "  audio.cpp: built at ${head:0:9}, rebuilding at $AC_REF"
     _check_deps git cmake c++ glslc || return 1
     if [[ ! -d "$AUDIOCPP_DIR/.git" ]]; then
         echo "  git clone $AUDIOCPP_GIT"
         git clone -q "$AUDIOCPP_GIT" "$AUDIOCPP_DIR" || return 1
     fi
-    git -C "$AUDIOCPP_DIR" cat-file -e "$AUDIOCPP_COMMIT^{commit}" 2>/dev/null ||
-        git -C "$AUDIOCPP_DIR" fetch -q origin "$AUDIOCPP_COMMIT" || return 1
-    git -C "$AUDIOCPP_DIR" -c advice.detachedHead=false checkout -q "$AUDIOCPP_COMMIT" || return 1
+    git -C "$AUDIOCPP_DIR" cat-file -e "$AC_SHA^{commit}" 2>/dev/null ||
+        git -C "$AUDIOCPP_DIR" fetch -q origin "$AC_SHA" || return 1
+    git -C "$AUDIOCPP_DIR" -c advice.detachedHead=false checkout -q "$AC_SHA" || return 1
     git -C "$AUDIOCPP_DIR" submodule update -q --init --recursive --depth 1 || return 1
     local fams; fams=$(_audiocpp_families)
     echo "  building with Vulkan, model families: $fams"
@@ -908,6 +933,7 @@ _start_tts() {
         exit 1
     fi
     echo "Server running (PID: $server_pid, detached)"
+    _watch_start "$server_pid" "$server_log" "$port_server" || { _stop_slot "$slot" > /dev/null 2>&1; exit 1; }
     echo ""
     echo "  Try:   curl -s $url/v1/audio/speech -H 'Content-Type: application/json' \\"
     echo "           -d '{\"input\": \"Hallo!\", \"voice\": \"frau\"}' -o hallo.wav"
@@ -1099,6 +1125,7 @@ _start_comfyui() {
         exit 1
     fi
     echo "Server running (PID: $server_pid, detached) — up in ~10-20 s; models load per workflow."
+    _watch_start "$server_pid" "$server_log" "$port_server" || { _stop_slot "$slot" > /dev/null 2>&1; exit 1; }
     if [[ "$start_proxy" == true ]]; then
         _start_images_server "$slot" "$host" || { _stop_slot "$slot" > /dev/null; exit 1; }
     fi
@@ -1799,6 +1826,7 @@ _start_halogen() {
     fi
     echo "Server running (PID: $server_pid, detached) — loading takes ~15-30 s with the"
     echo "weights in the file cache, a few minutes from disk."
+    _watch_start "$server_pid" "$server_log" "$port_server" || { _stop_slot "$slot" > /dev/null 2>&1; exit 1; }
 
     _start_proxy "$slot" "$host" "$public" "$cap" || { _stop_slot "$slot" > /dev/null; exit 1; }
 
@@ -1953,6 +1981,7 @@ _start_gufo() {
     [[ -n "$server_pid" ]] || { echo "Error: podman did not report a PID. See $server_log" >&2; exit 1; }
     echo "Server running (PID: $server_pid, detached) — gufo loads a 30 GB model in a few seconds"
     echo "from the file cache, longer from disk."
+    _watch_start "$server_pid" "$server_log" "$port_server" || { _stop_slot "$slot" > /dev/null 2>&1; exit 1; }
     local proxy_kind=gufo
     _start_proxy "$slot" "$host" "$public" || { _stop_slot "$slot" > /dev/null; exit 1; }
     echo ""
@@ -2472,6 +2501,7 @@ cmd_start() {
     fi
 
     echo "Server running (PID: $server_pid, detached)"
+    _watch_start "$server_pid" "$server_log" "$port_server" || { _stop_slot "$slot" > /dev/null 2>&1; return 1; }
 
     # Start the TLS front last, so the port only opens once there is a backend
     # behind it.
@@ -2506,6 +2536,39 @@ cmd_start() {
 
 # The server / proxy actually running on a slot: the PID file if it still names a
 # live process, otherwise whoever holds the port. Prints the PID, or returns 1.
+# After a start: watch the new server for a while (LLMCTL_START_WATCH seconds,
+# default 20, 0 = not at all). One that dies in that time — a model or mmproj
+# it cannot load, memory it cannot get — is reported with the end of its log,
+# its PID file removed, and start fails, rather than "Server running" over a
+# corpse that only status or the log would show. One that answers is reported
+# up; one still loading is left to it.
+# $1 PID, $2 log, $3 port.
+_watch_start() {
+    local pid="$1" log="$2" port="$3" limit="${LLMCTL_START_WATCH:-20}" t=0 code
+    [[ "$limit" =~ ^[0-9]+$ ]] || limit=20
+    (( limit > 0 )) || return 0
+    while (( t < limit )); do
+        if ! ps -p "$pid" > /dev/null 2>&1; then
+            echo "Error: the server exited ${t} s after its start. The end of its log ($log):" >&2
+            # Its last words, without what gdb adds when it catches the crash
+            # (the backtrace, debuginfod's questions): what llama.cpp, a Python
+            # traceback or podman said last.
+            grep -vE '^(#[0-9]|\[(New|Thread|Inferior)|This GDB|  <|Enable debuginfod|Debuginfod|To make this|Using host libthread|0x[0-9a-f]+ in|$)' "$log" |
+                tail -n 8 | sed 's/^/  /' >&2
+            return 1
+        fi
+        code=$(curl -s -o /dev/null -m 2 -w '%{http_code}' "http://127.0.0.1:$port/health" 2>/dev/null)
+        [[ "$code" == 200 ]] || code=$(curl -s -o /dev/null -m 2 -w '%{http_code}' "http://127.0.0.1:$port/" 2>/dev/null)
+        if [[ "$code" == 200 ]]; then
+            echo "Server up after ${t} s."
+            return 0
+        fi
+        sleep 2
+        t=$(( t + 2 ))
+    done
+    echo "Still loading after ${limit} s — '$PROG status' shows when it is up."
+}
+
 _slot_server_pid() {
     local slot="$1" pid=""
     [[ -f "$PID_DIR/server-${slot}.pid" ]] && pid=$(cat "$PID_DIR/server-${slot}.pid")
@@ -4636,9 +4699,47 @@ _outdated_self() {
 }
 
 # self-update: to the newest release — or to the checkout, where that is newer.
+# self-update --master: master instead of the newest release — the checkout
+# fast-forwarded to origin/master (never over local work), or master's archive.
+# Its version number is the last release's until the next one, so it installs
+# whenever asked.
+_self_update_master() {
+    local check="$1" src tmp head
+    src=$(_self_source)
+    if [[ -n "$src" ]]; then
+        git -C "$src" fetch -q origin master || { echo "Error: cannot fetch master into $src"; return 1; }
+        if [[ -n "$(git -C "$src" status --porcelain --untracked-files=no)" ]]; then
+            echo "Error: $src has local changes; commit or stash them, then run self-update again"; return 1
+        fi
+        head=$(git -C "$src" rev-parse --short origin/master)
+        if [[ "$check" == true ]]; then echo "  would fast-forward $src to master ($head) and install it"; return 1; fi
+        git -C "$src" merge -q --ff-only origin/master || { echo "Error: $src has diverged from master — not touched"; return 1; }
+        echo "  $src at master ($head)"
+        [[ "$src" == "$SHARE_DIR" ]] && { echo "  llmctl runs from $src"; return 0; }
+        echo "  installing master from $src — sudo asks for your password"
+        sudo make -C "$src" install > /dev/null || { echo "Error: make install failed"; return 1; }
+    else
+        if [[ "$check" == true ]]; then echo "  would download master and install it (sudo make install)"; return 1; fi
+        tmp=$(mktemp -d)
+        curl -fsSL "https://github.com/$LLMCTL_REPO/archive/refs/heads/master.tar.gz" | tar xz -C "$tmp" --strip-components=1 ||
+            { rm -rf "$tmp"; echo "Error: cannot download master"; return 1; }
+        echo "  installing master — sudo asks for your password"
+        sudo make -C "$tmp" install > /dev/null || { rm -rf "$tmp"; echo "Error: make install failed"; return 1; }
+        rm -rf "$tmp"
+    fi
+    echo "  installed: $("$(command -v "$PROG" || echo /usr/local/bin/llmctl)" version) (master)"
+}
+
 cmd_self_update() {
-    local check=false
-    [[ "${1:-}" == --check ]] && check=true
+    local check=false master=false a
+    for a in "$@"; do
+        case "$a" in
+            --check) check=true ;;
+            --master) master=true ;;
+            *) echo "Usage: $PROG self-update [--check] [--master]"; return 1 ;;
+        esac
+    done
+    [[ "$master" == true ]] && { _self_update_master "$check"; return; }
     local latest src checkout tmp
     latest=$(_gh_json "repos/$LLMCTL_REPO/releases/latest" .tag_name); latest=${latest#v}
     [[ -n "$latest" ]] || { echo "Error: cannot ask GitHub for llmctl's newest release"; return 1; }
@@ -4770,18 +4871,19 @@ cmd_outdated() {
 
     printf '\n\033[1maudio.cpp\033[0m\n'
     if [[ -d "$AUDIOCPP_DIR/.git" ]]; then
-        local release; release=$(_gh_json "repos/0xShug0/audio.cpp/releases/latest" .tag_name)
         local built; built=$(git -C "$AUDIOCPP_DIR" rev-parse HEAD 2>/dev/null)
-        local lead; lead=$(_gh_json "repos/0xShug0/audio.cpp/compare/$AUDIOCPP_COMMIT...main" .ahead_by)
-        lead=${lead:+, main is $lead commits further}
-        if [[ -z "$release" ]]; then echo "  audio.cpp ($AUDIOCPP_TAG, pinned): cannot ask GitHub"
-        elif [[ "$release" != "$AUDIOCPP_TAG" ]]; then
-            echo "  audio.cpp ($AUDIOCPP_TAG, pinned) — $release is out; move AUDIOCPP_TAG/AUDIOCPP_COMMIT after trying it$lead"
+        # Against the newest release tag: built at it, or past it (--master), is current.
+        local DL_MASTER=false; _audiocpp_wanted
+        # Its version: the release tag it is built at, else its commit.
+        local at=""; [[ "$built" == "$AC_SHA" ]] && at="$AC_REF"
+        local lead; lead=$(_gh_json "repos/0xShug0/audio.cpp/compare/$built...main" .ahead_by)
+        [[ "$lead" =~ ^[1-9] ]] && lead=", main is $lead commits further" || lead=""
+        if git -C "$AUDIOCPP_DIR" merge-base --is-ancestor "$AC_SHA" "$built" 2>/dev/null; then
+            echo "  audio.cpp (${at:-${built:0:9}}) — current: $AC_REF is the newest release$lead"
+        else
+            echo "  audio.cpp (${at:-${built:0:9}}) — $AC_REF is the newest release: $PROG download asr-live builds it$lead"
             newer=$(( newer + 1 ))
-        elif [[ "$built" != "$AUDIOCPP_COMMIT" ]]; then
-            echo "  audio.cpp — built at ${built:0:9}, not at $AUDIOCPP_TAG: $PROG download asr-live"
-            newer=$(( newer + 1 ))
-        else echo "  audio.cpp ($AUDIOCPP_TAG) — current: $AUDIOCPP_TAG is the newest release$lead"; fi
+        fi
     else
         echo "  not set up"
     fi
@@ -4792,22 +4894,42 @@ cmd_outdated() {
         _resolve_model "${f[0]}" && [[ "$_r_backend" == comfyui ]] || continue
         _comfyui_paths
         [[ -d "$c_app/.git" ]] || { echo "  not set up"; continue; }
-        local here gh_repo
+        # Against the newest release tag (patch releases have no GitHub release
+        # page, so the tags themselves): on it, or past it, is current.
+        local here version newest on_master="" lead=""
         here=$(git -C "$c_app" rev-parse HEAD 2>/dev/null)
-        gh_repo=$(sed -E 's#^https://github.com/##; s#\.git$##' <<< "$COMFYUI_GIT")
-        behind=$(_gh_json "repos/$gh_repo/compare/$here...HEAD" .ahead_by)
-        if [[ -z "$behind" ]]; then echo "  ComfyUI (${here:0:9}): cannot compare"
-        elif (( behind == 0 )); then echo "  ComfyUI (${here:0:9}) — current"
-        else echo "  ComfyUI (${here:0:9}) — $behind commits behind; $PROG update ${f[0]}"; newer=$(( newer + 1 )); fi
+        version=$(_comfyui_version "$c_app"); version=${version:-${here:0:9}}
+        newest=$(git ls-remote --tags --refs "$COMFYUI_GIT" 'v*' 2>/dev/null | sed 's#.*refs/tags/##' |
+                 grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+        if git -C "$c_app" symbolic-ref -q HEAD > /dev/null; then
+            on_master=", master"
+            lead=$(git -C "$c_app" rev-list --count HEAD..origin/master 2>/dev/null)
+            [[ "$lead" =~ ^[1-9] ]] && lead=", $lead commits behind origin/master" || lead=""
+        fi
+        if [[ -z "$newest" ]]; then echo "  ComfyUI ($version$on_master): cannot list its releases"
+        elif git -C "$c_app" merge-base --is-ancestor "$newest" HEAD 2>/dev/null; then
+            echo "  ComfyUI ($version$on_master) — current: $newest is the newest release$lead"
+        else
+            echo "  ComfyUI ($version$on_master) — $newest is the newest release; $PROG update ${f[0]} moves onto it"
+            newer=$(( newer + 1 ))
+        fi
         local dir url pin rest
         while read -r dir url pin rest; do
             [[ -z "$dir" || "$dir" == \#* ]] && continue
+            # A release tag made after the pin is news (update comfy takes it); new
+            # commits are only shown.
             gh_repo=$(sed -E 's#^https://github.com/##; s#\.git$##' <<< "$url")
+            local tag status
+            tag=$(_node_pack_tag "$url")
+            status=""; [[ -n "$tag" ]] && status=$(_gh_json "repos/$gh_repo/compare/$pin...$tag" .status)
             behind=$(_gh_json "repos/$gh_repo/compare/$pin...HEAD" .ahead_by)
-            if [[ -z "$behind" ]]; then echo "  custom nodes $dir: cannot compare"
-            elif (( behind == 0 )); then echo "  custom nodes $dir (${pin:0:9}, pinned) — current"
-            else echo "  custom nodes $dir (${pin:0:9}, pinned) — upstream has $behind newer commits; move the pin in comfyui/custom_nodes.txt after trying them"
-                 newer=$(( newer + 1 )); fi
+            [[ "$behind" =~ ^[1-9] ]] && behind=", $behind commits since the pin" || behind=""
+            if [[ "$status" == ahead ]]; then
+                echo "  custom nodes $dir (${pin:0:9}, pinned) — $tag is out, after the pin: $PROG update ${f[0]}"
+                newer=$(( newer + 1 ))
+            else
+                echo "  custom nodes $dir (${pin:0:9}, pinned) — current${tag:+: $tag, its newest release, is older}$behind"
+            fi
         done < "$COMFYUI_SHARE/custom_nodes.txt"
         echo "  models:"
         local -a qflag=()
@@ -5749,6 +5871,8 @@ cmd_help() {
     printf "  %-20s %s\n" "clear-kv [slot]"        "drop the KV cache of every server slot (or one slot); ComfyUI: unload its models"
     printf "  %-20s %s\n" "probe-reasoning [m]"    "what each downloaded model's chat template supports vs. models.conf"
     printf "  %-20s %s\n" "gen-certs <host>"       "create the CA + server/VPS certificates for --public"
+    printf "  %-20s %s\n" "musicvideo <song> <pic>..." "a music video on ComfyUI: the pictures sing the song (LTX-2.5), sections"
+    printf "  %-20s %s\n" ""                      "  cut to the frame and joined (--sections, --continuous, --dry-run; --help)"
     printf "  %-20s %s\n" "bench [opts] <m>"       "run benchmark (model or 'all'); halogen: measures the running slot"
     printf "  %-20s %s\n" "list"                   "show available models; for ComfyUI, which workflows have their models"
     printf "  %-20s %s\n" "env <name> [slot]"      "print Claude Code env vars for eval \"\$($PROG env …)\"; --proxy/--direct force the endpoint"
@@ -5759,12 +5883,14 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  models its workflows name; PATTERN: only workflows whose name contains it;"
     printf "  %-20s %s\n" ""                      "  --from DIR: move an existing ComfyUI checkout into place instead"
     printf "  %-20s %s\n" ""                      "  --check: only tell what would be downloaded, with sizes; exit 0 when nothing"
-    printf "  %-20s %s\n" "update <m> [--torch]"   "comfyui: git pull (patches kept), Python dependencies, workflows; --torch: torch too"
+    printf "  %-20s %s\n" "update <m> [--torch]"   "comfyui: to the newest release (patches kept), Python dependencies, workflows;"
+    printf "  %-20s %s\n" ""                      "  --torch: torch too; --master: follow master instead of the releases"
     printf "  %-20s %s\n" "download|update llama"  "prebuilt llama-server for Vulkan (ggml-org) and ROCm (lemonade, this GPU) at the"
     printf "  %-20s %s\n" ""                      "  newest stable llama.cpp release, into $LLAMA_DIR/<kind>/current; tested before use"
     printf "  %-20s %s\n" "voice list|add|design|rm" "voices the speech (tts) slots speak in: design one from a description, or add a recording"
     printf "  %-20s %s\n" ""                      "  voice export [FILE] / import FILE [--force]: they live nowhere else — back them up"
-    printf "  %-20s %s\n" "self-update [--check]" "llmctl to its newest release (or its checkout, where newer); --check: only tell"
+    printf "  %-20s %s\n" "self-update [--check]" "llmctl to its newest release (or its checkout, where newer); --check: only tell;"
+    printf "  %-20s %s\n" ""                      "  --master: master instead of the newest release"
     printf "  %-20s %s\n" "version"                "print the version"
     echo ""
     echo "  Ports:  slot N → server :$(( PORT_BASE_SERVER + 1 ))-$(( PORT_BASE_SERVER + SLOT_MAX ))  proxy :$(( PORT_BASE_PROXY + 1 ))-$(( PORT_BASE_PROXY + SLOT_MAX ))  (N added to the base)"
@@ -6041,6 +6167,15 @@ _comfyui_sync_workflows() {
 # commit, into --base-directory's custom_nodes/ (where ComfyUI looks), and their
 # requirements into ComfyUI's venv with torch held to its ROCm build; "-name"
 # after the commit drops a requirement, "+name" adds one.
+# The newest version tag of a node pack's repo (local after a fetch, or remote
+# by URL), or nothing. Packs tag loosely (8.28, 1.3.4, v.1.0.0): any tag of
+# digits and dots, with an optional v or v. in front.
+_node_pack_tag() {
+    local src="$1"
+    if [[ -d "$src/.git" ]]; then git -C "$src" tag -l; else git ls-remote --tags --refs "$src" 2>/dev/null | sed 's#.*refs/tags/##'; fi |
+        grep -E '^v?\.?[0-9]+(\.[0-9]+)*$' | sort -V | tail -1
+}
+
 _comfyui_custom_nodes() {
     local list="$COMFYUI_SHARE/custom_nodes.txt"
     [[ -f "$list" ]] || return 0
@@ -6052,13 +6187,21 @@ _comfyui_custom_nodes() {
         if [[ ! -d "$target/.git" ]]; then
             git clone -q "$url" "$target" || { echo "  custom nodes $dir: clone failed"; continue; }
         fi
-        if [[ "$(git -C "$target" rev-parse HEAD 2>/dev/null)" != "$commit" ]]; then
-            git -C "$target" fetch -q origin 2>/dev/null
-            git -C "$target" -c advice.detachedHead=false checkout -q "$commit" ||
-                { echo "  custom nodes $dir: commit ${commit:0:12} not found"; continue; }
-            echo "  custom nodes $dir: at ${commit:0:12}"
+        # The pin, or a release tag of the pack made after it: tags count, commits
+        # do not. Most packs tag rarely, and their newest tag lies behind the pin.
+        git -C "$target" fetch -q --tags origin 2>/dev/null
+        local want="$commit" label="${commit:0:12}" tag
+        tag=$(_node_pack_tag "$target")
+        if [[ -n "$tag" ]] && ! git -C "$target" merge-base --is-ancestor "$tag" "$commit" 2>/dev/null &&
+           git -C "$target" merge-base --is-ancestor "$commit" "$tag" 2>/dev/null; then
+            want="$tag" label="$tag (released after the pin ${commit:0:12})"
+        fi
+        if [[ "$(git -C "$target" rev-parse HEAD 2>/dev/null)" != "$(git -C "$target" rev-parse "$want^{commit}" 2>/dev/null)" ]]; then
+            git -C "$target" -c advice.detachedHead=false checkout -q "$want" ||
+                { echo "  custom nodes $dir: ${want:0:12} not found"; continue; }
+            echo "  custom nodes $dir: at $label"
         else
-            echo "  custom nodes $dir: at ${commit:0:12} (unchanged)"
+            echo "  custom nodes $dir: at $label (unchanged)"
         fi
         if [[ -f "$target/requirements.txt" ]]; then
             local skip req="$COMFYUI_TMP/req-$dir.txt" constraints="$COMFYUI_TMP/torch-constraints.txt"
@@ -6134,6 +6277,21 @@ _comfyui_migrate() {
     return 0
 }
 
+# ComfyUI publishes releases (vX.Y.Z tags, about one a week; patch releases
+# vX.Y.1, .2 … on a release/vX.Y branch with fixes backported); llmctl follows
+# the newest tag, not master: the frontend and template packages its
+# requirements pin belong together at a release. `update --master` follows
+# master instead.
+# The newest release tag in the checkout (after a fetch), or nothing.
+_comfyui_release_tag() {
+    git -C "$1" tag -l 'v[0-9]*.[0-9]*.[0-9]*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1
+}
+
+# Where the checkout stands: the release it is at or past, and how far past.
+_comfyui_version() {
+    git -C "$1" describe --tags --match 'v[0-9]*' 2>/dev/null | sed -E 's/-([0-9]+)-g[0-9a-f]+$/+\1/'
+}
+
 # A fresh checkout and venv. COMFYUI_PYTHON picks the interpreter — it needs to be
 # one the ROCm torch wheels are built for.
 _comfyui_install() {
@@ -6143,6 +6301,13 @@ _comfyui_install() {
     echo "  git clone $COMFYUI_GIT"
     mkdir -p "$c_base"
     git clone -q "$COMFYUI_GIT" "$c_app" || return 1
+    local tag; tag=$(_comfyui_release_tag "$c_app")
+    if [[ "${DL_MASTER:-false}" == true ]]; then
+        echo "  on master (--master)"
+    elif [[ -n "$tag" ]]; then
+        echo "  at the newest release, $tag"
+        git -C "$c_app" checkout -q "$tag" || return 1
+    fi
     echo "  venv with $("$py" --version 2>&1)"
     "$py" -m venv "$c_app/.venv" || return 1
     _comfyui_python_deps torch
@@ -6545,8 +6710,13 @@ _llama_install() {
 _llama_setup() {
     local check="${1:-false}" info rc=0
     _check_deps jq curl || return 1
-    echo "==> llama.cpp: the newest stable release and its prebuilt builds"
-    info=$(python3 "$LLAMA_BUILDS_SCRIPT" resolve) || { echo "  cannot ask GitHub"; DL_UNKNOWN=$(( DL_UNKNOWN + 1 )); return 1; }
+    if [[ "${DL_MASTER:-false}" == true ]]; then
+        echo "==> llama.cpp: the newest master builds (--master)"
+        info=$(python3 "$LLAMA_BUILDS_SCRIPT" resolve-master) || { echo "  cannot ask GitHub"; DL_UNKNOWN=$(( DL_UNKNOWN + 1 )); return 1; }
+    else
+        echo "==> llama.cpp: the newest stable release and its prebuilt builds"
+        info=$(python3 "$LLAMA_BUILDS_SCRIPT" resolve) || { echo "  cannot ask GitHub"; DL_UNKNOWN=$(( DL_UNKNOWN + 1 )); return 1; }
+    fi
     echo "  $(jq -r .tag <<< "$info") (${info:+$(jq -r '.commit[:9]' <<< "$info")})"
     _llama_install vulkan "$info" "$check" || rc=1
     if [[ "$(jq -r '.rocm.gfx // empty' <<< "$info")" ]]; then
@@ -6559,16 +6729,17 @@ _llama_setup() {
 }
 
 cmd_update() {
-    local name="" torch=""
+    local name="" torch="" master=false
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --torch) torch=torch; shift ;;
+            --master) master=true; shift ;;
             -*) echo "Unknown option: $1"; return 1 ;;
             *) name="$1"; shift ;;
         esac
     done
-    [[ -z "$name" ]] && { echo "Usage: $PROG update <comfyui-model> [--torch] | llama"; return 1; }
-    [[ "$name" == llama ]] && { _llama_setup; return; }
+    [[ -z "$name" ]] && { echo "Usage: $PROG update <comfyui-model> [--torch] [--master] | llama"; return 1; }
+    [[ "$name" == llama ]] && { DL_MASTER="$master" _llama_setup; return; }
     _resolve_model "$name" || { echo "Unknown model: $name"; return 1; }
     if [[ "$_r_backend" != comfyui ]]; then
         echo "'$name' has nothing to update: its weights come from '$PROG download $name', its server"
@@ -6592,12 +6763,27 @@ cmd_update() {
         _comfyui_apply_patches > /dev/null
         return 1
     fi
-    git -C "$c_app" pull --ff-only -q || { _comfyui_apply_patches; return 1; }
+    git -C "$c_app" fetch -q --tags origin || { _comfyui_apply_patches; return 1; }
+    if [[ "$master" == true ]]; then
+        git -C "$c_app" checkout -q master && git -C "$c_app" merge -q --ff-only origin/master ||
+            { _comfyui_apply_patches; return 1; }
+    else
+        # The newest release, unless the checkout is at or past it already (a
+        # master from before, say): never backwards.
+        local tag; tag=$(_comfyui_release_tag "$c_app")
+        if [[ -z "$tag" ]]; then
+            echo "  no release tag found — staying put ($PROG update $name --master follows master)"
+        elif git -C "$c_app" merge-base --is-ancestor "$tag" HEAD; then
+            echo "  at or past the newest release $tag — staying put"
+        else
+            git -C "$c_app" checkout -q "$tag" || { _comfyui_apply_patches; return 1; }
+        fi
+    fi
     new=$(git -C "$c_app" rev-parse --short HEAD)
     if [[ "$old" == "$new" ]]; then
-        echo "  already current ($new)"
+        echo "  already current ($(_comfyui_version "$c_app"))"
     else
-        echo "  $old → $new ($(git -C "$c_app" rev-list --count "$old..$new") new commits)"
+        echo "  $old → $new, now $(_comfyui_version "$c_app") ($(git -C "$c_app" rev-list --count "$old..$new") new commits)"
     fi
     _comfyui_apply_patches
     echo "==> Python dependencies"
@@ -6615,11 +6801,12 @@ cmd_download() {
     local force=""
 
     local from="" pattern=""
-    DL_CHECK=false DL_PENDING=0 DL_UNKNOWN=0
+    DL_CHECK=false DL_PENDING=0 DL_UNKNOWN=0 DL_MASTER=false
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --force|-f) force="1"; shift ;;
             --check|--dry-run) DL_CHECK=true; shift ;;
+            --master) DL_MASTER=true; shift ;;
             --from) _need_value "$@" || return 1; from="$2"; shift 2 ;;
             -*) echo "Unknown option: $1"; return 1 ;;
             *) if [[ -z "$target" ]]; then target="$1"; else pattern="$1"; fi; shift ;;
@@ -6633,6 +6820,7 @@ cmd_download() {
         echo "  Options:"
         echo "    --force, -f   force re-download even if model exists"
         echo "    --check       only tell what would be downloaded; exit 0 when nothing"
+        echo "    --master      llama, audio.cpp, a new ComfyUI: master instead of the newest release"
         echo "    PATTERN       comfyui: only the models of workflows whose file name contains it"
         echo "    --from DIR    comfyui: move an existing ComfyUI checkout (with .venv) into place"
         echo ""
@@ -6787,6 +6975,21 @@ _prune_halogen_images() {
     fi
 }
 
+# musicvideo: a song and pictures of the singer made into a music video on the
+# running ComfyUI (musicvideo.py, #47): sections sung with LTX-2.5 Talking or
+# played as scenes, cut to the frame, joined, the song underneath.
+cmd_musicvideo() {
+    case "${1:-}" in
+        ""|-h|--help) python3 "$LIB_DIR/musicvideo.py" --help | sed "s|^usage: musicvideo.py|usage: $PROG musicvideo|"; return ;;
+    esac
+    _check_deps python3 ffmpeg ffprobe || return 1
+    # No ComfyUI: an empty URL, which only a run that renders minds (not --dry-run).
+    local slot url=""
+    slot=$(_comfyui_slots | head -1)
+    [[ -n "$slot" ]] && url="http://127.0.0.1:$(( PORT_BASE_SERVER + slot ))"
+    python3 "$LIB_DIR/musicvideo.py" --url "$url" --workflows "$COMFYUI_SHARE/api/video" "$@"
+}
+
 # ── Dispatch ────────────────────────────────────────────────
 case "${1:-}" in
     start)      shift; cmd_start "$@" ;;
@@ -6815,5 +7018,6 @@ case "${1:-}" in
     download)   shift; cmd_download "$@" ;;
     update)     shift; cmd_update "$@" ;;
     voice)      shift; cmd_voice "$@" ;;
+    musicvideo) shift; cmd_musicvideo "$@" ;;
     *)          cmd_help; cmd_list ;;
 esac

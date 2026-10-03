@@ -247,6 +247,51 @@ class ThinkingOff(unittest.TestCase):
         self.assertEqual(ac.messages_to_chat(body, None, "none")["reasoning_effort"], "high")
 
 
+try:
+    import musicvideo                                              # requests
+except ImportError:
+    musicvideo = None
+
+
+@unittest.skipIf(musicvideo is None, "musicvideo.py needs requests")
+class MusicVideo(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        (self.tmp / "city.png").write_bytes(b"x")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def plan(self, text, count=4):
+        f = self.tmp / "sections.txt"
+        f.write_text(text)
+        return musicvideo.read_sections(str(f), count, "sing it")
+
+    def test_the_sections_file_is_read_and_filled_up(self):
+        plan = self.plan("sing\n# a comment\nscene: a city at night\nsing city.png: eyes closed\n")
+        self.assertEqual(plan, [("sing", None, "sing it"), ("scene", None, "a city at night"),
+                                ("sing", str(self.tmp / "city.png"), "eyes closed"), ("sing", None, "sing it")])
+
+    def test_a_scene_needs_a_prompt_and_a_picture_must_exist(self):
+        for bad in ("scene\n", "dance: x\n", "sing nowhere.png: x\n"):
+            with self.assertRaises(SystemExit):
+                self.plan(bad)
+
+    def test_the_frames_add_up_to_the_song(self):
+        plan = [("sing", None, "p")] * 7
+        sections = musicvideo.plan_sections(plan, 31.27, 5, ["a.png", "b.png"], False)
+        self.assertEqual(sum(s["frames"] for s in sections), round(31.27 * 24))
+        self.assertEqual([s["picture"] for s in sections[:3]], ["a.png", "b.png", "a.png"])
+        self.assertEqual(sections[-1]["end"], 31.27)
+
+    def test_scenes_without_a_picture_are_text_only_or_follow(self):
+        plan = [("sing", None, "p"), ("scene", None, "city"), ("sing", None, "p")]
+        apart = musicvideo.plan_sections(plan, 15, 5, ["a.png", "b.png"], False)
+        self.assertEqual([(s["picture"], s["follow"]) for s in apart], [("a.png", False), (None, False), ("b.png", False)])
+        along = musicvideo.plan_sections(plan, 15, 5, ["a.png", "b.png"], True)
+        self.assertEqual([(s["picture"], s["follow"]) for s in along], [("a.png", False), (None, True), (None, True)])
+
+
 class Sources(unittest.TestCase):
     def test_the_bundled_recipes_are_complete(self):
         data = json.loads((ROOT / "comfyui" / "sources.json").read_text())
@@ -904,6 +949,54 @@ class ArtifactNode(unittest.TestCase):
         self.assertEqual(self.n.repair_prompt("A kitchen.", [{"fix": "A hand."}, {"fix": "A cup."}]),
                          "A kitchen. A hand; A cup")
 
+    def test_joined_clips_take_comfyuis_types(self):
+        types = self.n.LlmctlJoinClips.INPUT_TYPES()
+        inputs = {**types["required"], **types["optional"]}
+        self.assertEqual({v[0] for k, v in inputs.items() if k.startswith("images_")}, {"IMAGE"})
+        self.assertEqual({v[0] for k, v in inputs.items() if k.startswith("audio_")}, {"AUDIO"})
+
+    def test_joins_are_crossfaded_without_a_dip(self):
+        import torch
+        rate, fps = 48000, 24
+        n = round(121 * rate / fps)
+        frame = rate // fps
+        # Two clips of the same level, clip 2 a sign flip of clip 1: a hard cut
+        # steps from +1 to -1; a crossfade in the shared frame passes smoothly.
+        clips = {"images_1": torch.zeros(121, 4, 4, 3), "audio_1": {"waveform": torch.ones(1, 2, n), "sample_rate": rate},
+                 "images_2": torch.zeros(121, 4, 4, 3), "audio_2": {"waveform": -torch.ones(1, 2, n), "sample_rate": rate}}
+        hard = self.n.LlmctlJoinClips().join(fps, 0.0, **clips)[1]["waveform"]
+        soft = self.n.LlmctlJoinClips().join(fps, 0.04, **clips)[1]["waveform"]
+        self.assertEqual(hard.shape, soft.shape)                       # the length, and with it the sync, stays
+        at = n                                                         # clip 2's kept sound begins here
+        self.assertEqual((hard[0, 0, at - 1].item(), hard[0, 0, at].item()), (1.0, -1.0))
+        self.assertTrue(torch.equal(hard[..., :at - frame], soft[..., :at - frame]))   # only the shared frame changes
+        self.assertTrue(torch.equal(hard[..., at:], soft[..., at:]))
+        self.assertLess(soft[0, 0, at - frame - 1:at + 1].diff().abs().max().item(), 0.01)
+        # equal power: two sounds of the same level do not dip
+        same = dict(clips, audio_2={"waveform": torch.ones(1, 2, n), "sample_rate": rate})
+        level = self.n.LlmctlJoinClips().join(fps, 0.04, **same)[1]["waveform"][0, 0, at - frame:at]
+        self.assertGreaterEqual(level.min().item(), 0.99)
+
+    def test_joined_clips_keep_the_sound_on_the_pictures(self):
+        import torch
+        rate, fps = 48000, 24
+        # Three 5 s clips (121 frames each), their sound a little long, short and
+        # in mono; each sample holds its clip's number, so a join shows up.
+        lengths = [round(121 * rate / fps) + 700, round(121 * rate / fps) - 900, round(121 * rate / fps)]
+        clips = {}
+        for i, (n, ch) in enumerate(zip(lengths, (2, 2, 1)), 1):
+            clips[f"images_{i}"] = torch.full((121, 8, 8, 3), float(i))
+            clips[f"audio_{i}"] = {"waveform": torch.full((1, ch, n), float(i)), "sample_rate": rate}
+        images, audio = self.n.LlmctlJoinClips().join(fps, **clips)
+        wave = audio["waveform"]
+        self.assertEqual(images.shape[0], 121 + 120 + 120)            # the repeated start frames dropped
+        self.assertEqual(wave.shape, (1, 2, round(images.shape[0] * rate / fps)))
+        clip2 = round(121 * rate / fps)                                # where clip 2's second frame begins
+        self.assertEqual((wave[0, 0, clip2 - 1].item(), wave[0, 0, clip2].item()), (1.0, 2.0))
+        clip3 = round(241 * rate / fps)
+        # clip 2 came out 900 samples short: silence up to clip 3, which is mono made stereo
+        self.assertEqual((wave[0, 1, clip3 - 1].item(), wave[0, 1, clip3].item()), (0.0, 3.0))
+
 
 import hashlib
 import hf_parts                                                   # comfyui_models: stdlib only
@@ -947,6 +1040,18 @@ class Parts(unittest.TestCase):
         self.assertEqual(c["revision"], "c0ffee")
         self.assertFalse(any((self.tmp / n).exists() for n in self.names))
         self.assertFalse(list((self.tmp / ".cache").rglob("*.metadata")))
+
+    def test_a_second_repo_in_the_directory_does_not_see_the_parts(self):
+        # A vision projector from another repo lands beside the joined model;
+        # checking that repo must not report the model's parts as changed.
+        self.write_parts()
+        with contextlib.redirect_stdout(io.StringIO()):
+            hf_parts.cmd_join("org/repo", str(self.tmp))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            hf_parts.cmd_check("org/mmproj", str(self.tmp))
+        self.assertEqual(out.getvalue(), "")
+        self.assertEqual(len(hf_parts.companions(self.tmp, "org/repo")), 1)
 
     def test_an_existing_joined_file_is_adopted_when_it_matches(self):
         self.write_parts()

@@ -54,16 +54,20 @@ def hub_files(repo, revision="main"):
     return files, sha
 
 
-def companions(directory):
-    """{companion path: its content} for the joined files under DIR."""
+def companions(directory, repo=None):
+    """{companion path: its content} for the joined files under DIR — those of
+    REPO only, when given: a directory may hold files of a second repo too (a
+    vision projector beside the model), which do not have these parts."""
     out = {}
     for p in sorted(Path(directory).rglob("*" + COMPANION)):
         if ".cache" in p.parts:
             continue
         try:
-            out[p] = json.loads(p.read_text())
+            c = json.loads(p.read_text())
         except ValueError:
             continue
+        if repo is None or c.get("repo", repo) == repo:
+            out[p] = c
     return out
 
 
@@ -84,7 +88,7 @@ def rel(p, directory):
 def cmd_excludes(repo, directory):
     """Parts download should skip. Without the Hub there is no telling — then the
     companion is trusted, rather than fetching tens of GB on a network hiccup."""
-    comp = companions(directory)
+    comp = companions(directory, repo)
     if not comp:
         return 0
     try:
@@ -99,7 +103,7 @@ def cmd_excludes(repo, directory):
 
 
 def cmd_check(repo, directory):
-    comp = companions(directory)
+    comp = companions(directory, repo)
     if not comp:
         return 0
     try:

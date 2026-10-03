@@ -240,6 +240,8 @@ check "logs -n shows the last lines"     "!one"                  -- "$L" logs 4 
 check "logs names a missing proxy log"   "No proxy log for slot 4" -- "$L" logs 4 --proxy
 check "logs refuses a bad -n"            "takes a number"        -- "$L" logs 4 -n x
 check "update refuses a non-comfyui"     "nothing to update"     -- "$L" update qwen
+check "musicvideo explains itself"      "usage: llmctl musicvideo"           -- "$L" musicvideo --help
+check "musicvideo wants its files"      "no such file: song.flac"            -- "$L" musicvideo song.flac pic.png
 
 echo ""
 printf '%d passed, %d failed%s\n' "$pass" "$fail" "$( (( skipped )) && printf ', %d skipped' "$skipped")"

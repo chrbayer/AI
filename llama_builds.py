@@ -2,6 +2,7 @@
 """Which prebuilt llama-server builds belong to llama.cpp's newest stable release.
 
     llama_builds.py resolve [GFX]     one JSON object: the release and the two builds
+    llama_builds.py resolve-master [GFX]   the same for master: the newest builds
     llama_builds.py gfx               this machine's GPU target (gfx1151), from KFD
 
 ggml-org tags a stable vX.Y.Z now and then and publishes a build (bNNNNN) of
@@ -110,14 +111,44 @@ def rocm_build(tag, sha, target):
     return None
 
 
+def master_builds(target):
+    """master instead of the release: ggml-org's newest bNNNNN build with a Vulkan
+    package, and lemonade's newest build for this GPU target."""
+    vulkan = None
+    for r in gh(f"repos/{GGML}/releases?per_page=30"):
+        if not r["tag_name"].startswith("b"):
+            continue
+        a = next((a for a in r["assets"] if a["name"].endswith("-bin-ubuntu-vulkan-x64.tar.gz")), None)
+        if a:
+            vulkan = {"build": r["tag_name"], "commit": r.get("target_commitish"), "asset": a["name"],
+                      "url": a["browser_download_url"], "size": a["size"]}
+            break
+    rocm = None
+    if target:
+        for r in gh(f"repos/{LEMONADE}/releases?per_page=20"):
+            a = lemonade_asset(r["assets"], target)
+            if a:
+                short = next((line.split(":", 1)[1].strip(" *") for line in (r.get("body") or "").splitlines()
+                              if "Commit Hash" in line), "")
+                rocm = {"build": r["tag_name"], "commit": short.lower(), "asset": a["name"],
+                        "url": a["browser_download_url"], "size": a["size"], "gfx": target}
+                break
+    return vulkan, rocm
+
+
 def main(argv):
     if len(argv) >= 2 and argv[1] == "gfx":
         print(gfx() or "")
         return 0
-    if len(argv) < 2 or argv[1] != "resolve":
+    if len(argv) < 2 or argv[1] not in ("resolve", "resolve-master"):
         print(__doc__, file=sys.stderr)
         return 2
     target = argv[2] if len(argv) > 2 else gfx()
+    if argv[1] == "resolve-master":
+        vulkan, rocm = master_builds(target)
+        print(json.dumps({"tag": "master", "commit": (vulkan or {}).get("commit"), "vulkan": vulkan, "rocm": rocm},
+                         indent=1))
+        return 0
     tag, sha, published = stable()
     out = {"tag": tag, "commit": sha, "vulkan": vulkan_build(sha, published),
            "rocm": rocm_build(tag, sha, target) if target else None}

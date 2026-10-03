@@ -1,6 +1,8 @@
 # Custom node packs llmctl installs into ComfyUI (download comfy / update comfy).
 # One pack per line:  <directory>  <git URL>  <commit>  [-<requirement to drop>|+<requirement to add> ...]
-# The commit is pinned: update moves a pack only when this file names a new one.
+# The commit is pinned: update moves a pack when this file names a new one, or
+# when the pack tags a release made after the pin (tags count, commits do not;
+# most packs tag rarely, and their newest tag lies behind the pin).
 # Requirements install into ComfyUI's venv with torch held to its ROCm build;
 # a "-name" drops that requirement, a "+name" adds one.
 

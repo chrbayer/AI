@@ -725,8 +725,119 @@ def talking():
     return g
 
 
+def chain(clips=4, keyframes=False):
+    """LTX-2.5 clips in a row (#48): each starts on the last frame of the one before
+    and has a prompt of its own, so the story moves on over clips × Duration
+    seconds. The clips' pictures and sound are joined by LlmctlJoinClips, which
+    drops each repeated start frame, keeps the sound on its pictures to the
+    sample and crossfades each join within the frame two clips share. The models load once; each clip costs what
+    one LTX-2.5 Video (or First-Last Frame) does.
+
+    keyframes: on First-Last Frame, each clip runs from the last frame of the one
+    before to a picture of its own (Bild 2 … Bild N+1) — a storyboard, each made
+    from the one before with Qwen-Image Edit say, so the person and whatever is
+    in the scene carry on. Over a plain chain a face drifts a little with every
+    clip and the drift adds up; here every clip ends on the storyboard again,
+    pulled to it with *Stärke Zielbild* (0.5).
+
+    *Ton fortsetzen* (on): a later clip's sound starts with the last second of the
+    one before, held as it is, and LTX goes on from there — the same wind and
+    surf rather than a new soundscape at every join."""
+    g = from_base("ltx_flf" if keyframes else "ltx_i2v")
+    find = lambda cls, t=None: next(k for k, n in g.items() if n["class_type"] == cls and (t is None or variants.title(n) == t))
+    if keyframes:
+        start, end = find("LoadImage", "Load First Frame"), find("LoadImage", "Load Last Frame")
+        g[start]["_meta"]["title"], g[end]["_meta"]["title"] = "Bild 1", "Bild 2"
+    else:
+        start, end = find("LoadImage"), None
+    prompt, create = find("PrimitiveStringMultiline", "Prompt"), find("CreateVideo")
+    sources = {start, prompt} | ({end} if end else set())
+    # A clip: what reads its pictures or its prompt, up to the finished video, and
+    # its own noise.
+    per, grew = set(), True
+    while grew:
+        grew = False
+        for k, n in g.items():
+            if k in per or k in sources | {create} or n["class_type"] == "SaveVideo":
+                continue
+            if n["class_type"] == "RandomNoise" or any(variants.is_ref(x) and x[0] in per | sources
+                                                       for x in n["inputs"].values()):
+                per.add(k)
+                grew = True
+    # The first stage's audio: an empty latent, which a later clip can replace
+    # with the end of the sound before it.
+    first_av = next(k for k in per if g[k]["class_type"] == "LTXVConcatAVLatent"
+                    and g[g[k]["inputs"]["audio_latent"][0]]["class_type"] == "LTXVEmptyLatentAudio")
+    audio_vae = g[g[first_av]["inputs"]["audio_latent"][0]]["inputs"]["audio_vae"]
+    go_on = _flag(g, "Ton fortsetzen", True)
+    held_mask = _new_id(g)
+    g[held_mask] = {"class_type": "SolidMask", "inputs": {"value": 0.0, "width": 64, "height": 64}}
+    if keyframes:
+        # How hard a clip is pulled to its picture at the end. The template's 0.7
+        # had LTX reach the picture early and hold it for a second; less leaves it
+        # free to move into it.
+        pull = _new_id(g)
+        g[pull] = {"class_type": "PrimitiveFloat", "inputs": {"value": 0.5}, "_meta": {"title": "Stärke Zielbild"}}
+        for k in per:
+            if g[k]["class_type"] == "LTXVAddGuide" and g[k]["inputs"]["frame_idx"] == -1:
+                g[k]["inputs"]["strength"] = [pull, 0]
+    g[prompt]["_meta"]["title"] = "Prompt 1"
+    images, audio = [g[create]["inputs"]["images"]], [g[create]["inputs"]["audio"]]
+    for i in range(2, clips + 1):
+        last, text = (str(int(_new_id(g)) + j) for j in range(2))
+        g[last] = {"class_type": "ImageFromBatch", "inputs": {"image": images[-1], "batch_index": -1, "length": 1},
+                   "_meta": {"title": f"Last frame of clip {i - 1}"}}
+        g[text] = {"class_type": "PrimitiveStringMultiline", "inputs": {"value": ""}, "_meta": {"title": f"Prompt {i}"}}
+        target = None
+        if keyframes:
+            target = _new_id(g)
+            g[target] = {"class_type": "LoadImage", "inputs": dict(g[end]["inputs"]), "_meta": {"title": f"Bild {i + 1}"}}
+        swap = {start: last, prompt: text, **({end: target} if end else {})}
+        ids = {}
+        for k in sorted(per, key=int):
+            ids[k] = _new_id({**g, **{v: None for v in ids.values()}})
+        for k in per:
+            n = json.loads(json.dumps(g[k]))
+            for a, x in n["inputs"].items():
+                if a == "bypass":                       # a later clip always starts from its picture
+                    n["inputs"][a] = False
+                elif variants.is_ref(x) and x[0] in per:
+                    n["inputs"][a] = [ids[x[0]], x[1]]
+                elif variants.is_ref(x) and x[0] in swap:
+                    n["inputs"][a] = [swap[x[0]], x[1]]
+            if n["class_type"] == "RandomNoise":
+                n["inputs"]["noise_seed"] += i - 1
+            if n["class_type"] == "LTXVAddGuide" and n["inputs"]["frame_idx"] == 0:
+                n["inputs"]["strength"] = 1.0           # it starts exactly where the clip before ended
+            g[ids[k]] = n
+        # Ton fortsetzen: the last second of the sound before, encoded and held at
+        # the start of this clip's audio; the rest LTX makes.
+        av = ids[first_av]
+        tail, enc, held, av2 = (str(int(_new_id(g)) + j) for j in range(4))
+        g[tail] = {"class_type": "TrimAudioDuration", "inputs": {"audio": audio[-1], "start_index": -1.0, "duration": 1.0}}
+        g[enc] = {"class_type": "LTXVAudioVAEEncode", "inputs": {"audio": [tail, 0], "audio_vae": audio_vae}}
+        g[held] = {"class_type": "SetLatentNoiseMask", "inputs": {"samples": [enc, 0], "mask": [held_mask, 0]},
+                   "_meta": {"title": f"Sound of clip {i - 1} held"}}
+        g[av2] = {"class_type": "LTXVConcatAVLatent", "inputs": {"video_latent": [av, 0], "audio_latent": [held, 0]}}
+        sw = _switch(g, go_on, [av, 0], [av2, 0], "Ton fortsetzen")
+        g[av2]["inputs"]["video_latent"] = [av, 0]      # the switch took this read over too
+        images.append([ids[images[0][0]], images[0][1]])
+        audio.append([ids[audio[0][0]], audio[0][1]])
+        assert sw
+    join = _new_id(g)
+    g[join] = {"class_type": "LlmctlJoinClips", "_meta": {"title": "Clips joined"},
+               "inputs": {"frame_rate": g[g[create]["inputs"]["fps"][0]]["inputs"]["values.a"], "crossfade": 0.04,
+                          **{f"images_{i + 1}": x for i, x in enumerate(images)},
+                          **{f"audio_{i + 1}": x for i, x in enumerate(audio)}}}
+    g[create]["inputs"].update(images=[join, 0], audio=[join, 1])
+    g[find("SaveVideo")]["inputs"]["filename_prefix"] = "video/LTX-2.5_chain" + ("_keyframes" if keyframes else "")
+    return g
+
+
 WORKFLOWS = {
     "LTX-2.5 Video (int8, distilled)": video_finish(lambda: from_base("ltx_i2v")),
+    "LTX-2.5 Chain (int8, distilled, 4 clips)": video_finish(chain),
+    "LTX-2.5 Chain Keyframes (int8, distilled, 4 clips)": video_finish(lambda: chain(keyframes=True)),
     "LTX-2.5 First-Last Frame (int8, distilled)": video_finish(lambda: from_base("ltx_flf")),
     "LTX-2.5 Talking (int8, distilled)": video_finish(talking),
     "Qwen-Image 2.1 T2I": qwen_template("qwen_t2i"),

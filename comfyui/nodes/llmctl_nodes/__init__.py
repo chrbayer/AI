@@ -243,8 +243,92 @@ class LlmctlAudioFit:
         return ({"waveform": wave, "sample_rate": rate}, seconds, frames)
 
 
+class LlmctlJoinClips:
+    """Clips that continue one another, joined into one video with its sound. Each
+    clip after the first starts on the last frame of the one before, so that frame
+    is dropped; each clip's sound is cut (or padded with silence) to exactly the
+    frames it keeps — N frames last N / frame rate seconds — from the time of its
+    first kept frame on. So the sound stays on its pictures to the sample across
+    every join, however long LTX's audio for a clip came out. Each join is
+    crossfaded (equal power) within the one frame the clips share, so it does
+    not click; a jump in level between two clips' sounds is what *Ton
+    fortsetzen* in the chain workflows takes care of."""
+    CATEGORY = "llmctl"
+    FUNCTION = "join"
+    RETURN_TYPES = ("IMAGE", "AUDIO")
+    RETURN_NAMES = ("images", "audio")
+    CLIPS = 4
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        clip = {f"{kind}_{i}": (t,) for i in range(1, cls.CLIPS + 1) for kind, t in (("images", "IMAGE"), ("audio", "AUDIO"))}
+        return {"required": {"images_1": ("IMAGE",), "audio_1": ("AUDIO",),
+                             "frame_rate": ("INT", {"default": 24, "min": 1, "max": 120}),
+                             "crossfade": ("FLOAT", {"default": 0.04, "min": 0.0, "max": 0.5, "step": 0.01,
+                                                     "tooltip": "seconds of crossfade at each join, at most the one "
+                                                                "frame the clips share; 0 = hard cut"})},
+                "optional": {k: v for k, v in clip.items() if not k.endswith("_1")}}
+
+    def join(self, frame_rate, crossfade=0.0, **clips):
+        import math
+        import torch
+        pictures, sound, rate, raw = [], [], None, []
+        for i in range(1, self.CLIPS + 1):
+            images, audio = clips.get(f"images_{i}"), clips.get(f"audio_{i}")
+            if images is None or audio is None:
+                continue
+            skip = 1 if pictures else 0
+            images = images[skip:]
+            wave = audio["waveform"]
+            if rate is None:
+                rate = audio["sample_rate"]
+            elif audio["sample_rate"] != rate:
+                import torchaudio
+                wave = torchaudio.functional.resample(wave, audio["sample_rate"], rate)
+            start = round(skip * rate / frame_rate)
+            want = round((skip + images.shape[0]) * rate / frame_rate) - start
+            raw.append((wave, start))                       # the whole clip, for the fades
+            wave = wave[..., start:start + want]
+            if wave.shape[-1] < want:
+                wave = torch.cat([wave, wave.new_zeros(*wave.shape[:-1], want - wave.shape[-1])], dim=-1)
+            pictures.append(images)
+            sound.append(wave)
+        channels = max(w.shape[1] for w in sound)                   # mono beside stereo
+        sound = [w.expand(-1, channels, -1) for w in sound]
+        joined = torch.cat(sound, dim=-1).clone()
+        if crossfade > 0:
+            # Join j: where clip j+1's kept sound begins. The two clips share one
+            # frame — clip j+1 starts on clip j's last — so for that frame both
+            # sounds exist; the crossfade lies in it, ending at the join: no click,
+            # and no dip, since neither side fades into silence. Longer fades
+            # would: the outgoing sound ends at the join, the incoming one starts
+            # a frame before it.
+            at = 0
+            for j in range(len(sound) - 1):
+                begun = at                                          # where clip j's kept sound began
+                at += sound[j].shape[-1]
+                out_w, out_off = raw[j]
+                in_w, in_off = raw[j + 1]
+                width = min(round(crossfade * rate), in_off, sound[j].shape[-1])
+                if width <= 0:
+                    continue
+                pos = torch.arange(at - width, at)
+                ramp = (torch.arange(width, dtype=joined.dtype) + 0.5) / width * (math.pi / 2)
+
+                def take(w, offset):
+                    src = pos - offset
+                    ok = (src >= 0) & (src < w.shape[-1])
+                    seg = joined.new_zeros(*joined.shape[:2], width)
+                    seg[..., ok] = w.expand(-1, channels, -1)[..., src[ok]].to(joined.dtype)
+                    return seg
+                joined[..., at - width:at] = (take(out_w, begun - out_off) * torch.cos(ramp)
+                                              + take(in_w, at - in_off) * torch.sin(ramp))
+        return (torch.cat(pictures, dim=0), {"waveform": joined, "sample_rate": rate})
+
+
 NODE_CLASS_MAPPINGS = {"LlmctlArtifactCheck": LlmctlArtifactCheck, "LlmctlControlImage": LlmctlControlImage,
-                       "LlmctlAudioFit": LlmctlAudioFit}
+                       "LlmctlAudioFit": LlmctlAudioFit, "LlmctlJoinClips": LlmctlJoinClips}
 NODE_DISPLAY_NAME_MAPPINGS = {"LlmctlArtifactCheck": "Artifact Check (llmctl)",
                               "LlmctlControlImage": "Control image (llmctl)",
-                              "LlmctlAudioFit": "Audio to whole seconds (llmctl)"}
+                              "LlmctlAudioFit": "Audio to whole seconds (llmctl)",
+                              "LlmctlJoinClips": "Join clips with their sound (llmctl)"}
