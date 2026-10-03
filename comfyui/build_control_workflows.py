@@ -634,6 +634,58 @@ def inpaint_all():
     return g
 
 
+def video_finish(make):
+    """Two switches before the video is put together, both off: *Hochskalieren
+    (SeedVR2)* — SeedVR2 3B, 1.5×, Split Latent on (~10 min per second of video:
+    for a clip to keep) — and *48 fps (FILM)*, frames in between, the rate doubled
+    (~1 min). Upscaling first: the other way round SeedVR2 would have twice the
+    frames. The sound goes through untouched."""
+    def made():
+        g = make()
+        create = _find(g, "CreateVideo")
+        images, fps = g[create]["inputs"]["images"], g[create]["inputs"]["fps"]
+        # SeedVR2: ComfyUI's video template without its file input and output
+        sv = json.loads((ROOT / "bases" / "seedvr2_video.json").read_text())
+        drop = {k for k, n in sv.items() if n["class_type"] in ("LoadVideo", "GetVideoComponents", "CreateVideo", "SaveVideo",
+                                                                "Video Slice")}
+        drop |= {k for k, n in sv.items() if n["class_type"] == "ComfySwitchNode"
+                 and any(variants.is_ref(x) and x[0] in drop for x in n["inputs"].values())}
+        frames_from = next(k for k, n in sv.items() if n["class_type"] == "GetVideoComponents")
+        ids = {}
+        for k in sv:
+            if k not in drop:
+                ids[k] = _new_id({**g, **{v: None for v in ids.values()}})
+        for k, n in sv.items():
+            if k in drop:
+                continue
+            n = json.loads(json.dumps(n))
+            for a, x in n["inputs"].items():
+                if variants.is_ref(x):
+                    n["inputs"][a] = images if x[0] == frames_from else [ids[x[0]], x[1]]
+            if n["class_type"] == "ResizeImageMaskNode":
+                n["inputs"]["resize_type.multiplier"] = 1.5
+            if n["class_type"] == "PrimitiveBoolean":                    # Split Latent: on
+                n["inputs"]["value"] = True
+            g[ids[k]] = n
+        post = ids[next(k for k, n in sv.items() if n["class_type"] == "SeedVR2PostProcessing")]
+        resize = ids[next(k for k, n in sv.items() if n["class_type"] == "ResizeImageMaskNode")]
+        up = _switch(g, _flag(g, "Hochskalieren (SeedVR2)"), images, [post, 0], "Hochskalieren (SeedVR2)")
+        g[resize]["inputs"]["input"] = images            # the switch took this read over too; SeedVR2 reads the frames
+        # FILM
+        loader, interp, rate = (str(int(_new_id(g)) + i) for i in range(3))
+        g[loader] = {"class_type": "FrameInterpolationModelLoader", "inputs": {"model_name": "film_net_fp16.safetensors"}}
+        g[rate] = {"class_type": "ComfyMathExpression", "inputs": {"expression": "a * 2", "values.a": fps}, "_meta": {"title": "fps × 2"}}
+        flag = _flag(g, "48 fps (FILM)")
+        _switch(g, flag, [up, 0], [interp, 0], "48 fps (FILM)")
+        g[interp] = {"class_type": "FrameInterpolate", "inputs": {"interp_model": [loader, 0], "images": [up, 0], "multiplier": 2}}
+        k = _new_id(g)
+        g[k] = {"class_type": "ComfySwitchNode", "inputs": {"switch": [flag, 0], "on_false": fps, "on_true": [rate, 0]},
+                "_meta": {"title": "48 fps (FILM): rate"}}
+        g[create]["inputs"]["fps"] = [k, 0]
+        return g
+    return made
+
+
 def talking():
     """LTX-2.5 picture + audio to video (#43): the voice (or song) is encoded with
     LTX's audio VAE and held fixed by a noise mask, and the video is made to it —
@@ -674,7 +726,9 @@ def talking():
 
 
 WORKFLOWS = {
-    "LTX-2.5 Talking (int8, distilled)": talking,
+    "LTX-2.5 Video (int8, distilled)": video_finish(lambda: from_base("ltx_i2v")),
+    "LTX-2.5 First-Last Frame (int8, distilled)": video_finish(lambda: from_base("ltx_flf")),
+    "LTX-2.5 Talking (int8, distilled)": video_finish(talking),
     "Qwen-Image 2.1 T2I": qwen_template("qwen_t2i"),
     "Qwen-Image 2.1 Edit": qwen_template("qwen_edit"),
     "Qwen-Image 2.1 Background Removal": qwen_template("qwen_bg", uncensored=False),

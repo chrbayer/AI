@@ -125,6 +125,12 @@
    "url": "https://huggingface.co/Bingsu/adetailer/resolve/53cc19de382014514d9d4038601d261a7faa9b7b/face_yolov8m.pt"
   }
  ],
+ "film_net_fp16.safetensors": [
+  {
+   "directory": "frame_interpolation",
+   "url": "https://huggingface.co/Comfy-Org/frame_interpolation/resolve/main/frame_interpolation/film_net_fp16.safetensors"
+  }
+ ],
  "flux-2-klein-9b.safetensors": [
   {
    "directory": "diffusion_models",
@@ -337,6 +343,12 @@
   {
    "directory": "sams",
    "url": "https://huggingface.co/ybelkada/segment-anything/resolve/7790786db131bcdc639f24a915d9f2c331d843ee/checkpoints/sam_vit_h_4b8939.pth"
+  }
+ ],
+ "seedvr2_3b_int8_convrot.safetensors": [
+  {
+   "directory": "diffusion_models",
+   "url": "https://huggingface.co/Comfy-Org/SeedVR2/resolve/main/diffusion_models/seedvr2_3b_int8_convrot.safetensors"
   }
  ],
  "seedvr2_7b_fp16.safetensors": [

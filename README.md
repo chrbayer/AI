@@ -1444,6 +1444,14 @@ llmctl update comfy --torch           # …and torch itself
   Latent* on. Without that switch the whole clip went into one step that had
   not finished after 40 minutes; leave it on for anything longer than a second.
   Best kept for a finished clip.
+
+  The three LTX-2.5 workflows (Video, First-Last Frame, Talking) have both as
+  switches before the video is put together, off by default:
+  *Hochskalieren (SeedVR2)* (1.5×, Split Latent on) and *48 fps (FILM)* —
+  upscaling first, so SeedVR2 sees half the frames. A switched-off branch
+  loads nothing. 1 s at 1024×576 with both on: 1536×864 at 48 fps in 408 s.
+  For a clip made already, or a whole music video, the two workflows above
+  take the video file.
 - **Speech in ComfyUI.** [ComfyUI-Qwen-TTS](https://github.com/flybirdxx/ComfyUI-Qwen-TTS)
   brings Qwen3-TTS; two workflows use it. `Qwen3-TTS Stimme entwerfen` designs
   a voice from a description (VoiceDesign), `Qwen3-TTS Stimme klonen` speaks in
