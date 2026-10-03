@@ -1458,6 +1458,19 @@ llmctl update comfy --master          # master instead of the releases (download
   a phone (more triangles a little better). After a restart a new count
   costs the whole run again.
 
+  **More than one picture** (TRELLIS.2 only): with *Mehrere Ansichten
+  (TRELLIS.2)* on, up to three more pictures of the object — *Ansicht 2–4*,
+  the side, the back, from above, each with its own *Ansicht N verwenden* —
+  are cut free and encoded like the main one, and their conditionings are
+  combined for the structure and shape stages, where the form is decided.
+  The upsampling (1536) takes the main picture alone: with every view it
+  took 5027 s for the handbag instead of 851 s. The views can come from
+  Qwen-Image Edit (Turbo, at ~1 MP: "the same object seen from the left
+  side"). The gain is modest: the handbag's side profile came closer to its
+  side view, the fox hardly changed — and from three pictures it took 190 s
+  against 355 s from one. Off, the workflow is the template's; on Pixal3D
+  (*Switch to Trellis2* off) the views go nowhere.
+
   On ROCm the UV unwrap's batched fp64 solve fails in hipBLAS
   (`HIPBLAS_STATUS_ALLOC_FAILED`); `comfyui/patches/mesh-uv-unwrap-rocm-cpu.patch`
   sends it to the CPU, where it takes ~40 s for 670,000 faces. Hunyuan3D 2.1,

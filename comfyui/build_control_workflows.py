@@ -834,8 +834,82 @@ def chain(clips=4, keyframes=False):
     return g
 
 
+def three_d():
+    """Pixal3D / TRELLIS.2 from a picture (#38), plus *Mehrere Ansichten
+    (TRELLIS.2)*: up to three more pictures of the object (Ansicht 2-4 — the
+    side, the back, from above), each cut free and encoded like the main one,
+    their conditionings combined (the sampler averages the views' predictions)
+    for the structure and shape stages, where the form is decided. The
+    upsampling at 1536 takes the main picture alone: with every view it took
+    445 s a step instead of a few. Measured: a fox from three pictures in 190 s
+    against 355 s from one, a handbag's side profile closer to its side view.
+    Each view has its own switch (Ansicht N verwenden), for fewer than three.
+    Off, the workflow is the template's; with the template's switch on Pixal3D
+    the views go nowhere either way."""
+    g = from_base("pixal3d_trellis")
+    find = lambda cls, t=None: next(k for k, n in g.items() if n["class_type"] == cls and (t is None or variants.title(n) == t))
+    main = find("LoadImage")
+    bg_model = find("LoadBackgroundRemovalModel")
+    clip_vision = find("CLIPVisionLoader")
+    cond = find("Trellis2Conditioning")
+    crop = find("ImageCropToMask")
+    shape = find("Trellis2ShapeStage")
+    upsample = find("Trellis2UpsampleStage")
+    template_switches = [k for k, n in g.items() if n["class_type"] == "ComfySwitchNode"]
+    flag = _flag(g, "Mehrere Ansichten (TRELLIS.2)", False)
+    pos, neg = [cond, 0], [cond, 1]
+    for i in (2, 3, 4):
+        load, rb, cut, enc, cp, cn = (str(int(_new_id(g)) + j) for j in range(6))
+        g[load] = {"class_type": "LoadImage", "inputs": {"image": g[main]["inputs"]["image"]},
+                   "_meta": {"title": f"Ansicht {i}"}}
+        g[rb] = {"class_type": "RemoveBackground", "inputs": {"bg_removal_model": [bg_model, 0], "image": [load, 0]}}
+        g[cut] = {"class_type": "ImageCropToMask",
+                  "inputs": {**{k: v for k, v in g[crop]["inputs"].items() if not variants.is_ref(v)},
+                             "images": [load, 0], "masks": [rb, 0]}}
+        g[enc] = {"class_type": "Trellis2Conditioning", "inputs": {"clip_vision_model": [clip_vision, 0], "image": [cut, 0]}}
+        g[cp] = {"class_type": "ConditioningCombine", "inputs": {"conditioning_1": pos, "conditioning_2": [enc, 0]}}
+        g[cn] = {"class_type": "ConditioningCombine", "inputs": {"conditioning_1": neg, "conditioning_2": [enc, 1]}}
+        # A view of its own switch: an unused slot (holding the main picture,
+        # so it validates) would count the main picture twice.
+        use = _flag(g, f"Ansicht {i} verwenden", True)
+        sp, sn = (str(int(_new_id(g)) + j) for j in range(2))
+        for sw, on, off in ((sp, [cp, 0], pos), (sn, [cn, 0], neg)):
+            g[sw] = {"class_type": "ComfySwitchNode", "inputs": {"switch": [use, 0], "on_false": off, "on_true": on},
+                     "_meta": {"title": f"Ansicht {i}"}}
+        pos, neg = [sp, 0], [sn, 0]
+    # Structure and shape: the views together, where the switch is on.
+    sw_pos, sw_neg = (str(int(_new_id(g)) + j) for j in range(2))
+    for sw, off, on in ((sw_pos, [cond, 0], pos), (sw_neg, [cond, 1], neg)):
+        g[sw] = {"class_type": "ComfySwitchNode", "inputs": {"switch": [flag, 0], "on_false": off, "on_true": on},
+                 "_meta": {"title": "Mehrere Ansichten"}}
+    # The template's Pixal3D/TRELLIS.2 switches: one copy keeps the main picture
+    # alone (for the upsampling), the original takes the views.
+    single = {}
+    for k in template_switches:
+        for a, x in g[k]["inputs"].items():
+            if x in ([cond, 0], [cond, 1]):
+                copy = _new_id(g)
+                g[copy] = json.loads(json.dumps(g[k]))
+                single[x[1]] = [copy, 0]
+                g[k]["inputs"][a] = [(sw_pos, sw_neg)[x[1]], 0]
+                break
+    assert set(single) == {0, 1}
+    # The upsampling: the main picture alone, through a shape stage of its own.
+    alone, up_pos, up_neg = (str(int(_new_id(g)) + j) for j in range(3))
+    g[alone] = {"class_type": "Trellis2ShapeStage", "inputs": {"positive": single[0], "negative": single[1],
+                                                                "voxel": g[shape]["inputs"]["voxel"]},
+                "_meta": {"title": "Main picture alone (upsampling)"}}
+    for sw, a, i in ((up_pos, "positive", 0), (up_neg, "negative", 1)):
+        g[sw] = {"class_type": "ComfySwitchNode",
+                 "inputs": {"switch": [flag, 0], "on_false": g[upsample]["inputs"][a], "on_true": [alone, i]},
+                 "_meta": {"title": "Mehrere Ansichten"}}
+        g[upsample]["inputs"][a] = [sw, 0]
+    return g
+
+
 WORKFLOWS = {
     "LTX-2.5 Video (int8, distilled)": video_finish(lambda: from_base("ltx_i2v")),
+    "Pixal3D TRELLIS.2 Image to Model (int8)": three_d,
     "LTX-2.5 Chain (int8, distilled, 4 clips)": video_finish(chain),
     "LTX-2.5 Chain Keyframes (int8, distilled, 4 clips)": video_finish(lambda: chain(keyframes=True)),
     "LTX-2.5 First-Last Frame (int8, distilled)": video_finish(lambda: from_base("ltx_flf")),
