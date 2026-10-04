@@ -738,7 +738,13 @@ def chain(clips=4, keyframes=False):
     from the one before with Qwen-Image Edit say, so the person and whatever is
     in the scene carry on. Over a plain chain a face drifts a little with every
     clip and the drift adds up; here every clip ends on the storyboard again,
-    pulled to it with *Stärke Zielbild* (0.5).
+    pulled to it with *Stärke Zielbild N* (0.5).
+
+    *Dauer Clip N* (5 s, 1.5 allowed — rounded to LTX's grid of 1/3 s at 24
+    fps, a tie upwards): each clip its own length — a walk wants more time than
+    picking a shell up, and a clip done early waits for its end picture (a
+    stall); one that is too short rushes or does not get there. *Stärke
+    Zielbild N* likewise per clip.
 
     *Ton fortsetzen* (on): a later clip's sound starts with the last second of the
     one before, held as it is, and LTX goes on from there — the same wind and
@@ -757,7 +763,17 @@ def chain(clips=4, keyframes=False):
     else:
         start, end = find("LoadImage"), None
     prompt, create = find("PrimitiveStringMultiline", "Prompt"), find("CreateVideo")
-    sources = {start, prompt} | ({end} if end else set())
+    # Each clip its own length: what a clip has to show decides it, not a fixed 5 s.
+    # In seconds with a fraction (1.5): LTX takes 8·n + 1 frames, at 24 fps a grid
+    # of 1/3 s, so the length is rounded to the nearest third, a tie upwards.
+    duration = find("PrimitiveInt", "Duration")
+    g[duration] = {"class_type": "PrimitiveFloat", "inputs": {"value": float(g[duration]["inputs"]["value"])},
+                   "_meta": {"title": "Dauer Clip 1"}}
+    for n in g.values():
+        if n["class_type"] == "ComfyMathExpression" and n["inputs"].get("values.a") == [duration, 0]:
+            assert n["inputs"]["expression"].strip() == "a * b + 1", n["inputs"]["expression"]
+            n["inputs"]["expression"] = "floor(a * b / 8 + 0.5) * 8 + 1"
+    sources = {start, prompt, duration} | ({end} if end else set())
     # A clip: what reads its pictures or its prompt, up to the finished video, and
     # its own noise.
     per, grew = set(), True
@@ -783,7 +799,7 @@ def chain(clips=4, keyframes=False):
         # had LTX reach the picture early and hold it for a second; less leaves it
         # free to move into it.
         pull = _new_id(g)
-        g[pull] = {"class_type": "PrimitiveFloat", "inputs": {"value": 0.5}, "_meta": {"title": "Stärke Zielbild"}}
+        g[pull] = {"class_type": "PrimitiveFloat", "inputs": {"value": 0.5}, "_meta": {"title": "Stärke Zielbild 1"}}
         for k in per:
             if g[k]["class_type"] == "LTXVAddGuide" and g[k]["inputs"]["frame_idx"] == -1:
                 g[k]["inputs"]["strength"] = [pull, 0]
@@ -809,7 +825,14 @@ def chain(clips=4, keyframes=False):
                                                                 "on_true": [own, 0]},
                     "_meta": {"title": f"Schnitt vor Clip {i}"}}
         cuts[f"cut_{i}"] = [cut, 0]
-        swap = {start: first, prompt: text, **({end: target} if end else {})}
+        length = _new_id(g)
+        g[length] = {"class_type": "PrimitiveFloat", "inputs": dict(g[duration]["inputs"]), "_meta": {"title": f"Dauer Clip {i}"}}
+        swap = {start: first, prompt: text, duration: length, **({end: target} if end else {})}
+        if keyframes:
+            own_pull = _new_id(g)
+            g[own_pull] = {"class_type": "PrimitiveFloat", "inputs": {"value": 0.5},
+                           "_meta": {"title": f"Stärke Zielbild {i}"}}
+            swap[pull] = own_pull
         ids = {}
         for k in sorted(per, key=int):
             ids[k] = _new_id({**g, **{v: None for v in ids.values()}})
