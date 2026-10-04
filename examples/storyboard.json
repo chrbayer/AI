@@ -29,7 +29,7 @@
       "seed": 53
     },
     {
-      "edit": "Keep <image1> exactly as it is — the same woman at the same place and size in the picture, the same framing, hair, coat, sea and light — only she has opened her eyes and smiles, and holds the small seashell from <image2> (no bigger than her palm) in front of her chest, looking out over the sea towards the left edge of the picture. Photo.",
+      "edit": "Keep <image1> as it is — the same woman at the same place and size in the picture, the same framing, hair, coat, sky and light, the same camera — only she has opened her eyes and smiles, and holds the small seashell from <image2> (no bigger than her palm) in front of her chest, looking out over the sea towards the left edge of the picture; and the sea behind her has moved on a little: the waves and their foam are in slightly other places. Photo.",
       "check": "Close-up, head and shoulders, the woman at the same place as in the picture before: eyes open, smiling, the small seashell in front of her chest, looking towards the left edge of the picture.",
       "from": "cut_4"
     }
@@ -50,7 +50,7 @@
       "pull": 0.6
     },
     {
-      "prompt": "Close-up: with the seashell at her ear and her eyes closed she listens, then opens her eyes, smiles, lowers the small shell to her chest and looks out over the sea, the wind in her hair. Calm, gentle movement, the surf in the background.",
+      "prompt": "Close-up: with the seashell at her ear and her eyes closed she listens, then opens her eyes, smiles, lowers the small shell to her chest and looks out over the sea, the wind in her hair. Calm, gentle movement, the waves keep rolling in behind her, the surf moving in the background.",
       "cut": {
         "edit": "Close-up of the same woman as in <image1>, same face and long dark hair blowing in the wind, dark coat, holding the small seashell from <image2> (no bigger than her palm) to her ear with her eyes closed, listening; the sea and the low golden sun behind her. Head and shoulders, photo.",
         "check": "Close-up, head and shoulders: the woman with eyes closed holding the seashell to her ear.",

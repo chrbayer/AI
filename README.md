@@ -1585,7 +1585,10 @@ llmctl update comfy --master          # master instead of the releases (download
     waves are breaking, in other places" in an edit it rose to 0.4–0.55, and
     the sand at her feet calmed down. Tie the rest down in the same edit
     ("same camera, horizon height, beach and light; only the waves differ"),
-    or Qwen redraws the whole background.
+    or Qwen redraws the whole background. That holds for every keyframe made
+    `"from"` another too: the close-up's end picture, made from its start
+    with "keep it as it is", had the same sea, and it stood still (0.05–0.1)
+    until its edit asked for the waves to move on (0.8–1.0 after).
   - Her way must not cross the object: walking over the shell to stand
     beyond it, she raised a cloud of sand in which it vanished for a few
     frames.
