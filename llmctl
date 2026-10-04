@@ -1106,10 +1106,14 @@ _start_comfyui() {
     printf '%s\n\n' "$config_text" >> "$server_log"
     echo "Starting ComfyUI [slot $slot] on port $port_server..."
     # From the checkout, as its own launcher would; _r_rocm_env is unquoted on
-    # purpose — it word-splits into KEY=VAL pairs for env.
+    # purpose — it word-splits into KEY=VAL pairs for env, after (so over) ours.
+    # ROCPROFILER_REGISTER_ENABLED=0 (#54): torch registers its profiler, which
+    # takes 4096 interrupt signals at start and leaves KFD none for ROCr's own;
+    # its AsyncEventsLoop then polls without an event and keeps a core at 100%
+    # for as long as ComfyUI runs, idle or not (ROCm/TheRock#7051, ComfyUI#16339).
     local server_pid=""
     server_pid=$(cd "$app" && _spawn_detached "$PID_DIR/server-${slot}.pid" "$server_log" append \
-        env TMPDIR="$COMFYUI_TMP" PYTHONUNBUFFERED=1 \
+        env TMPDIR="$COMFYUI_TMP" PYTHONUNBUFFERED=1 ROCPROFILER_REGISTER_ENABLED=0 \
             LLMCTL_IMAGES_API="http://127.0.0.1:$(( PORT_BASE_PROXY + slot ))" $_r_rocm_env "${cmd[@]}")
     if [[ -z "$server_pid" ]]; then
         echo "Error: ComfyUI did not report a PID. See $server_log" >&2

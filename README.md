@@ -973,6 +973,13 @@ handle it. A models.conf entry with `_model_backend="comfyui"` describes it
 | `extra_args` | additional ComfyUI flags (`--disable-pinned-memory --use-pytorch-cross-attention`) |
 | `rocm_env` | its environment (`TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL=1`) |
 
+llmctl starts ComfyUI with `ROCPROFILER_REGISTER_ENABLED=0` (#54): otherwise
+torch's profiler registration takes the interrupt signals ROCm's event thread
+needs on gfx1151, and after the first GPU operation that thread keeps one CPU
+core at 100% for as long as ComfyUI runs, idle or not
+([ROCm/TheRock#7051](https://github.com/ROCm/TheRock/issues/7051)). A
+`rocm_env` setting of it overrides llmctl's.
+
 The checkout's parent directory holds what ComfyUI writes: `user/` (settings,
 saved workflows), `input/`, `output/`, `temp/` and `custom_nodes/`
 (`--base-directory`).
