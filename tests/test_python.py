@@ -978,6 +978,26 @@ class ArtifactNode(unittest.TestCase):
         level = self.n.LlmctlJoinClips().join(fps, 0.04, **same)[1]["waveform"][0, 0, at - frame:at]
         self.assertGreaterEqual(level.min().item(), 0.99)
 
+    def test_videocheck_finds_a_jump_a_halt_and_a_freeze(self):
+        import importlib
+        vc = importlib.import_module("videocheck")
+        import numpy as np
+        # 10 s at 24 fps: steady movement, one frame that snaps over at 2.5 s, a
+        # planned cut at 5 s, then movement that stops dead at 7 s and stays still
+        move = np.full(240, 0.4)
+        rest = np.full(240, 1.0)
+        rest[59] = 9.0
+        rest[119] = 60.0
+        move[168:] = 0.02
+        found, _ = vc.events(move, rest, 24, {120})
+        kinds = [(e["kind"], e["frame"]) for e in found]
+        self.assertIn(("jump", 60), kinds)
+        self.assertNotIn(("jump", 120), kinds)                  # the cut is left out
+        self.assertTrue(any(k == "halt" and 160 <= f <= 174 for k, f in kinds), kinds)
+        self.assertTrue(any(k == "freeze" for k, f in kinds), kinds)
+        self.assertEqual(vc.where(60, [121, 217]), "clip 1")
+        self.assertEqual(vc.where(122, [121, 217]), "join 1/2")
+
     def test_a_cut_keeps_every_frame_and_does_not_fade(self):
         import torch
         rate, fps = 48000, 24

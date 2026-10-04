@@ -1630,10 +1630,25 @@ llmctl update comfy --master          # master instead of the releases (download
      (where the person and the object are, which way she moves, shot size,
      how many people, anything doubled or half transparent), compares it with
      its `check`, then looks at all pictures together.
-  4. **Render** with `--render` (`--redo-clip N` for one clip again), then the motion measured: a stall (half a
-     second and more nearly still at a clip's end, so give it fewer
-     `seconds`, a lower `pull` or more to do) and a jump at a join (the clip
-     did not get there). On v3 it found the stall you see before 10 s.
+  4. **Render** with `--render` (`--redo-clip N` for one clip again), then
+     the motion measured by optical flow (`videocheck.py`, also on its own:
+     `videocheck.py VIDEO [--cuts F,..] [--joins F,..]`). For each pair of
+     frames it measures how far the picture moves and what that movement
+     does not explain. It reports:
+     - **JUMP:** unexplained change far above the second around it. A
+       background snapping over, or a clip reaching its end picture only in
+       its last frame.
+     - **HALT:** movement falling by more than 70 % within half a second and
+       staying down: someone stopping dead.
+     - **FREEZE:** a second and more nearly without movement: a clip done
+       early.
+
+     Each comes with its time, frame and clip or join. Calibrated on the
+     beach scene's versions, it found every jump and stop seen by eye: the
+     background snap at 9.88 s (18× the change around it), the end of clip 2
+     at 9.0 s (3.4×), the sand fountain (35×), the halts and freezes. A slow
+     dissolve changes each frame too little for it; that takes the vision
+     check.
      `--check-video` checks a rendered video again, and with `--vision`
      every half second a frame for ghosts: two people, or one half
      transparent. On v4 it found the dissolve at 10.5–12.5 s and nothing
@@ -1680,6 +1695,17 @@ llmctl update comfy --master          # master instead of the releases (download
   9.85 s inside clip 3 (Bild 4's other waves and smoothed sand). Clip 3
   again with another seed took 5 min instead of the whole video's 40; the
   jump was gone, the rest unchanged.
+
+  Why a clip can snap over shortly before its end: LTX works in blocks of 8
+  frames, and the end picture's pull takes hold of the whole last block. If
+  the clip has not got there by then, the picture jumps at the start of that
+  block (in clip 2, at its 90th frame of 97, 8.79 s, with three seeds alike)
+  and stands still after. Giving the clip more time made it worse: at 4⅔ s
+  instead of 4 it got to Bild 3 early, snapped (20×) and halted. Another
+  seed decides whether it gets there in time. In the beach scene clip 2 got
+  there with seed 5003 and clip 3 with 6001, each found with `--redo-clip`
+  in about 8 and 5 min a try, judged by the optical-flow check.
+  `llmctl videocheck <video>` runs that check on any video.
 
   **Sound:** LTX makes the sound clip by clip, each clip a soundscape of its
   own. In v7 it jumped 8 dB at a join (surf in one clip, wind in the next),

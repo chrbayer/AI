@@ -449,9 +449,21 @@ class Board:
         print(f"  rendering 4 clips, {total:.1f} s — about {total * 3:.0f} min at 1280x704 …", flush=True)
         comfy.run(g, out)
         print(f"  video: {out}")
+        self.write_layout(out, [clip_frames(float(c.get("seconds", 5))) for c in self.plan["clips"]])
         self.motion(out)
         if self.plan.get("ambience"):
             self.ambience(out)
+
+    def write_layout(self, video, frames):
+        """What each clip was rendered with, beside the video: --redo-clip cuts the
+        old video at these frames, whatever the plan says now."""
+        Path(str(video) + ".layout.json").write_text(json.dumps({"frames": frames}) + "\n")
+
+    def layout(self, video):
+        f = Path(str(video) + ".layout.json")
+        if f.is_file():
+            return json.loads(f.read_text())["frames"]
+        return [clip_frames(float(c.get("seconds", 5))) for c in self.plan["clips"]]
 
     def ambience(self, video):
         """One soundtrack for the whole video instead of LTX's, which it makes clip by
@@ -513,8 +525,9 @@ class Board:
         if not 1 <= i <= len(clips):
             sys.exit(f"--redo-clip: 1 to {len(clips)}")
         clip, frames = clips[i - 1], clip_frames(float(clips[i - 1].get("seconds", 5)))
-        start = sum(clip_frames(float(c.get("seconds", 5))) - (0 if j == 1 or c.get("cut") else 1)
-                    for j, c in enumerate(clips[:i - 1], 1))      # this clip's first new frame in the video
+        old = self.layout(video)                                  # as the video was made, not as the plan says now
+        start = sum(f - (0 if j == 1 or c.get("cut") else 1)
+                    for j, (f, c) in enumerate(zip(old[:i - 1], clips[:i - 1]), 1))   # this clip's first new frame
         follows = i > 1 and not clip.get("cut")                   # starts on the frame before it
         first = self.dir / f"redo_{i}_start.png"
         if follows:
@@ -547,14 +560,16 @@ class Board:
         keep = video.with_name(video.stem + ".before_redo.mp4")
         shutil.copy(video, keep)
         skip = 1 if follows else 0
-        stop = start + frames - skip
+        stop = start + old[i - 1] - skip                          # where the old clip ended
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(keep), "-i", str(new), "-filter_complex",
                         f"[0:v]trim=start_frame=0:end_frame={start},setpts=PTS-STARTPTS[a];"
                         f"[1:v]trim=start_frame={skip}:end_frame={frames},setpts=PTS-STARTPTS[b];"
                         f"[0:v]trim=start_frame={stop},setpts=PTS-STARTPTS[c];[a][b][c]concat=n=3:v=1:a=0,format=yuv420p[v]",
                         "-map", "[v]", "-map", "0:a?", "-c:v", "libx264", "-crf", "14", "-preset", "slow", "-r", str(FPS),
                         "-c:a", "copy", str(video)], check=True)
-        print(f"  video: {video} (frames {start}–{stop - 1} new; the one before: {keep.name})")
+        old[i - 1] = frames
+        self.write_layout(video, old)
+        print(f"  video: {video} (clip {i} now frames {start}–{start + frames - skip - 1}; the one before: {keep.name})")
         self.motion(video)
         if self.plan.get("ambience"):
             self.ambience(video)
@@ -587,41 +602,25 @@ class Board:
                     "\n".join(f"- {x}" for x in found or ["none"]) + "\n")
 
     def motion(self, video):
-        """Where the finished video stands still or jumps, measured: the mean change
-        from frame to frame (grey, 160 px wide). A stall — half a second and more
-        nearly still at a clip's end — is a clip done early, waiting for its end
-        picture (shorter "seconds", lower "pull", more to do in its prompt). A jump
-        at a join is a clip that did not get there (longer, higher pull)."""
-        import shutil
-        import subprocess
-        import numpy as np
-        if not shutil.which("ffmpeg"):
-            return
-        raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(video), "-vf", "scale=160:88,format=gray",
-                              "-f", "rawvideo", "-"], capture_output=True, check=True).stdout
-        x = np.frombuffer(raw, np.uint8).reshape(-1, 88, 160).astype(float)
-        d = np.abs(np.diff(x, axis=0)).mean(axis=(1, 2))         # d[i]: frame i -> i+1
-        report, start = [], 0
-        for i, clip in enumerate(self.plan["clips"], 1):
-            frames = clip_frames(float(clip.get("seconds", 5))) - (0 if i == 1 or clip.get("cut") else 1)
-            end = start + frames                                    # this clip's frames: [start, end)
-            seg = d[start:end - 1]
-            still = 0
-            while still < len(seg) and seg[len(seg) - 1 - still] < 0.35:
-                still += 1
-            line = f"clip {i}: {frames} frames, motion {seg.mean():.2f}"
-            if still >= FPS // 2:
-                line += f" — STALL: the last {still / FPS:.1f} s nearly still"
-            if end - 1 < len(d) and i < len(self.plan["clips"]) and not self.plan["clips"][i].get("cut"):
-                jump, usual = d[end - 1], np.median(seg) + 1e-6
-                if jump > 3 * usual and jump > 1.0:
-                    line += f" — JUMP into clip {i + 1} ({jump / usual:.0f}× the usual change)"
-            report.append(line)
-            start = end
+        """Jumps, halts and freezes, measured by optical flow (videocheck.py): a jump
+        is a clip that did not get there or a background snapping over (longer,
+        another seed, its keyframe nearer the one before); a halt or freeze a
+        clip done early (shorter, a lower pull, idle motion in its prompt). Cuts
+        the plan has are left out."""
+        import videocheck
+        frames, joins, cuts, at = self.layout(video), [], [], 0
+        for i, (made, clip) in enumerate(zip(frames, self.plan["clips"]), 1):
+            if i > 1:
+                joins.append(at)
+                if clip.get("cut"):
+                    cuts.append(at)
+            at += made - (0 if i == 1 or clip.get("cut") else 1)
+        found, _, n = videocheck.check(video, FPS, cuts, joins)
+        report = [videocheck.describe(e, FPS, joins).strip() for e in found] or ["no jump, halt or freeze"]
         for line in report:
             print(f"  {line}")
         with open(self.dir / "check.md", "a") as f:
-            f.write(f"\n## Motion of {Path(video).name} (measured)\n\n" + "\n".join(f"- {x}" for x in report) + "\n")
+            f.write(f"\n## Motion of {Path(video).name} (optical flow)\n\n" + "\n".join(f"- {x}" for x in report) + "\n")
 
 
 def main():

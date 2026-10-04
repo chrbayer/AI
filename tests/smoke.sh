@@ -248,6 +248,7 @@ check "musicvideo explains itself"      "usage: llmctl musicvideo"           -- 
 check "musicvideo wants its files"      "no such file: song.flac"            -- "$L" musicvideo song.flac pic.png
 check "storyboard explains itself"      "usage: llmctl storyboard"           -- "$L" storyboard --help
 check "storyboard wants its plan"        "no such file: plan.json"            -- "$L" storyboard plan.json
+check "videocheck explains itself"      "usage: llmctl videocheck"           -- "$L" videocheck --help
 
 echo ""
 printf '%d passed, %d failed%s\n' "$pass" "$fail" "$( (( skipped )) && printf ', %d skipped' "$skipped")"
