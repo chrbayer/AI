@@ -14,22 +14,34 @@ between them. Three steps, each run again only where its input changed:
    the plan expects there, and over all pictures whether they make one scene.
    Look before rendering: an hour of LTX is worth it only for keyframes that fit.
 3. With --render: the four clips, LTX-2.5 Chain Keyframes — each from one
-   keyframe to the next, or, where a clip has "cut", from a picture of its own.
+   keyframe to the next, or, where a clip has "cut", from a picture of its own —
+   and the motion measured: stalls and jumps. --check-video looks at a rendered
+   video again, with --vision for ghosts too (two people, a half-transparent
+   one: LTX dissolving someone to a place it does not walk her to).
 
-    storyboard.py --url URL --workflows DIR PLAN.json [--vision URL] [--render] [--out FILE]
+    storyboard.py --url URL --workflows DIR PLAN.json [--vision URL] [--render | --check-video] [--out FILE]
 
 The plan (JSON):
 
     {"photo": "beach.png",                     relative to the plan file
      "object": "the pale spiral seashell",     optional: SAM 3's prompt for it
      "size": "1280x704", "seed": 1,            optional
-     "pull": 0.5,                              optional: Stärke Zielbild
+     "pull": 0.5,                              optional: Stärke Zielbild, all clips
      "keys": [{"edit": "...", "check": "..."}, ... five],
-     "clips": [{"prompt": "..."}, ...,        four; a clip with
+     "clips": [{"prompt": "...", "seconds": 4, "pull": 0.7}, ...,   four; a clip with
                {"prompt": "...", "cut": {"edit": "...", "check": "..."}}]}
 
+A clip's "seconds" (1-10, default 5; 1.5 is fine, rounded to LTX's grid of
+1/3 s) is what its action needs: a clip done
+early waits at its end picture (a stall), one too short rushes. Its "pull"
+overrides the plan's.
+
 "edit" is the Qwen Edit prompt: <image1> is the photo, <image2> the object; a
-picture's own "seed" tries another take of it. "object_stays": true pastes the
+picture's own "seed" tries another take of it. "from": "key_3" edits it from
+that keyframe instead of the photo (<image1> is then that keyframe): the person
+stays where she was — LTX does not walk her to a place she does not face, it
+dissolves her there. One edit of an edit is fine; a row of them gathers grain.
+"object_stays": true pastes the
 object in where it lies in key 1 — until it is picked up it must not move (Qwen
 draws it somewhere else each time, and LTX then kicks or throws it there); its
 edit then leaves the object out and places the person by it.
@@ -46,6 +58,7 @@ import argparse
 import base64
 import hashlib
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -59,6 +72,7 @@ SAM = "SAM 3 Select.json"
 CHAIN = "video/LTX-2.5 Chain Keyframes (int8, distilled, 4 clips).json"
 CLIPS = 4
 UPLOAD_DIR = "storyboard"
+FPS = 24
 
 
 def load_plan(path):
@@ -71,6 +85,13 @@ def load_plan(path):
         sys.exit(f"no such photo: {plan['photo']}")
     if len(plan.get("keys", [])) != CLIPS + 1 or len(plan.get("clips", [])) != CLIPS:
         sys.exit(f"the plan wants {CLIPS + 1} keys and {CLIPS} clips")
+    for i, clip in enumerate(plan["clips"], 1):
+        seconds = float(clip.get("seconds", 5))
+        if not 1 <= seconds <= 10:
+            sys.exit(f"clip {i}: seconds 1 to 10")
+        if clip_frames(seconds) != round(seconds * FPS) + 1:
+            print(f"clip {i}: {seconds:g} s → {(clip_frames(seconds) - 1) / FPS:.2f} s "
+                  f"({clip_frames(seconds)} frames; LTX takes 8·n + 1)")
     if plan["clips"][0].get("cut"):
         sys.exit("clip 1 starts on key 1; a cut makes sense from clip 2 on")
     for i, k in enumerate(plan["keys"] + [c["cut"] for c in plan["clips"] if c.get("cut")], 1):
@@ -84,6 +105,18 @@ def load_plan(path):
         except (ValueError, AssertionError):
             sys.exit("size: WxH, multiples of 32")
     return plan
+
+
+def picture_part(p, kind="png"):
+    """A picture as a chat message part."""
+    data = p if isinstance(p, bytes) else Path(p).read_bytes()
+    return {"type": "image_url", "image_url": {"url": f"data:image/{kind};base64," + base64.b64encode(data).decode()}}
+
+
+def clip_frames(seconds):
+    """The frames LTX makes for a clip of `seconds`: 8·n + 1, the nearest (a tie
+    upwards) — as the chain workflows' Dauer Clip N rounds it."""
+    return math.floor(seconds * FPS / 8 + 0.5) * 8 + 1
 
 
 def pictures(plan):
@@ -125,16 +158,17 @@ class Board:
     def made(self, out, key):
         out.with_suffix(".json").write_text(json.dumps({"from": key}) + "\n")
 
-    def edit(self, name, prompt, seed, ref=None):
+    def edit(self, name, prompt, seed, ref=None, source=None):
         out = self.dir / f"{name}.png"
-        key = digest(Path(self.plan["photo"]), prompt, seed, *([ref] if ref else []))
+        source = Path(source or self.plan["photo"])
+        key = digest(source, prompt, seed, *([ref] if ref else []))
         if self.fresh(out, key):
             print(f"  {name}: unchanged")
             return out
         comfy = self.need_comfy()
         g = json.loads((self.workflows / EDIT).read_text())
         loads = sorted((k for k, n in g.items() if n["class_type"] == "LoadImage"), key=int)
-        g[loads[0]]["inputs"]["image"] = comfy.upload(self.plan["photo"], UPLOAD_DIR)
+        g[loads[0]]["inputs"]["image"] = comfy.upload(source, UPLOAD_DIR)
         if ref:
             g[loads[1]]["inputs"]["image"] = comfy.upload(ref, UPLOAD_DIR)
         else:                                        # one picture: the second loader goes
@@ -258,7 +292,9 @@ class Board:
         made["key_1"] = self.edit("key_1", shown[0][1]["edit"], seed)
         ref = self.cut_object(made["key_1"]) if self.plan.get("object") else None
         for i, (name, k) in enumerate(shown[1:], 2):
-            made[name] = self.edit(name, k["edit"], int(k.get("seed", seed + i)), ref)
+            if k.get("from") and k["from"] not in made:
+                sys.exit(f"{name}: 'from' names {k['from']}, which comes later or does not exist")
+            made[name] = self.edit(name, k["edit"], int(k.get("seed", seed + i)), ref, made.get(k.get("from")))
             if k.get("object_stays"):
                 made[name] = self.paste_object(made["key_1"], made[name], name)
         self.sheet(shown, made)
@@ -283,26 +319,26 @@ class Board:
         sheet.save(self.dir / "sheet.jpg", quality=88)
         print(f"  contact sheet: {self.dir / 'sheet.jpg'}")
 
-    def check(self, shown, made):
-        """A vision model's look at each picture against its 'check', then at all."""
+    def ask(self, content):
+        """One question to the vision model (--vision), its answer."""
         url = self.a.vision.rstrip("/")
         url = url if url.endswith("/v1") else url + "/v1"
-        thing = self.plan.get("object") or "anything the scene is about"
-
-        def ask(content):
-            try:
-                r = requests.post(f"{url}/chat/completions", timeout=900, json={
+        try:
+            r = requests.post(f"{url}/chat/completions", timeout=900, json={
                 "messages": [{"role": "user", "content": content}], "max_tokens": 900, "temperature": 0.2})
-            except requests.ConnectionError:
-                sys.exit(f"no vision model at {url}")
-            if not r.ok:
-                sys.exit(f"the vision model at {url} refused: {r.text[:500]}\n"
-                         "(a llama.cpp model sees pictures only when started with --mmproj)")
-            return r.json()["choices"][0]["message"]["content"].strip()
+        except requests.ConnectionError:
+            sys.exit(f"no vision model at {url}")
+        if not r.ok:
+            sys.exit(f"the vision model at {url} refused: {r.text[:500]}\n"
+                     "(a llama.cpp model sees pictures only when started with --mmproj)")
+        return r.json()["choices"][0]["message"]["content"].strip()
 
-        def image(p):
-            return {"type": "image_url", "image_url": {"url": "data:image/png;base64," +
-                                                       base64.b64encode(Path(p).read_bytes()).decode()}}
+    def check(self, shown, made):
+        """A vision model's look at each picture against its 'check', then at all."""
+        thing = self.plan.get("object") or "anything the scene is about"
+        ask = self.ask
+
+        image = picture_part
 
         report = [f"# Storyboard check: {Path(self.a.plan).name}\n"]
         for name, k in shown:
@@ -342,8 +378,12 @@ class Board:
                 i = int(t.split()[2])
                 cut = made.get(f"cut_{i}", made["key_1"])
                 n["inputs"]["image"] = comfy.upload(cut, UPLOAD_DIR)
-            if n["class_type"] == "PrimitiveFloat" and t == "Stärke Zielbild" and "pull" in self.plan:
-                n["inputs"]["value"] = float(self.plan["pull"])
+            if n["class_type"] == "PrimitiveFloat" and t.startswith("Stärke Zielbild "):
+                clip = self.plan["clips"][int(t.split()[2]) - 1]
+                if "pull" in clip or "pull" in self.plan:
+                    n["inputs"]["value"] = float(clip.get("pull", self.plan.get("pull")))
+            if n["class_type"] in ("PrimitiveFloat", "PrimitiveInt") and t.startswith("Dauer Clip "):
+                n["inputs"]["value"] = float(self.plan["clips"][int(t.split()[2]) - 1].get("seconds", 5))
             if n["class_type"] == "PrimitiveBoolean" and t.startswith("Schnitt vor Clip "):
                 n["inputs"]["value"] = f"cut_{t.split()[3]}" in made
             if n["class_type"] == "PrimitiveStringMultiline" and t.startswith("Prompt "):
@@ -352,10 +392,76 @@ class Board:
                 n["inputs"]["value"] = self.plan["size"][t.lower() == "height"]
             if n["class_type"] == "SaveVideo":
                 n["inputs"]["filename_prefix"] = f"video/storyboard_{self.dir.stem}"
-        out = Path(self.a.out) if self.a.out else self.dir / f"{Path(self.a.plan).stem}.mp4"
-        print(f"  rendering 4 clips — about an hour at 1280x704 …", flush=True)
+        out = self.video()
+        total = sum((clip_frames(float(c.get("seconds", 5))) - 1) / FPS for c in self.plan["clips"])
+        print(f"  rendering 4 clips, {total:.1f} s — about {total * 3:.0f} min at 1280x704 …", flush=True)
         comfy.run(g, out)
         print(f"  video: {out}")
+        self.motion(out)
+
+    def video(self):
+        return Path(self.a.out) if self.a.out else self.dir / f"{Path(self.a.plan).stem}.mp4"
+
+    def ghosts(self, video):
+        """Every half second a frame to the vision model: two people where there is
+        one, or anyone half transparent — LTX's way of moving someone it does not
+        walk (a dissolve), which the motion measurement does not see."""
+        import subprocess
+        frames = subprocess.run(["ffmpeg", "-v", "error", "-i", str(video), "-vf", f"select='not(mod(n\\,{FPS // 2}))',scale=640:-2",
+                                 "-vsync", "0", "-f", "image2pipe", "-c:v", "mjpeg", "-"],
+                                capture_output=True, check=True).stdout
+        pictures = [b"\xff\xd8" + p for p in frames.split(b"\xff\xd8")[1:]]
+        found = []
+        for i, jpg in enumerate(pictures):
+            answer = self.ask([{"type": "text", "text":
+                                "A frame of a video. How many people are in it, and is any of them half transparent, "
+                                "a faint double, or a ghost of another? Answer in one line: 'PEOPLE <n>, GHOST yes' or "
+                                "'PEOPLE <n>, GHOST no'."}, picture_part(jpg, "jpeg")])
+            t = i * (FPS // 2) / FPS
+            if "GHOST YES" in answer.upper().replace(":", "") or "PEOPLE 1" not in answer.upper().replace(":", ""):
+                found.append(f"{t:.1f} s: {answer.splitlines()[0][:100]}")
+        for line in found or ["none"]:
+            print(f"  ghost or double {line}")
+        with open(self.dir / "check.md", "a") as f:
+            f.write(f"\n## Ghosts in {Path(video).name} (vision model, every 0.5 s)\n\n" +
+                    "\n".join(f"- {x}" for x in found or ["none"]) + "\n")
+
+    def motion(self, video):
+        """Where the finished video stands still or jumps, measured: the mean change
+        from frame to frame (grey, 160 px wide). A stall — half a second and more
+        nearly still at a clip's end — is a clip done early, waiting for its end
+        picture (shorter "seconds", lower "pull", more to do in its prompt). A jump
+        at a join is a clip that did not get there (longer, higher pull)."""
+        import shutil
+        import subprocess
+        import numpy as np
+        if not shutil.which("ffmpeg"):
+            return
+        raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(video), "-vf", "scale=160:88,format=gray",
+                              "-f", "rawvideo", "-"], capture_output=True, check=True).stdout
+        x = np.frombuffer(raw, np.uint8).reshape(-1, 88, 160).astype(float)
+        d = np.abs(np.diff(x, axis=0)).mean(axis=(1, 2))         # d[i]: frame i -> i+1
+        report, start = [], 0
+        for i, clip in enumerate(self.plan["clips"], 1):
+            frames = clip_frames(float(clip.get("seconds", 5))) - (0 if i == 1 or clip.get("cut") else 1)
+            end = start + frames                                    # this clip's frames: [start, end)
+            seg = d[start:end - 1]
+            still = 0
+            while still < len(seg) and seg[len(seg) - 1 - still] < 0.35:
+                still += 1
+            line = f"clip {i}: {frames} frames, motion {seg.mean():.2f}"
+            if still >= FPS // 2:
+                line += f" — STALL: the last {still / FPS:.1f} s nearly still"
+            if end - 1 < len(d) and i < len(self.plan["clips"]) and not self.plan["clips"][i].get("cut"):
+                jump, usual = d[end - 1], np.median(seg) + 1e-6
+                if jump > 3 * usual and jump > 1.0:
+                    line += f" — JUMP into clip {i + 1} ({jump / usual:.0f}× the usual change)"
+            report.append(line)
+            start = end
+        for line in report:
+            print(f"  {line}")
+        with open(self.dir / "check.md", "a") as f:
+            f.write(f"\n## Motion of {Path(video).name} (measured)\n\n" + "\n".join(f"- {x}" for x in report) + "\n")
 
 
 def main():
@@ -366,10 +472,20 @@ def main():
     ap.add_argument("--workflows", required=True, help=argparse.SUPPRESS)
     ap.add_argument("--vision", help="an OpenAI base URL of a model that sees pictures, for the check")
     ap.add_argument("--render", action="store_true", help="render the clips (else: keyframes, sheet, check only)")
+    ap.add_argument("--check-video", action="store_true",
+                    help="check the rendered video: motion (stalls, jumps), with --vision ghosts too")
     ap.add_argument("--out", help="the video (default: PLAN.storyboard/PLAN.mp4)")
     a = ap.parse_args()
     plan = load_plan(a.plan)
     board = Board(a, plan)
+    if a.check_video:
+        if not board.video().is_file():
+            sys.exit(f"no video yet: {board.video()} — render it with --render")
+        print("Video check:")
+        board.motion(board.video())
+        if a.vision:
+            board.ghosts(board.video())
+        return
     print("Keyframes:")
     shown, made = board.keyframes()
     if a.vision:

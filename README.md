@@ -1536,8 +1536,13 @@ llmctl update comfy --master          # master instead of the releases (download
   `LTX-2.5 Chain Keyframes (int8, distilled, 4 clips)` runs each clip on
   First-Last Frame from one picture to the next (*Bild 1–5*), so the person
   stays the same and the story follows the pictures (~60 min for 20 s).
-  *Stärke Zielbild* (0.5) pulls a clip to its end picture; at the template's
-  0.7 LTX reached it early and held it for a second. *Schnitt vor Clip N*
+  Each clip has its own length, *Dauer Clip N* (5 s; 1.5 is fine, rounded
+  to LTX's grid: a clip has 8·n + 1 frames, at 24 fps steps of 1/3 s, a tie
+  upwards): a walk wants more time than picking a shell up. A clip with too much time reaches its end
+  picture early and waits there (a stall); one with too little rushes or
+  does not get there. *Stärke Zielbild N* (0.5), also per clip, pulls a clip
+  to its end picture; at the template's 0.7 LTX reached it early and held it
+  for a second. *Schnitt vor Clip N*
   starts clip N on a picture of its own (*Start Clip N*), a hard cut, for what
   one movement in 5 s cannot reach. Crammed into one clip, a jump from close
   to wide ended in a double image. The sound goes on across the cut.
@@ -1553,7 +1558,10 @@ llmctl update comfy --master          # master instead of the releases (download
     picture's terms ("lower left of the picture"), not the person's ("to her
     right").
   - Each picture must be reachable from the one before by a natural movement
-    in 5 s; anything else is a cut.
+    in 5 s; anything else is a cut. That includes direction: LTX walks a
+    person where she faces. From a place she had to turn around and walk
+    back from, about 1.5 m in 5 s, it dissolved her there instead, as a ghost
+    fading in at the new place.
   - Keyframes are resting states (standing by the shell, holding it, shell at
     the ear), not a moment in the middle of a movement. With "bending down,
     hand at the shell" as the end of a clip, LTX picked the shell up early,
@@ -1581,12 +1589,16 @@ llmctl update comfy --master          # master instead of the releases (download
   (`examples/storyboard.json` is the beach scene below). The plan
   names a photo, five keyframes (an `edit` prompt and a `check` of where
   things should be), four clip prompts, and optionally an `object`, a
-  `cut` and `pull` (*Stärke Zielbild*). The steps:
+  `cut`, and per clip `seconds` and `pull` (*Stärke Zielbild*; a plan-wide
+  `pull` is the default). The steps:
   1. **Keyframes:** each straight from the photo with Qwen-Image Edit Turbo.
      The `object` is cut out of keyframe 1 (SAM 3) and goes into every later
      edit as `<image2>`, so it stays the same. A keyframe with
      `"object_stays": true` gets it pasted in where it lies in keyframe 1;
-     its edit leaves the object out and places the person by it.
+     its edit leaves the object out and places the person by it. A keyframe
+     with `"from": "key_3"` is edited from that keyframe instead of the
+     photo: the person stays where she was and only her pose changes (one
+     edit of an edit is fine; a row of them gathers grain).
   2. **Contact sheet** of the keyframes (`sheet.jpg`), and the object's size
      measured in each (SAM 3). Within a shot it must stay within 0.6–1.6
      times the first picture; the vision model had called a shell 1.4 times
@@ -1595,7 +1607,14 @@ llmctl update comfy --master          # master instead of the releases (download
      (where the person and the object are, which way she moves, shot size,
      how many people, anything doubled or half transparent), compares it with
      its `check`, then looks at all pictures together.
-  4. **Render** with `--render`.
+  4. **Render** with `--render`, then the motion measured: a stall (half a
+     second and more nearly still at a clip's end, so give it fewer
+     `seconds`, a lower `pull` or more to do) and a jump at a join (the clip
+     did not get there). On v3 it found the stall you see before 10 s.
+     `--check-video` checks a rendered video again, and with `--vision`
+     every half second a frame for ghosts: two people, or one half
+     transparent. On v4 it found the dissolve at 10.5–12.5 s and nothing
+     else, in 33 s.
 
   Each step reuses what is unchanged: delete a picture, or give it a `seed` of
   its own, to have it made anew. Qwen Edit Turbo likes to draw a walking
