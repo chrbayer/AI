@@ -1571,6 +1571,17 @@ llmctl update comfy --master          # master instead of the releases (download
     foam.
   - Close-ups made from a full-figure photo get a face Qwen invents; try a
     few seeds and take close-ups that match each other and the photo.
+  - What should keep moving must differ between the keyframes. Edited from
+    one photo, every keyframe has the same sea to the pixel, and LTX kept it
+    still from one to the next: 0.1–0.3 of change a frame, against 1.0–1.3
+    in a plain LTX clip of the photo. With "the sea has moved on: other
+    waves are breaking, in other places" in an edit it rose to 0.4–0.55, and
+    the sand at her feet calmed down. Tie the rest down in the same edit
+    ("same camera, horizon height, beach and light; only the waves differ"),
+    or Qwen redraws the whole background.
+  - Her way must not cross the object: walking over the shell to stand
+    beyond it, she raised a cloud of sand in which it vanished for a few
+    frames.
   - An object that lies still must lie at the same pixels in every picture
     until it is picked up. Qwen draws it somewhere else in each edit, and LTX
     then gets it there anyway: at *Stärke Zielbild* 0.5 by blending, at 0.7
@@ -1598,7 +1609,12 @@ llmctl update comfy --master          # master instead of the releases (download
      its edit leaves the object out and places the person by it. A keyframe
      with `"from": "key_3"` is edited from that keyframe instead of the
      photo: the person stays where she was and only her pose changes (one
-     edit of an edit is fine; a row of them gathers grain).
+     edit of an edit is fine; a row of them gathers grain). Where the object
+     lies decides the scene (does her way to it cross it, where does she
+     stop), and Qwen puts it only roughly where a prompt asks. So keyframe 1
+     can have it pasted in instead: `"object_at": [x, y]` and
+     `"object_height"` as fractions of the picture, from the plan's
+     `"object_image"`, a picture of the object with transparency.
   2. **Contact sheet** of the keyframes (`sheet.jpg`), and the object's size
      measured in each (SAM 3). Within a shot it must stay within 0.6–1.6
      times the first picture; the vision model had called a shell 1.4 times
@@ -1625,7 +1641,7 @@ llmctl update comfy --master          # master instead of the releases (download
   Keyframes take ~30 s each, the check ~1 min, the render about an hour.
   The beach scene (`examples/storyboard.json`): a woman walks to a shell
   lying in the sand, picks it up and holds it to her ear, then a cut to a
-  close-up where she listens, opens her eyes and smiles. It took six
+  close-up where she listens, opens her eyes and smiles. It took seven
   rounds, each fixing what the one before showed:
   - **v1:** a giant shell, put down again before it was picked up.
   - **v2:** a small shell, resting-state keyframes, but at pull 0.5 a ghost
@@ -1643,10 +1659,16 @@ llmctl update comfy --master          # master instead of the releases (download
     3 at 2⅔ s. No ghost (checked every 0.5 s), no jump. 16.75 s (402
     frames, the sound to the sample) in ~40 min.
 
-  Left in v6: sand flies about her feet on the walk, as in every version.
-  Clip 3 ends with 1.2 s of listening, eyes closed, before the cut; the
-  motion check calls that a stall. It cannot tell a still moment meant from
-  one waited out, so read its stalls as hints.
+  - **v7:** the shell pasted in far left (`object_at`), so her way no longer
+    crosses it and it stays in sight; other waves in every keyframe, so the
+    sea moves (0.4–1.4 instead of 0.2–0.3). No ghost, the shell never
+    hidden, 16.75 s in ~40 min.
+
+  The motion check's stalls and jumps are hints, not verdicts:
+  - **Stalls:** it cannot tell a still moment meant (listening, eyes closed,
+    before a cut) from one waited out.
+  - **Jumps:** waves that start moving at a join count as one, where nothing
+    jumps.
 - **Music videos** (#47): `llmctl musicvideo <song> <picture>...` makes one on
   the running ComfyUI. The song is cut into sections (`--seconds`, 5 by
   default); in each the pictures take turns to sing it (LTX-2.5 Talking), or a

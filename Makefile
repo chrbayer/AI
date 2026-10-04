@@ -44,7 +44,7 @@ install:
 	install -Dm644 images_repair.html $(LIBDIR)/images_repair.html
 	install -Dm644 tts_voice_design.py $(LIBDIR)/tts_voice_design.py
 	install -Dm644 -t $(SHAREDIR)/templates templates/*
-	install -Dm644 -t $(SHAREDIR)/examples examples/*.conf examples/*.json
+	install -Dm644 -t $(SHAREDIR)/examples examples/*.conf examples/*.json examples/*.png
 	install -Dm644 -t $(SHAREDIR)/comfyui/workflows comfyui/workflows/*.json
 	install -Dm644 -t $(SHAREDIR)/comfyui/api comfyui/api/*.json
 	install -Dm644 -t $(SHAREDIR)/comfyui/api/audio comfyui/api/audio/*.json

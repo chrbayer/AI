@@ -5,23 +5,28 @@
   "seed": 7,
   "keys": [
     {
-      "edit": "Keep <image1> exactly as it is — the same woman, pose, clothes, beach, sea, light and camera — and add one a small pale cream spiral seashell that fits in the palm of her hand, lying on the wet sand in the lower left part of the picture, a few steps to the left of the woman, in the direction she is looking. The shell is small, no bigger than her palm, about a third as long as her foot.",
-      "check": "Full figure of the woman in the middle of the picture, looking towards the left edge; a small seashell lies on the sand in the lower left part of the picture."
+      "check": "Full figure of the woman in the middle of the picture, looking towards the left edge; a small seashell lies on the sand at the far left, near the left edge.",
+      "object_at": [
+        0.1,
+        0.92
+      ],
+      "object_height": 0.047
     },
     {
-      "edit": "The woman from <image1> has moved: she now stands still in the left part of the picture, about a quarter of the way in from the left edge, and looks down at the wet sand just to the right of her feet — the same woman, same face, long dark hair, dark coat and jeans, and she is the only person in the picture; nobody stands in the middle any more. Nothing lies on the sand. Same beach, sea, golden evening light and camera distance as <image1>, full figure, photo.",
+      "edit": "The woman from <image1> has moved: she has walked to the left and now stands still in the left part of the picture, about a fifth of the way in from the left edge, and looks down to the left at the wet sand just to the left of her feet — the same woman, same face, long dark hair, dark coat and jeans, and she is the only person in the picture; nobody stands in the middle any more. Nothing lies on the sand. Same beach, golden evening light and camera distance as <image1>, full figure, photo. The sea has moved on since <image1>: other waves are breaking now, in other places, with fresh white foam.",
       "check": "Full figure, the woman standing still in the left part of the picture, looking down at the small seashell on the sand right in front of her feet.",
       "object_stays": true
     },
     {
-      "edit": "The woman from <image1> has moved: she now stands upright in the left part of the picture and holds the small seashell from <image2> (the shell is small, no bigger than her palm, about a third as long as her foot) in both hands in front of her, looking at it — the same woman, same face, long dark hair, dark coat and jeans, and she is the only person in the picture; nobody stands in the middle any more, and nothing lies on the sand. Same beach, sea, golden evening light and camera distance as <image1>, full figure, photo.",
+      "edit": "The woman from <image1> has moved: she now stands upright in the left part of the picture and holds the small seashell from <image2> (the shell is small, no bigger than her palm, about a third as long as her foot) in both hands in front of her, looking at it — the same woman, same face, long dark hair, dark coat and jeans, and she is the only person in the picture; nobody stands in the middle any more, and nothing lies on the sand. Same beach, golden evening light and camera distance as <image1>, full figure, photo. The sea has moved on since <image1>: other waves are breaking now, in other places, with fresh white foam.",
       "check": "Full figure, the woman standing upright in the left part of the picture, holding the small seashell in both hands in front of her, looking at it; nothing on the sand.",
       "seed": 33
     },
     {
-      "edit": "Keep <image1> exactly as it is — the same woman at the same place in the picture, the same pose of her body and legs, the same clothes, beach, sea, light and camera — only she now holds the small seashell from <image2> (no bigger than her palm) to her ear with one hand and has her eyes closed, listening. She is the only person in the picture; nothing lies on the sand. Photo.",
+      "edit": "Keep <image1> exactly as it is — the same woman at the same place in the picture, the same pose of her body and legs, the same clothes, the same camera position and framing, the same horizon height, the same beach and sand, the same sky and golden light — only she now holds the small seashell from <image2> (no bigger than her palm) to her ear with one hand and has her eyes closed, listening, and the waves behind her have moved on a little: the breaking waves and their foam are in slightly other places. She is the only person in the picture; nothing lies on the sand. Photo.",
       "check": "Full figure, the woman at the same place as in the picture before (left of the middle), holding the small seashell to her ear, eyes closed; no shell on the sand.",
-      "from": "key_3"
+      "from": "key_3",
+      "seed": 53
     },
     {
       "edit": "Keep <image1> exactly as it is — the same woman at the same place and size in the picture, the same framing, hair, coat, sea and light — only she has opened her eyes and smiles, and holds the small seashell from <image2> (no bigger than her palm) in front of her chest, looking out over the sea towards the left edge of the picture. Photo.",
@@ -31,16 +36,16 @@
   ],
   "clips": [
     {
-      "prompt": "The young woman stands on the beach at golden hour, the wind in her long dark hair and coat; she notices the small seashell lying completely still on the wet sand to the left of her, walks a few slow barefoot steps to the left towards it and stops right next to it, looking down at it. The seashell does not move. Natural continuous movement, steady camera, sound of wind and surf.",
+      "prompt": "The young woman stands on the beach at golden hour, the wind in her long dark hair and coat; she notices the small seashell lying completely still on the wet sand to the left of her, walks a few slow barefoot steps to the left over the firm wet sand towards it and stops right next to it, the shell just to the left of her feet, looking down at it. The seashell does not move. Behind her the waves keep rolling in and breaking, foam running up the beach. Natural continuous movement, steady camera, sound of wind and surf.",
       "seconds": 5
     },
     {
-      "prompt": "She bends down and picks up the small seashell, which lies still on the sand, in one smooth movement, straightens up and turns it slowly in her fingers, looking at it closely. Calm continuous movement, steady camera, sound of waves.",
+      "prompt": "She bends down and picks up the small seashell, which lies still on the sand, in one smooth movement, straightens up and turns it slowly in her fingers, looking at it closely. Calm continuous movement, the waves keep rolling in behind her, steady camera, sound of waves.",
       "seconds": 4,
       "pull": 0.6
     },
     {
-      "prompt": "She stays where she stands and slowly lifts the small seashell to her ear, closes her eyes and listens, the wind in her hair and coat. Calm, gentle movement, steady camera, wind and surf.",
+      "prompt": "She stays where she stands and slowly lifts the small seashell to her ear, closes her eyes and listens, the wind in her hair and coat. Calm, gentle movement, the waves keep rolling in behind her, steady camera, wind and surf.",
       "seconds": 2.5
     },
     {
@@ -53,5 +58,6 @@
       "seconds": 5
     }
   ],
-  "pull": 0.7
+  "pull": 0.7,
+  "object_image": "storyboard-shell.png"
 }

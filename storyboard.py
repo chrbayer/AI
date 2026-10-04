@@ -41,6 +41,10 @@ picture's own "seed" tries another take of it. "from": "key_3" edits it from
 that keyframe instead of the photo (<image1> is then that keyframe): the person
 stays where she was — LTX does not walk her to a place she does not face, it
 dissolves her there. One edit of an edit is fine; a row of them gathers grain.
+"object_at": [x, y] on key 1
+(with "object_height", and the plan's "object_image", a picture of the object
+with transparency) pastes the object in exactly there instead of having Qwen
+draw it, roughly where it likes; key 1 may then go without an "edit".
 "object_stays": true pastes the
 object in where it lies in key 1 — until it is picked up it must not move (Qwen
 draws it somewhere else each time, and LTX then kicks or throws it there); its
@@ -95,8 +99,14 @@ def load_plan(path):
     if plan["clips"][0].get("cut"):
         sys.exit("clip 1 starts on key 1; a cut makes sense from clip 2 on")
     for i, k in enumerate(plan["keys"] + [c["cut"] for c in plan["clips"] if c.get("cut")], 1):
-        if not k.get("edit"):
+        if not k.get("edit") and not (i == 1 and k.get("object_at")):
             sys.exit(f"picture {i}: no 'edit' prompt")
+    if plan["keys"][0].get("object_at"):
+        if not plan.get("object_image") or not plan.get("object"):
+            sys.exit("object_at wants an 'object_image' (with transparency) and the 'object' it shows")
+        plan["object_image"] = str(base / plan["object_image"])
+        if not Path(plan["object_image"]).is_file():
+            sys.exit(f"no such object image: {plan['object_image']}")
     if plan.get("size"):
         try:
             w, h = (int(x) for x in plan["size"].lower().split("x"))
@@ -188,6 +198,39 @@ class Board:
         comfy.run(g, out)
         self.made(out, key)
         print(f"  {name}: made")
+        return out
+
+    def place_object(self, picture, key):
+        """Keyframe 1 with the object pasted in where the plan says ("object_at":
+        its centre as fractions of width and height, "object_height": its height
+        as a fraction of the picture's) from "object_image", a picture of it with
+        transparency. Qwen puts an object roughly where a prompt asks, and the
+        whole scene hangs on where it lies: whether her way to it crosses it,
+        where she stops. The mask is the picture's own transparency."""
+        from PIL import Image
+        out, mask = self.dir / "key_1_placed.png", self.dir / "key_1_placed_mask.png"
+        thing = Path(self.plan["object_image"])
+        where = (key["object_at"], key.get("object_height", 0.06))
+        k = digest(Path(picture), thing, where)
+        if not self.fresh(out, k):
+            scene = Image.open(picture).convert("RGB")
+            obj = Image.open(thing).convert("RGBA")
+            h = max(4, round(where[1] * scene.height))
+            obj = obj.resize((max(4, round(obj.width * h / obj.height)), h), Image.LANCZOS)
+            x = round(where[0][0] * scene.width - obj.width / 2)
+            y = round(where[0][1] * scene.height - obj.height / 2)
+            scene.paste(obj, (x, y), obj)
+            scene.save(out)
+            m = Image.new("L", scene.size, 0)
+            m.paste(obj.getchannel("A"), (x, y))
+            m.save(mask)
+            self.made(out, k)
+            print(f"  key_1: object placed at {where[0]}, {h} px high")
+        # what SAM 3 would have found there: the mask is known, for the cut-out,
+        # object_stays and the size check alike
+        known = self.dir / "key_1_mask.png"
+        known.write_bytes(mask.read_bytes())
+        self.made(known, digest(out, self.plan["object"]))
         return out
 
     def object_box(self, picture, name):
@@ -289,7 +332,10 @@ class Board:
         seed = int(self.plan.get("seed", 1))
         shown = pictures(self.plan)
         made = {}
-        made["key_1"] = self.edit("key_1", shown[0][1]["edit"], seed)
+        first = shown[0][1]
+        made["key_1"] = self.edit("key_1", first["edit"], seed) if first.get("edit") else Path(self.plan["photo"])
+        if first.get("object_at"):
+            made["key_1"] = self.place_object(made["key_1"], first)
         ref = self.cut_object(made["key_1"]) if self.plan.get("object") else None
         for i, (name, k) in enumerate(shown[1:], 2):
             if k.get("from") and k["from"] not in made:
