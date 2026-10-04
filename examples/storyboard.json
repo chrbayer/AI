@@ -45,18 +45,27 @@
       "pull": 0.6
     },
     {
-      "prompt": "She stays where she stands and slowly lifts the small seashell to her ear, closes her eyes and listens; even standing still she keeps moving a little: breathing calmly, swaying very slightly, her head tilting a touch, the wind in her hair and coat. Calm, gentle, continuous movement that slows down softly, the waves keep rolling in behind her, steady camera.",
-      "seconds": 2.5,
-      "pull": 0.6
+      "prompt": "She stays where she stands and slowly lifts the small seashell to her ear, closes her eyes and then listens to it for a while, holding it at her ear; even standing still she keeps moving a little: breathing calmly, swaying very slightly, her head tilting a touch, the wind in her hair and coat. Calm, gentle, continuous movement, the waves keep rolling in behind her, steady camera.",
+      "seconds": 4,
+      "pull": 0.5
     },
     {
-      "prompt": "Close-up: with the seashell at her ear and her eyes closed she listens, then opens her eyes, smiles, lowers the small shell to her chest and looks out over the sea, the wind in her hair. Calm, gentle movement, the waves keep rolling in behind her, the surf moving in the background.",
+      "prompt": "Close-up: she keeps the seashell at her ear with her eyes closed and listens for a long moment, breathing calmly, the wind in her hair, a faint smile coming; then she slowly opens her eyes, smiles, lowers the small shell to her chest and looks out over the sea. Calm, gentle movement, the waves keep rolling in behind her, the surf moving in the background.",
       "cut": {
         "edit": "Close-up of the same woman as in <image1>, same face and long dark hair blowing in the wind, dark coat, holding the small seashell from <image2> (no bigger than her palm) to her ear with her eyes closed, listening; the sea and the low golden sun behind her. Head and shoulders, photo.",
         "check": "Close-up, head and shoulders: the woman with eyes closed holding the seashell to her ear.",
         "seed": 233
       },
-      "seconds": 5
+      "seconds": 7.67,
+      "pull": 0.5,
+      "guides": [
+        {
+          "at": 2.67,
+          "from": "cut_4",
+          "pull": 0.5,
+          "edit": "Keep <image1> as it is — the same woman at the same place and size in the picture, the same framing, face, eyes still closed, the same hand holding the small seashell from <image2> to her ear, the same coat, sky and light — only the wind has blown her long hair into other strands and the waves behind her have moved on: the breaking waves and their foam are in other places. Photo."
+        }
+      ]
     }
   ],
   "pull": 0.7,

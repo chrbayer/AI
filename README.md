@@ -1710,6 +1710,21 @@ llmctl update comfy --master          # master instead of the releases (download
   in about 8 and 5 min a try, judged by the optical-flow check.
   `llmctl videocheck <video>` runs that check on any video.
 
+  **A picture in the middle of a clip:** LTX hurries through a prompt. Told
+  to listen first and then open her eyes, the close-up held the shell to
+  her ear for about 1 s. A clip's `"guides"`
+  (`[{"at": 2.67, "picture": "...", "pull": 0.5}]`, with `--redo-clip`; the
+  chain has start and end alone) adds a picture it must pass at that time.
+  It must not be a copy of the picture before: with the cut picture itself
+  as the guide, the first 2.5 s were a still image (sea and hair at 0.02).
+  A guide with its own `edit` (and `from`) makes a variant: the same pose,
+  the waves and hair moved on. With that she listened for about 3.5 s, the
+  sea and hair moving all along. A long, calm clip like that is better at
+  pull 0.5 than 0.7: at 0.7 the wide shot's 4 s listening clip snapped its
+  background in (seeds 6001 and 6011 alike) and froze; at 0.5 it was clean.
+  The beach scene ends that way: 20.75 s, about 3 s of listening in the wide
+  shot and 3.5 s in the close-up.
+
   **Sound:** LTX makes the sound clip by clip, each clip a soundscape of its
   own. In v7 it jumped 8 dB at a join (surf in one clip, wind in the next),
   and from about 5 s LTX added music nobody asked for. With `"ambience":

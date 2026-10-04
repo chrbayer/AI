@@ -38,7 +38,12 @@ The plan (JSON):
 A clip's "seconds" (1-10, default 5; 1.5 is fine, rounded to LTX's grid of
 1/3 s) is what its action needs: a clip done
 early waits at its end picture (a stall), one too short rushes. Its "pull"
-overrides the plan's.
+overrides the plan's. "guides": [{"at": 2.5, "picture": "cut_4", "pull": 0.6}]
+on a clip gives --redo-clip a picture the clip must pass at that time — a keyframe
+in the middle, so that LTX does not hurry past what comes first. Not a copy of the
+picture before: between two equal pictures LTX holds the frame still (2.5 s of a
+still image in the close-up). A guide's own "edit" (with "from") makes a variant
+of it — the same pose, the waves and hair moved on.
 
 "edit" is the Qwen Edit prompt: <image1> is the photo, <image2> the object; a
 picture's own "seed" tries another take of it. "from": "key_3" edits it from
@@ -349,6 +354,15 @@ class Board:
             made[name] = self.edit(name, k["edit"], int(k.get("seed", seed + i)), ref, made.get(k.get("from")))
             if k.get("object_stays"):
                 made[name] = self.paste_object(made["key_1"], made[name], name)
+        # a guide picture of its own (a variant of a keyframe: the same pose, the
+        # waves and hair moved on — a copy of a keyframe would hold the clip still)
+        for c, clip in enumerate(self.plan["clips"], 1):
+            for j, guide in enumerate(clip.get("guides", []), 1):
+                if guide.get("edit"):
+                    name = f"guide_{c}_{j}"
+                    made[name] = self.edit(name, guide["edit"], int(guide.get("seed", seed + 100 * c + j)), ref,
+                                           made.get(guide.get("from")))
+                    guide["picture"] = name
         self.sheet(shown, made)
         self.measured = self.sizes(shown, made) if self.plan.get("object") else ([], 0)
         return shown, made
@@ -554,6 +568,8 @@ class Board:
                 n["inputs"]["noise_seed"] = seed
             if n["class_type"] == "SaveVideo":
                 n["inputs"]["filename_prefix"] = f"video/storyboard_{self.dir.stem}_clip{i}"
+        for guide in clip.get("guides", []):
+            self.add_guide(g, guide, made, frames)
         new = self.dir / f"redo_{i}.mp4"
         print(f"  clip {i} again ({frames} frames, seed {seed}) …", flush=True)
         comfy.run(g, new)
@@ -573,6 +589,34 @@ class Board:
         self.motion(video)
         if self.plan.get("ambience"):
             self.ambience(video)
+
+    def add_guide(self, g, guide, made, frames):
+        """One more picture a clip must pass through, at "at" seconds — a keyframe
+        in the middle (only --redo-clip: the chain has start and end alone). What
+        happens before it, LTX may not hurry past: a close-up that is to listen
+        first, with eyes closed, and only then open them. Its picture goes the way
+        the end picture does (resized, compressed), its guide after the end's."""
+        end = next(k for k, n in g.items() if n["class_type"] == "LTXVAddGuide" and n["inputs"]["frame_idx"] == -1)
+        pre = g[end]["inputs"]["image"][0]
+        resize = g[pre]["inputs"]["image"][0]
+        ids = iter(str(max(int(k) for k in g if k.isdigit()) + j) for j in range(1, 5))
+        load, rs, pp, gd = next(ids), next(ids), next(ids), next(ids)
+        name = guide["picture"]
+        if name not in made:
+            sys.exit(f"guide: no picture {name} (key_N or cut_N)")
+        g[load] = {"class_type": "LoadImage", "inputs": {"image": self.need_comfy().upload(made[name], UPLOAD_DIR)},
+                   "_meta": {"title": f"Guide {name}"}}
+        g[rs] = {"class_type": g[resize]["class_type"], "inputs": {**g[resize]["inputs"], "input": [load, 0]}}
+        g[pp] = {"class_type": g[pre]["class_type"], "inputs": {**g[pre]["inputs"], "image": [rs, 0]}}
+        at = min(frames - 9, max(8, round(float(guide["at"]) * FPS / 8) * 8))   # on LTX's grid of 8, inside the clip
+        for n in g.values():                                      # whoever read the end guide reads this one
+            for a, x in n["inputs"].items():
+                if isinstance(x, list) and x[0] == end:
+                    n["inputs"][a] = [gd, x[1]]
+        g[gd] = {"class_type": "LTXVAddGuide", "inputs": {**g[end]["inputs"], "positive": [end, 0], "negative": [end, 1],
+                                                           "latent": [end, 2], "image": [pp, 0], "frame_idx": at,
+                                                           "strength": float(guide.get("pull", 0.6))}}
+        print(f"  guide {name} at frame {at} ({at / FPS:.2f} s)")
 
     def video(self):
         return Path(self.a.out) if self.a.out else self.dir / f"{Path(self.a.plan).stem}.mp4"
