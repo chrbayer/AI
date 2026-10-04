@@ -1523,6 +1523,66 @@ llmctl update comfy --master          # master instead of the releases (download
   frame, follows better than a head-and-shoulders shot. A 7 s clip at
   1280×704 takes ~12 min. Voices from the speech slot or the Qwen3-TTS
   workflows, songs from ACE-Step or YuE2 fit straight in.
+- **Longer videos: chains and storyboards** (#48). LTX makes 5–10 s a clip;
+  `LTX-2.5 Chain (int8, distilled, 4 clips)` puts four in a row, each starting
+  on the last frame of the one before with a prompt of its own (*Prompt 1–4*).
+  The models load once. *LlmctlJoinClips* drops each repeated start frame,
+  keeps the sound on its pictures to the sample and crossfades each join
+  within the one frame two clips share. *Ton fortsetzen* (on) starts a clip's
+  sound with the last second of the one before, so the same wind and surf go
+  on instead of a new soundscape with a jump in level at every join. Over a
+  plain chain a face drifts a little with every clip: in a 20 s test the
+  fourth clip showed another woman (25 min).
+  `LTX-2.5 Chain Keyframes (int8, distilled, 4 clips)` runs each clip on
+  First-Last Frame from one picture to the next (*Bild 1–5*), so the person
+  stays the same and the story follows the pictures (~60 min for 20 s).
+  *Stärke Zielbild* (0.5) pulls a clip to its end picture; at the template's
+  0.7 LTX reached it early and held it for a second. *Schnitt vor Clip N*
+  starts clip N on a picture of its own (*Start Clip N*), a hard cut, for what
+  one movement in 5 s cannot reach. Crammed into one clip, a jump from close
+  to wide ended in a double image. The sound goes on across the cut.
+
+  **The video is only as good as its keyframes.** What the tests taught:
+  - Make every keyframe straight from the photo; an edit of an edit gathers
+    noise.
+  - What the story needs must be in the scene from the first picture on, or
+    it appears from nowhere. It must also look the same in every picture: a
+    shell large in one and small in the next became two shells.
+  - The composition must agree across pictures: where things lie, which way
+    the person goes, which side the camera is on. Name places in the
+    picture's terms ("lower left of the picture"), not the person's ("to her
+    right").
+  - Each picture must be reachable from the one before by a natural movement
+    in 5 s; anything else is a cut.
+
+  `llmctl storyboard <plan.json>` does this on the running ComfyUI
+  (`examples/storyboard.json` is the beach scene below). The plan
+  names a photo, five keyframes (an `edit` prompt and a `check` of where
+  things should be), four clip prompts, and optionally an `object` and a
+  `cut`. The steps:
+  1. **Keyframes:** each straight from the photo with Qwen-Image Edit Turbo.
+     The `object` is cut out of keyframe 1 (SAM 3) and goes into every later
+     edit as `<image2>`, so it stays the same.
+  2. **Contact sheet** of the keyframes (`sheet.jpg`).
+  3. **Check** with `--vision URL`: a vision model describes each picture
+     (where the person and the object are, which way she moves, shot size,
+     how many people, anything doubled or half transparent), compares it with
+     its `check`, then looks at all pictures together.
+  4. **Render** with `--render`.
+
+  Each step reuses what is unchanged: delete a picture, or give it a `seed` of
+  its own, to have it made anew. Qwen Edit Turbo likes to draw a walking
+  person twice, once as a half-transparent ghost (2 of 3 seeds). The check
+  caught both doubles in a test ("two women visible") and passed the clean
+  board. A llama.cpp model sees pictures only when started with `--mmproj`
+  (`llmctl start qwen-vl 2 --mmproj`, then `--vision http://127.0.0.1:8002`).
+  Keyframes take ~30 s each, the check ~1 min, the render about an hour.
+  The beach scene (`examples/storyboard.json`): a woman walks to a shell
+  lying in the sand, picks it up, holds it to her ear, then a cut to a
+  close-up where she listens, opens her eyes and smiles. It came out as 20 s
+  (482 frames, the sound 20.083 s) in 62 min. One woman throughout, the same
+  shell from first to last frame, the cut clean between frames 360 and 361.
+  No click at any join; the level moves at most 7 dB, at the cut.
 - **Music videos** (#47): `llmctl musicvideo <song> <picture>...` makes one on
   the running ComfyUI. The song is cut into sections (`--seconds`, 5 by
   default); in each the pictures take turns to sing it (LTX-2.5 Talking), or a

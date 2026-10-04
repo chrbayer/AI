@@ -5803,6 +5803,7 @@ cmd_help() {
     printf "  %-20s %s\n" "clear-kv [slot]"        "drop the KV cache of every server slot (or one slot); ComfyUI: unload its models"
     printf "  %-20s %s\n" "probe-reasoning [m]"    "what each downloaded model's chat template supports vs. models.conf"
     printf "  %-20s %s\n" "musicvideo <song> <pic>..." "a music video on ComfyUI: the pictures sing the song (LTX-2.5), sections"
+    printf "  %-20s %s\n" "storyboard <plan.json>" "a scene on ComfyUI: keyframes from a photo, a check, four LTX-2.5 clips (--render)"
     printf "  %-20s %s\n" ""                      "  cut to the frame and joined (--sections, --continuous, --dry-run; --help)"
     printf "  %-20s %s\n" "bench [opts] <m>"       "run benchmark (model or 'all'); halogen: measures the running slot"
     printf "  %-20s %s\n" "list"                   "show available models; for ComfyUI, which workflows have their models"
@@ -6933,6 +6934,20 @@ _prune_halogen_images() {
     fi
 }
 
+# storyboard: a scene from a plan file on the running ComfyUI (storyboard.py,
+# #48): keyframes from a photo, a contact sheet and a check by a vision model,
+# then with --render four LTX-2.5 clips through them.
+cmd_storyboard() {
+    case "${1:-}" in
+        ""|-h|--help) python3 "$LIB_DIR/storyboard.py" --help | sed "s|^usage: storyboard.py|usage: $PROG storyboard|"; return ;;
+    esac
+    _check_deps python3 || return 1
+    local slot url=""
+    slot=$(_comfyui_slots | head -1)
+    [[ -n "$slot" ]] && url="http://127.0.0.1:$(( PORT_BASE_SERVER + slot ))"
+    python3 "$LIB_DIR/storyboard.py" --url "$url" --workflows "$COMFYUI_SHARE/api" "$@"
+}
+
 # musicvideo: a song and pictures of the singer made into a music video on the
 # running ComfyUI (musicvideo.py, #47): sections sung with LTX-2.5 Talking or
 # played as scenes, cut to the frame, joined, the song underneath.
@@ -6976,5 +6991,6 @@ case "${1:-}" in
     update)     shift; cmd_update "$@" ;;
     voice)      shift; cmd_voice "$@" ;;
     musicvideo) shift; cmd_musicvideo "$@" ;;
+    storyboard) shift; cmd_storyboard "$@" ;;
     *)          cmd_help; cmd_list ;;
 esac

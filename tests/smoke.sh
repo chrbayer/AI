@@ -246,6 +246,8 @@ check "logs refuses a bad -n"            "takes a number"        -- "$L" logs 4 
 check "update refuses a non-comfyui"     "nothing to update"     -- "$L" update qwen
 check "musicvideo explains itself"      "usage: llmctl musicvideo"           -- "$L" musicvideo --help
 check "musicvideo wants its files"      "no such file: song.flac"            -- "$L" musicvideo song.flac pic.png
+check "storyboard explains itself"      "usage: llmctl storyboard"           -- "$L" storyboard --help
+check "storyboard wants its plan"        "no such file: plan.json"            -- "$L" storyboard plan.json
 
 echo ""
 printf '%d passed, %d failed%s\n' "$pass" "$fail" "$( (( skipped )) && printf ', %d skipped' "$skipped")"

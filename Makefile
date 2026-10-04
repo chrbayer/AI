@@ -36,6 +36,7 @@ install:
 	install -Dm644 llama_builds.py $(LIBDIR)/llama_builds.py
 	install -Dm644 watch.py $(LIBDIR)/watch.py
 	install -Dm644 musicvideo.py $(LIBDIR)/musicvideo.py
+	install -Dm644 storyboard.py $(LIBDIR)/storyboard.py
 	install -Dm644 comfyui_models.py $(LIBDIR)/comfyui_models.py
 	install -Dm644 tts_server.py $(LIBDIR)/tts_server.py
 	install -Dm644 images_server.py $(LIBDIR)/images_server.py
@@ -43,7 +44,7 @@ install:
 	install -Dm644 images_repair.html $(LIBDIR)/images_repair.html
 	install -Dm644 tts_voice_design.py $(LIBDIR)/tts_voice_design.py
 	install -Dm644 -t $(SHAREDIR)/templates templates/*
-	install -Dm644 -t $(SHAREDIR)/examples examples/*.conf
+	install -Dm644 -t $(SHAREDIR)/examples examples/*.conf examples/*.json
 	install -Dm644 -t $(SHAREDIR)/comfyui/workflows comfyui/workflows/*.json
 	install -Dm644 -t $(SHAREDIR)/comfyui/api comfyui/api/*.json
 	install -Dm644 -t $(SHAREDIR)/comfyui/api/audio comfyui/api/audio/*.json

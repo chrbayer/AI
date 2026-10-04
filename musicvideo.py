@@ -106,11 +106,11 @@ class Comfy:
     def __init__(self, url):
         self.url = url.rstrip("/")
 
-    def upload(self, path):
-        """The file into ComfyUI's input/musicvideo/; its name as loaders take it."""
+    def upload(self, path, subfolder=UPLOAD_DIR):
+        """The file into ComfyUI's input/<subfolder>/; its name as loaders take it."""
         with open(path, "rb") as f:
             r = requests.post(f"{self.url}/upload/image", files={"image": (Path(path).name, f)},
-                              data={"subfolder": UPLOAD_DIR, "type": "input", "overwrite": "true"}, timeout=120)
+                              data={"subfolder": subfolder, "type": "input", "overwrite": "true"}, timeout=120)
         r.raise_for_status()
         d = r.json()
         return f"{d['subfolder']}/{d['name']}" if d.get("subfolder") else d["name"]
