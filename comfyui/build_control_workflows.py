@@ -742,7 +742,13 @@ def chain(clips=4, keyframes=False):
 
     *Ton fortsetzen* (on): a later clip's sound starts with the last second of the
     one before, held as it is, and LTX goes on from there — the same wind and
-    surf rather than a new soundscape at every join."""
+    surf rather than a new soundscape at every join.
+
+    *Schnitt vor Clip N* (off): clip N starts on a picture of its own (*Start
+    Clip N*) instead of the last frame before — a cut, for what one continuous
+    movement cannot reach in a clip (close-up to wide shot: crammed into a clip,
+    LTX blends the two pictures into a double image). The join cuts hard there,
+    dropping no frame; the sound still goes on with *Ton fortsetzen*."""
     g = from_base("ltx_flf" if keyframes else "ltx_i2v")
     find = lambda cls, t=None: next(k for k, n in g.items() if n["class_type"] == cls and (t is None or variants.title(n) == t))
     if keyframes:
@@ -783,6 +789,7 @@ def chain(clips=4, keyframes=False):
                 g[k]["inputs"]["strength"] = [pull, 0]
     g[prompt]["_meta"]["title"] = "Prompt 1"
     images, audio = [g[create]["inputs"]["images"]], [g[create]["inputs"]["audio"]]
+    cuts = {}
     for i in range(2, clips + 1):
         last, text = (str(int(_new_id(g)) + j) for j in range(2))
         g[last] = {"class_type": "ImageFromBatch", "inputs": {"image": images[-1], "batch_index": -1, "length": 1},
@@ -792,7 +799,17 @@ def chain(clips=4, keyframes=False):
         if keyframes:
             target = _new_id(g)
             g[target] = {"class_type": "LoadImage", "inputs": dict(g[end]["inputs"]), "_meta": {"title": f"Bild {i + 1}"}}
-        swap = {start: last, prompt: text, **({end: target} if end else {})}
+        # Schnitt: this clip starts on its own picture (the switch is lazy; the
+        # loader names the first picture so that it validates when unused).
+        cut = _flag(g, f"Schnitt vor Clip {i}", False)
+        own = _new_id(g)
+        g[own] = {"class_type": "LoadImage", "inputs": dict(g[start]["inputs"]), "_meta": {"title": f"Start Clip {i}"}}
+        first = _new_id(g)
+        g[first] = {"class_type": "ComfySwitchNode", "inputs": {"switch": [cut, 0], "on_false": [last, 0],
+                                                                "on_true": [own, 0]},
+                    "_meta": {"title": f"Schnitt vor Clip {i}"}}
+        cuts[f"cut_{i}"] = [cut, 0]
+        swap = {start: first, prompt: text, **({end: target} if end else {})}
         ids = {}
         for k in sorted(per, key=int):
             ids[k] = _new_id({**g, **{v: None for v in ids.values()}})
@@ -828,7 +845,7 @@ def chain(clips=4, keyframes=False):
     g[join] = {"class_type": "LlmctlJoinClips", "_meta": {"title": "Clips joined"},
                "inputs": {"frame_rate": g[g[create]["inputs"]["fps"][0]]["inputs"]["values.a"], "crossfade": 0.04,
                           **{f"images_{i + 1}": x for i, x in enumerate(images)},
-                          **{f"audio_{i + 1}": x for i, x in enumerate(audio)}}}
+                          **{f"audio_{i + 1}": x for i, x in enumerate(audio)}, **cuts}}
     g[create]["inputs"].update(images=[join, 0], audio=[join, 1])
     g[find("SaveVideo")]["inputs"]["filename_prefix"] = "video/LTX-2.5_chain" + ("_keyframes" if keyframes else "")
     return g

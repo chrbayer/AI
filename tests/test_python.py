@@ -978,6 +978,23 @@ class ArtifactNode(unittest.TestCase):
         level = self.n.LlmctlJoinClips().join(fps, 0.04, **same)[1]["waveform"][0, 0, at - frame:at]
         self.assertGreaterEqual(level.min().item(), 0.99)
 
+    def test_a_cut_keeps_every_frame_and_does_not_fade(self):
+        import torch
+        rate, fps = 48000, 24
+        n = round(121 * rate / fps)
+        clips = {}
+        for i in (1, 2, 3):
+            clips[f"images_{i}"] = torch.full((121, 4, 4, 3), float(i))
+            clips[f"audio_{i}"] = {"waveform": torch.full((1, 2, n), float(i)), "sample_rate": rate}
+        images, audio = self.n.LlmctlJoinClips().join(fps, 0.04, cut_3=True, **clips)
+        wave = audio["waveform"]
+        self.assertEqual(images.shape[0], 121 + 120 + 121)            # clip 3 starts on its own picture
+        self.assertEqual(images[241, 0, 0, 0].item(), 3.0)
+        self.assertEqual(wave.shape[-1], round(images.shape[0] * rate / fps))
+        at = round(241 * rate / fps)                                   # clip 3's sound from its first sample on
+        self.assertEqual((wave[0, 0, at - 1].item(), wave[0, 0, at].item()), (2.0, 3.0))
+        self.assertNotIn(wave[0, 0, n - rate // fps // 2].item(), (1.0, 2.0))   # the join 1|2 is still crossfaded
+
     def test_joined_clips_keep_the_sound_on_the_pictures(self):
         import torch
         rate, fps = 48000, 24

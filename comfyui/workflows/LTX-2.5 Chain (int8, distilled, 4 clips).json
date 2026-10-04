@@ -1,14 +1,14 @@
 {
- "id": "3b9af795-0f05-4a80-8baa-6ccac5bfb7ab",
+ "id": "fb696951-2759-4aad-bc05-1d5c8144eb19",
  "revision": 0,
- "last_node_id": 162,
- "last_link_id": 586,
+ "last_node_id": 171,
+ "last_link_id": 610,
  "nodes": [
   {
    "id": 1,
    "type": "SaveVideo",
    "pos": [
-    29019.008203125013,
+    30129.008203125017,
     130
    ],
    "size": [
@@ -16,14 +16,14 @@
     106
    ],
    "flags": {},
-   "order": 161,
+   "order": 170,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "video",
      "name": "video",
      "type": "VIDEO",
-     "link": 294
+     "link": 306
     },
     {
      "localized_name": "filename_prefix",
@@ -125,7 +125,7 @@
      "name": "IMAGE",
      "type": "IMAGE",
      "links": [
-      328
+      340
      ]
     },
     {
@@ -207,7 +207,7 @@
      "name": "width",
      "type": "INT",
      "links": [
-      307
+      319
      ]
     },
     {
@@ -215,7 +215,7 @@
      "name": "height",
      "type": "INT",
      "links": [
-      309
+      321
      ]
     }
    ],
@@ -283,10 +283,10 @@
      "name": "CLIP",
      "type": "CLIP",
      "links": [
-      296,
-      365,
-      425,
-      485
+      308,
+      380,
+      443,
+      506
      ]
     }
    ],
@@ -323,21 +323,21 @@
     456
    ],
    "flags": {},
-   "order": 47,
+   "order": 53,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "clip",
      "name": "clip",
      "type": "CLIP",
-     "link": 296
+     "link": 308
     },
     {
      "localized_name": "image",
      "name": "image",
      "shape": 7,
      "type": "IMAGE",
-     "link": 297
+     "link": 309
     },
     {
      "localized_name": "video",
@@ -367,7 +367,7 @@
      "widget": {
       "name": "prompt"
      },
-     "link": 295
+     "link": 307
     },
     {
      "localized_name": "max_length",
@@ -488,7 +488,7 @@
      "name": "generated_text",
      "type": "STRING",
      "links": [
-      302
+      314
      ]
     },
     {
@@ -563,10 +563,10 @@
      "name": "BOOLEAN",
      "type": "BOOLEAN",
      "links": [
-      300,
-      369,
-      429,
-      489
+      312,
+      384,
+      447,
+      510
      ]
     }
    ],
@@ -593,14 +593,14 @@
     200
    ],
    "flags": {},
-   "order": 52,
+   "order": 58,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "clip",
      "name": "clip",
      "type": "CLIP",
-     "link": 299
+     "link": 311
     },
     {
      "localized_name": "text",
@@ -609,7 +609,7 @@
      "widget": {
       "name": "text"
      },
-     "link": 298
+     "link": 310
     }
    ],
    "outputs": [
@@ -618,7 +618,7 @@
      "name": "CONDITIONING",
      "type": "CONDITIONING",
      "links": [
-      305
+      317
      ]
     }
    ],
@@ -663,8 +663,8 @@
      "name": "STRING",
      "type": "STRING",
      "links": [
-      295,
-      301
+      307,
+      313
      ]
     }
    ],
@@ -691,7 +691,7 @@
     78
    ],
    "flags": {},
-   "order": 50,
+   "order": 56,
    "mode": 0,
    "inputs": [
     {
@@ -699,14 +699,14 @@
      "name": "on_false",
      "shape": 7,
      "type": "STRING",
-     "link": 301
+     "link": 313
     },
     {
      "localized_name": "on_true",
      "name": "on_true",
      "shape": 7,
      "type": "STRING",
-     "link": 302
+     "link": 314
     },
     {
      "localized_name": "switch",
@@ -715,7 +715,7 @@
      "widget": {
       "name": "switch"
      },
-     "link": 300
+     "link": 312
     }
    ],
    "outputs": [
@@ -724,8 +724,8 @@
      "name": "output",
      "type": "STRING",
      "links": [
-      298,
-      303
+      310,
+      315
      ]
     }
    ],
@@ -779,14 +779,14 @@
      "name": "MODEL",
      "type": "MODEL",
      "links": [
-      310,
-      347,
-      376,
-      400,
-      436,
-      460,
-      496,
-      520
+      322,
+      359,
+      391,
+      415,
+      454,
+      478,
+      517,
+      541
      ]
     }
    ],
@@ -821,14 +821,14 @@
     122
    ],
    "flags": {},
-   "order": 53,
+   "order": 59,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "source",
      "name": "source",
      "type": "*",
-     "link": 303
+     "link": 315
     }
    ],
    "outputs": [
@@ -876,7 +876,7 @@
      "name": "INT",
      "type": "INT",
      "links": [
-      343
+      355
      ]
     }
    ],
@@ -924,8 +924,8 @@
      "name": "BOOLEAN",
      "type": "BOOLEAN",
      "links": [
-      318,
-      338
+      330,
+      350
      ]
     }
    ],
@@ -952,20 +952,20 @@
     78
    ],
    "flags": {},
-   "order": 55,
+   "order": 61,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "positive",
      "name": "positive",
      "type": "CONDITIONING",
-     "link": 305
+     "link": 317
     },
     {
      "localized_name": "negative",
      "name": "negative",
      "type": "CONDITIONING",
-     "link": 306
+     "link": 318
     },
     {
      "localized_name": "frame_rate",
@@ -974,7 +974,7 @@
      "widget": {
       "name": "frame_rate"
      },
-     "link": 304
+     "link": 316
     }
    ],
    "outputs": [
@@ -983,8 +983,8 @@
      "name": "positive",
      "type": "CONDITIONING",
      "links": [
-      311,
-      348
+      323,
+      360
      ]
     },
     {
@@ -992,8 +992,8 @@
      "name": "negative",
      "type": "CONDITIONING",
      "links": [
-      312,
-      349
+      324,
+      361
      ]
     }
    ],
@@ -1038,22 +1038,22 @@
      "name": "VAE",
      "type": "VAE",
      "links": [
-      319,
-      337,
-      339,
-      357,
-      384,
-      394,
-      395,
+      331,
+      349,
+      351,
+      369,
+      399,
+      409,
       410,
-      444,
-      454,
-      455,
-      470,
-      504,
-      514,
-      515,
-      530
+      425,
+      462,
+      472,
+      473,
+      488,
+      525,
+      535,
+      536,
+      551
      ]
     }
    ],
@@ -1105,14 +1105,14 @@
      "name": "VAE",
      "type": "VAE",
      "links": [
-      324,
-      359,
-      412,
-      415,
-      472,
-      475,
-      532,
-      535
+      336,
+      371,
+      427,
+      430,
+      490,
+      493,
+      553,
+      556
      ]
     }
    ],
@@ -1145,7 +1145,7 @@
     82
    ],
    "flags": {},
-   "order": 37,
+   "order": 43,
    "mode": 0,
    "inputs": [
     {
@@ -1155,7 +1155,7 @@
      "widget": {
       "name": "value"
      },
-     "link": 307
+     "link": 319
     }
    ],
    "outputs": [
@@ -1164,7 +1164,7 @@
      "name": "INT",
      "type": "INT",
      "links": [
-      329
+      341
      ]
     }
    ],
@@ -1193,14 +1193,14 @@
     200
    ],
    "flags": {},
-   "order": 39,
+   "order": 45,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "clip",
      "name": "clip",
      "type": "CLIP",
-     "link": 308
+     "link": 320
     },
     {
      "localized_name": "text",
@@ -1218,10 +1218,10 @@
      "name": "CONDITIONING",
      "type": "CONDITIONING",
      "links": [
-      306,
-      375,
-      435,
-      495
+      318,
+      390,
+      453,
+      516
      ]
     }
    ],
@@ -1285,11 +1285,11 @@
      "name": "CLIP",
      "type": "CLIP",
      "links": [
-      299,
-      308,
-      368,
-      428,
-      488
+      311,
+      320,
+      383,
+      446,
+      509
      ]
     }
    ],
@@ -1326,7 +1326,7 @@
     82
    ],
    "flags": {},
-   "order": 38,
+   "order": 44,
    "mode": 0,
    "inputs": [
     {
@@ -1336,7 +1336,7 @@
      "widget": {
       "name": "value"
      },
-     "link": 309
+     "link": 321
     }
    ],
    "outputs": [
@@ -1345,7 +1345,7 @@
      "name": "INT",
      "type": "INT",
      "links": [
-      330
+      342
      ]
     }
    ],
@@ -1393,10 +1393,10 @@
      "name": "SAMPLER",
      "type": "SAMPLER",
      "links": [
-      315,
-      381,
-      441,
-      501
+      327,
+      396,
+      459,
+      522
      ]
     }
    ],
@@ -1441,7 +1441,7 @@
      "name": "NOISE",
      "type": "NOISE",
      "links": [
-      313
+      325
      ]
     }
    ],
@@ -1488,10 +1488,10 @@
      "name": "SIGMAS",
      "type": "SIGMAS",
      "links": [
-      316,
-      382,
-      442,
-      502
+      328,
+      397,
+      460,
+      523
      ]
     }
    ],
@@ -1536,9 +1536,9 @@
      "name": "INT",
      "type": "INT",
      "links": [
-      342,
-      344,
-      543
+      354,
+      356,
+      564
      ]
     }
    ],
@@ -1586,10 +1586,10 @@
      "name": "LATENT_UPSCALE_MODEL",
      "type": "LATENT_UPSCALE_MODEL",
      "links": [
-      336,
-      393,
-      453,
-      513
+      348,
+      408,
+      471,
+      534
      ]
     }
    ],
@@ -1622,26 +1622,26 @@
     122
    ],
    "flags": {},
-   "order": 56,
+   "order": 62,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "model",
      "name": "model",
      "type": "MODEL",
-     "link": 310
+     "link": 322
     },
     {
      "localized_name": "positive",
      "name": "positive",
      "type": "CONDITIONING",
-     "link": 311
+     "link": 323
     },
     {
      "localized_name": "negative",
      "name": "negative",
      "type": "CONDITIONING",
-     "link": 312
+     "link": 324
     },
     {
      "localized_name": "video_cfg",
@@ -1668,7 +1668,7 @@
      "name": "GUIDER",
      "type": "GUIDER",
      "links": [
-      314
+      326
      ]
     }
    ],
@@ -1696,38 +1696,38 @@
     106
    ],
    "flags": {},
-   "order": 58,
+   "order": 64,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "noise",
      "name": "noise",
      "type": "NOISE",
-     "link": 313
+     "link": 325
     },
     {
      "localized_name": "guider",
      "name": "guider",
      "type": "GUIDER",
-     "link": 314
+     "link": 326
     },
     {
      "localized_name": "sampler",
      "name": "sampler",
      "type": "SAMPLER",
-     "link": 315
+     "link": 327
     },
     {
      "localized_name": "sigmas",
      "name": "sigmas",
      "type": "SIGMAS",
-     "link": 316
+     "link": 328
     },
     {
      "localized_name": "latent_image",
      "name": "latent_image",
      "type": "LATENT",
-     "link": 317
+     "link": 329
     }
    ],
    "outputs": [
@@ -1736,7 +1736,7 @@
      "name": "output",
      "type": "LATENT",
      "links": [
-      325
+      337
      ]
     },
     {
@@ -1762,26 +1762,26 @@
     122
    ],
    "flags": {},
-   "order": 51,
+   "order": 57,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "vae",
      "name": "vae",
      "type": "VAE",
-     "link": 319
+     "link": 331
     },
     {
      "localized_name": "image",
      "name": "image",
      "type": "IMAGE",
-     "link": 320
+     "link": 332
     },
     {
      "localized_name": "latent",
      "name": "latent",
      "type": "LATENT",
-     "link": 321
+     "link": 333
     },
     {
      "localized_name": "strength",
@@ -1799,7 +1799,7 @@
      "widget": {
       "name": "bypass"
      },
-     "link": 318
+     "link": 330
     }
    ],
    "outputs": [
@@ -1808,7 +1808,7 @@
      "name": "latent",
      "type": "LATENT",
      "links": [
-      326
+      338
      ]
     }
    ],
@@ -1836,14 +1836,14 @@
     106
    ],
    "flags": {},
-   "order": 46,
+   "order": 52,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "Audio VAE",
      "name": "audio_vae",
      "type": "VAE",
-     "link": 324
+     "link": 336
     },
     {
      "localized_name": "frames_number",
@@ -1852,7 +1852,7 @@
      "widget": {
       "name": "frames_number"
      },
-     "link": 322
+     "link": 334
     },
     {
      "localized_name": "frame_rate",
@@ -1861,7 +1861,7 @@
      "widget": {
       "name": "frame_rate"
      },
-     "link": 323
+     "link": 335
     },
     {
      "localized_name": "batch_size",
@@ -1879,10 +1879,10 @@
      "name": "Latent",
      "type": "LATENT",
      "links": [
-      327,
-      389,
-      449,
-      509
+      339,
+      404,
+      467,
+      530
      ]
     }
    ],
@@ -1912,14 +1912,14 @@
     46
    ],
    "flags": {},
-   "order": 59,
+   "order": 65,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "av_latent",
      "name": "av_latent",
      "type": "LATENT",
-     "link": 325
+     "link": 337
     }
    ],
    "outputs": [
@@ -1928,7 +1928,7 @@
      "name": "video_latent",
      "type": "LATENT",
      "links": [
-      335
+      347
      ]
     },
     {
@@ -1936,7 +1936,7 @@
      "name": "audio_latent",
      "type": "LATENT",
      "links": [
-      346
+      358
      ]
     }
    ],
@@ -1956,20 +1956,20 @@
     46
    ],
    "flags": {},
-   "order": 54,
+   "order": 60,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "video_latent",
      "name": "video_latent",
      "type": "LATENT",
-     "link": 326
+     "link": 338
     },
     {
      "localized_name": "audio_latent",
      "name": "audio_latent",
      "type": "LATENT",
-     "link": 327
+     "link": 339
     }
    ],
    "outputs": [
@@ -1978,7 +1978,7 @@
      "name": "latent",
      "type": "LATENT",
      "links": [
-      317
+      329
      ]
     }
    ],
@@ -1998,14 +1998,14 @@
     106
    ],
    "flags": {},
-   "order": 36,
+   "order": 42,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "input",
      "name": "input",
      "type": "IMAGE,MASK",
-     "link": 328
+     "link": 340
     },
     {
      "localized_name": "resize_type",
@@ -2041,7 +2041,7 @@
      "name": "resized",
      "type": "IMAGE",
      "links": [
-      331
+      343
      ]
     }
    ],
@@ -2071,14 +2071,14 @@
     200
    ],
    "flags": {},
-   "order": 43,
+   "order": 49,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "a",
      "name": "values.a",
      "type": "FLOAT,INT,BOOLEAN",
-     "link": 329
+     "link": 341
     },
     {
      "localized_name": "b",
@@ -2109,7 +2109,7 @@
      "name": "INT",
      "type": "INT",
      "links": [
-      332
+      344
      ]
     },
     {
@@ -2141,14 +2141,14 @@
     200
    ],
    "flags": {},
-   "order": 44,
+   "order": 50,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "a",
      "name": "values.a",
      "type": "FLOAT,INT,BOOLEAN",
-     "link": 330
+     "link": 342
     },
     {
      "localized_name": "b",
@@ -2179,7 +2179,7 @@
      "name": "INT",
      "type": "INT",
      "links": [
-      333
+      345
      ]
     },
     {
@@ -2211,14 +2211,14 @@
     58
    ],
    "flags": {},
-   "order": 42,
+   "order": 48,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "image",
      "name": "image",
      "type": "IMAGE",
-     "link": 331
+     "link": 343
     },
     {
      "localized_name": "img_compression",
@@ -2236,9 +2236,9 @@
      "name": "output_image",
      "type": "IMAGE",
      "links": [
-      297,
-      320,
-      340
+      309,
+      332,
+      352
      ]
     }
    ],
@@ -2264,7 +2264,7 @@
     130
    ],
    "flags": {},
-   "order": 48,
+   "order": 54,
    "mode": 0,
    "inputs": [
     {
@@ -2274,7 +2274,7 @@
      "widget": {
       "name": "width"
      },
-     "link": 332
+     "link": 344
     },
     {
      "localized_name": "height",
@@ -2283,7 +2283,7 @@
      "widget": {
       "name": "height"
      },
-     "link": 333
+     "link": 345
     },
     {
      "localized_name": "length",
@@ -2292,7 +2292,7 @@
      "widget": {
       "name": "length"
      },
-     "link": 334
+     "link": 346
     },
     {
      "localized_name": "batch_size",
@@ -2310,10 +2310,10 @@
      "name": "LATENT",
      "type": "LATENT",
      "links": [
-      321,
-      386,
-      446,
-      506
+      333,
+      401,
+      464,
+      527
      ]
     }
    ],
@@ -2345,26 +2345,26 @@
     66
    ],
    "flags": {},
-   "order": 60,
+   "order": 66,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "samples",
      "name": "samples",
      "type": "LATENT",
-     "link": 335
+     "link": 347
     },
     {
      "localized_name": "upscale_model",
      "name": "upscale_model",
      "type": "LATENT_UPSCALE_MODEL",
-     "link": 336
+     "link": 348
     },
     {
      "localized_name": "vae",
      "name": "vae",
      "type": "VAE",
-     "link": 337
+     "link": 349
     }
    ],
    "outputs": [
@@ -2373,7 +2373,7 @@
      "name": "LATENT",
      "type": "LATENT",
      "links": [
-      341
+      353
      ]
     }
    ],
@@ -2393,26 +2393,26 @@
     122
    ],
    "flags": {},
-   "order": 61,
+   "order": 67,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "vae",
      "name": "vae",
      "type": "VAE",
-     "link": 339
+     "link": 351
     },
     {
      "localized_name": "image",
      "name": "image",
      "type": "IMAGE",
-     "link": 340
+     "link": 352
     },
     {
      "localized_name": "latent",
      "name": "latent",
      "type": "LATENT",
-     "link": 341
+     "link": 353
     },
     {
      "localized_name": "strength",
@@ -2430,7 +2430,7 @@
      "widget": {
       "name": "bypass"
      },
-     "link": 338
+     "link": 350
     }
    ],
    "outputs": [
@@ -2439,7 +2439,7 @@
      "name": "latent",
      "type": "LATENT",
      "links": [
-      345
+      357
      ]
     }
    ],
@@ -2467,14 +2467,14 @@
     200
    ],
    "flags": {},
-   "order": 40,
+   "order": 46,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "a",
      "name": "values.a",
      "type": "FLOAT,INT,BOOLEAN",
-     "link": 342
+     "link": 354
     },
     {
      "localized_name": "b",
@@ -2499,12 +2499,12 @@
      "name": "FLOAT",
      "type": "FLOAT",
      "links": [
-      304,
-      373,
-      433,
-      493,
-      580,
-      585
+      316,
+      388,
+      451,
+      514,
+      604,
+      609
      ]
     },
     {
@@ -2512,7 +2512,7 @@
      "name": "INT",
      "type": "INT",
      "links": [
-      323
+      335
      ]
     },
     {
@@ -2545,21 +2545,21 @@
     200
    ],
    "flags": {},
-   "order": 41,
+   "order": 47,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "a",
      "name": "values.a",
      "type": "FLOAT,INT,BOOLEAN",
-     "link": 343
+     "link": 355
     },
     {
      "localized_name": "b",
      "name": "values.b",
      "shape": 7,
      "type": "FLOAT,INT,BOOLEAN",
-     "link": 344
+     "link": 356
     },
     {
      "localized_name": "c",
@@ -2590,8 +2590,8 @@
      "name": "INT",
      "type": "INT",
      "links": [
-      322,
-      334
+      334,
+      346
      ]
     },
     {
@@ -2643,7 +2643,7 @@
      "name": "NOISE",
      "type": "NOISE",
      "links": [
-      350
+      362
      ]
     }
    ],
@@ -2671,20 +2671,20 @@
     46
    ],
    "flags": {},
-   "order": 62,
+   "order": 68,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "video_latent",
      "name": "video_latent",
      "type": "LATENT",
-     "link": 345
+     "link": 357
     },
     {
      "localized_name": "audio_latent",
      "name": "audio_latent",
      "type": "LATENT",
-     "link": 346
+     "link": 358
     }
    ],
    "outputs": [
@@ -2693,7 +2693,7 @@
      "name": "latent",
      "type": "LATENT",
      "links": [
-      354
+      366
      ]
     }
    ],
@@ -2732,10 +2732,10 @@
      "name": "SIGMAS",
      "type": "SIGMAS",
      "links": [
-      353,
-      406,
-      466,
-      526
+      365,
+      421,
+      484,
+      547
      ]
     }
    ],
@@ -2761,26 +2761,26 @@
     122
    ],
    "flags": {},
-   "order": 57,
+   "order": 63,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "model",
      "name": "model",
      "type": "MODEL",
-     "link": 347
+     "link": 359
     },
     {
      "localized_name": "positive",
      "name": "positive",
      "type": "CONDITIONING",
-     "link": 348
+     "link": 360
     },
     {
      "localized_name": "negative",
      "name": "negative",
      "type": "CONDITIONING",
-     "link": 349
+     "link": 361
     },
     {
      "localized_name": "video_cfg",
@@ -2807,7 +2807,7 @@
      "name": "GUIDER",
      "type": "GUIDER",
      "links": [
-      351
+      363
      ]
     }
    ],
@@ -2854,10 +2854,10 @@
      "name": "SAMPLER",
      "type": "SAMPLER",
      "links": [
-      352,
-      405,
-      465,
-      525
+      364,
+      420,
+      483,
+      546
      ]
     }
    ],
@@ -2883,38 +2883,38 @@
     106
    ],
    "flags": {},
-   "order": 63,
+   "order": 69,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "noise",
      "name": "noise",
      "type": "NOISE",
-     "link": 350
+     "link": 362
     },
     {
      "localized_name": "guider",
      "name": "guider",
      "type": "GUIDER",
-     "link": 351
+     "link": 363
     },
     {
      "localized_name": "sampler",
      "name": "sampler",
      "type": "SAMPLER",
-     "link": 352
+     "link": 364
     },
     {
      "localized_name": "sigmas",
      "name": "sigmas",
      "type": "SIGMAS",
-     "link": 353
+     "link": 365
     },
     {
      "localized_name": "latent_image",
      "name": "latent_image",
      "type": "LATENT",
-     "link": 354
+     "link": 366
     }
    ],
    "outputs": [
@@ -2923,7 +2923,7 @@
      "name": "output",
      "type": "LATENT",
      "links": [
-      355
+      367
      ]
     },
     {
@@ -2949,14 +2949,14 @@
     46
    ],
    "flags": {},
-   "order": 64,
+   "order": 70,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "av_latent",
      "name": "av_latent",
      "type": "LATENT",
-     "link": 355
+     "link": 367
     }
    ],
    "outputs": [
@@ -2965,7 +2965,7 @@
      "name": "video_latent",
      "type": "LATENT",
      "links": [
-      356
+      368
      ]
     },
     {
@@ -2973,7 +2973,7 @@
      "name": "audio_latent",
      "type": "LATENT",
      "links": [
-      358
+      370
      ]
     }
    ],
@@ -2993,20 +2993,20 @@
     150
    ],
    "flags": {},
-   "order": 65,
+   "order": 71,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "samples",
      "name": "samples",
      "type": "LATENT",
-     "link": 356
+     "link": 368
     },
     {
      "localized_name": "vae",
      "name": "vae",
      "type": "VAE",
-     "link": 357
+     "link": 369
     },
     {
      "localized_name": "tile_size",
@@ -3051,8 +3051,8 @@
      "name": "IMAGE",
      "type": "IMAGE",
      "links": [
-      363,
-      544
+      375,
+      565
      ]
     }
    ],
@@ -3084,20 +3084,20 @@
     46
    ],
    "flags": {},
-   "order": 66,
+   "order": 72,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "samples",
      "name": "samples",
      "type": "LATENT",
-     "link": 358
+     "link": 370
     },
     {
      "localized_name": "Audio VAE",
      "name": "audio_vae",
      "type": "VAE",
-     "link": 359
+     "link": 371
     }
    ],
    "outputs": [
@@ -3106,8 +3106,8 @@
      "name": "Audio",
      "type": "AUDIO",
      "links": [
-      413,
-      548
+      428,
+      569
      ]
     }
    ],
@@ -3119,7 +3119,7 @@
    "id": 50,
    "type": "CreateVideo",
    "pos": [
-    28649.008203125013,
+    29759.008203125017,
     130
    ],
    "size": [
@@ -3127,21 +3127,21 @@
     150
    ],
    "flags": {},
-   "order": 160,
+   "order": 169,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "images",
      "name": "images",
      "type": "IMAGE",
-     "link": 361
+     "link": 373
     },
     {
      "localized_name": "audio",
      "name": "audio",
      "shape": 7,
      "type": "AUDIO",
-     "link": 362
+     "link": 374
     },
     {
      "localized_name": "fps",
@@ -3150,7 +3150,7 @@
      "widget": {
       "name": "fps"
      },
-     "link": 360
+     "link": 372
     },
     {
      "localized_name": "bit_depth",
@@ -3189,7 +3189,7 @@
      "name": "VIDEO",
      "type": "VIDEO",
      "links": [
-      294
+      306
      ]
     }
    ],
@@ -3240,9 +3240,9 @@
      "name": "BOOLEAN",
      "type": "BOOLEAN",
      "links": [
-      420,
-      480,
-      540
+      435,
+      498,
+      561
      ]
     }
    ],
@@ -3306,9 +3306,9 @@
      "name": "MASK",
      "type": "MASK",
      "links": [
-      417,
-      477,
-      537
+      432,
+      495,
+      558
      ]
     }
    ],
@@ -3338,14 +3338,14 @@
     82
    ],
    "flags": {},
-   "order": 67,
+   "order": 73,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "image",
      "name": "image",
      "type": "IMAGE",
-     "link": 363
+     "link": 375
     },
     {
      "localized_name": "batch_index",
@@ -3372,7 +3372,7 @@
      "name": "IMAGE",
      "type": "IMAGE",
      "links": [
-      390
+      377
      ]
     }
    ],
@@ -3420,8 +3420,8 @@
      "name": "STRING",
      "type": "STRING",
      "links": [
-      364,
-      370
+      379,
+      385
      ]
     }
    ],
@@ -3438,9 +3438,179 @@
   },
   {
    "id": 55,
+   "type": "PrimitiveBoolean",
+   "pos": [
+    100,
+    4950
+   ],
+   "size": [
+    270,
+    58
+   ],
+   "flags": {},
+   "order": 22,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "value",
+     "name": "value",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "value"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "BOOLEAN",
+     "name": "BOOLEAN",
+     "type": "BOOLEAN",
+     "links": [
+      376,
+      573
+     ]
+    }
+   ],
+   "title": "Schnitt vor Clip 2",
+   "properties": {
+    "Node name for S&R": "PrimitiveBoolean"
+   },
+   "widgets_values": [
+    false
+   ],
+   "widgets_values_named": {
+    "value": false
+   }
+  },
+  {
+   "id": 56,
+   "type": "LoadImage",
+   "pos": [
+    100,
+    5138
+   ],
+   "size": [
+    282.798828125,
+    102
+   ],
+   "flags": {},
+   "order": 23,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "image",
+     "name": "image",
+     "type": "COMBO",
+     "widget": {
+      "name": "image"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "choose file to upload",
+     "name": "upload",
+     "type": "IMAGEUPLOAD",
+     "widget": {
+      "name": "upload"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "IMAGE",
+     "name": "IMAGE",
+     "type": "IMAGE",
+     "links": [
+      378
+     ]
+    },
+    {
+     "localized_name": "MASK",
+     "name": "MASK",
+     "type": "MASK",
+     "links": null
+    }
+   ],
+   "title": "Start Clip 2",
+   "properties": {
+    "Node name for S&R": "LoadImage"
+   },
+   "widgets_values": [
+    "neon_cyborg_portrait.png",
+    "image"
+   ],
+   "widgets_values_named": {
+    "image": "neon_cyborg_portrait.png",
+    "upload": "image"
+   }
+  },
+  {
+   "id": 57,
+   "type": "ComfySwitchNode",
+   "pos": [
+    6521.063085937499,
+    130
+   ],
+   "size": [
+    270,
+    78
+   ],
+   "flags": {},
+   "order": 75,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "on_false",
+     "name": "on_false",
+     "shape": 7,
+     "type": "IMAGE",
+     "link": 377
+    },
+    {
+     "localized_name": "on_true",
+     "name": "on_true",
+     "shape": 7,
+     "type": "IMAGE",
+     "link": 378
+    },
+    {
+     "localized_name": "switch",
+     "name": "switch",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "switch"
+     },
+     "link": 376
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "output",
+     "name": "output",
+     "type": "IMAGE",
+     "links": [
+      405
+     ]
+    }
+   ],
+   "title": "Schnitt vor Clip 2",
+   "properties": {
+    "Node name for S&R": "ComfySwitchNode"
+   },
+   "widgets_values": [
+    false
+   ],
+   "widgets_values_named": {
+    "switch": false
+   }
+  },
+  {
+   "id": 58,
    "type": "TextGenerateLTX2Prompt",
    "pos": [
-    7261.063085937499,
+    7631.063085937499,
     130
    ],
    "size": [
@@ -3448,21 +3618,21 @@
     456
    ],
    "flags": {},
-   "order": 73,
+   "order": 80,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "clip",
      "name": "clip",
      "type": "CLIP",
-     "link": 365
+     "link": 380
     },
     {
      "localized_name": "image",
      "name": "image",
      "shape": 7,
      "type": "IMAGE",
-     "link": 366
+     "link": 381
     },
     {
      "localized_name": "video",
@@ -3492,7 +3662,7 @@
      "widget": {
       "name": "prompt"
      },
-     "link": 364
+     "link": 379
     },
     {
      "localized_name": "max_length",
@@ -3613,7 +3783,7 @@
      "name": "generated_text",
      "type": "STRING",
      "links": [
-      371
+      386
      ]
     },
     {
@@ -3658,10 +3828,10 @@
    }
   },
   {
-   "id": 56,
+   "id": 59,
    "type": "CLIPTextEncode",
    "pos": [
-    8131.063085937499,
+    8501.063085937498,
     130
    ],
    "size": [
@@ -3669,14 +3839,14 @@
     200
    ],
    "flags": {},
-   "order": 77,
+   "order": 84,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "clip",
      "name": "clip",
      "type": "CLIP",
-     "link": 368
+     "link": 383
     },
     {
      "localized_name": "text",
@@ -3685,7 +3855,7 @@
      "widget": {
       "name": "text"
      },
-     "link": 367
+     "link": 382
     }
    ],
    "outputs": [
@@ -3694,7 +3864,7 @@
      "name": "CONDITIONING",
      "type": "CONDITIONING",
      "links": [
-      374
+      389
      ]
     }
    ],
@@ -3709,10 +3879,10 @@
    }
   },
   {
-   "id": 57,
+   "id": 60,
    "type": "ComfySwitchNode",
    "pos": [
-    7761.063085937499,
+    8131.063085937499,
     130
    ],
    "size": [
@@ -3720,7 +3890,7 @@
     78
    ],
    "flags": {},
-   "order": 75,
+   "order": 82,
    "mode": 0,
    "inputs": [
     {
@@ -3728,14 +3898,14 @@
      "name": "on_false",
      "shape": 7,
      "type": "STRING",
-     "link": 370
+     "link": 385
     },
     {
      "localized_name": "on_true",
      "name": "on_true",
      "shape": 7,
      "type": "STRING",
-     "link": 371
+     "link": 386
     },
     {
      "localized_name": "switch",
@@ -3744,7 +3914,7 @@
      "widget": {
       "name": "switch"
      },
-     "link": 369
+     "link": 384
     }
    ],
    "outputs": [
@@ -3753,8 +3923,8 @@
      "name": "output",
      "type": "STRING",
      "links": [
-      367,
-      372
+      382,
+      387
      ]
     }
    ],
@@ -3769,10 +3939,10 @@
    }
   },
   {
-   "id": 58,
+   "id": 61,
    "type": "PreviewAny",
    "pos": [
-    8131.063085937499,
+    8501.063085937498,
     460
    ],
    "size": [
@@ -3780,14 +3950,14 @@
     122
    ],
    "flags": {},
-   "order": 78,
+   "order": 85,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "source",
      "name": "source",
      "type": "*",
-     "link": 372
+     "link": 387
     }
    ],
    "outputs": [
@@ -3805,10 +3975,10 @@
    "widgets_values_named": {}
   },
   {
-   "id": 59,
+   "id": 62,
    "type": "LTXVConditioning",
    "pos": [
-    8631.063085937498,
+    9001.063085937498,
     130
    ],
    "size": [
@@ -3816,20 +3986,20 @@
     78
    ],
    "flags": {},
-   "order": 80,
+   "order": 87,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "positive",
      "name": "positive",
      "type": "CONDITIONING",
-     "link": 374
+     "link": 389
     },
     {
      "localized_name": "negative",
      "name": "negative",
      "type": "CONDITIONING",
-     "link": 375
+     "link": 390
     },
     {
      "localized_name": "frame_rate",
@@ -3838,7 +4008,7 @@
      "widget": {
       "name": "frame_rate"
      },
-     "link": 373
+     "link": 388
     }
    ],
    "outputs": [
@@ -3847,8 +4017,8 @@
      "name": "positive",
      "type": "CONDITIONING",
      "links": [
-      377,
-      401
+      392,
+      416
      ]
     },
     {
@@ -3856,8 +4026,8 @@
      "name": "negative",
      "type": "CONDITIONING",
      "links": [
-      378,
-      402
+      393,
+      417
      ]
     }
    ],
@@ -3872,18 +4042,18 @@
    }
   },
   {
-   "id": 60,
+   "id": 63,
    "type": "RandomNoise",
    "pos": [
     100,
-    4950
+    5370
    ],
    "size": [
     270,
     82
    ],
    "flags": {},
-   "order": 22,
+   "order": 24,
    "mode": 0,
    "inputs": [
     {
@@ -3902,7 +4072,7 @@
      "name": "NOISE",
      "type": "NOISE",
      "links": [
-      379
+      394
      ]
     }
    ],
@@ -3919,10 +4089,10 @@
    }
   },
   {
-   "id": 61,
+   "id": 64,
    "type": "LTXVDualCFGGuider",
    "pos": [
-    9001.063085937498,
+    9371.063085937498,
     130
    ],
    "size": [
@@ -3930,26 +4100,26 @@
     122
    ],
    "flags": {},
-   "order": 82,
+   "order": 89,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "model",
      "name": "model",
      "type": "MODEL",
-     "link": 376
+     "link": 391
     },
     {
      "localized_name": "positive",
      "name": "positive",
      "type": "CONDITIONING",
-     "link": 377
+     "link": 392
     },
     {
      "localized_name": "negative",
      "name": "negative",
      "type": "CONDITIONING",
-     "link": 378
+     "link": 393
     },
     {
      "localized_name": "video_cfg",
@@ -3976,7 +4146,7 @@
      "name": "GUIDER",
      "type": "GUIDER",
      "links": [
-      380
+      395
      ]
     }
    ],
@@ -3993,10 +4163,10 @@
    }
   },
   {
-   "id": 62,
+   "id": 65,
    "type": "SamplerCustomAdvanced",
    "pos": [
-    9371.063085937498,
+    9741.063085937498,
     130
    ],
    "size": [
@@ -4004,38 +4174,38 @@
     106
    ],
    "flags": {},
-   "order": 84,
+   "order": 91,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "noise",
      "name": "noise",
      "type": "NOISE",
-     "link": 379
+     "link": 394
     },
     {
      "localized_name": "guider",
      "name": "guider",
      "type": "GUIDER",
-     "link": 380
+     "link": 395
     },
     {
      "localized_name": "sampler",
      "name": "sampler",
      "type": "SAMPLER",
-     "link": 381
+     "link": 396
     },
     {
      "localized_name": "sigmas",
      "name": "sigmas",
      "type": "SIGMAS",
-     "link": 382
+     "link": 397
     },
     {
      "localized_name": "latent_image",
      "name": "latent_image",
      "type": "LATENT",
-     "link": 383
+     "link": 398
     }
    ],
    "outputs": [
@@ -4044,7 +4214,7 @@
      "name": "output",
      "type": "LATENT",
      "links": [
-      387
+      402
      ]
     },
     {
@@ -4059,10 +4229,10 @@
    }
   },
   {
-   "id": 63,
+   "id": 66,
    "type": "LTXVImgToVideoInplace",
    "pos": [
-    7261.063085937499,
+    7631.063085937499,
     716
    ],
    "size": [
@@ -4070,26 +4240,26 @@
     122
    ],
    "flags": {},
-   "order": 74,
+   "order": 81,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "vae",
      "name": "vae",
      "type": "VAE",
-     "link": 384
+     "link": 399
     },
     {
      "localized_name": "image",
      "name": "image",
      "type": "IMAGE",
-     "link": 385
+     "link": 400
     },
     {
      "localized_name": "latent",
      "name": "latent",
      "type": "LATENT",
-     "link": 386
+     "link": 401
     },
     {
      "localized_name": "strength",
@@ -4116,7 +4286,7 @@
      "name": "latent",
      "type": "LATENT",
      "links": [
-      388
+      403
      ]
     }
    ],
@@ -4133,10 +4303,10 @@
    }
   },
   {
-   "id": 64,
+   "id": 67,
    "type": "LTXVSeparateAVLatent",
    "pos": [
-    9683.426953124997,
+    10053.426953124997,
     130
    ],
    "size": [
@@ -4144,14 +4314,14 @@
     46
    ],
    "flags": {},
-   "order": 85,
+   "order": 92,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "av_latent",
      "name": "av_latent",
      "type": "LATENT",
-     "link": 387
+     "link": 402
     }
    ],
    "outputs": [
@@ -4160,7 +4330,7 @@
      "name": "video_latent",
      "type": "LATENT",
      "links": [
-      392
+      407
      ]
     },
     {
@@ -4168,7 +4338,7 @@
      "name": "audio_latent",
      "type": "LATENT",
      "links": [
-      399
+      414
      ]
     }
    ],
@@ -4177,10 +4347,10 @@
    }
   },
   {
-   "id": 65,
+   "id": 68,
    "type": "LTXVConcatAVLatent",
    "pos": [
-    7761.063085937499,
+    8131.063085937499,
     338
    ],
    "size": [
@@ -4188,20 +4358,20 @@
     46
    ],
    "flags": {},
-   "order": 76,
+   "order": 83,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "video_latent",
      "name": "video_latent",
      "type": "LATENT",
-     "link": 388
+     "link": 403
     },
     {
      "localized_name": "audio_latent",
      "name": "audio_latent",
      "type": "LATENT",
-     "link": 389
+     "link": 404
     }
    ],
    "outputs": [
@@ -4210,8 +4380,8 @@
      "name": "latent",
      "type": "LATENT",
      "links": [
-      418,
-      421
+      433,
+      436
      ]
     }
    ],
@@ -4220,10 +4390,10 @@
    }
   },
   {
-   "id": 66,
+   "id": 69,
    "type": "ResizeImageMaskNode",
    "pos": [
-    6521.063085937499,
+    6891.063085937499,
     130
    ],
    "size": [
@@ -4231,14 +4401,14 @@
     106
    ],
    "flags": {},
-   "order": 69,
+   "order": 77,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "input",
      "name": "input",
      "type": "IMAGE,MASK",
-     "link": 390
+     "link": 405
     },
     {
      "localized_name": "resize_type",
@@ -4274,7 +4444,7 @@
      "name": "resized",
      "type": "IMAGE",
      "links": [
-      391
+      406
      ]
     }
    ],
@@ -4293,10 +4463,10 @@
    }
   },
   {
-   "id": 67,
+   "id": 70,
    "type": "LTXVPreprocess",
    "pos": [
-    6891.063085937499,
+    7261.063085937499,
     130
    ],
    "size": [
@@ -4304,14 +4474,14 @@
     58
    ],
    "flags": {},
-   "order": 71,
+   "order": 79,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "image",
      "name": "image",
      "type": "IMAGE",
-     "link": 391
+     "link": 406
     },
     {
      "localized_name": "img_compression",
@@ -4329,9 +4499,9 @@
      "name": "output_image",
      "type": "IMAGE",
      "links": [
-      366,
-      385,
-      396
+      381,
+      400,
+      411
      ]
     }
    ],
@@ -4346,10 +4516,10 @@
    }
   },
   {
-   "id": 68,
+   "id": 71,
    "type": "LTXVLatentUpsampler",
    "pos": [
-    9950.249804687497,
+    10320.249804687497,
     130
    ],
    "size": [
@@ -4357,26 +4527,26 @@
     66
    ],
    "flags": {},
-   "order": 86,
+   "order": 93,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "samples",
      "name": "samples",
      "type": "LATENT",
-     "link": 392
+     "link": 407
     },
     {
      "localized_name": "upscale_model",
      "name": "upscale_model",
      "type": "LATENT_UPSCALE_MODEL",
-     "link": 393
+     "link": 408
     },
     {
      "localized_name": "vae",
      "name": "vae",
      "type": "VAE",
-     "link": 394
+     "link": 409
     }
    ],
    "outputs": [
@@ -4385,7 +4555,7 @@
      "name": "LATENT",
      "type": "LATENT",
      "links": [
-      397
+      412
      ]
     }
    ],
@@ -4394,10 +4564,10 @@
    }
   },
   {
-   "id": 69,
+   "id": 72,
    "type": "LTXVImgToVideoInplace",
    "pos": [
-    10238.099999999997,
+    10608.099999999997,
     130
    ],
    "size": [
@@ -4405,26 +4575,26 @@
     122
    ],
    "flags": {},
-   "order": 87,
+   "order": 94,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "vae",
      "name": "vae",
      "type": "VAE",
-     "link": 395
+     "link": 410
     },
     {
      "localized_name": "image",
      "name": "image",
      "type": "IMAGE",
-     "link": 396
+     "link": 411
     },
     {
      "localized_name": "latent",
      "name": "latent",
      "type": "LATENT",
-     "link": 397
+     "link": 412
     },
     {
      "localized_name": "strength",
@@ -4451,7 +4621,7 @@
      "name": "latent",
      "type": "LATENT",
      "links": [
-      398
+      413
      ]
     }
    ],
@@ -4468,1212 +4638,11 @@
    }
   },
   {
-   "id": 70,
-   "type": "RandomNoise",
-   "pos": [
-    100,
-    5162
-   ],
-   "size": [
-    270,
-    82
-   ],
-   "flags": {},
-   "order": 23,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "noise_seed",
-     "name": "noise_seed",
-     "type": "INT",
-     "widget": {
-      "name": "noise_seed"
-     },
-     "link": null
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "NOISE",
-     "name": "NOISE",
-     "type": "NOISE",
-     "links": [
-      403
-     ]
-    }
-   ],
-   "properties": {
-    "Node name for S&R": "RandomNoise"
-   },
-   "widgets_values": [
-    43,
-    "randomize"
-   ],
-   "widgets_values_named": {
-    "noise_seed": 43,
-    "control_after_generate": "randomize"
-   }
-  },
-  {
-   "id": 71,
-   "type": "LTXVConcatAVLatent",
-   "pos": [
-    10608.099999999997,
-    130
-   ],
-   "size": [
-    154.839453125,
-    46
-   ],
-   "flags": {},
-   "order": 88,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "video_latent",
-     "name": "video_latent",
-     "type": "LATENT",
-     "link": 398
-    },
-    {
-     "localized_name": "audio_latent",
-     "name": "audio_latent",
-     "type": "LATENT",
-     "link": 399
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "latent",
-     "name": "latent",
-     "type": "LATENT",
-     "links": [
-      407
-     ]
-    }
-   ],
-   "properties": {
-    "Node name for S&R": "LTXVConcatAVLatent"
-   }
-  },
-  {
-   "id": 72,
-   "type": "LTXVDualCFGGuider",
-   "pos": [
-    9001.063085937498,
-    382
-   ],
-   "size": [
-    270,
-    122
-   ],
-   "flags": {},
-   "order": 83,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "model",
-     "name": "model",
-     "type": "MODEL",
-     "link": 400
-    },
-    {
-     "localized_name": "positive",
-     "name": "positive",
-     "type": "CONDITIONING",
-     "link": 401
-    },
-    {
-     "localized_name": "negative",
-     "name": "negative",
-     "type": "CONDITIONING",
-     "link": 402
-    },
-    {
-     "localized_name": "video_cfg",
-     "name": "video_cfg",
-     "type": "FLOAT",
-     "widget": {
-      "name": "video_cfg"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "audio_cfg",
-     "name": "audio_cfg",
-     "type": "FLOAT",
-     "widget": {
-      "name": "audio_cfg"
-     },
-     "link": null
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "GUIDER",
-     "name": "GUIDER",
-     "type": "GUIDER",
-     "links": [
-      404
-     ]
-    }
-   ],
-   "properties": {
-    "Node name for S&R": "LTXVDualCFGGuider"
-   },
-   "widgets_values": [
-    1,
-    1
-   ],
-   "widgets_values_named": {
-    "video_cfg": 1,
-    "audio_cfg": 1
-   }
-  },
-  {
    "id": 73,
-   "type": "SamplerCustomAdvanced",
-   "pos": [
-    10862.939453124996,
-    130
-   ],
-   "size": [
-    212.3638671875,
-    106
-   ],
-   "flags": {},
-   "order": 89,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "noise",
-     "name": "noise",
-     "type": "NOISE",
-     "link": 403
-    },
-    {
-     "localized_name": "guider",
-     "name": "guider",
-     "type": "GUIDER",
-     "link": 404
-    },
-    {
-     "localized_name": "sampler",
-     "name": "sampler",
-     "type": "SAMPLER",
-     "link": 405
-    },
-    {
-     "localized_name": "sigmas",
-     "name": "sigmas",
-     "type": "SIGMAS",
-     "link": 406
-    },
-    {
-     "localized_name": "latent_image",
-     "name": "latent_image",
-     "type": "LATENT",
-     "link": 407
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "output",
-     "name": "output",
-     "type": "LATENT",
-     "links": [
-      408
-     ]
-    },
-    {
-     "localized_name": "denoised_output",
-     "name": "denoised_output",
-     "type": "LATENT",
-     "links": null
-    }
-   ],
-   "properties": {
-    "Node name for S&R": "SamplerCustomAdvanced"
-   }
-  },
-  {
-   "id": 74,
-   "type": "LTXVSeparateAVLatent",
-   "pos": [
-    11175.303320312496,
-    130
-   ],
-   "size": [
-    166.8228515625,
-    46
-   ],
-   "flags": {},
-   "order": 90,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "av_latent",
-     "name": "av_latent",
-     "type": "LATENT",
-     "link": 408
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "video_latent",
-     "name": "video_latent",
-     "type": "LATENT",
-     "links": [
-      409
-     ]
-    },
-    {
-     "localized_name": "audio_latent",
-     "name": "audio_latent",
-     "type": "LATENT",
-     "links": [
-      411
-     ]
-    }
-   ],
-   "properties": {
-    "Node name for S&R": "LTXVSeparateAVLatent"
-   }
-  },
-  {
-   "id": 75,
-   "type": "VAEDecodeTiled",
-   "pos": [
-    11442.126171874996,
-    130
-   ],
-   "size": [
-    270,
-    150
-   ],
-   "flags": {},
-   "order": 91,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "samples",
-     "name": "samples",
-     "type": "LATENT",
-     "link": 409
-    },
-    {
-     "localized_name": "vae",
-     "name": "vae",
-     "type": "VAE",
-     "link": 410
-    },
-    {
-     "localized_name": "tile_size",
-     "name": "tile_size",
-     "type": "INT",
-     "widget": {
-      "name": "tile_size"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "overlap",
-     "name": "overlap",
-     "type": "INT",
-     "widget": {
-      "name": "overlap"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "temporal_size",
-     "name": "temporal_size",
-     "type": "INT",
-     "widget": {
-      "name": "temporal_size"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "temporal_overlap",
-     "name": "temporal_overlap",
-     "type": "INT",
-     "widget": {
-      "name": "temporal_overlap"
-     },
-     "link": null
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "IMAGE",
-     "name": "IMAGE",
-     "type": "IMAGE",
-     "links": [
-      423,
-      545
-     ]
-    }
-   ],
-   "properties": {
-    "Node name for S&R": "VAEDecodeTiled"
-   },
-   "widgets_values": [
-    512,
-    64,
-    64,
-    16
-   ],
-   "widgets_values_named": {
-    "tile_size": 512,
-    "overlap": 64,
-    "temporal_size": 64,
-    "temporal_overlap": 16
-   }
-  },
-  {
-   "id": 76,
-   "type": "LTXVAudioVAEDecode",
-   "pos": [
-    11442.126171874996,
-    410
-   ],
-   "size": [
-    202.991796875,
-    46
-   ],
-   "flags": {},
-   "order": 92,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "samples",
-     "name": "samples",
-     "type": "LATENT",
-     "link": 411
-    },
-    {
-     "localized_name": "Audio VAE",
-     "name": "audio_vae",
-     "type": "VAE",
-     "link": 412
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "Audio",
-     "name": "Audio",
-     "type": "AUDIO",
-     "links": [
-      473,
-      549
-     ]
-    }
-   ],
-   "properties": {
-    "Node name for S&R": "LTXVAudioVAEDecode"
-   }
-  },
-  {
-   "id": 77,
-   "type": "TrimAudioDuration",
-   "pos": [
-    6151.063085937499,
-    342
-   ],
-   "size": [
-    270,
-    82
-   ],
-   "flags": {},
-   "order": 68,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "audio",
-     "name": "audio",
-     "type": "AUDIO",
-     "link": 413
-    },
-    {
-     "localized_name": "start_index",
-     "name": "start_index",
-     "type": "FLOAT",
-     "widget": {
-      "name": "start_index"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "duration",
-     "name": "duration",
-     "type": "FLOAT",
-     "widget": {
-      "name": "duration"
-     },
-     "link": null
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "AUDIO",
-     "name": "AUDIO",
-     "type": "AUDIO",
-     "links": [
-      414
-     ]
-    }
-   ],
-   "properties": {
-    "Node name for S&R": "TrimAudioDuration"
-   },
-   "widgets_values": [
-    -1,
-    1
-   ],
-   "widgets_values_named": {
-    "start_index": -1,
-    "duration": 1
-   }
-  },
-  {
-   "id": 78,
-   "type": "LTXVAudioVAEEncode",
-   "pos": [
-    6521.063085937499,
-    366
-   ],
-   "size": [
-    201.4126953125,
-    46
-   ],
-   "flags": {},
-   "order": 70,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "audio",
-     "name": "audio",
-     "type": "AUDIO",
-     "link": 414
-    },
-    {
-     "localized_name": "Audio VAE",
-     "name": "audio_vae",
-     "type": "VAE",
-     "link": 415
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "Audio Latent",
-     "name": "Audio Latent",
-     "type": "LATENT",
-     "links": [
-      416
-     ]
-    }
-   ],
-   "properties": {
-    "Node name for S&R": "LTXVAudioVAEEncode"
-   }
-  },
-  {
-   "id": 79,
-   "type": "SetLatentNoiseMask",
-   "pos": [
-    6891.063085937499,
-    318
-   ],
-   "size": [
-    188.1373046875,
-    46
-   ],
-   "flags": {},
-   "order": 72,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "samples",
-     "name": "samples",
-     "type": "LATENT",
-     "link": 416
-    },
-    {
-     "localized_name": "mask",
-     "name": "mask",
-     "type": "MASK",
-     "link": 417
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "LATENT",
-     "name": "LATENT",
-     "type": "LATENT",
-     "links": [
-      419
-     ]
-    }
-   ],
-   "title": "Sound of clip 1 held",
-   "properties": {
-    "Node name for S&R": "SetLatentNoiseMask"
-   }
-  },
-  {
-   "id": 80,
-   "type": "LTXVConcatAVLatent",
-   "pos": [
-    8131.063085937499,
-    712
-   ],
-   "size": [
-    154.839453125,
-    46
-   ],
-   "flags": {},
-   "order": 79,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "video_latent",
-     "name": "video_latent",
-     "type": "LATENT",
-     "link": 418
-    },
-    {
-     "localized_name": "audio_latent",
-     "name": "audio_latent",
-     "type": "LATENT",
-     "link": 419
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "latent",
-     "name": "latent",
-     "type": "LATENT",
-     "links": [
-      422
-     ]
-    }
-   ],
-   "properties": {
-    "Node name for S&R": "LTXVConcatAVLatent"
-   }
-  },
-  {
-   "id": 81,
-   "type": "ComfySwitchNode",
-   "pos": [
-    8631.063085937498,
-    338
-   ],
-   "size": [
-    270,
-    78
-   ],
-   "flags": {},
-   "order": 81,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "on_false",
-     "name": "on_false",
-     "shape": 7,
-     "type": "LATENT",
-     "link": 421
-    },
-    {
-     "localized_name": "on_true",
-     "name": "on_true",
-     "shape": 7,
-     "type": "LATENT",
-     "link": 422
-    },
-    {
-     "localized_name": "switch",
-     "name": "switch",
-     "type": "BOOLEAN",
-     "widget": {
-      "name": "switch"
-     },
-     "link": 420
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "output",
-     "name": "output",
-     "type": "LATENT",
-     "links": [
-      383
-     ]
-    }
-   ],
-   "title": "Ton fortsetzen",
-   "properties": {
-    "Node name for S&R": "ComfySwitchNode"
-   },
-   "widgets_values": [
-    false
-   ],
-   "widgets_values_named": {
-    "switch": false
-   }
-  },
-  {
-   "id": 82,
-   "type": "ImageFromBatch",
-   "pos": [
-    11812.126171874996,
-    130
-   ],
-   "size": [
-    270,
-    82
-   ],
-   "flags": {},
-   "order": 93,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "image",
-     "name": "image",
-     "type": "IMAGE",
-     "link": 423
-    },
-    {
-     "localized_name": "batch_index",
-     "name": "batch_index",
-     "type": "INT",
-     "widget": {
-      "name": "batch_index"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "length",
-     "name": "length",
-     "type": "INT",
-     "widget": {
-      "name": "length"
-     },
-     "link": null
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "IMAGE",
-     "name": "IMAGE",
-     "type": "IMAGE",
-     "links": [
-      450
-     ]
-    }
-   ],
-   "title": "Last frame of clip 2",
-   "properties": {
-    "Node name for S&R": "ImageFromBatch"
-   },
-   "widgets_values": [
-    -1,
-    1
-   ],
-   "widgets_values_named": {
-    "batch_index": -1,
-    "length": 1
-   }
-  },
-  {
-   "id": 83,
-   "type": "PrimitiveStringMultiline",
-   "pos": [
-    100,
-    5374
-   ],
-   "size": [
-    400,
-    200
-   ],
-   "flags": {},
-   "order": 24,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "value",
-     "name": "value",
-     "type": "STRING",
-     "widget": {
-      "name": "value"
-     },
-     "link": null
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "STRING",
-     "name": "STRING",
-     "type": "STRING",
-     "links": [
-      424,
-      430
-     ]
-    }
-   ],
-   "title": "Prompt 3",
-   "properties": {
-    "Node name for S&R": "PrimitiveStringMultiline"
-   },
-   "widgets_values": [
-    ""
-   ],
-   "widgets_values_named": {
-    "value": ""
-   }
-  },
-  {
-   "id": 84,
-   "type": "TextGenerateLTX2Prompt",
-   "pos": [
-    12922.126171874996,
-    130
-   ],
-   "size": [
-    400,
-    456
-   ],
-   "flags": {},
-   "order": 99,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "clip",
-     "name": "clip",
-     "type": "CLIP",
-     "link": 425
-    },
-    {
-     "localized_name": "image",
-     "name": "image",
-     "shape": 7,
-     "type": "IMAGE",
-     "link": 426
-    },
-    {
-     "localized_name": "video",
-     "name": "video",
-     "shape": 7,
-     "type": "IMAGE",
-     "link": null
-    },
-    {
-     "localized_name": "audio",
-     "name": "audio",
-     "shape": 7,
-     "type": "AUDIO",
-     "link": null
-    },
-    {
-     "localized_name": "system_prompt",
-     "name": "system_prompt",
-     "shape": 7,
-     "type": "STRING",
-     "link": null
-    },
-    {
-     "localized_name": "prompt",
-     "name": "prompt",
-     "type": "STRING",
-     "widget": {
-      "name": "prompt"
-     },
-     "link": 424
-    },
-    {
-     "localized_name": "max_length",
-     "name": "max_length",
-     "type": "INT",
-     "widget": {
-      "name": "max_length"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "Sampling Mode",
-     "name": "sampling_mode",
-     "type": "COMFY_DYNAMICCOMBO_V3",
-     "widget": {
-      "name": "sampling_mode"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "temperature",
-     "name": "sampling_mode.temperature",
-     "type": "FLOAT",
-     "widget": {
-      "name": "sampling_mode.temperature"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "top_k",
-     "name": "sampling_mode.top_k",
-     "type": "INT",
-     "widget": {
-      "name": "sampling_mode.top_k"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "top_p",
-     "name": "sampling_mode.top_p",
-     "type": "FLOAT",
-     "widget": {
-      "name": "sampling_mode.top_p"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "min_p",
-     "name": "sampling_mode.min_p",
-     "type": "FLOAT",
-     "widget": {
-      "name": "sampling_mode.min_p"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "repetition_penalty",
-     "name": "sampling_mode.repetition_penalty",
-     "type": "FLOAT",
-     "widget": {
-      "name": "sampling_mode.repetition_penalty"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "seed",
-     "name": "sampling_mode.seed",
-     "type": "INT",
-     "widget": {
-      "name": "sampling_mode.seed"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "presence_penalty",
-     "name": "sampling_mode.presence_penalty",
-     "shape": 7,
-     "type": "FLOAT",
-     "widget": {
-      "name": "sampling_mode.presence_penalty"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "thinking",
-     "name": "thinking",
-     "shape": 7,
-     "type": "BOOLEAN",
-     "widget": {
-      "name": "thinking"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "use_default_template",
-     "name": "use_default_template",
-     "shape": 7,
-     "type": "BOOLEAN",
-     "widget": {
-      "name": "use_default_template"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "mtp",
-     "name": "mtp",
-     "shape": 7,
-     "type": "COMBO",
-     "widget": {
-      "name": "mtp"
-     },
-     "link": null
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "generated_text",
-     "name": "generated_text",
-     "type": "STRING",
-     "links": [
-      431
-     ]
-    },
-    {
-     "localized_name": "thinking",
-     "name": "thinking",
-     "type": "STRING",
-     "links": null
-    }
-   ],
-   "properties": {
-    "Node name for S&R": "TextGenerateLTX2Prompt"
-   },
-   "widgets_values": [
-    "",
-    600,
-    "on",
-    0.7,
-    64,
-    0.95,
-    0.05,
-    1.15,
-    0,
-    0,
-    false,
-    true,
-    "auto"
-   ],
-   "widgets_values_named": {
-    "prompt": "",
-    "max_length": 600,
-    "sampling_mode": "on",
-    "sampling_mode.temperature": 0.7,
-    "sampling_mode.top_k": 64,
-    "sampling_mode.top_p": 0.95,
-    "sampling_mode.min_p": 0.05,
-    "sampling_mode.repetition_penalty": 1.15,
-    "sampling_mode.seed": 0,
-    "sampling_mode.presence_penalty": 0,
-    "thinking": false,
-    "use_default_template": true,
-    "mtp": "auto"
-   }
-  },
-  {
-   "id": 85,
-   "type": "CLIPTextEncode",
-   "pos": [
-    13792.126171874996,
-    130
-   ],
-   "size": [
-    400,
-    200
-   ],
-   "flags": {},
-   "order": 103,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "clip",
-     "name": "clip",
-     "type": "CLIP",
-     "link": 428
-    },
-    {
-     "localized_name": "text",
-     "name": "text",
-     "type": "STRING",
-     "widget": {
-      "name": "text"
-     },
-     "link": 427
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "CONDITIONING",
-     "name": "CONDITIONING",
-     "type": "CONDITIONING",
-     "links": [
-      434
-     ]
-    }
-   ],
-   "properties": {
-    "Node name for S&R": "CLIPTextEncode"
-   },
-   "widgets_values": [
-    ""
-   ],
-   "widgets_values_named": {
-    "text": ""
-   }
-  },
-  {
-   "id": 86,
-   "type": "ComfySwitchNode",
-   "pos": [
-    13422.126171874996,
-    130
-   ],
-   "size": [
-    270,
-    78
-   ],
-   "flags": {},
-   "order": 101,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "on_false",
-     "name": "on_false",
-     "shape": 7,
-     "type": "STRING",
-     "link": 430
-    },
-    {
-     "localized_name": "on_true",
-     "name": "on_true",
-     "shape": 7,
-     "type": "STRING",
-     "link": 431
-    },
-    {
-     "localized_name": "switch",
-     "name": "switch",
-     "type": "BOOLEAN",
-     "widget": {
-      "name": "switch"
-     },
-     "link": 429
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "output",
-     "name": "output",
-     "type": "STRING",
-     "links": [
-      427,
-      432
-     ]
-    }
-   ],
-   "properties": {
-    "Node name for S&R": "ComfySwitchNode"
-   },
-   "widgets_values": [
-    false
-   ],
-   "widgets_values_named": {
-    "switch": false
-   }
-  },
-  {
-   "id": 87,
-   "type": "PreviewAny",
-   "pos": [
-    13792.126171874996,
-    460
-   ],
-   "size": [
-    210,
-    122
-   ],
-   "flags": {},
-   "order": 104,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "source",
-     "name": "source",
-     "type": "*",
-     "link": 432
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "STRING",
-     "name": "STRING",
-     "type": "STRING",
-     "links": null
-    }
-   ],
-   "properties": {
-    "Node name for S&R": "PreviewAny"
-   },
-   "widgets_values": [],
-   "widgets_values_named": {}
-  },
-  {
-   "id": 88,
-   "type": "LTXVConditioning",
-   "pos": [
-    14292.126171874996,
-    130
-   ],
-   "size": [
-    270,
-    78
-   ],
-   "flags": {},
-   "order": 106,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "positive",
-     "name": "positive",
-     "type": "CONDITIONING",
-     "link": 434
-    },
-    {
-     "localized_name": "negative",
-     "name": "negative",
-     "type": "CONDITIONING",
-     "link": 435
-    },
-    {
-     "localized_name": "frame_rate",
-     "name": "frame_rate",
-     "type": "FLOAT",
-     "widget": {
-      "name": "frame_rate"
-     },
-     "link": 433
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "positive",
-     "name": "positive",
-     "type": "CONDITIONING",
-     "links": [
-      437,
-      461
-     ]
-    },
-    {
-     "localized_name": "negative",
-     "name": "negative",
-     "type": "CONDITIONING",
-     "links": [
-      438,
-      462
-     ]
-    }
-   ],
-   "properties": {
-    "Node name for S&R": "LTXVConditioning"
-   },
-   "widgets_values": [
-    25
-   ],
-   "widgets_values_named": {
-    "frame_rate": 25
-   }
-  },
-  {
-   "id": 89,
    "type": "RandomNoise",
    "pos": [
     100,
-    5704
+    5582
    ],
    "size": [
     270,
@@ -5699,7 +4668,7 @@
      "name": "NOISE",
      "type": "NOISE",
      "links": [
-      439
+      418
      ]
     }
    ],
@@ -5707,636 +4676,40 @@
     "Node name for S&R": "RandomNoise"
    },
    "widgets_values": [
-    875362541677471,
+    43,
     "randomize"
    ],
    "widgets_values_named": {
-    "noise_seed": 875362541677471,
+    "noise_seed": 43,
     "control_after_generate": "randomize"
    }
   },
   {
-   "id": 90,
-   "type": "LTXVDualCFGGuider",
-   "pos": [
-    14662.126171874996,
-    130
-   ],
-   "size": [
-    270,
-    122
-   ],
-   "flags": {},
-   "order": 108,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "model",
-     "name": "model",
-     "type": "MODEL",
-     "link": 436
-    },
-    {
-     "localized_name": "positive",
-     "name": "positive",
-     "type": "CONDITIONING",
-     "link": 437
-    },
-    {
-     "localized_name": "negative",
-     "name": "negative",
-     "type": "CONDITIONING",
-     "link": 438
-    },
-    {
-     "localized_name": "video_cfg",
-     "name": "video_cfg",
-     "type": "FLOAT",
-     "widget": {
-      "name": "video_cfg"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "audio_cfg",
-     "name": "audio_cfg",
-     "type": "FLOAT",
-     "widget": {
-      "name": "audio_cfg"
-     },
-     "link": null
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "GUIDER",
-     "name": "GUIDER",
-     "type": "GUIDER",
-     "links": [
-      440
-     ]
-    }
-   ],
-   "properties": {
-    "Node name for S&R": "LTXVDualCFGGuider"
-   },
-   "widgets_values": [
-    1,
-    1
-   ],
-   "widgets_values_named": {
-    "video_cfg": 1,
-    "audio_cfg": 1
-   }
-  },
-  {
-   "id": 91,
-   "type": "SamplerCustomAdvanced",
-   "pos": [
-    15032.126171874996,
-    130
-   ],
-   "size": [
-    212.3638671875,
-    106
-   ],
-   "flags": {},
-   "order": 110,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "noise",
-     "name": "noise",
-     "type": "NOISE",
-     "link": 439
-    },
-    {
-     "localized_name": "guider",
-     "name": "guider",
-     "type": "GUIDER",
-     "link": 440
-    },
-    {
-     "localized_name": "sampler",
-     "name": "sampler",
-     "type": "SAMPLER",
-     "link": 441
-    },
-    {
-     "localized_name": "sigmas",
-     "name": "sigmas",
-     "type": "SIGMAS",
-     "link": 442
-    },
-    {
-     "localized_name": "latent_image",
-     "name": "latent_image",
-     "type": "LATENT",
-     "link": 443
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "output",
-     "name": "output",
-     "type": "LATENT",
-     "links": [
-      447
-     ]
-    },
-    {
-     "localized_name": "denoised_output",
-     "name": "denoised_output",
-     "type": "LATENT",
-     "links": null
-    }
-   ],
-   "properties": {
-    "Node name for S&R": "SamplerCustomAdvanced"
-   }
-  },
-  {
-   "id": 92,
-   "type": "LTXVImgToVideoInplace",
-   "pos": [
-    12922.126171874996,
-    716
-   ],
-   "size": [
-    270,
-    122
-   ],
-   "flags": {},
-   "order": 100,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "vae",
-     "name": "vae",
-     "type": "VAE",
-     "link": 444
-    },
-    {
-     "localized_name": "image",
-     "name": "image",
-     "type": "IMAGE",
-     "link": 445
-    },
-    {
-     "localized_name": "latent",
-     "name": "latent",
-     "type": "LATENT",
-     "link": 446
-    },
-    {
-     "localized_name": "strength",
-     "name": "strength",
-     "type": "FLOAT",
-     "widget": {
-      "name": "strength"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "bypass",
-     "name": "bypass",
-     "type": "BOOLEAN",
-     "widget": {
-      "name": "bypass"
-     },
-     "link": null
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "latent",
-     "name": "latent",
-     "type": "LATENT",
-     "links": [
-      448
-     ]
-    }
-   ],
-   "properties": {
-    "Node name for S&R": "LTXVImgToVideoInplace"
-   },
-   "widgets_values": [
-    0.7,
-    false
-   ],
-   "widgets_values_named": {
-    "strength": 0.7,
-    "bypass": false
-   }
-  },
-  {
-   "id": 93,
-   "type": "LTXVSeparateAVLatent",
-   "pos": [
-    15344.490039062495,
-    130
-   ],
-   "size": [
-    166.8228515625,
-    46
-   ],
-   "flags": {},
-   "order": 111,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "av_latent",
-     "name": "av_latent",
-     "type": "LATENT",
-     "link": 447
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "video_latent",
-     "name": "video_latent",
-     "type": "LATENT",
-     "links": [
-      452
-     ]
-    },
-    {
-     "localized_name": "audio_latent",
-     "name": "audio_latent",
-     "type": "LATENT",
-     "links": [
-      459
-     ]
-    }
-   ],
-   "properties": {
-    "Node name for S&R": "LTXVSeparateAVLatent"
-   }
-  },
-  {
-   "id": 94,
+   "id": 74,
    "type": "LTXVConcatAVLatent",
    "pos": [
-    13422.126171874996,
-    338
+    10978.099999999997,
+    130
    ],
    "size": [
     154.839453125,
     46
-   ],
-   "flags": {},
-   "order": 102,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "video_latent",
-     "name": "video_latent",
-     "type": "LATENT",
-     "link": 448
-    },
-    {
-     "localized_name": "audio_latent",
-     "name": "audio_latent",
-     "type": "LATENT",
-     "link": 449
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "latent",
-     "name": "latent",
-     "type": "LATENT",
-     "links": [
-      478,
-      481
-     ]
-    }
-   ],
-   "properties": {
-    "Node name for S&R": "LTXVConcatAVLatent"
-   }
-  },
-  {
-   "id": 95,
-   "type": "ResizeImageMaskNode",
-   "pos": [
-    12182.126171874996,
-    130
-   ],
-   "size": [
-    270,
-    106
    ],
    "flags": {},
    "order": 95,
    "mode": 0,
    "inputs": [
     {
-     "localized_name": "input",
-     "name": "input",
-     "type": "IMAGE,MASK",
-     "link": 450
-    },
-    {
-     "localized_name": "resize_type",
-     "name": "resize_type",
-     "type": "COMFY_DYNAMICCOMBO_V3",
-     "widget": {
-      "name": "resize_type"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "longer_size",
-     "name": "resize_type.longer_size",
-     "type": "INT",
-     "widget": {
-      "name": "resize_type.longer_size"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "scale_method",
-     "name": "scale_method",
-     "type": "COMBO",
-     "widget": {
-      "name": "scale_method"
-     },
-     "link": null
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "resized",
-     "name": "resized",
-     "type": "IMAGE",
-     "links": [
-      451
-     ]
-    }
-   ],
-   "properties": {
-    "Node name for S&R": "ResizeImageMaskNode"
-   },
-   "widgets_values": [
-    "scale longer dimension",
-    1536,
-    "lanczos"
-   ],
-   "widgets_values_named": {
-    "resize_type": "scale longer dimension",
-    "resize_type.longer_size": 1536,
-    "scale_method": "lanczos"
-   }
-  },
-  {
-   "id": 96,
-   "type": "LTXVPreprocess",
-   "pos": [
-    12552.126171874996,
-    130
-   ],
-   "size": [
-    270,
-    58
-   ],
-   "flags": {},
-   "order": 97,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "image",
-     "name": "image",
-     "type": "IMAGE",
-     "link": 451
-    },
-    {
-     "localized_name": "img_compression",
-     "name": "img_compression",
-     "type": "INT",
-     "widget": {
-      "name": "img_compression"
-     },
-     "link": null
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "output_image",
-     "name": "output_image",
-     "type": "IMAGE",
-     "links": [
-      426,
-      445,
-      456
-     ]
-    }
-   ],
-   "properties": {
-    "Node name for S&R": "LTXVPreprocess"
-   },
-   "widgets_values": [
-    18
-   ],
-   "widgets_values_named": {
-    "img_compression": 18
-   }
-  },
-  {
-   "id": 97,
-   "type": "LTXVLatentUpsampler",
-   "pos": [
-    15611.312890624995,
-    130
-   ],
-   "size": [
-    187.8501953125,
-    66
-   ],
-   "flags": {},
-   "order": 112,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "samples",
-     "name": "samples",
-     "type": "LATENT",
-     "link": 452
-    },
-    {
-     "localized_name": "upscale_model",
-     "name": "upscale_model",
-     "type": "LATENT_UPSCALE_MODEL",
-     "link": 453
-    },
-    {
-     "localized_name": "vae",
-     "name": "vae",
-     "type": "VAE",
-     "link": 454
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "LATENT",
-     "name": "LATENT",
-     "type": "LATENT",
-     "links": [
-      457
-     ]
-    }
-   ],
-   "properties": {
-    "Node name for S&R": "LTXVLatentUpsampler"
-   }
-  },
-  {
-   "id": 98,
-   "type": "LTXVImgToVideoInplace",
-   "pos": [
-    15899.163085937495,
-    130
-   ],
-   "size": [
-    270,
-    122
-   ],
-   "flags": {},
-   "order": 113,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "vae",
-     "name": "vae",
-     "type": "VAE",
-     "link": 455
-    },
-    {
-     "localized_name": "image",
-     "name": "image",
-     "type": "IMAGE",
-     "link": 456
-    },
-    {
-     "localized_name": "latent",
-     "name": "latent",
-     "type": "LATENT",
-     "link": 457
-    },
-    {
-     "localized_name": "strength",
-     "name": "strength",
-     "type": "FLOAT",
-     "widget": {
-      "name": "strength"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "bypass",
-     "name": "bypass",
-     "type": "BOOLEAN",
-     "widget": {
-      "name": "bypass"
-     },
-     "link": null
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "latent",
-     "name": "latent",
-     "type": "LATENT",
-     "links": [
-      458
-     ]
-    }
-   ],
-   "properties": {
-    "Node name for S&R": "LTXVImgToVideoInplace"
-   },
-   "widgets_values": [
-    1,
-    false
-   ],
-   "widgets_values_named": {
-    "strength": 1,
-    "bypass": false
-   }
-  },
-  {
-   "id": 99,
-   "type": "RandomNoise",
-   "pos": [
-    100,
-    5916
-   ],
-   "size": [
-    270,
-    82
-   ],
-   "flags": {},
-   "order": 26,
-   "mode": 0,
-   "inputs": [
-    {
-     "localized_name": "noise_seed",
-     "name": "noise_seed",
-     "type": "INT",
-     "widget": {
-      "name": "noise_seed"
-     },
-     "link": null
-    }
-   ],
-   "outputs": [
-    {
-     "localized_name": "NOISE",
-     "name": "NOISE",
-     "type": "NOISE",
-     "links": [
-      463
-     ]
-    }
-   ],
-   "properties": {
-    "Node name for S&R": "RandomNoise"
-   },
-   "widgets_values": [
-    44,
-    "randomize"
-   ],
-   "widgets_values_named": {
-    "noise_seed": 44,
-    "control_after_generate": "randomize"
-   }
-  },
-  {
-   "id": 100,
-   "type": "LTXVConcatAVLatent",
-   "pos": [
-    16269.163085937495,
-    130
-   ],
-   "size": [
-    154.839453125,
-    46
-   ],
-   "flags": {},
-   "order": 114,
-   "mode": 0,
-   "inputs": [
-    {
      "localized_name": "video_latent",
      "name": "video_latent",
      "type": "LATENT",
-     "link": 458
+     "link": 413
     },
     {
      "localized_name": "audio_latent",
      "name": "audio_latent",
      "type": "LATENT",
-     "link": 459
+     "link": 414
     }
    ],
    "outputs": [
@@ -6345,7 +4718,7 @@
      "name": "latent",
      "type": "LATENT",
      "links": [
-      467
+      422
      ]
     }
    ],
@@ -6354,10 +4727,10 @@
    }
   },
   {
-   "id": 101,
+   "id": 75,
    "type": "LTXVDualCFGGuider",
    "pos": [
-    14662.126171874996,
+    9371.063085937498,
     382
    ],
    "size": [
@@ -6365,26 +4738,26 @@
     122
    ],
    "flags": {},
-   "order": 109,
+   "order": 90,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "model",
      "name": "model",
      "type": "MODEL",
-     "link": 460
+     "link": 415
     },
     {
      "localized_name": "positive",
      "name": "positive",
      "type": "CONDITIONING",
-     "link": 461
+     "link": 416
     },
     {
      "localized_name": "negative",
      "name": "negative",
      "type": "CONDITIONING",
-     "link": 462
+     "link": 417
     },
     {
      "localized_name": "video_cfg",
@@ -6411,7 +4784,7 @@
      "name": "GUIDER",
      "type": "GUIDER",
      "links": [
-      464
+      419
      ]
     }
    ],
@@ -6428,10 +4801,10 @@
    }
   },
   {
-   "id": 102,
+   "id": 76,
    "type": "SamplerCustomAdvanced",
    "pos": [
-    16524.002539062494,
+    11232.939453124996,
     130
    ],
    "size": [
@@ -6439,38 +4812,38 @@
     106
    ],
    "flags": {},
-   "order": 115,
+   "order": 96,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "noise",
      "name": "noise",
      "type": "NOISE",
-     "link": 463
+     "link": 418
     },
     {
      "localized_name": "guider",
      "name": "guider",
      "type": "GUIDER",
-     "link": 464
+     "link": 419
     },
     {
      "localized_name": "sampler",
      "name": "sampler",
      "type": "SAMPLER",
-     "link": 465
+     "link": 420
     },
     {
      "localized_name": "sigmas",
      "name": "sigmas",
      "type": "SIGMAS",
-     "link": 466
+     "link": 421
     },
     {
      "localized_name": "latent_image",
      "name": "latent_image",
      "type": "LATENT",
-     "link": 467
+     "link": 422
     }
    ],
    "outputs": [
@@ -6479,7 +4852,7 @@
      "name": "output",
      "type": "LATENT",
      "links": [
-      468
+      423
      ]
     },
     {
@@ -6494,10 +4867,10 @@
    }
   },
   {
-   "id": 103,
+   "id": 77,
    "type": "LTXVSeparateAVLatent",
    "pos": [
-    16836.366406249996,
+    11545.303320312496,
     130
    ],
    "size": [
@@ -6505,14 +4878,14 @@
     46
    ],
    "flags": {},
-   "order": 116,
+   "order": 97,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "av_latent",
      "name": "av_latent",
      "type": "LATENT",
-     "link": 468
+     "link": 423
     }
    ],
    "outputs": [
@@ -6521,7 +4894,7 @@
      "name": "video_latent",
      "type": "LATENT",
      "links": [
-      469
+      424
      ]
     },
     {
@@ -6529,7 +4902,7 @@
      "name": "audio_latent",
      "type": "LATENT",
      "links": [
-      471
+      426
      ]
     }
    ],
@@ -6538,10 +4911,10 @@
    }
   },
   {
-   "id": 104,
+   "id": 78,
    "type": "VAEDecodeTiled",
    "pos": [
-    17103.189257812497,
+    11812.126171874996,
     130
    ],
    "size": [
@@ -6549,20 +4922,20 @@
     150
    ],
    "flags": {},
-   "order": 117,
+   "order": 98,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "samples",
      "name": "samples",
      "type": "LATENT",
-     "link": 469
+     "link": 424
     },
     {
      "localized_name": "vae",
      "name": "vae",
      "type": "VAE",
-     "link": 470
+     "link": 425
     },
     {
      "localized_name": "tile_size",
@@ -6607,8 +4980,8 @@
      "name": "IMAGE",
      "type": "IMAGE",
      "links": [
-      483,
-      546
+      438,
+      566
      ]
     }
    ],
@@ -6629,10 +5002,10 @@
    }
   },
   {
-   "id": 105,
+   "id": 79,
    "type": "LTXVAudioVAEDecode",
    "pos": [
-    17103.189257812497,
+    11812.126171874996,
     410
    ],
    "size": [
@@ -6640,20 +5013,20 @@
     46
    ],
    "flags": {},
-   "order": 118,
+   "order": 99,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "samples",
      "name": "samples",
      "type": "LATENT",
-     "link": 471
+     "link": 426
     },
     {
      "localized_name": "Audio VAE",
      "name": "audio_vae",
      "type": "VAE",
-     "link": 472
+     "link": 427
     }
    ],
    "outputs": [
@@ -6662,8 +5035,8 @@
      "name": "Audio",
      "type": "AUDIO",
      "links": [
-      533,
-      550
+      491,
+      570
      ]
     }
    ],
@@ -6672,10 +5045,10 @@
    }
   },
   {
-   "id": 106,
+   "id": 80,
    "type": "TrimAudioDuration",
    "pos": [
-    11812.126171874996,
+    6151.063085937499,
     342
    ],
    "size": [
@@ -6683,14 +5056,14 @@
     82
    ],
    "flags": {},
-   "order": 94,
+   "order": 74,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "audio",
      "name": "audio",
      "type": "AUDIO",
-     "link": 473
+     "link": 428
     },
     {
      "localized_name": "start_index",
@@ -6717,7 +5090,7 @@
      "name": "AUDIO",
      "type": "AUDIO",
      "links": [
-      474
+      429
      ]
     }
    ],
@@ -6734,31 +5107,31 @@
    }
   },
   {
-   "id": 107,
+   "id": 81,
    "type": "LTXVAudioVAEEncode",
    "pos": [
-    12182.126171874996,
-    366
+    6521.063085937499,
+    338
    ],
    "size": [
     201.4126953125,
     46
    ],
    "flags": {},
-   "order": 96,
+   "order": 76,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "audio",
      "name": "audio",
      "type": "AUDIO",
-     "link": 474
+     "link": 429
     },
     {
      "localized_name": "Audio VAE",
      "name": "audio_vae",
      "type": "VAE",
-     "link": 475
+     "link": 430
     }
    ],
    "outputs": [
@@ -6767,7 +5140,7 @@
      "name": "Audio Latent",
      "type": "LATENT",
      "links": [
-      476
+      431
      ]
     }
    ],
@@ -6776,31 +5149,31 @@
    }
   },
   {
-   "id": 108,
+   "id": 82,
    "type": "SetLatentNoiseMask",
    "pos": [
-    12552.126171874996,
-    318
+    6891.063085937499,
+    366
    ],
    "size": [
     188.1373046875,
     46
    ],
    "flags": {},
-   "order": 98,
+   "order": 78,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "samples",
      "name": "samples",
      "type": "LATENT",
-     "link": 476
+     "link": 431
     },
     {
      "localized_name": "mask",
      "name": "mask",
      "type": "MASK",
-     "link": 477
+     "link": 432
     }
    ],
    "outputs": [
@@ -6809,20 +5182,20 @@
      "name": "LATENT",
      "type": "LATENT",
      "links": [
-      479
+      434
      ]
     }
    ],
-   "title": "Sound of clip 2 held",
+   "title": "Sound of clip 1 held",
    "properties": {
     "Node name for S&R": "SetLatentNoiseMask"
    }
   },
   {
-   "id": 109,
+   "id": 83,
    "type": "LTXVConcatAVLatent",
    "pos": [
-    13792.126171874996,
+    8501.063085937498,
     712
    ],
    "size": [
@@ -6830,20 +5203,20 @@
     46
    ],
    "flags": {},
-   "order": 105,
+   "order": 86,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "video_latent",
      "name": "video_latent",
      "type": "LATENT",
-     "link": 478
+     "link": 433
     },
     {
      "localized_name": "audio_latent",
      "name": "audio_latent",
      "type": "LATENT",
-     "link": 479
+     "link": 434
     }
    ],
    "outputs": [
@@ -6852,7 +5225,7 @@
      "name": "latent",
      "type": "LATENT",
      "links": [
-      482
+      437
      ]
     }
    ],
@@ -6861,10 +5234,10 @@
    }
   },
   {
-   "id": 110,
+   "id": 84,
    "type": "ComfySwitchNode",
    "pos": [
-    14292.126171874996,
+    9001.063085937498,
     338
    ],
    "size": [
@@ -6872,7 +5245,7 @@
     78
    ],
    "flags": {},
-   "order": 107,
+   "order": 88,
    "mode": 0,
    "inputs": [
     {
@@ -6880,14 +5253,14 @@
      "name": "on_false",
      "shape": 7,
      "type": "LATENT",
-     "link": 481
+     "link": 436
     },
     {
      "localized_name": "on_true",
      "name": "on_true",
      "shape": 7,
      "type": "LATENT",
-     "link": 482
+     "link": 437
     },
     {
      "localized_name": "switch",
@@ -6896,7 +5269,7 @@
      "widget": {
       "name": "switch"
      },
-     "link": 480
+     "link": 435
     }
    ],
    "outputs": [
@@ -6905,7 +5278,7 @@
      "name": "output",
      "type": "LATENT",
      "links": [
-      443
+      398
      ]
     }
    ],
@@ -6921,10 +5294,10 @@
    }
   },
   {
-   "id": 111,
+   "id": 85,
    "type": "ImageFromBatch",
    "pos": [
-    17473.189257812497,
+    12182.126171874996,
     130
    ],
    "size": [
@@ -6932,14 +5305,14 @@
     82
    ],
    "flags": {},
-   "order": 119,
+   "order": 100,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "image",
      "name": "image",
      "type": "IMAGE",
-     "link": 483
+     "link": 438
     },
     {
      "localized_name": "batch_index",
@@ -6966,11 +5339,11 @@
      "name": "IMAGE",
      "type": "IMAGE",
      "links": [
-      510
+      440
      ]
     }
    ],
-   "title": "Last frame of clip 3",
+   "title": "Last frame of clip 2",
    "properties": {
     "Node name for S&R": "ImageFromBatch"
    },
@@ -6984,18 +5357,18 @@
    }
   },
   {
-   "id": 112,
+   "id": 86,
    "type": "PrimitiveStringMultiline",
    "pos": [
     100,
-    6128
+    5794
    ],
    "size": [
     400,
     200
    ],
    "flags": {},
-   "order": 27,
+   "order": 26,
    "mode": 0,
    "inputs": [
     {
@@ -7014,12 +5387,12 @@
      "name": "STRING",
      "type": "STRING",
      "links": [
-      484,
-      490
+      442,
+      448
      ]
     }
    ],
-   "title": "Prompt 4",
+   "title": "Prompt 3",
    "properties": {
     "Node name for S&R": "PrimitiveStringMultiline"
    },
@@ -7031,10 +5404,180 @@
    }
   },
   {
-   "id": 113,
+   "id": 87,
+   "type": "PrimitiveBoolean",
+   "pos": [
+    100,
+    6124
+   ],
+   "size": [
+    270,
+    58
+   ],
+   "flags": {},
+   "order": 27,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "value",
+     "name": "value",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "value"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "BOOLEAN",
+     "name": "BOOLEAN",
+     "type": "BOOLEAN",
+     "links": [
+      439,
+      574
+     ]
+    }
+   ],
+   "title": "Schnitt vor Clip 3",
+   "properties": {
+    "Node name for S&R": "PrimitiveBoolean"
+   },
+   "widgets_values": [
+    false
+   ],
+   "widgets_values_named": {
+    "value": false
+   }
+  },
+  {
+   "id": 88,
+   "type": "LoadImage",
+   "pos": [
+    100,
+    6312
+   ],
+   "size": [
+    282.798828125,
+    102
+   ],
+   "flags": {},
+   "order": 28,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "image",
+     "name": "image",
+     "type": "COMBO",
+     "widget": {
+      "name": "image"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "choose file to upload",
+     "name": "upload",
+     "type": "IMAGEUPLOAD",
+     "widget": {
+      "name": "upload"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "IMAGE",
+     "name": "IMAGE",
+     "type": "IMAGE",
+     "links": [
+      441
+     ]
+    },
+    {
+     "localized_name": "MASK",
+     "name": "MASK",
+     "type": "MASK",
+     "links": null
+    }
+   ],
+   "title": "Start Clip 3",
+   "properties": {
+    "Node name for S&R": "LoadImage"
+   },
+   "widgets_values": [
+    "neon_cyborg_portrait.png",
+    "image"
+   ],
+   "widgets_values_named": {
+    "image": "neon_cyborg_portrait.png",
+    "upload": "image"
+   }
+  },
+  {
+   "id": 89,
+   "type": "ComfySwitchNode",
+   "pos": [
+    12552.126171874996,
+    130
+   ],
+   "size": [
+    270,
+    78
+   ],
+   "flags": {},
+   "order": 102,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "on_false",
+     "name": "on_false",
+     "shape": 7,
+     "type": "IMAGE",
+     "link": 440
+    },
+    {
+     "localized_name": "on_true",
+     "name": "on_true",
+     "shape": 7,
+     "type": "IMAGE",
+     "link": 441
+    },
+    {
+     "localized_name": "switch",
+     "name": "switch",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "switch"
+     },
+     "link": 439
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "output",
+     "name": "output",
+     "type": "IMAGE",
+     "links": [
+      468
+     ]
+    }
+   ],
+   "title": "Schnitt vor Clip 3",
+   "properties": {
+    "Node name for S&R": "ComfySwitchNode"
+   },
+   "widgets_values": [
+    false
+   ],
+   "widgets_values_named": {
+    "switch": false
+   }
+  },
+  {
+   "id": 90,
    "type": "TextGenerateLTX2Prompt",
    "pos": [
-    18583.189257812497,
+    13662.126171874996,
     130
    ],
    "size": [
@@ -7042,21 +5585,21 @@
     456
    ],
    "flags": {},
-   "order": 125,
+   "order": 107,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "clip",
      "name": "clip",
      "type": "CLIP",
-     "link": 485
+     "link": 443
     },
     {
      "localized_name": "image",
      "name": "image",
      "shape": 7,
      "type": "IMAGE",
-     "link": 486
+     "link": 444
     },
     {
      "localized_name": "video",
@@ -7086,7 +5629,7 @@
      "widget": {
       "name": "prompt"
      },
-     "link": 484
+     "link": 442
     },
     {
      "localized_name": "max_length",
@@ -7207,7 +5750,7 @@
      "name": "generated_text",
      "type": "STRING",
      "links": [
-      491
+      449
      ]
     },
     {
@@ -7252,10 +5795,10 @@
    }
   },
   {
-   "id": 114,
+   "id": 91,
    "type": "CLIPTextEncode",
    "pos": [
-    19453.189257812497,
+    14532.126171874996,
     130
    ],
    "size": [
@@ -7263,14 +5806,14 @@
     200
    ],
    "flags": {},
-   "order": 129,
+   "order": 111,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "clip",
      "name": "clip",
      "type": "CLIP",
-     "link": 488
+     "link": 446
     },
     {
      "localized_name": "text",
@@ -7279,7 +5822,7 @@
      "widget": {
       "name": "text"
      },
-     "link": 487
+     "link": 445
     }
    ],
    "outputs": [
@@ -7288,7 +5831,7 @@
      "name": "CONDITIONING",
      "type": "CONDITIONING",
      "links": [
-      494
+      452
      ]
     }
    ],
@@ -7303,10 +5846,10 @@
    }
   },
   {
-   "id": 115,
+   "id": 92,
    "type": "ComfySwitchNode",
    "pos": [
-    19083.189257812497,
+    14162.126171874996,
     130
    ],
    "size": [
@@ -7314,7 +5857,7 @@
     78
    ],
    "flags": {},
-   "order": 127,
+   "order": 109,
    "mode": 0,
    "inputs": [
     {
@@ -7322,14 +5865,14 @@
      "name": "on_false",
      "shape": 7,
      "type": "STRING",
-     "link": 490
+     "link": 448
     },
     {
      "localized_name": "on_true",
      "name": "on_true",
      "shape": 7,
      "type": "STRING",
-     "link": 491
+     "link": 449
     },
     {
      "localized_name": "switch",
@@ -7338,7 +5881,7 @@
      "widget": {
       "name": "switch"
      },
-     "link": 489
+     "link": 447
     }
    ],
    "outputs": [
@@ -7347,8 +5890,8 @@
      "name": "output",
      "type": "STRING",
      "links": [
-      487,
-      492
+      445,
+      450
      ]
     }
    ],
@@ -7363,10 +5906,10 @@
    }
   },
   {
-   "id": 116,
+   "id": 93,
    "type": "PreviewAny",
    "pos": [
-    19453.189257812497,
+    14532.126171874996,
     460
    ],
    "size": [
@@ -7374,14 +5917,14 @@
     122
    ],
    "flags": {},
-   "order": 130,
+   "order": 112,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "source",
      "name": "source",
      "type": "*",
-     "link": 492
+     "link": 450
     }
    ],
    "outputs": [
@@ -7399,10 +5942,10 @@
    "widgets_values_named": {}
   },
   {
-   "id": 117,
+   "id": 94,
    "type": "LTXVConditioning",
    "pos": [
-    19953.189257812497,
+    15032.126171874996,
     130
    ],
    "size": [
@@ -7410,20 +5953,20 @@
     78
    ],
    "flags": {},
-   "order": 132,
+   "order": 114,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "positive",
      "name": "positive",
      "type": "CONDITIONING",
-     "link": 494
+     "link": 452
     },
     {
      "localized_name": "negative",
      "name": "negative",
      "type": "CONDITIONING",
-     "link": 495
+     "link": 453
     },
     {
      "localized_name": "frame_rate",
@@ -7432,7 +5975,7 @@
      "widget": {
       "name": "frame_rate"
      },
-     "link": 493
+     "link": 451
     }
    ],
    "outputs": [
@@ -7441,8 +5984,8 @@
      "name": "positive",
      "type": "CONDITIONING",
      "links": [
-      497,
-      521
+      455,
+      479
      ]
     },
     {
@@ -7450,8 +5993,8 @@
      "name": "negative",
      "type": "CONDITIONING",
      "links": [
-      498,
-      522
+      456,
+      480
      ]
     }
    ],
@@ -7466,18 +6009,18 @@
    }
   },
   {
-   "id": 118,
+   "id": 95,
    "type": "RandomNoise",
    "pos": [
     100,
-    6458
+    6544
    ],
    "size": [
     270,
     82
    ],
    "flags": {},
-   "order": 28,
+   "order": 29,
    "mode": 0,
    "inputs": [
     {
@@ -7496,7 +6039,7 @@
      "name": "NOISE",
      "type": "NOISE",
      "links": [
-      499
+      457
      ]
     }
    ],
@@ -7504,19 +6047,19 @@
     "Node name for S&R": "RandomNoise"
    },
    "widgets_values": [
-    875362541677472,
+    875362541677471,
     "randomize"
    ],
    "widgets_values_named": {
-    "noise_seed": 875362541677472,
+    "noise_seed": 875362541677471,
     "control_after_generate": "randomize"
    }
   },
   {
-   "id": 119,
+   "id": 96,
    "type": "LTXVDualCFGGuider",
    "pos": [
-    20323.189257812497,
+    15402.126171874996,
     130
    ],
    "size": [
@@ -7524,26 +6067,26 @@
     122
    ],
    "flags": {},
-   "order": 134,
+   "order": 116,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "model",
      "name": "model",
      "type": "MODEL",
-     "link": 496
+     "link": 454
     },
     {
      "localized_name": "positive",
      "name": "positive",
      "type": "CONDITIONING",
-     "link": 497
+     "link": 455
     },
     {
      "localized_name": "negative",
      "name": "negative",
      "type": "CONDITIONING",
-     "link": 498
+     "link": 456
     },
     {
      "localized_name": "video_cfg",
@@ -7570,7 +6113,7 @@
      "name": "GUIDER",
      "type": "GUIDER",
      "links": [
-      500
+      458
      ]
     }
    ],
@@ -7587,10 +6130,10 @@
    }
   },
   {
-   "id": 120,
+   "id": 97,
    "type": "SamplerCustomAdvanced",
    "pos": [
-    20693.189257812497,
+    15772.126171874996,
     130
    ],
    "size": [
@@ -7598,38 +6141,38 @@
     106
    ],
    "flags": {},
-   "order": 136,
+   "order": 118,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "noise",
      "name": "noise",
      "type": "NOISE",
-     "link": 499
+     "link": 457
     },
     {
      "localized_name": "guider",
      "name": "guider",
      "type": "GUIDER",
-     "link": 500
+     "link": 458
     },
     {
      "localized_name": "sampler",
      "name": "sampler",
      "type": "SAMPLER",
-     "link": 501
+     "link": 459
     },
     {
      "localized_name": "sigmas",
      "name": "sigmas",
      "type": "SIGMAS",
-     "link": 502
+     "link": 460
     },
     {
      "localized_name": "latent_image",
      "name": "latent_image",
      "type": "LATENT",
-     "link": 503
+     "link": 461
     }
    ],
    "outputs": [
@@ -7638,7 +6181,7 @@
      "name": "output",
      "type": "LATENT",
      "links": [
-      507
+      465
      ]
     },
     {
@@ -7653,10 +6196,10 @@
    }
   },
   {
-   "id": 121,
+   "id": 98,
    "type": "LTXVImgToVideoInplace",
    "pos": [
-    18583.189257812497,
+    13662.126171874996,
     716
    ],
    "size": [
@@ -7664,26 +6207,26 @@
     122
    ],
    "flags": {},
-   "order": 126,
+   "order": 108,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "vae",
      "name": "vae",
      "type": "VAE",
-     "link": 504
+     "link": 462
     },
     {
      "localized_name": "image",
      "name": "image",
      "type": "IMAGE",
-     "link": 505
+     "link": 463
     },
     {
      "localized_name": "latent",
      "name": "latent",
      "type": "LATENT",
-     "link": 506
+     "link": 464
     },
     {
      "localized_name": "strength",
@@ -7710,7 +6253,7 @@
      "name": "latent",
      "type": "LATENT",
      "links": [
-      508
+      466
      ]
     }
    ],
@@ -7727,10 +6270,10 @@
    }
   },
   {
-   "id": 122,
+   "id": 99,
    "type": "LTXVSeparateAVLatent",
    "pos": [
-    21005.553125,
+    16084.490039062495,
     130
    ],
    "size": [
@@ -7738,14 +6281,14 @@
     46
    ],
    "flags": {},
-   "order": 137,
+   "order": 119,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "av_latent",
      "name": "av_latent",
      "type": "LATENT",
-     "link": 507
+     "link": 465
     }
    ],
    "outputs": [
@@ -7754,7 +6297,7 @@
      "name": "video_latent",
      "type": "LATENT",
      "links": [
-      512
+      470
      ]
     },
     {
@@ -7762,7 +6305,7 @@
      "name": "audio_latent",
      "type": "LATENT",
      "links": [
-      519
+      477
      ]
     }
    ],
@@ -7771,10 +6314,10 @@
    }
   },
   {
-   "id": 123,
+   "id": 100,
    "type": "LTXVConcatAVLatent",
    "pos": [
-    19083.189257812497,
+    14162.126171874996,
     338
    ],
    "size": [
@@ -7782,20 +6325,20 @@
     46
    ],
    "flags": {},
-   "order": 128,
+   "order": 110,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "video_latent",
      "name": "video_latent",
      "type": "LATENT",
-     "link": 508
+     "link": 466
     },
     {
      "localized_name": "audio_latent",
      "name": "audio_latent",
      "type": "LATENT",
-     "link": 509
+     "link": 467
     }
    ],
    "outputs": [
@@ -7804,8 +6347,8 @@
      "name": "latent",
      "type": "LATENT",
      "links": [
-      538,
-      541
+      496,
+      499
      ]
     }
    ],
@@ -7814,10 +6357,10 @@
    }
   },
   {
-   "id": 124,
+   "id": 101,
    "type": "ResizeImageMaskNode",
    "pos": [
-    17843.189257812497,
+    12922.126171874996,
     130
    ],
    "size": [
@@ -7825,14 +6368,14 @@
     106
    ],
    "flags": {},
-   "order": 121,
+   "order": 104,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "input",
      "name": "input",
      "type": "IMAGE,MASK",
-     "link": 510
+     "link": 468
     },
     {
      "localized_name": "resize_type",
@@ -7868,7 +6411,7 @@
      "name": "resized",
      "type": "IMAGE",
      "links": [
-      511
+      469
      ]
     }
    ],
@@ -7887,10 +6430,10 @@
    }
   },
   {
-   "id": 125,
+   "id": 102,
    "type": "LTXVPreprocess",
    "pos": [
-    18213.189257812497,
+    13292.126171874996,
     130
    ],
    "size": [
@@ -7898,14 +6441,14 @@
     58
    ],
    "flags": {},
-   "order": 123,
+   "order": 106,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "image",
      "name": "image",
      "type": "IMAGE",
-     "link": 511
+     "link": 469
     },
     {
      "localized_name": "img_compression",
@@ -7923,9 +6466,9 @@
      "name": "output_image",
      "type": "IMAGE",
      "links": [
-      486,
-      505,
-      516
+      444,
+      463,
+      474
      ]
     }
    ],
@@ -7940,10 +6483,10 @@
    }
   },
   {
-   "id": 126,
+   "id": 103,
    "type": "LTXVLatentUpsampler",
    "pos": [
-    21272.3759765625,
+    16351.312890624995,
     130
    ],
    "size": [
@@ -7951,26 +6494,26 @@
     66
    ],
    "flags": {},
-   "order": 138,
+   "order": 120,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "samples",
      "name": "samples",
      "type": "LATENT",
-     "link": 512
+     "link": 470
     },
     {
      "localized_name": "upscale_model",
      "name": "upscale_model",
      "type": "LATENT_UPSCALE_MODEL",
-     "link": 513
+     "link": 471
     },
     {
      "localized_name": "vae",
      "name": "vae",
      "type": "VAE",
-     "link": 514
+     "link": 472
     }
    ],
    "outputs": [
@@ -7979,7 +6522,7 @@
      "name": "LATENT",
      "type": "LATENT",
      "links": [
-      517
+      475
      ]
     }
    ],
@@ -7988,10 +6531,10 @@
    }
   },
   {
-   "id": 127,
+   "id": 104,
    "type": "LTXVImgToVideoInplace",
    "pos": [
-    21560.226171875,
+    16639.163085937496,
     130
    ],
    "size": [
@@ -7999,26 +6542,26 @@
     122
    ],
    "flags": {},
-   "order": 139,
+   "order": 121,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "vae",
      "name": "vae",
      "type": "VAE",
-     "link": 515
+     "link": 473
     },
     {
      "localized_name": "image",
      "name": "image",
      "type": "IMAGE",
-     "link": 516
+     "link": 474
     },
     {
      "localized_name": "latent",
      "name": "latent",
      "type": "LATENT",
-     "link": 517
+     "link": 475
     },
     {
      "localized_name": "strength",
@@ -8045,7 +6588,7 @@
      "name": "latent",
      "type": "LATENT",
      "links": [
-      518
+      476
      ]
     }
    ],
@@ -8062,18 +6605,18 @@
    }
   },
   {
-   "id": 128,
+   "id": 105,
    "type": "RandomNoise",
    "pos": [
     100,
-    6670
+    6756
    ],
    "size": [
     270,
     82
    ],
    "flags": {},
-   "order": 29,
+   "order": 30,
    "mode": 0,
    "inputs": [
     {
@@ -8092,7 +6635,7 @@
      "name": "NOISE",
      "type": "NOISE",
      "links": [
-      523
+      481
      ]
     }
    ],
@@ -8100,19 +6643,19 @@
     "Node name for S&R": "RandomNoise"
    },
    "widgets_values": [
-    45,
+    44,
     "randomize"
    ],
    "widgets_values_named": {
-    "noise_seed": 45,
+    "noise_seed": 44,
     "control_after_generate": "randomize"
    }
   },
   {
-   "id": 129,
+   "id": 106,
    "type": "LTXVConcatAVLatent",
    "pos": [
-    21930.226171875,
+    17009.163085937496,
     130
    ],
    "size": [
@@ -8120,20 +6663,20 @@
     46
    ],
    "flags": {},
-   "order": 140,
+   "order": 122,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "video_latent",
      "name": "video_latent",
      "type": "LATENT",
-     "link": 518
+     "link": 476
     },
     {
      "localized_name": "audio_latent",
      "name": "audio_latent",
      "type": "LATENT",
-     "link": 519
+     "link": 477
     }
    ],
    "outputs": [
@@ -8142,7 +6685,7 @@
      "name": "latent",
      "type": "LATENT",
      "links": [
-      527
+      485
      ]
     }
    ],
@@ -8151,10 +6694,10 @@
    }
   },
   {
-   "id": 130,
+   "id": 107,
    "type": "LTXVDualCFGGuider",
    "pos": [
-    20323.189257812497,
+    15402.126171874996,
     382
    ],
    "size": [
@@ -8162,26 +6705,26 @@
     122
    ],
    "flags": {},
-   "order": 135,
+   "order": 117,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "model",
      "name": "model",
      "type": "MODEL",
-     "link": 520
+     "link": 478
     },
     {
      "localized_name": "positive",
      "name": "positive",
      "type": "CONDITIONING",
-     "link": 521
+     "link": 479
     },
     {
      "localized_name": "negative",
      "name": "negative",
      "type": "CONDITIONING",
-     "link": 522
+     "link": 480
     },
     {
      "localized_name": "video_cfg",
@@ -8208,7 +6751,7 @@
      "name": "GUIDER",
      "type": "GUIDER",
      "links": [
-      524
+      482
      ]
     }
    ],
@@ -8225,10 +6768,10 @@
    }
   },
   {
-   "id": 131,
+   "id": 108,
    "type": "SamplerCustomAdvanced",
    "pos": [
-    22185.065625000003,
+    17264.002539062498,
     130
    ],
    "size": [
@@ -8236,38 +6779,38 @@
     106
    ],
    "flags": {},
-   "order": 141,
+   "order": 123,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "noise",
      "name": "noise",
      "type": "NOISE",
-     "link": 523
+     "link": 481
     },
     {
      "localized_name": "guider",
      "name": "guider",
      "type": "GUIDER",
-     "link": 524
+     "link": 482
     },
     {
      "localized_name": "sampler",
      "name": "sampler",
      "type": "SAMPLER",
-     "link": 525
+     "link": 483
     },
     {
      "localized_name": "sigmas",
      "name": "sigmas",
      "type": "SIGMAS",
-     "link": 526
+     "link": 484
     },
     {
      "localized_name": "latent_image",
      "name": "latent_image",
      "type": "LATENT",
-     "link": 527
+     "link": 485
     }
    ],
    "outputs": [
@@ -8276,7 +6819,7 @@
      "name": "output",
      "type": "LATENT",
      "links": [
-      528
+      486
      ]
     },
     {
@@ -8291,10 +6834,10 @@
    }
   },
   {
-   "id": 132,
+   "id": 109,
    "type": "LTXVSeparateAVLatent",
    "pos": [
-    22497.429492187504,
+    17576.36640625,
     130
    ],
    "size": [
@@ -8302,14 +6845,14 @@
     46
    ],
    "flags": {},
-   "order": 142,
+   "order": 124,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "av_latent",
      "name": "av_latent",
      "type": "LATENT",
-     "link": 528
+     "link": 486
     }
    ],
    "outputs": [
@@ -8318,7 +6861,7 @@
      "name": "video_latent",
      "type": "LATENT",
      "links": [
-      529
+      487
      ]
     },
     {
@@ -8326,7 +6869,7 @@
      "name": "audio_latent",
      "type": "LATENT",
      "links": [
-      531
+      489
      ]
     }
    ],
@@ -8335,10 +6878,10 @@
    }
   },
   {
-   "id": 133,
+   "id": 110,
    "type": "VAEDecodeTiled",
    "pos": [
-    22764.252343750006,
+    17843.1892578125,
     130
    ],
    "size": [
@@ -8346,20 +6889,20 @@
     150
    ],
    "flags": {},
-   "order": 143,
+   "order": 125,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "samples",
      "name": "samples",
      "type": "LATENT",
-     "link": 529
+     "link": 487
     },
     {
      "localized_name": "vae",
      "name": "vae",
      "type": "VAE",
-     "link": 530
+     "link": 488
     },
     {
      "localized_name": "tile_size",
@@ -8404,7 +6947,8 @@
      "name": "IMAGE",
      "type": "IMAGE",
      "links": [
-      547
+      501,
+      567
      ]
     }
    ],
@@ -8425,10 +6969,10 @@
    }
   },
   {
-   "id": 134,
+   "id": 111,
    "type": "LTXVAudioVAEDecode",
    "pos": [
-    22764.252343750006,
+    17843.1892578125,
     410
    ],
    "size": [
@@ -8436,20 +6980,20 @@
     46
    ],
    "flags": {},
-   "order": 144,
+   "order": 126,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "samples",
      "name": "samples",
      "type": "LATENT",
-     "link": 531
+     "link": 489
     },
     {
      "localized_name": "Audio VAE",
      "name": "audio_vae",
      "type": "VAE",
-     "link": 532
+     "link": 490
     }
    ],
    "outputs": [
@@ -8458,7 +7002,8 @@
      "name": "Audio",
      "type": "AUDIO",
      "links": [
-      551
+      554,
+      571
      ]
     }
    ],
@@ -8467,10 +7012,10 @@
    }
   },
   {
-   "id": 135,
+   "id": 112,
    "type": "TrimAudioDuration",
    "pos": [
-    17473.189257812497,
+    12182.126171874996,
     342
    ],
    "size": [
@@ -8478,14 +7023,14 @@
     82
    ],
    "flags": {},
-   "order": 120,
+   "order": 101,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "audio",
      "name": "audio",
      "type": "AUDIO",
-     "link": 533
+     "link": 491
     },
     {
      "localized_name": "start_index",
@@ -8512,7 +7057,7 @@
      "name": "AUDIO",
      "type": "AUDIO",
      "links": [
-      534
+      492
      ]
     }
    ],
@@ -8529,31 +7074,31 @@
    }
   },
   {
-   "id": 136,
+   "id": 113,
    "type": "LTXVAudioVAEEncode",
    "pos": [
-    17843.189257812497,
-    366
+    12552.126171874996,
+    338
    ],
    "size": [
     201.4126953125,
     46
    ],
    "flags": {},
-   "order": 122,
+   "order": 103,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "audio",
      "name": "audio",
      "type": "AUDIO",
-     "link": 534
+     "link": 492
     },
     {
      "localized_name": "Audio VAE",
      "name": "audio_vae",
      "type": "VAE",
-     "link": 535
+     "link": 493
     }
    ],
    "outputs": [
@@ -8562,7 +7107,7 @@
      "name": "Audio Latent",
      "type": "LATENT",
      "links": [
-      536
+      494
      ]
     }
    ],
@@ -8571,31 +7116,31 @@
    }
   },
   {
-   "id": 137,
+   "id": 114,
    "type": "SetLatentNoiseMask",
    "pos": [
-    18213.189257812497,
-    318
+    12922.126171874996,
+    366
    ],
    "size": [
     188.1373046875,
     46
    ],
    "flags": {},
-   "order": 124,
+   "order": 105,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "samples",
      "name": "samples",
      "type": "LATENT",
-     "link": 536
+     "link": 494
     },
     {
      "localized_name": "mask",
      "name": "mask",
      "type": "MASK",
-     "link": 537
+     "link": 495
     }
    ],
    "outputs": [
@@ -8604,20 +7149,20 @@
      "name": "LATENT",
      "type": "LATENT",
      "links": [
-      539
+      497
      ]
     }
    ],
-   "title": "Sound of clip 3 held",
+   "title": "Sound of clip 2 held",
    "properties": {
     "Node name for S&R": "SetLatentNoiseMask"
    }
   },
   {
-   "id": 138,
+   "id": 115,
    "type": "LTXVConcatAVLatent",
    "pos": [
-    19453.189257812497,
+    14532.126171874996,
     712
    ],
    "size": [
@@ -8625,20 +7170,20 @@
     46
    ],
    "flags": {},
-   "order": 131,
+   "order": 113,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "video_latent",
      "name": "video_latent",
      "type": "LATENT",
-     "link": 538
+     "link": 496
     },
     {
      "localized_name": "audio_latent",
      "name": "audio_latent",
      "type": "LATENT",
-     "link": 539
+     "link": 497
     }
    ],
    "outputs": [
@@ -8647,7 +7192,7 @@
      "name": "latent",
      "type": "LATENT",
      "links": [
-      542
+      500
      ]
     }
    ],
@@ -8656,10 +7201,10 @@
    }
   },
   {
-   "id": 139,
+   "id": 116,
    "type": "ComfySwitchNode",
    "pos": [
-    19953.189257812497,
+    15032.126171874996,
     338
    ],
    "size": [
@@ -8667,7 +7212,7 @@
     78
    ],
    "flags": {},
-   "order": 133,
+   "order": 115,
    "mode": 0,
    "inputs": [
     {
@@ -8675,14 +7220,14 @@
      "name": "on_false",
      "shape": 7,
      "type": "LATENT",
-     "link": 541
+     "link": 499
     },
     {
      "localized_name": "on_true",
      "name": "on_true",
      "shape": 7,
      "type": "LATENT",
-     "link": 542
+     "link": 500
     },
     {
      "localized_name": "switch",
@@ -8691,7 +7236,7 @@
      "widget": {
       "name": "switch"
      },
-     "link": 540
+     "link": 498
     }
    ],
    "outputs": [
@@ -8700,7 +7245,7 @@
      "name": "output",
      "type": "LATENT",
      "links": [
-      503
+      461
      ]
     }
    ],
@@ -8716,73 +7261,2038 @@
    }
   },
   {
-   "id": 140,
-   "type": "LlmctlJoinClips",
+   "id": 117,
+   "type": "ImageFromBatch",
    "pos": [
-    23134.252343750006,
+    18213.1892578125,
     130
    ],
    "size": [
-    321.8970703125,
-    222
+    270,
+    82
+   ],
+   "flags": {},
+   "order": 127,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "image",
+     "name": "image",
+     "type": "IMAGE",
+     "link": 501
+    },
+    {
+     "localized_name": "batch_index",
+     "name": "batch_index",
+     "type": "INT",
+     "widget": {
+      "name": "batch_index"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "length",
+     "name": "length",
+     "type": "INT",
+     "widget": {
+      "name": "length"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "IMAGE",
+     "name": "IMAGE",
+     "type": "IMAGE",
+     "links": [
+      503
+     ]
+    }
+   ],
+   "title": "Last frame of clip 3",
+   "properties": {
+    "Node name for S&R": "ImageFromBatch"
+   },
+   "widgets_values": [
+    -1,
+    1
+   ],
+   "widgets_values_named": {
+    "batch_index": -1,
+    "length": 1
+   }
+  },
+  {
+   "id": 118,
+   "type": "PrimitiveStringMultiline",
+   "pos": [
+    100,
+    6968
+   ],
+   "size": [
+    400,
+    200
+   ],
+   "flags": {},
+   "order": 31,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "value",
+     "name": "value",
+     "type": "STRING",
+     "widget": {
+      "name": "value"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "STRING",
+     "name": "STRING",
+     "type": "STRING",
+     "links": [
+      505,
+      511
+     ]
+    }
+   ],
+   "title": "Prompt 4",
+   "properties": {
+    "Node name for S&R": "PrimitiveStringMultiline"
+   },
+   "widgets_values": [
+    ""
+   ],
+   "widgets_values_named": {
+    "value": ""
+   }
+  },
+  {
+   "id": 119,
+   "type": "PrimitiveBoolean",
+   "pos": [
+    100,
+    7298
+   ],
+   "size": [
+    270,
+    58
+   ],
+   "flags": {},
+   "order": 32,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "value",
+     "name": "value",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "value"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "BOOLEAN",
+     "name": "BOOLEAN",
+     "type": "BOOLEAN",
+     "links": [
+      502,
+      575
+     ]
+    }
+   ],
+   "title": "Schnitt vor Clip 4",
+   "properties": {
+    "Node name for S&R": "PrimitiveBoolean"
+   },
+   "widgets_values": [
+    false
+   ],
+   "widgets_values_named": {
+    "value": false
+   }
+  },
+  {
+   "id": 120,
+   "type": "LoadImage",
+   "pos": [
+    100,
+    7486
+   ],
+   "size": [
+    282.798828125,
+    102
+   ],
+   "flags": {},
+   "order": 33,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "image",
+     "name": "image",
+     "type": "COMBO",
+     "widget": {
+      "name": "image"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "choose file to upload",
+     "name": "upload",
+     "type": "IMAGEUPLOAD",
+     "widget": {
+      "name": "upload"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "IMAGE",
+     "name": "IMAGE",
+     "type": "IMAGE",
+     "links": [
+      504
+     ]
+    },
+    {
+     "localized_name": "MASK",
+     "name": "MASK",
+     "type": "MASK",
+     "links": null
+    }
+   ],
+   "title": "Start Clip 4",
+   "properties": {
+    "Node name for S&R": "LoadImage"
+   },
+   "widgets_values": [
+    "neon_cyborg_portrait.png",
+    "image"
+   ],
+   "widgets_values_named": {
+    "image": "neon_cyborg_portrait.png",
+    "upload": "image"
+   }
+  },
+  {
+   "id": 121,
+   "type": "ComfySwitchNode",
+   "pos": [
+    18583.1892578125,
+    130
+   ],
+   "size": [
+    270,
+    78
+   ],
+   "flags": {},
+   "order": 129,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "on_false",
+     "name": "on_false",
+     "shape": 7,
+     "type": "IMAGE",
+     "link": 503
+    },
+    {
+     "localized_name": "on_true",
+     "name": "on_true",
+     "shape": 7,
+     "type": "IMAGE",
+     "link": 504
+    },
+    {
+     "localized_name": "switch",
+     "name": "switch",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "switch"
+     },
+     "link": 502
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "output",
+     "name": "output",
+     "type": "IMAGE",
+     "links": [
+      531
+     ]
+    }
+   ],
+   "title": "Schnitt vor Clip 4",
+   "properties": {
+    "Node name for S&R": "ComfySwitchNode"
+   },
+   "widgets_values": [
+    false
+   ],
+   "widgets_values_named": {
+    "switch": false
+   }
+  },
+  {
+   "id": 122,
+   "type": "TextGenerateLTX2Prompt",
+   "pos": [
+    19693.1892578125,
+    130
+   ],
+   "size": [
+    400,
+    456
+   ],
+   "flags": {},
+   "order": 134,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "clip",
+     "name": "clip",
+     "type": "CLIP",
+     "link": 506
+    },
+    {
+     "localized_name": "image",
+     "name": "image",
+     "shape": 7,
+     "type": "IMAGE",
+     "link": 507
+    },
+    {
+     "localized_name": "video",
+     "name": "video",
+     "shape": 7,
+     "type": "IMAGE",
+     "link": null
+    },
+    {
+     "localized_name": "audio",
+     "name": "audio",
+     "shape": 7,
+     "type": "AUDIO",
+     "link": null
+    },
+    {
+     "localized_name": "system_prompt",
+     "name": "system_prompt",
+     "shape": 7,
+     "type": "STRING",
+     "link": null
+    },
+    {
+     "localized_name": "prompt",
+     "name": "prompt",
+     "type": "STRING",
+     "widget": {
+      "name": "prompt"
+     },
+     "link": 505
+    },
+    {
+     "localized_name": "max_length",
+     "name": "max_length",
+     "type": "INT",
+     "widget": {
+      "name": "max_length"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "Sampling Mode",
+     "name": "sampling_mode",
+     "type": "COMFY_DYNAMICCOMBO_V3",
+     "widget": {
+      "name": "sampling_mode"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "temperature",
+     "name": "sampling_mode.temperature",
+     "type": "FLOAT",
+     "widget": {
+      "name": "sampling_mode.temperature"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "top_k",
+     "name": "sampling_mode.top_k",
+     "type": "INT",
+     "widget": {
+      "name": "sampling_mode.top_k"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "top_p",
+     "name": "sampling_mode.top_p",
+     "type": "FLOAT",
+     "widget": {
+      "name": "sampling_mode.top_p"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "min_p",
+     "name": "sampling_mode.min_p",
+     "type": "FLOAT",
+     "widget": {
+      "name": "sampling_mode.min_p"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "repetition_penalty",
+     "name": "sampling_mode.repetition_penalty",
+     "type": "FLOAT",
+     "widget": {
+      "name": "sampling_mode.repetition_penalty"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "seed",
+     "name": "sampling_mode.seed",
+     "type": "INT",
+     "widget": {
+      "name": "sampling_mode.seed"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "presence_penalty",
+     "name": "sampling_mode.presence_penalty",
+     "shape": 7,
+     "type": "FLOAT",
+     "widget": {
+      "name": "sampling_mode.presence_penalty"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "thinking",
+     "name": "thinking",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "thinking"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "use_default_template",
+     "name": "use_default_template",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "use_default_template"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "mtp",
+     "name": "mtp",
+     "shape": 7,
+     "type": "COMBO",
+     "widget": {
+      "name": "mtp"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "generated_text",
+     "name": "generated_text",
+     "type": "STRING",
+     "links": [
+      512
+     ]
+    },
+    {
+     "localized_name": "thinking",
+     "name": "thinking",
+     "type": "STRING",
+     "links": null
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "TextGenerateLTX2Prompt"
+   },
+   "widgets_values": [
+    "",
+    600,
+    "on",
+    0.7,
+    64,
+    0.95,
+    0.05,
+    1.15,
+    0,
+    0,
+    false,
+    true,
+    "auto"
+   ],
+   "widgets_values_named": {
+    "prompt": "",
+    "max_length": 600,
+    "sampling_mode": "on",
+    "sampling_mode.temperature": 0.7,
+    "sampling_mode.top_k": 64,
+    "sampling_mode.top_p": 0.95,
+    "sampling_mode.min_p": 0.05,
+    "sampling_mode.repetition_penalty": 1.15,
+    "sampling_mode.seed": 0,
+    "sampling_mode.presence_penalty": 0,
+    "thinking": false,
+    "use_default_template": true,
+    "mtp": "auto"
+   }
+  },
+  {
+   "id": 123,
+   "type": "CLIPTextEncode",
+   "pos": [
+    20563.1892578125,
+    130
+   ],
+   "size": [
+    400,
+    200
+   ],
+   "flags": {},
+   "order": 138,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "clip",
+     "name": "clip",
+     "type": "CLIP",
+     "link": 509
+    },
+    {
+     "localized_name": "text",
+     "name": "text",
+     "type": "STRING",
+     "widget": {
+      "name": "text"
+     },
+     "link": 508
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "CONDITIONING",
+     "name": "CONDITIONING",
+     "type": "CONDITIONING",
+     "links": [
+      515
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "CLIPTextEncode"
+   },
+   "widgets_values": [
+    ""
+   ],
+   "widgets_values_named": {
+    "text": ""
+   }
+  },
+  {
+   "id": 124,
+   "type": "ComfySwitchNode",
+   "pos": [
+    20193.1892578125,
+    130
+   ],
+   "size": [
+    270,
+    78
+   ],
+   "flags": {},
+   "order": 136,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "on_false",
+     "name": "on_false",
+     "shape": 7,
+     "type": "STRING",
+     "link": 511
+    },
+    {
+     "localized_name": "on_true",
+     "name": "on_true",
+     "shape": 7,
+     "type": "STRING",
+     "link": 512
+    },
+    {
+     "localized_name": "switch",
+     "name": "switch",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "switch"
+     },
+     "link": 510
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "output",
+     "name": "output",
+     "type": "STRING",
+     "links": [
+      508,
+      513
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "ComfySwitchNode"
+   },
+   "widgets_values": [
+    false
+   ],
+   "widgets_values_named": {
+    "switch": false
+   }
+  },
+  {
+   "id": 125,
+   "type": "PreviewAny",
+   "pos": [
+    20563.1892578125,
+    460
+   ],
+   "size": [
+    210,
+    122
+   ],
+   "flags": {},
+   "order": 139,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "source",
+     "name": "source",
+     "type": "*",
+     "link": 513
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "STRING",
+     "name": "STRING",
+     "type": "STRING",
+     "links": null
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "PreviewAny"
+   },
+   "widgets_values": [],
+   "widgets_values_named": {}
+  },
+  {
+   "id": 126,
+   "type": "LTXVConditioning",
+   "pos": [
+    21063.1892578125,
+    130
+   ],
+   "size": [
+    270,
+    78
+   ],
+   "flags": {},
+   "order": 141,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "positive",
+     "name": "positive",
+     "type": "CONDITIONING",
+     "link": 515
+    },
+    {
+     "localized_name": "negative",
+     "name": "negative",
+     "type": "CONDITIONING",
+     "link": 516
+    },
+    {
+     "localized_name": "frame_rate",
+     "name": "frame_rate",
+     "type": "FLOAT",
+     "widget": {
+      "name": "frame_rate"
+     },
+     "link": 514
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "positive",
+     "name": "positive",
+     "type": "CONDITIONING",
+     "links": [
+      518,
+      542
+     ]
+    },
+    {
+     "localized_name": "negative",
+     "name": "negative",
+     "type": "CONDITIONING",
+     "links": [
+      519,
+      543
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LTXVConditioning"
+   },
+   "widgets_values": [
+    25
+   ],
+   "widgets_values_named": {
+    "frame_rate": 25
+   }
+  },
+  {
+   "id": 127,
+   "type": "RandomNoise",
+   "pos": [
+    100,
+    7718
+   ],
+   "size": [
+    270,
+    82
+   ],
+   "flags": {},
+   "order": 34,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "noise_seed",
+     "name": "noise_seed",
+     "type": "INT",
+     "widget": {
+      "name": "noise_seed"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "NOISE",
+     "name": "NOISE",
+     "type": "NOISE",
+     "links": [
+      520
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "RandomNoise"
+   },
+   "widgets_values": [
+    875362541677472,
+    "randomize"
+   ],
+   "widgets_values_named": {
+    "noise_seed": 875362541677472,
+    "control_after_generate": "randomize"
+   }
+  },
+  {
+   "id": 128,
+   "type": "LTXVDualCFGGuider",
+   "pos": [
+    21433.1892578125,
+    130
+   ],
+   "size": [
+    270,
+    122
+   ],
+   "flags": {},
+   "order": 143,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "model",
+     "name": "model",
+     "type": "MODEL",
+     "link": 517
+    },
+    {
+     "localized_name": "positive",
+     "name": "positive",
+     "type": "CONDITIONING",
+     "link": 518
+    },
+    {
+     "localized_name": "negative",
+     "name": "negative",
+     "type": "CONDITIONING",
+     "link": 519
+    },
+    {
+     "localized_name": "video_cfg",
+     "name": "video_cfg",
+     "type": "FLOAT",
+     "widget": {
+      "name": "video_cfg"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "audio_cfg",
+     "name": "audio_cfg",
+     "type": "FLOAT",
+     "widget": {
+      "name": "audio_cfg"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "GUIDER",
+     "name": "GUIDER",
+     "type": "GUIDER",
+     "links": [
+      521
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LTXVDualCFGGuider"
+   },
+   "widgets_values": [
+    1,
+    1
+   ],
+   "widgets_values_named": {
+    "video_cfg": 1,
+    "audio_cfg": 1
+   }
+  },
+  {
+   "id": 129,
+   "type": "SamplerCustomAdvanced",
+   "pos": [
+    21803.1892578125,
+    130
+   ],
+   "size": [
+    212.3638671875,
+    106
    ],
    "flags": {},
    "order": 145,
    "mode": 0,
    "inputs": [
     {
+     "localized_name": "noise",
+     "name": "noise",
+     "type": "NOISE",
+     "link": 520
+    },
+    {
+     "localized_name": "guider",
+     "name": "guider",
+     "type": "GUIDER",
+     "link": 521
+    },
+    {
+     "localized_name": "sampler",
+     "name": "sampler",
+     "type": "SAMPLER",
+     "link": 522
+    },
+    {
+     "localized_name": "sigmas",
+     "name": "sigmas",
+     "type": "SIGMAS",
+     "link": 523
+    },
+    {
+     "localized_name": "latent_image",
+     "name": "latent_image",
+     "type": "LATENT",
+     "link": 524
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "output",
+     "name": "output",
+     "type": "LATENT",
+     "links": [
+      528
+     ]
+    },
+    {
+     "localized_name": "denoised_output",
+     "name": "denoised_output",
+     "type": "LATENT",
+     "links": null
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "SamplerCustomAdvanced"
+   }
+  },
+  {
+   "id": 130,
+   "type": "LTXVImgToVideoInplace",
+   "pos": [
+    19693.1892578125,
+    716
+   ],
+   "size": [
+    270,
+    122
+   ],
+   "flags": {},
+   "order": 135,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "vae",
+     "name": "vae",
+     "type": "VAE",
+     "link": 525
+    },
+    {
+     "localized_name": "image",
+     "name": "image",
+     "type": "IMAGE",
+     "link": 526
+    },
+    {
+     "localized_name": "latent",
+     "name": "latent",
+     "type": "LATENT",
+     "link": 527
+    },
+    {
+     "localized_name": "strength",
+     "name": "strength",
+     "type": "FLOAT",
+     "widget": {
+      "name": "strength"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "bypass",
+     "name": "bypass",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "bypass"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "latent",
+     "name": "latent",
+     "type": "LATENT",
+     "links": [
+      529
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LTXVImgToVideoInplace"
+   },
+   "widgets_values": [
+    0.7,
+    false
+   ],
+   "widgets_values_named": {
+    "strength": 0.7,
+    "bypass": false
+   }
+  },
+  {
+   "id": 131,
+   "type": "LTXVSeparateAVLatent",
+   "pos": [
+    22115.553125000002,
+    130
+   ],
+   "size": [
+    166.8228515625,
+    46
+   ],
+   "flags": {},
+   "order": 146,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "av_latent",
+     "name": "av_latent",
+     "type": "LATENT",
+     "link": 528
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "video_latent",
+     "name": "video_latent",
+     "type": "LATENT",
+     "links": [
+      533
+     ]
+    },
+    {
+     "localized_name": "audio_latent",
+     "name": "audio_latent",
+     "type": "LATENT",
+     "links": [
+      540
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LTXVSeparateAVLatent"
+   }
+  },
+  {
+   "id": 132,
+   "type": "LTXVConcatAVLatent",
+   "pos": [
+    20193.1892578125,
+    338
+   ],
+   "size": [
+    154.839453125,
+    46
+   ],
+   "flags": {},
+   "order": 137,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "video_latent",
+     "name": "video_latent",
+     "type": "LATENT",
+     "link": 529
+    },
+    {
+     "localized_name": "audio_latent",
+     "name": "audio_latent",
+     "type": "LATENT",
+     "link": 530
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "latent",
+     "name": "latent",
+     "type": "LATENT",
+     "links": [
+      559,
+      562
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LTXVConcatAVLatent"
+   }
+  },
+  {
+   "id": 133,
+   "type": "ResizeImageMaskNode",
+   "pos": [
+    18953.1892578125,
+    130
+   ],
+   "size": [
+    270,
+    106
+   ],
+   "flags": {},
+   "order": 131,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "input",
+     "name": "input",
+     "type": "IMAGE,MASK",
+     "link": 531
+    },
+    {
+     "localized_name": "resize_type",
+     "name": "resize_type",
+     "type": "COMFY_DYNAMICCOMBO_V3",
+     "widget": {
+      "name": "resize_type"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "longer_size",
+     "name": "resize_type.longer_size",
+     "type": "INT",
+     "widget": {
+      "name": "resize_type.longer_size"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "scale_method",
+     "name": "scale_method",
+     "type": "COMBO",
+     "widget": {
+      "name": "scale_method"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "resized",
+     "name": "resized",
+     "type": "IMAGE",
+     "links": [
+      532
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "ResizeImageMaskNode"
+   },
+   "widgets_values": [
+    "scale longer dimension",
+    1536,
+    "lanczos"
+   ],
+   "widgets_values_named": {
+    "resize_type": "scale longer dimension",
+    "resize_type.longer_size": 1536,
+    "scale_method": "lanczos"
+   }
+  },
+  {
+   "id": 134,
+   "type": "LTXVPreprocess",
+   "pos": [
+    19323.1892578125,
+    130
+   ],
+   "size": [
+    270,
+    58
+   ],
+   "flags": {},
+   "order": 133,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "image",
+     "name": "image",
+     "type": "IMAGE",
+     "link": 532
+    },
+    {
+     "localized_name": "img_compression",
+     "name": "img_compression",
+     "type": "INT",
+     "widget": {
+      "name": "img_compression"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "output_image",
+     "name": "output_image",
+     "type": "IMAGE",
+     "links": [
+      507,
+      526,
+      537
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LTXVPreprocess"
+   },
+   "widgets_values": [
+    18
+   ],
+   "widgets_values_named": {
+    "img_compression": 18
+   }
+  },
+  {
+   "id": 135,
+   "type": "LTXVLatentUpsampler",
+   "pos": [
+    22382.375976562504,
+    130
+   ],
+   "size": [
+    187.8501953125,
+    66
+   ],
+   "flags": {},
+   "order": 147,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "samples",
+     "name": "samples",
+     "type": "LATENT",
+     "link": 533
+    },
+    {
+     "localized_name": "upscale_model",
+     "name": "upscale_model",
+     "type": "LATENT_UPSCALE_MODEL",
+     "link": 534
+    },
+    {
+     "localized_name": "vae",
+     "name": "vae",
+     "type": "VAE",
+     "link": 535
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "LATENT",
+     "name": "LATENT",
+     "type": "LATENT",
+     "links": [
+      538
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LTXVLatentUpsampler"
+   }
+  },
+  {
+   "id": 136,
+   "type": "LTXVImgToVideoInplace",
+   "pos": [
+    22670.226171875005,
+    130
+   ],
+   "size": [
+    270,
+    122
+   ],
+   "flags": {},
+   "order": 148,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "vae",
+     "name": "vae",
+     "type": "VAE",
+     "link": 536
+    },
+    {
+     "localized_name": "image",
+     "name": "image",
+     "type": "IMAGE",
+     "link": 537
+    },
+    {
+     "localized_name": "latent",
+     "name": "latent",
+     "type": "LATENT",
+     "link": 538
+    },
+    {
+     "localized_name": "strength",
+     "name": "strength",
+     "type": "FLOAT",
+     "widget": {
+      "name": "strength"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "bypass",
+     "name": "bypass",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "bypass"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "latent",
+     "name": "latent",
+     "type": "LATENT",
+     "links": [
+      539
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LTXVImgToVideoInplace"
+   },
+   "widgets_values": [
+    1,
+    false
+   ],
+   "widgets_values_named": {
+    "strength": 1,
+    "bypass": false
+   }
+  },
+  {
+   "id": 137,
+   "type": "RandomNoise",
+   "pos": [
+    100,
+    7930
+   ],
+   "size": [
+    270,
+    82
+   ],
+   "flags": {},
+   "order": 35,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "noise_seed",
+     "name": "noise_seed",
+     "type": "INT",
+     "widget": {
+      "name": "noise_seed"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "NOISE",
+     "name": "NOISE",
+     "type": "NOISE",
+     "links": [
+      544
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "RandomNoise"
+   },
+   "widgets_values": [
+    45,
+    "randomize"
+   ],
+   "widgets_values_named": {
+    "noise_seed": 45,
+    "control_after_generate": "randomize"
+   }
+  },
+  {
+   "id": 138,
+   "type": "LTXVConcatAVLatent",
+   "pos": [
+    23040.226171875005,
+    130
+   ],
+   "size": [
+    154.839453125,
+    46
+   ],
+   "flags": {},
+   "order": 149,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "video_latent",
+     "name": "video_latent",
+     "type": "LATENT",
+     "link": 539
+    },
+    {
+     "localized_name": "audio_latent",
+     "name": "audio_latent",
+     "type": "LATENT",
+     "link": 540
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "latent",
+     "name": "latent",
+     "type": "LATENT",
+     "links": [
+      548
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LTXVConcatAVLatent"
+   }
+  },
+  {
+   "id": 139,
+   "type": "LTXVDualCFGGuider",
+   "pos": [
+    21433.1892578125,
+    382
+   ],
+   "size": [
+    270,
+    122
+   ],
+   "flags": {},
+   "order": 144,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "model",
+     "name": "model",
+     "type": "MODEL",
+     "link": 541
+    },
+    {
+     "localized_name": "positive",
+     "name": "positive",
+     "type": "CONDITIONING",
+     "link": 542
+    },
+    {
+     "localized_name": "negative",
+     "name": "negative",
+     "type": "CONDITIONING",
+     "link": 543
+    },
+    {
+     "localized_name": "video_cfg",
+     "name": "video_cfg",
+     "type": "FLOAT",
+     "widget": {
+      "name": "video_cfg"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "audio_cfg",
+     "name": "audio_cfg",
+     "type": "FLOAT",
+     "widget": {
+      "name": "audio_cfg"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "GUIDER",
+     "name": "GUIDER",
+     "type": "GUIDER",
+     "links": [
+      545
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LTXVDualCFGGuider"
+   },
+   "widgets_values": [
+    1,
+    1
+   ],
+   "widgets_values_named": {
+    "video_cfg": 1,
+    "audio_cfg": 1
+   }
+  },
+  {
+   "id": 140,
+   "type": "SamplerCustomAdvanced",
+   "pos": [
+    23295.065625000007,
+    130
+   ],
+   "size": [
+    212.3638671875,
+    106
+   ],
+   "flags": {},
+   "order": 150,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "noise",
+     "name": "noise",
+     "type": "NOISE",
+     "link": 544
+    },
+    {
+     "localized_name": "guider",
+     "name": "guider",
+     "type": "GUIDER",
+     "link": 545
+    },
+    {
+     "localized_name": "sampler",
+     "name": "sampler",
+     "type": "SAMPLER",
+     "link": 546
+    },
+    {
+     "localized_name": "sigmas",
+     "name": "sigmas",
+     "type": "SIGMAS",
+     "link": 547
+    },
+    {
+     "localized_name": "latent_image",
+     "name": "latent_image",
+     "type": "LATENT",
+     "link": 548
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "output",
+     "name": "output",
+     "type": "LATENT",
+     "links": [
+      549
+     ]
+    },
+    {
+     "localized_name": "denoised_output",
+     "name": "denoised_output",
+     "type": "LATENT",
+     "links": null
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "SamplerCustomAdvanced"
+   }
+  },
+  {
+   "id": 141,
+   "type": "LTXVSeparateAVLatent",
+   "pos": [
+    23607.429492187508,
+    130
+   ],
+   "size": [
+    166.8228515625,
+    46
+   ],
+   "flags": {},
+   "order": 151,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "av_latent",
+     "name": "av_latent",
+     "type": "LATENT",
+     "link": 549
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "video_latent",
+     "name": "video_latent",
+     "type": "LATENT",
+     "links": [
+      550
+     ]
+    },
+    {
+     "localized_name": "audio_latent",
+     "name": "audio_latent",
+     "type": "LATENT",
+     "links": [
+      552
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LTXVSeparateAVLatent"
+   }
+  },
+  {
+   "id": 142,
+   "type": "VAEDecodeTiled",
+   "pos": [
+    23874.25234375001,
+    130
+   ],
+   "size": [
+    270,
+    150
+   ],
+   "flags": {},
+   "order": 152,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "samples",
+     "name": "samples",
+     "type": "LATENT",
+     "link": 550
+    },
+    {
+     "localized_name": "vae",
+     "name": "vae",
+     "type": "VAE",
+     "link": 551
+    },
+    {
+     "localized_name": "tile_size",
+     "name": "tile_size",
+     "type": "INT",
+     "widget": {
+      "name": "tile_size"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "overlap",
+     "name": "overlap",
+     "type": "INT",
+     "widget": {
+      "name": "overlap"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "temporal_size",
+     "name": "temporal_size",
+     "type": "INT",
+     "widget": {
+      "name": "temporal_size"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "temporal_overlap",
+     "name": "temporal_overlap",
+     "type": "INT",
+     "widget": {
+      "name": "temporal_overlap"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "IMAGE",
+     "name": "IMAGE",
+     "type": "IMAGE",
+     "links": [
+      568
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "VAEDecodeTiled"
+   },
+   "widgets_values": [
+    512,
+    64,
+    64,
+    16
+   ],
+   "widgets_values_named": {
+    "tile_size": 512,
+    "overlap": 64,
+    "temporal_size": 64,
+    "temporal_overlap": 16
+   }
+  },
+  {
+   "id": 143,
+   "type": "LTXVAudioVAEDecode",
+   "pos": [
+    23874.25234375001,
+    410
+   ],
+   "size": [
+    202.991796875,
+    46
+   ],
+   "flags": {},
+   "order": 153,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "samples",
+     "name": "samples",
+     "type": "LATENT",
+     "link": 552
+    },
+    {
+     "localized_name": "Audio VAE",
+     "name": "audio_vae",
+     "type": "VAE",
+     "link": 553
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "Audio",
+     "name": "Audio",
+     "type": "AUDIO",
+     "links": [
+      572
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LTXVAudioVAEDecode"
+   }
+  },
+  {
+   "id": 144,
+   "type": "TrimAudioDuration",
+   "pos": [
+    18213.1892578125,
+    342
+   ],
+   "size": [
+    270,
+    82
+   ],
+   "flags": {},
+   "order": 128,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "audio",
+     "name": "audio",
+     "type": "AUDIO",
+     "link": 554
+    },
+    {
+     "localized_name": "start_index",
+     "name": "start_index",
+     "type": "FLOAT",
+     "widget": {
+      "name": "start_index"
+     },
+     "link": null
+    },
+    {
+     "localized_name": "duration",
+     "name": "duration",
+     "type": "FLOAT",
+     "widget": {
+      "name": "duration"
+     },
+     "link": null
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "AUDIO",
+     "name": "AUDIO",
+     "type": "AUDIO",
+     "links": [
+      555
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "TrimAudioDuration"
+   },
+   "widgets_values": [
+    -1,
+    1
+   ],
+   "widgets_values_named": {
+    "start_index": -1,
+    "duration": 1
+   }
+  },
+  {
+   "id": 145,
+   "type": "LTXVAudioVAEEncode",
+   "pos": [
+    18583.1892578125,
+    338
+   ],
+   "size": [
+    201.4126953125,
+    46
+   ],
+   "flags": {},
+   "order": 130,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "audio",
+     "name": "audio",
+     "type": "AUDIO",
+     "link": 555
+    },
+    {
+     "localized_name": "Audio VAE",
+     "name": "audio_vae",
+     "type": "VAE",
+     "link": 556
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "Audio Latent",
+     "name": "Audio Latent",
+     "type": "LATENT",
+     "links": [
+      557
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LTXVAudioVAEEncode"
+   }
+  },
+  {
+   "id": 146,
+   "type": "SetLatentNoiseMask",
+   "pos": [
+    18953.1892578125,
+    366
+   ],
+   "size": [
+    188.1373046875,
+    46
+   ],
+   "flags": {},
+   "order": 132,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "samples",
+     "name": "samples",
+     "type": "LATENT",
+     "link": 557
+    },
+    {
+     "localized_name": "mask",
+     "name": "mask",
+     "type": "MASK",
+     "link": 558
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "LATENT",
+     "name": "LATENT",
+     "type": "LATENT",
+     "links": [
+      560
+     ]
+    }
+   ],
+   "title": "Sound of clip 3 held",
+   "properties": {
+    "Node name for S&R": "SetLatentNoiseMask"
+   }
+  },
+  {
+   "id": 147,
+   "type": "LTXVConcatAVLatent",
+   "pos": [
+    20563.1892578125,
+    712
+   ],
+   "size": [
+    154.839453125,
+    46
+   ],
+   "flags": {},
+   "order": 140,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "video_latent",
+     "name": "video_latent",
+     "type": "LATENT",
+     "link": 559
+    },
+    {
+     "localized_name": "audio_latent",
+     "name": "audio_latent",
+     "type": "LATENT",
+     "link": 560
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "latent",
+     "name": "latent",
+     "type": "LATENT",
+     "links": [
+      563
+     ]
+    }
+   ],
+   "properties": {
+    "Node name for S&R": "LTXVConcatAVLatent"
+   }
+  },
+  {
+   "id": 148,
+   "type": "ComfySwitchNode",
+   "pos": [
+    21063.1892578125,
+    338
+   ],
+   "size": [
+    270,
+    78
+   ],
+   "flags": {},
+   "order": 142,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "on_false",
+     "name": "on_false",
+     "shape": 7,
+     "type": "LATENT",
+     "link": 562
+    },
+    {
+     "localized_name": "on_true",
+     "name": "on_true",
+     "shape": 7,
+     "type": "LATENT",
+     "link": 563
+    },
+    {
+     "localized_name": "switch",
+     "name": "switch",
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "switch"
+     },
+     "link": 561
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "output",
+     "name": "output",
+     "type": "LATENT",
+     "links": [
+      524
+     ]
+    }
+   ],
+   "title": "Ton fortsetzen",
+   "properties": {
+    "Node name for S&R": "ComfySwitchNode"
+   },
+   "widgets_values": [
+    false
+   ],
+   "widgets_values_named": {
+    "switch": false
+   }
+  },
+  {
+   "id": 149,
+   "type": "LlmctlJoinClips",
+   "pos": [
+    24244.25234375001,
+    130
+   ],
+   "size": [
+    321.8970703125,
+    294
+   ],
+   "flags": {},
+   "order": 154,
+   "mode": 0,
+   "inputs": [
+    {
      "localized_name": "images_1",
      "name": "images_1",
      "type": "IMAGE",
-     "link": 544
+     "link": 565
     },
     {
      "localized_name": "audio_1",
      "name": "audio_1",
      "type": "AUDIO",
-     "link": 548
+     "link": 569
     },
     {
      "localized_name": "images_2",
      "name": "images_2",
      "shape": 7,
      "type": "IMAGE",
-     "link": 545
+     "link": 566
     },
     {
      "localized_name": "audio_2",
      "name": "audio_2",
      "shape": 7,
      "type": "AUDIO",
-     "link": 549
+     "link": 570
     },
     {
      "localized_name": "images_3",
      "name": "images_3",
      "shape": 7,
      "type": "IMAGE",
-     "link": 546
+     "link": 567
     },
     {
      "localized_name": "audio_3",
      "name": "audio_3",
      "shape": 7,
      "type": "AUDIO",
-     "link": 550
+     "link": 571
     },
     {
      "localized_name": "images_4",
      "name": "images_4",
      "shape": 7,
      "type": "IMAGE",
-     "link": 547
+     "link": 568
     },
     {
      "localized_name": "audio_4",
      "name": "audio_4",
      "shape": 7,
      "type": "AUDIO",
-     "link": 551
+     "link": 572
     },
     {
      "localized_name": "frame_rate",
@@ -8791,7 +9301,7 @@
      "widget": {
       "name": "frame_rate"
      },
-     "link": 543
+     "link": 564
     },
     {
      "localized_name": "crossfade",
@@ -8801,6 +9311,36 @@
       "name": "crossfade"
      },
      "link": null
+    },
+    {
+     "localized_name": "cut_2",
+     "name": "cut_2",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "cut_2"
+     },
+     "link": 573
+    },
+    {
+     "localized_name": "cut_3",
+     "name": "cut_3",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "cut_3"
+     },
+     "link": 574
+    },
+    {
+     "localized_name": "cut_4",
+     "name": "cut_4",
+     "shape": 7,
+     "type": "BOOLEAN",
+     "widget": {
+      "name": "cut_4"
+     },
+     "link": 575
     }
    ],
    "outputs": [
@@ -8809,8 +9349,8 @@
      "name": "images",
      "type": "IMAGE",
      "links": [
-      560,
-      576
+      584,
+      600
      ]
     },
     {
@@ -8818,7 +9358,7 @@
      "name": "audio",
      "type": "AUDIO",
      "links": [
-      362
+      374
      ]
     }
    ],
@@ -8828,18 +9368,24 @@
    },
    "widgets_values": [
     24,
-    0.04
+    0.04,
+    false,
+    false,
+    false
    ],
    "widgets_values_named": {
     "frame_rate": 24,
-    "crossfade": 0.04
+    "crossfade": 0.04,
+    "cut_2": false,
+    "cut_3": false,
+    "cut_4": false
    }
   },
   {
-   "id": 141,
+   "id": 150,
    "type": "VAEEncodeTiled",
    "pos": [
-    24250.36679687501,
+    25360.366796875012,
     130
    ],
    "size": [
@@ -8847,20 +9393,20 @@
     150
    ],
    "flags": {},
-   "order": 148,
+   "order": 157,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "pixels",
      "name": "pixels",
      "type": "IMAGE",
-     "link": 552
+     "link": 576
     },
     {
      "localized_name": "vae",
      "name": "vae",
      "type": "VAE",
-     "link": 553
+     "link": 577
     },
     {
      "localized_name": "tile_size",
@@ -8905,8 +9451,8 @@
      "name": "LATENT",
      "type": "LATENT",
      "links": [
-      566,
-      570
+      590,
+      594
      ]
     }
    ],
@@ -8927,18 +9473,18 @@
    }
   },
   {
-   "id": 142,
+   "id": 151,
    "type": "VAELoader",
    "pos": [
     100,
-    6882
+    8142
    ],
    "size": [
     270,
     58
    ],
    "flags": {},
-   "order": 30,
+   "order": 36,
    "mode": 0,
    "inputs": [
     {
@@ -8957,8 +9503,8 @@
      "name": "VAE",
      "type": "VAE",
      "links": [
-      553,
-      559
+      577,
+      583
      ]
     }
    ],
@@ -8980,18 +9526,18 @@
    }
   },
   {
-   "id": 143,
+   "id": 152,
    "type": "UNETLoader",
    "pos": [
     100,
-    7070
+    8330
    ],
    "size": [
     270,
     82
    ],
    "flags": {},
-   "order": 31,
+   "order": 37,
    "mode": 0,
    "inputs": [
     {
@@ -9019,8 +9565,8 @@
      "name": "MODEL",
      "type": "MODEL",
      "links": [
-      554,
-      564
+      578,
+      588
      ]
     }
    ],
@@ -9044,10 +9590,10 @@
    }
   },
   {
-   "id": 144,
+   "id": 153,
    "type": "KSampler",
    "pos": [
-    25691.09882812501,
+    26801.098828125014,
     130
    ],
    "size": [
@@ -9055,32 +9601,32 @@
     262
    ],
    "flags": {},
-   "order": 152,
+   "order": 161,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "model",
      "name": "model",
      "type": "MODEL",
-     "link": 554
+     "link": 578
     },
     {
      "localized_name": "positive",
      "name": "positive",
      "type": "CONDITIONING",
-     "link": 555
+     "link": 579
     },
     {
      "localized_name": "negative",
      "name": "negative",
      "type": "CONDITIONING",
-     "link": 556
+     "link": 580
     },
     {
      "localized_name": "latent_image",
      "name": "latent_image",
      "type": "LATENT",
-     "link": 557
+     "link": 581
     },
     {
      "localized_name": "seed",
@@ -9143,8 +9689,8 @@
      "name": "LATENT",
      "type": "LATENT",
      "links": [
-      567,
-      573
+      591,
+      597
      ]
     }
    ],
@@ -9171,10 +9717,10 @@
    }
   },
   {
-   "id": 145,
+   "id": 154,
    "type": "VAEDecodeTiled",
    "pos": [
-    26731.04179687501,
+    27841.041796875015,
     130
    ],
    "size": [
@@ -9182,20 +9728,20 @@
     150
    ],
    "flags": {},
-   "order": 155,
+   "order": 164,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "samples",
      "name": "samples",
      "type": "LATENT",
-     "link": 558
+     "link": 582
     },
     {
      "localized_name": "vae",
      "name": "vae",
      "type": "VAE",
-     "link": 559
+     "link": 583
     },
     {
      "localized_name": "tile_size",
@@ -9240,7 +9786,7 @@
      "name": "IMAGE",
      "type": "IMAGE",
      "links": [
-      562
+      586
      ]
     }
    ],
@@ -9261,10 +9807,10 @@
    }
   },
   {
-   "id": 146,
+   "id": 155,
    "type": "ResizeImageMaskNode",
    "pos": [
-    23556.149414062507,
+    24666.14941406251,
     130
    ],
    "size": [
@@ -9272,14 +9818,14 @@
     106
    ],
    "flags": {},
-   "order": 146,
+   "order": 155,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "input",
      "name": "input",
      "type": "IMAGE,MASK",
-     "link": 560
+     "link": 584
     },
     {
      "localized_name": "resize_type",
@@ -9315,8 +9861,8 @@
      "name": "resized",
      "type": "IMAGE",
      "links": [
-      561,
-      563
+      585,
+      587
      ]
     }
    ],
@@ -9335,10 +9881,10 @@
    }
   },
   {
-   "id": 147,
+   "id": 156,
    "type": "SeedVR2Preprocess",
    "pos": [
-    23926.149414062507,
+    25036.14941406251,
     130
    ],
    "size": [
@@ -9346,14 +9892,14 @@
     26
    ],
    "flags": {},
-   "order": 147,
+   "order": 156,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "resized_images",
      "name": "resized_images",
      "type": "IMAGE",
-     "link": 561
+     "link": 585
     }
    ],
    "outputs": [
@@ -9362,7 +9908,7 @@
      "name": "images",
      "type": "IMAGE",
      "links": [
-      552
+      576
      ]
     }
    ],
@@ -9371,10 +9917,10 @@
    }
   },
   {
-   "id": 148,
+   "id": 157,
    "type": "SeedVR2PostProcessing",
    "pos": [
-    27101.04179687501,
+    28211.041796875015,
     130
    ],
    "size": [
@@ -9382,20 +9928,20 @@
     78
    ],
    "flags": {},
-   "order": 156,
+   "order": 165,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "images",
      "name": "images",
      "type": "IMAGE",
-     "link": 562
+     "link": 586
     },
     {
      "localized_name": "original_resized_images",
      "name": "original_resized_images",
      "type": "IMAGE",
-     "link": 563
+     "link": 587
     },
     {
      "localized_name": "color_correction_method",
@@ -9413,7 +9959,7 @@
      "name": "images",
      "type": "IMAGE",
      "links": [
-      577
+      601
      ]
     }
    ],
@@ -9428,10 +9974,10 @@
    }
   },
   {
-   "id": 149,
+   "id": 158,
    "type": "SeedVR2Conditioning",
    "pos": [
-    25360.36679687501,
+    26470.366796875012,
     130
    ],
    "size": [
@@ -9439,20 +9985,20 @@
     46
    ],
    "flags": {},
-   "order": 151,
+   "order": 160,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "model",
      "name": "model",
      "type": "MODEL",
-     "link": 564
+     "link": 588
     },
     {
      "localized_name": "latent",
      "name": "vae_conditioning",
      "type": "LATENT",
-     "link": 565
+     "link": 589
     }
    ],
    "outputs": [
@@ -9461,7 +10007,7 @@
      "name": "positive",
      "type": "CONDITIONING",
      "links": [
-      555
+      579
      ]
     },
     {
@@ -9469,7 +10015,7 @@
      "name": "negative",
      "type": "CONDITIONING",
      "links": [
-      556
+      580
      ]
     }
    ],
@@ -9478,10 +10024,10 @@
    }
   },
   {
-   "id": 150,
+   "id": 159,
    "type": "SeedVR2TemporalChunk",
    "pos": [
-    24620.36679687501,
+    25730.366796875012,
     130
    ],
    "size": [
@@ -9489,14 +10035,14 @@
     102
    ],
    "flags": {},
-   "order": 149,
+   "order": 158,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "latent",
      "name": "latent",
      "type": "LATENT",
-     "link": 566
+     "link": 590
     },
     {
      "localized_name": "temporal_overlap",
@@ -9524,7 +10070,7 @@
      "shape": 6,
      "type": "LATENT",
      "links": [
-      571
+      595
      ]
     },
     {
@@ -9532,7 +10078,7 @@
      "name": "temporal_overlap",
      "type": "INT",
      "links": [
-      568
+      592
      ]
     }
    ],
@@ -9549,10 +10095,10 @@
    }
   },
   {
-   "id": 151,
+   "id": 160,
    "type": "SeedVR2TemporalMerge",
    "pos": [
-    26061.09882812501,
+    27171.098828125014,
     130
    ],
    "size": [
@@ -9560,20 +10106,20 @@
     46
    ],
    "flags": {},
-   "order": 153,
+   "order": 162,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "latents",
      "name": "latents",
      "type": "LATENT",
-     "link": 567
+     "link": 591
     },
     {
      "localized_name": "temporal_overlap",
      "name": "temporal_overlap",
      "type": "INT",
-     "link": 568
+     "link": 592
     }
    ],
    "outputs": [
@@ -9582,7 +10128,7 @@
      "name": "latent",
      "type": "LATENT",
      "links": [
-      574
+      598
      ]
     }
    ],
@@ -9591,10 +10137,10 @@
    }
   },
   {
-   "id": 152,
+   "id": 161,
    "type": "ComfySwitchNode",
    "pos": [
-    24990.36679687501,
+    26100.366796875012,
     130
    ],
    "size": [
@@ -9602,7 +10148,7 @@
     78
    ],
    "flags": {},
-   "order": 150,
+   "order": 159,
    "mode": 0,
    "inputs": [
     {
@@ -9610,14 +10156,14 @@
      "name": "on_false",
      "shape": 7,
      "type": "LATENT",
-     "link": 570
+     "link": 594
     },
     {
      "localized_name": "on_true",
      "name": "on_true",
      "shape": 7,
      "type": "LATENT",
-     "link": 571
+     "link": 595
     },
     {
      "localized_name": "switch",
@@ -9626,7 +10172,7 @@
      "widget": {
       "name": "switch"
      },
-     "link": 569
+     "link": 593
     }
    ],
    "outputs": [
@@ -9635,8 +10181,8 @@
      "name": "output",
      "type": "LATENT",
      "links": [
-      557,
-      565
+      581,
+      589
      ]
     }
    ],
@@ -9651,10 +10197,10 @@
    }
   },
   {
-   "id": 153,
+   "id": 162,
    "type": "ComfySwitchNode",
    "pos": [
-    26361.04179687501,
+    27471.041796875015,
     130
    ],
    "size": [
@@ -9662,7 +10208,7 @@
     78
    ],
    "flags": {},
-   "order": 154,
+   "order": 163,
    "mode": 0,
    "inputs": [
     {
@@ -9670,14 +10216,14 @@
      "name": "on_false",
      "shape": 7,
      "type": "LATENT",
-     "link": 573
+     "link": 597
     },
     {
      "localized_name": "on_true",
      "name": "on_true",
      "shape": 7,
      "type": "LATENT",
-     "link": 574
+     "link": 598
     },
     {
      "localized_name": "switch",
@@ -9686,7 +10232,7 @@
      "widget": {
       "name": "switch"
      },
-     "link": 572
+     "link": 596
     }
    ],
    "outputs": [
@@ -9695,7 +10241,7 @@
      "name": "output",
      "type": "LATENT",
      "links": [
-      558
+      582
      ]
     }
    ],
@@ -9710,18 +10256,18 @@
    }
   },
   {
-   "id": 154,
+   "id": 163,
    "type": "PrimitiveBoolean",
    "pos": [
     100,
-    7282
+    8542
    ],
    "size": [
     270,
     58
    ],
    "flags": {},
-   "order": 32,
+   "order": 38,
    "mode": 0,
    "inputs": [
     {
@@ -9740,8 +10286,8 @@
      "name": "BOOLEAN",
      "type": "BOOLEAN",
      "links": [
-      569,
-      572
+      593,
+      596
      ]
     }
    ],
@@ -9757,18 +10303,18 @@
    }
   },
   {
-   "id": 155,
+   "id": 164,
    "type": "PrimitiveBoolean",
    "pos": [
     100,
-    7470
+    8730
    ],
    "size": [
     270,
     58
    ],
    "flags": {},
-   "order": 33,
+   "order": 39,
    "mode": 0,
    "inputs": [
     {
@@ -9787,7 +10333,7 @@
      "name": "BOOLEAN",
      "type": "BOOLEAN",
      "links": [
-      575
+      599
      ]
     }
    ],
@@ -9803,10 +10349,10 @@
    }
   },
   {
-   "id": 156,
+   "id": 165,
    "type": "ComfySwitchNode",
    "pos": [
-    27506.17656250001,
+    28616.176562500015,
     130
    ],
    "size": [
@@ -9814,7 +10360,7 @@
     78
    ],
    "flags": {},
-   "order": 157,
+   "order": 166,
    "mode": 0,
    "inputs": [
     {
@@ -9822,14 +10368,14 @@
      "name": "on_false",
      "shape": 7,
      "type": "IMAGE",
-     "link": 576
+     "link": 600
     },
     {
      "localized_name": "on_true",
      "name": "on_true",
      "shape": 7,
      "type": "IMAGE",
-     "link": 577
+     "link": 601
     },
     {
      "localized_name": "switch",
@@ -9838,7 +10384,7 @@
      "widget": {
       "name": "switch"
      },
-     "link": 575
+     "link": 599
     }
    ],
    "outputs": [
@@ -9847,8 +10393,8 @@
      "name": "output",
      "type": "IMAGE",
      "links": [
-      579,
-      582
+      603,
+      606
      ]
     }
    ],
@@ -9864,18 +10410,18 @@
    }
   },
   {
-   "id": 157,
+   "id": 166,
    "type": "FrameInterpolationModelLoader",
    "pos": [
     100,
-    7658
+    8918
    ],
    "size": [
     310.1529296875,
     58
    ],
    "flags": {},
-   "order": 34,
+   "order": 40,
    "mode": 0,
    "inputs": [
     {
@@ -9894,7 +10440,7 @@
      "name": "INTERP_MODEL",
      "type": "INTERP_MODEL",
      "links": [
-      578
+      602
      ]
     }
    ],
@@ -9916,10 +10462,10 @@
    }
   },
   {
-   "id": 158,
+   "id": 167,
    "type": "FrameInterpolate",
    "pos": [
-    27876.17656250001,
+    28986.176562500015,
     130
    ],
    "size": [
@@ -9927,20 +10473,20 @@
     78
    ],
    "flags": {},
-   "order": 158,
+   "order": 167,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "interp_model",
      "name": "interp_model",
      "type": "INTERP_MODEL",
-     "link": 578
+     "link": 602
     },
     {
      "localized_name": "images",
      "name": "images",
      "type": "IMAGE",
-     "link": 579
+     "link": 603
     },
     {
      "localized_name": "multiplier",
@@ -9958,7 +10504,7 @@
      "name": "IMAGE",
      "type": "IMAGE",
      "links": [
-      583
+      607
      ]
     }
    ],
@@ -9973,7 +10519,7 @@
    }
   },
   {
-   "id": 159,
+   "id": 168,
    "type": "ComfyMathExpression",
    "pos": [
     1100,
@@ -9984,14 +10530,14 @@
     200
    ],
    "flags": {},
-   "order": 45,
+   "order": 51,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "a",
      "name": "values.a",
      "type": "FLOAT,INT,BOOLEAN",
-     "link": 580
+     "link": 604
     },
     {
      "localized_name": "b",
@@ -10016,7 +10562,7 @@
      "name": "FLOAT",
      "type": "FLOAT",
      "links": [
-      586
+      610
      ]
     },
     {
@@ -10044,18 +10590,18 @@
    }
   },
   {
-   "id": 160,
+   "id": 169,
    "type": "PrimitiveBoolean",
    "pos": [
     100,
-    7846
+    9106
    ],
    "size": [
     270,
     58
    ],
    "flags": {},
-   "order": 35,
+   "order": 41,
    "mode": 0,
    "inputs": [
     {
@@ -10074,8 +10620,8 @@
      "name": "BOOLEAN",
      "type": "BOOLEAN",
      "links": [
-      581,
-      584
+      605,
+      608
      ]
     }
    ],
@@ -10091,10 +10637,10 @@
    }
   },
   {
-   "id": 161,
+   "id": 170,
    "type": "ComfySwitchNode",
    "pos": [
-    28279.008203125013,
+    29389.008203125017,
     130
    ],
    "size": [
@@ -10102,7 +10648,7 @@
     78
    ],
    "flags": {},
-   "order": 159,
+   "order": 168,
    "mode": 0,
    "inputs": [
     {
@@ -10110,14 +10656,14 @@
      "name": "on_false",
      "shape": 7,
      "type": "IMAGE",
-     "link": 582
+     "link": 606
     },
     {
      "localized_name": "on_true",
      "name": "on_true",
      "shape": 7,
      "type": "IMAGE",
-     "link": 583
+     "link": 607
     },
     {
      "localized_name": "switch",
@@ -10126,7 +10672,7 @@
      "widget": {
       "name": "switch"
      },
-     "link": 581
+     "link": 605
     }
    ],
    "outputs": [
@@ -10135,7 +10681,7 @@
      "name": "output",
      "type": "IMAGE",
      "links": [
-      361
+      373
      ]
     }
    ],
@@ -10151,7 +10697,7 @@
    }
   },
   {
-   "id": 162,
+   "id": 171,
    "type": "ComfySwitchNode",
    "pos": [
     1600,
@@ -10162,7 +10708,7 @@
     78
    ],
    "flags": {},
-   "order": 49,
+   "order": 55,
    "mode": 0,
    "inputs": [
     {
@@ -10170,14 +10716,14 @@
      "name": "on_false",
      "shape": 7,
      "type": "FLOAT",
-     "link": 585
+     "link": 609
     },
     {
      "localized_name": "on_true",
      "name": "on_true",
      "shape": 7,
      "type": "FLOAT",
-     "link": 586
+     "link": 610
     },
     {
      "localized_name": "switch",
@@ -10186,7 +10732,7 @@
      "widget": {
       "name": "switch"
      },
-     "link": 584
+     "link": 608
     }
    ],
    "outputs": [
@@ -10195,7 +10741,7 @@
      "name": "output",
      "type": "FLOAT",
      "links": [
-      360
+      372
      ]
     }
    ],
@@ -10213,7 +10759,7 @@
  ],
  "links": [
   [
-   294,
+   306,
    50,
    0,
    1,
@@ -10221,7 +10767,7 @@
    "VIDEO"
   ],
   [
-   295,
+   307,
    8,
    0,
    5,
@@ -10229,7 +10775,7 @@
    "STRING"
   ],
   [
-   296,
+   308,
    4,
    0,
    5,
@@ -10237,7 +10783,7 @@
    "CLIP"
   ],
   [
-   297,
+   309,
    35,
    0,
    5,
@@ -10245,7 +10791,7 @@
    "IMAGE"
   ],
   [
-   298,
+   310,
    9,
    0,
    7,
@@ -10253,7 +10799,7 @@
    "STRING"
   ],
   [
-   299,
+   311,
    19,
    0,
    7,
@@ -10261,7 +10807,7 @@
    "CLIP"
   ],
   [
-   300,
+   312,
    6,
    0,
    9,
@@ -10269,7 +10815,7 @@
    "BOOLEAN"
   ],
   [
-   301,
+   313,
    8,
    0,
    9,
@@ -10277,7 +10823,7 @@
    "STRING"
   ],
   [
-   302,
+   314,
    5,
    0,
    9,
@@ -10285,7 +10831,7 @@
    "STRING"
   ],
   [
-   303,
+   315,
    9,
    0,
    11,
@@ -10293,7 +10839,7 @@
    "STRING"
   ],
   [
-   304,
+   316,
    39,
    0,
    14,
@@ -10301,7 +10847,7 @@
    "FLOAT"
   ],
   [
-   305,
+   317,
    7,
    0,
    14,
@@ -10309,7 +10855,7 @@
    "CONDITIONING"
   ],
   [
-   306,
+   318,
    18,
    0,
    14,
@@ -10317,7 +10863,7 @@
    "CONDITIONING"
   ],
   [
-   307,
+   319,
    3,
    0,
    17,
@@ -10325,7 +10871,7 @@
    "INT"
   ],
   [
-   308,
+   320,
    19,
    0,
    18,
@@ -10333,7 +10879,7 @@
    "CLIP"
   ],
   [
-   309,
+   321,
    3,
    1,
    20,
@@ -10341,7 +10887,7 @@
    "INT"
   ],
   [
-   310,
+   322,
    10,
    0,
    26,
@@ -10349,7 +10895,7 @@
    "MODEL"
   ],
   [
-   311,
+   323,
    14,
    0,
    26,
@@ -10357,7 +10903,7 @@
    "CONDITIONING"
   ],
   [
-   312,
+   324,
    14,
    1,
    26,
@@ -10365,7 +10911,7 @@
    "CONDITIONING"
   ],
   [
-   313,
+   325,
    22,
    0,
    27,
@@ -10373,7 +10919,7 @@
    "NOISE"
   ],
   [
-   314,
+   326,
    26,
    0,
    27,
@@ -10381,7 +10927,7 @@
    "GUIDER"
   ],
   [
-   315,
+   327,
    21,
    0,
    27,
@@ -10389,7 +10935,7 @@
    "SAMPLER"
   ],
   [
-   316,
+   328,
    23,
    0,
    27,
@@ -10397,7 +10943,7 @@
    "SIGMAS"
   ],
   [
-   317,
+   329,
    31,
    0,
    27,
@@ -10405,7 +10951,7 @@
    "LATENT"
   ],
   [
-   318,
+   330,
    13,
    0,
    28,
@@ -10413,7 +10959,7 @@
    "BOOLEAN"
   ],
   [
-   319,
+   331,
    15,
    0,
    28,
@@ -10421,7 +10967,7 @@
    "VAE"
   ],
   [
-   320,
+   332,
    35,
    0,
    28,
@@ -10429,7 +10975,7 @@
    "IMAGE"
   ],
   [
-   321,
+   333,
    36,
    0,
    28,
@@ -10437,7 +10983,7 @@
    "LATENT"
   ],
   [
-   322,
+   334,
    40,
    1,
    29,
@@ -10445,7 +10991,7 @@
    "INT"
   ],
   [
-   323,
+   335,
    39,
    1,
    29,
@@ -10453,7 +10999,7 @@
    "INT"
   ],
   [
-   324,
+   336,
    16,
    0,
    29,
@@ -10461,7 +11007,7 @@
    "VAE"
   ],
   [
-   325,
+   337,
    27,
    0,
    30,
@@ -10469,7 +11015,7 @@
    "LATENT"
   ],
   [
-   326,
+   338,
    28,
    0,
    31,
@@ -10477,7 +11023,7 @@
    "LATENT"
   ],
   [
-   327,
+   339,
    29,
    0,
    31,
@@ -10485,7 +11031,7 @@
    "LATENT"
   ],
   [
-   328,
+   340,
    2,
    0,
    32,
@@ -10493,7 +11039,7 @@
    "IMAGE"
   ],
   [
-   329,
+   341,
    17,
    0,
    33,
@@ -10501,7 +11047,7 @@
    "INT"
   ],
   [
-   330,
+   342,
    20,
    0,
    34,
@@ -10509,7 +11055,7 @@
    "INT"
   ],
   [
-   331,
+   343,
    32,
    0,
    35,
@@ -10517,7 +11063,7 @@
    "IMAGE"
   ],
   [
-   332,
+   344,
    33,
    1,
    36,
@@ -10525,7 +11071,7 @@
    "INT"
   ],
   [
-   333,
+   345,
    34,
    1,
    36,
@@ -10533,7 +11079,7 @@
    "INT"
   ],
   [
-   334,
+   346,
    40,
    1,
    36,
@@ -10541,7 +11087,7 @@
    "INT"
   ],
   [
-   335,
+   347,
    30,
    0,
    37,
@@ -10549,7 +11095,7 @@
    "LATENT"
   ],
   [
-   336,
+   348,
    25,
    0,
    37,
@@ -10557,7 +11103,7 @@
    "LATENT_UPSCALE_MODEL"
   ],
   [
-   337,
+   349,
    15,
    0,
    37,
@@ -10565,7 +11111,7 @@
    "VAE"
   ],
   [
-   338,
+   350,
    13,
    0,
    38,
@@ -10573,7 +11119,7 @@
    "BOOLEAN"
   ],
   [
-   339,
+   351,
    15,
    0,
    38,
@@ -10581,7 +11127,7 @@
    "VAE"
   ],
   [
-   340,
+   352,
    35,
    0,
    38,
@@ -10589,7 +11135,7 @@
    "IMAGE"
   ],
   [
-   341,
+   353,
    37,
    0,
    38,
@@ -10597,7 +11143,7 @@
    "LATENT"
   ],
   [
-   342,
+   354,
    24,
    0,
    39,
@@ -10605,7 +11151,7 @@
    "INT"
   ],
   [
-   343,
+   355,
    12,
    0,
    40,
@@ -10613,7 +11159,7 @@
    "INT"
   ],
   [
-   344,
+   356,
    24,
    0,
    40,
@@ -10621,7 +11167,7 @@
    "INT"
   ],
   [
-   345,
+   357,
    38,
    0,
    42,
@@ -10629,7 +11175,7 @@
    "LATENT"
   ],
   [
-   346,
+   358,
    30,
    1,
    42,
@@ -10637,7 +11183,7 @@
    "LATENT"
   ],
   [
-   347,
+   359,
    10,
    0,
    44,
@@ -10645,7 +11191,7 @@
    "MODEL"
   ],
   [
-   348,
+   360,
    14,
    0,
    44,
@@ -10653,7 +11199,7 @@
    "CONDITIONING"
   ],
   [
-   349,
+   361,
    14,
    1,
    44,
@@ -10661,7 +11207,7 @@
    "CONDITIONING"
   ],
   [
-   350,
+   362,
    41,
    0,
    46,
@@ -10669,7 +11215,7 @@
    "NOISE"
   ],
   [
-   351,
+   363,
    44,
    0,
    46,
@@ -10677,7 +11223,7 @@
    "GUIDER"
   ],
   [
-   352,
+   364,
    45,
    0,
    46,
@@ -10685,7 +11231,7 @@
    "SAMPLER"
   ],
   [
-   353,
+   365,
    43,
    0,
    46,
@@ -10693,7 +11239,7 @@
    "SIGMAS"
   ],
   [
-   354,
+   366,
    42,
    0,
    46,
@@ -10701,7 +11247,7 @@
    "LATENT"
   ],
   [
-   355,
+   367,
    46,
    0,
    47,
@@ -10709,7 +11255,7 @@
    "LATENT"
   ],
   [
-   356,
+   368,
    47,
    0,
    48,
@@ -10717,7 +11263,7 @@
    "LATENT"
   ],
   [
-   357,
+   369,
    15,
    0,
    48,
@@ -10725,7 +11271,7 @@
    "VAE"
   ],
   [
-   358,
+   370,
    47,
    1,
    49,
@@ -10733,7 +11279,7 @@
    "LATENT"
   ],
   [
-   359,
+   371,
    16,
    0,
    49,
@@ -10741,31 +11287,31 @@
    "VAE"
   ],
   [
-   360,
-   162,
+   372,
+   171,
    0,
    50,
    2,
    "FLOAT"
   ],
   [
-   361,
-   161,
+   373,
+   170,
    0,
    50,
    0,
    "IMAGE"
   ],
   [
-   362,
-   140,
+   374,
+   149,
    1,
    50,
    1,
    "AUDIO"
   ],
   [
-   363,
+   375,
    48,
    0,
    53,
@@ -10773,735 +11319,695 @@
    "IMAGE"
   ],
   [
-   364,
-   54,
-   0,
+   376,
    55,
-   5,
-   "STRING"
-  ],
-  [
-   365,
-   4,
-   0,
-   55,
-   0,
-   "CLIP"
-  ],
-  [
-   366,
-   67,
-   0,
-   55,
-   1,
-   "IMAGE"
-  ],
-  [
-   367,
-   57,
-   0,
-   56,
-   1,
-   "STRING"
-  ],
-  [
-   368,
-   19,
-   0,
-   56,
-   0,
-   "CLIP"
-  ],
-  [
-   369,
-   6,
    0,
    57,
    2,
    "BOOLEAN"
   ],
   [
-   370,
-   54,
+   377,
+   53,
    0,
    57,
    0,
+   "IMAGE"
+  ],
+  [
+   378,
+   56,
+   0,
+   57,
+   1,
+   "IMAGE"
+  ],
+  [
+   379,
+   54,
+   0,
+   58,
+   5,
    "STRING"
   ],
   [
-   371,
-   55,
+   380,
+   4,
    0,
-   57,
+   58,
+   0,
+   "CLIP"
+  ],
+  [
+   381,
+   70,
+   0,
+   58,
+   1,
+   "IMAGE"
+  ],
+  [
+   382,
+   60,
+   0,
+   59,
    1,
    "STRING"
   ],
   [
-   372,
-   57,
+   383,
+   19,
    0,
-   58,
+   59,
+   0,
+   "CLIP"
+  ],
+  [
+   384,
+   6,
+   0,
+   60,
+   2,
+   "BOOLEAN"
+  ],
+  [
+   385,
+   54,
+   0,
+   60,
    0,
    "STRING"
   ],
   [
-   373,
+   386,
+   58,
+   0,
+   60,
+   1,
+   "STRING"
+  ],
+  [
+   387,
+   60,
+   0,
+   61,
+   0,
+   "STRING"
+  ],
+  [
+   388,
    39,
    0,
-   59,
+   62,
    2,
    "FLOAT"
   ],
   [
-   374,
-   56,
-   0,
+   389,
    59,
+   0,
+   62,
    0,
    "CONDITIONING"
   ],
   [
-   375,
+   390,
    18,
    0,
-   59,
+   62,
    1,
    "CONDITIONING"
   ],
   [
-   376,
+   391,
    10,
    0,
-   61,
+   64,
    0,
    "MODEL"
   ],
   [
-   377,
-   59,
+   392,
+   62,
    0,
-   61,
+   64,
    1,
    "CONDITIONING"
   ],
   [
-   378,
-   59,
+   393,
+   62,
    1,
-   61,
+   64,
    2,
    "CONDITIONING"
   ],
   [
-   379,
-   60,
+   394,
+   63,
    0,
-   62,
+   65,
    0,
    "NOISE"
   ],
   [
-   380,
-   61,
+   395,
+   64,
    0,
-   62,
+   65,
    1,
    "GUIDER"
   ],
   [
-   381,
+   396,
    21,
    0,
-   62,
+   65,
    2,
    "SAMPLER"
   ],
   [
-   382,
+   397,
    23,
    0,
-   62,
+   65,
    3,
    "SIGMAS"
   ],
   [
-   383,
-   81,
-   0,
-   62,
-   4,
-   "LATENT"
-  ],
-  [
-   384,
-   15,
-   0,
-   63,
-   0,
-   "VAE"
-  ],
-  [
-   385,
-   67,
-   0,
-   63,
-   1,
-   "IMAGE"
-  ],
-  [
-   386,
-   36,
-   0,
-   63,
-   2,
-   "LATENT"
-  ],
-  [
-   387,
-   62,
-   0,
-   64,
-   0,
-   "LATENT"
-  ],
-  [
-   388,
-   63,
-   0,
-   65,
-   0,
-   "LATENT"
-  ],
-  [
-   389,
-   29,
-   0,
-   65,
-   1,
-   "LATENT"
-  ],
-  [
-   390,
-   53,
-   0,
-   66,
-   0,
-   "IMAGE"
-  ],
-  [
-   391,
-   66,
-   0,
-   67,
-   0,
-   "IMAGE"
-  ],
-  [
-   392,
-   64,
-   0,
-   68,
-   0,
-   "LATENT"
-  ],
-  [
-   393,
-   25,
-   0,
-   68,
-   1,
-   "LATENT_UPSCALE_MODEL"
-  ],
-  [
-   394,
-   15,
-   0,
-   68,
-   2,
-   "VAE"
-  ],
-  [
-   395,
-   15,
-   0,
-   69,
-   0,
-   "VAE"
-  ],
-  [
-   396,
-   67,
-   0,
-   69,
-   1,
-   "IMAGE"
-  ],
-  [
-   397,
-   68,
-   0,
-   69,
-   2,
-   "LATENT"
-  ],
-  [
    398,
-   69,
+   84,
    0,
-   71,
-   0,
+   65,
+   4,
    "LATENT"
   ],
   [
    399,
-   64,
+   15,
+   0,
+   66,
+   0,
+   "VAE"
+  ],
+  [
+   400,
+   70,
+   0,
+   66,
    1,
-   71,
+   "IMAGE"
+  ],
+  [
+   401,
+   36,
+   0,
+   66,
+   2,
+   "LATENT"
+  ],
+  [
+   402,
+   65,
+   0,
+   67,
+   0,
+   "LATENT"
+  ],
+  [
+   403,
+   66,
+   0,
+   68,
+   0,
+   "LATENT"
+  ],
+  [
+   404,
+   29,
+   0,
+   68,
    1,
    "LATENT"
   ],
   [
-   400,
-   10,
-   0,
-   72,
-   0,
-   "MODEL"
-  ],
-  [
-   401,
-   59,
-   0,
-   72,
-   1,
-   "CONDITIONING"
-  ],
-  [
-   402,
-   59,
-   1,
-   72,
-   2,
-   "CONDITIONING"
-  ],
-  [
-   403,
-   70,
-   0,
-   73,
-   0,
-   "NOISE"
-  ],
-  [
-   404,
-   72,
-   0,
-   73,
-   1,
-   "GUIDER"
-  ],
-  [
    405,
-   45,
+   57,
    0,
-   73,
-   2,
-   "SAMPLER"
+   69,
+   0,
+   "IMAGE"
   ],
   [
    406,
-   43,
+   69,
    0,
-   73,
-   3,
-   "SIGMAS"
+   70,
+   0,
+   "IMAGE"
   ],
   [
    407,
+   67,
+   0,
    71,
    0,
-   73,
-   4,
    "LATENT"
   ],
   [
    408,
-   73,
+   25,
    0,
-   74,
-   0,
-   "LATENT"
+   71,
+   1,
+   "LATENT_UPSCALE_MODEL"
   ],
   [
    409,
-   74,
+   15,
    0,
-   75,
-   0,
-   "LATENT"
+   71,
+   2,
+   "VAE"
   ],
   [
    410,
    15,
    0,
-   75,
-   1,
+   72,
+   0,
    "VAE"
   ],
   [
    411,
-   74,
-   1,
-   76,
+   70,
    0,
-   "LATENT"
+   72,
+   1,
+   "IMAGE"
   ],
   [
    412,
-   16,
+   71,
    0,
-   76,
-   1,
-   "VAE"
+   72,
+   2,
+   "LATENT"
   ],
   [
    413,
-   49,
+   72,
    0,
-   77,
+   74,
    0,
-   "AUDIO"
+   "LATENT"
   ],
   [
    414,
-   77,
-   0,
-   78,
-   0,
-   "AUDIO"
+   67,
+   1,
+   74,
+   1,
+   "LATENT"
   ],
   [
    415,
-   16,
+   10,
    0,
-   78,
-   1,
-   "VAE"
+   75,
+   0,
+   "MODEL"
   ],
   [
    416,
-   78,
+   62,
    0,
-   79,
-   0,
-   "LATENT"
+   75,
+   1,
+   "CONDITIONING"
   ],
   [
    417,
-   52,
-   0,
-   79,
+   62,
    1,
-   "MASK"
+   75,
+   2,
+   "CONDITIONING"
   ],
   [
    418,
-   65,
+   73,
    0,
-   80,
+   76,
    0,
-   "LATENT"
+   "NOISE"
   ],
   [
    419,
-   79,
+   75,
    0,
-   80,
+   76,
    1,
-   "LATENT"
+   "GUIDER"
   ],
   [
    420,
-   51,
+   45,
    0,
-   81,
+   76,
    2,
-   "BOOLEAN"
+   "SAMPLER"
   ],
   [
    421,
-   65,
+   43,
    0,
-   81,
-   0,
-   "LATENT"
+   76,
+   3,
+   "SIGMAS"
   ],
   [
    422,
-   80,
+   74,
    0,
-   81,
-   1,
+   76,
+   4,
    "LATENT"
   ],
   [
    423,
-   75,
+   76,
    0,
-   82,
+   77,
    0,
-   "IMAGE"
+   "LATENT"
   ],
   [
    424,
-   83,
+   77,
    0,
-   84,
-   5,
-   "STRING"
+   78,
+   0,
+   "LATENT"
   ],
   [
    425,
-   4,
+   15,
    0,
-   84,
-   0,
-   "CLIP"
+   78,
+   1,
+   "VAE"
   ],
   [
    426,
-   96,
-   0,
-   84,
+   77,
    1,
-   "IMAGE"
+   79,
+   0,
+   "LATENT"
   ],
   [
    427,
-   86,
+   16,
    0,
-   85,
+   79,
    1,
-   "STRING"
+   "VAE"
   ],
   [
    428,
-   19,
+   49,
    0,
-   85,
+   80,
    0,
-   "CLIP"
+   "AUDIO"
   ],
   [
    429,
-   6,
+   80,
    0,
-   86,
+   81,
+   0,
+   "AUDIO"
+  ],
+  [
+   430,
+   16,
+   0,
+   81,
+   1,
+   "VAE"
+  ],
+  [
+   431,
+   81,
+   0,
+   82,
+   0,
+   "LATENT"
+  ],
+  [
+   432,
+   52,
+   0,
+   82,
+   1,
+   "MASK"
+  ],
+  [
+   433,
+   68,
+   0,
+   83,
+   0,
+   "LATENT"
+  ],
+  [
+   434,
+   82,
+   0,
+   83,
+   1,
+   "LATENT"
+  ],
+  [
+   435,
+   51,
+   0,
+   84,
    2,
    "BOOLEAN"
   ],
   [
-   430,
+   436,
+   68,
+   0,
+   84,
+   0,
+   "LATENT"
+  ],
+  [
+   437,
    83,
    0,
+   84,
+   1,
+   "LATENT"
+  ],
+  [
+   438,
+   78,
+   0,
+   85,
+   0,
+   "IMAGE"
+  ],
+  [
+   439,
+   87,
+   0,
+   89,
+   2,
+   "BOOLEAN"
+  ],
+  [
+   440,
+   85,
+   0,
+   89,
+   0,
+   "IMAGE"
+  ],
+  [
+   441,
+   88,
+   0,
+   89,
+   1,
+   "IMAGE"
+  ],
+  [
+   442,
    86,
    0,
+   90,
+   5,
    "STRING"
   ],
   [
-   431,
-   84,
+   443,
+   4,
    0,
-   86,
+   90,
+   0,
+   "CLIP"
+  ],
+  [
+   444,
+   102,
+   0,
+   90,
+   1,
+   "IMAGE"
+  ],
+  [
+   445,
+   92,
+   0,
+   91,
    1,
    "STRING"
   ],
   [
-   432,
+   446,
+   19,
+   0,
+   91,
+   0,
+   "CLIP"
+  ],
+  [
+   447,
+   6,
+   0,
+   92,
+   2,
+   "BOOLEAN"
+  ],
+  [
+   448,
    86,
    0,
-   87,
+   92,
    0,
    "STRING"
   ],
   [
-   433,
+   449,
+   90,
+   0,
+   92,
+   1,
+   "STRING"
+  ],
+  [
+   450,
+   92,
+   0,
+   93,
+   0,
+   "STRING"
+  ],
+  [
+   451,
    39,
    0,
-   88,
+   94,
    2,
    "FLOAT"
   ],
   [
-   434,
-   85,
-   0,
-   88,
-   0,
-   "CONDITIONING"
-  ],
-  [
-   435,
-   18,
-   0,
-   88,
-   1,
-   "CONDITIONING"
-  ],
-  [
-   436,
-   10,
-   0,
-   90,
-   0,
-   "MODEL"
-  ],
-  [
-   437,
-   88,
-   0,
-   90,
-   1,
-   "CONDITIONING"
-  ],
-  [
-   438,
-   88,
-   1,
-   90,
-   2,
-   "CONDITIONING"
-  ],
-  [
-   439,
-   89,
-   0,
-   91,
-   0,
-   "NOISE"
-  ],
-  [
-   440,
-   90,
-   0,
-   91,
-   1,
-   "GUIDER"
-  ],
-  [
-   441,
-   21,
-   0,
-   91,
-   2,
-   "SAMPLER"
-  ],
-  [
-   442,
-   23,
-   0,
-   91,
-   3,
-   "SIGMAS"
-  ],
-  [
-   443,
-   110,
-   0,
-   91,
-   4,
-   "LATENT"
-  ],
-  [
-   444,
-   15,
-   0,
-   92,
-   0,
-   "VAE"
-  ],
-  [
-   445,
-   96,
-   0,
-   92,
-   1,
-   "IMAGE"
-  ],
-  [
-   446,
-   36,
-   0,
-   92,
-   2,
-   "LATENT"
-  ],
-  [
-   447,
-   91,
-   0,
-   93,
-   0,
-   "LATENT"
-  ],
-  [
-   448,
-   92,
-   0,
-   94,
-   0,
-   "LATENT"
-  ],
-  [
-   449,
-   29,
-   0,
-   94,
-   1,
-   "LATENT"
-  ],
-  [
-   450,
-   82,
-   0,
-   95,
-   0,
-   "IMAGE"
-  ],
-  [
-   451,
-   95,
-   0,
-   96,
-   0,
-   "IMAGE"
-  ],
-  [
    452,
-   93,
+   91,
    0,
-   97,
+   94,
    0,
-   "LATENT"
+   "CONDITIONING"
   ],
   [
    453,
-   25,
+   18,
    0,
-   97,
+   94,
    1,
-   "LATENT_UPSCALE_MODEL"
+   "CONDITIONING"
   ],
   [
    454,
-   15,
+   10,
    0,
-   97,
-   2,
-   "VAE"
+   96,
+   0,
+   "MODEL"
   ],
   [
    455,
+   94,
+   0,
+   96,
+   1,
+   "CONDITIONING"
+  ],
+  [
+   456,
+   94,
+   1,
+   96,
+   2,
+   "CONDITIONING"
+  ],
+  [
+   457,
+   95,
+   0,
+   97,
+   0,
+   "NOISE"
+  ],
+  [
+   458,
+   96,
+   0,
+   97,
+   1,
+   "GUIDER"
+  ],
+  [
+   459,
+   21,
+   0,
+   97,
+   2,
+   "SAMPLER"
+  ],
+  [
+   460,
+   23,
+   0,
+   97,
+   3,
+   "SIGMAS"
+  ],
+  [
+   461,
+   116,
+   0,
+   97,
+   4,
+   "LATENT"
+  ],
+  [
+   462,
    15,
    0,
    98,
@@ -11509,1050 +12015,1186 @@
    "VAE"
   ],
   [
-   456,
-   96,
+   463,
+   102,
    0,
    98,
    1,
    "IMAGE"
   ],
   [
-   457,
-   97,
-   0,
-   98,
-   2,
-   "LATENT"
-  ],
-  [
-   458,
-   98,
-   0,
-   100,
-   0,
-   "LATENT"
-  ],
-  [
-   459,
-   93,
-   1,
-   100,
-   1,
-   "LATENT"
-  ],
-  [
-   460,
-   10,
-   0,
-   101,
-   0,
-   "MODEL"
-  ],
-  [
-   461,
-   88,
-   0,
-   101,
-   1,
-   "CONDITIONING"
-  ],
-  [
-   462,
-   88,
-   1,
-   101,
-   2,
-   "CONDITIONING"
-  ],
-  [
-   463,
-   99,
-   0,
-   102,
-   0,
-   "NOISE"
-  ],
-  [
    464,
-   101,
+   36,
    0,
-   102,
-   1,
-   "GUIDER"
+   98,
+   2,
+   "LATENT"
   ],
   [
    465,
-   45,
+   97,
    0,
-   102,
-   2,
-   "SAMPLER"
+   99,
+   0,
+   "LATENT"
   ],
   [
    466,
-   43,
+   98,
    0,
-   102,
-   3,
-   "SIGMAS"
+   100,
+   0,
+   "LATENT"
   ],
   [
    467,
-   100,
+   29,
    0,
-   102,
-   4,
+   100,
+   1,
    "LATENT"
   ],
   [
    468,
-   102,
+   89,
    0,
-   103,
+   101,
    0,
-   "LATENT"
+   "IMAGE"
   ],
   [
    469,
-   103,
+   101,
    0,
-   104,
+   102,
    0,
-   "LATENT"
+   "IMAGE"
   ],
   [
    470,
-   15,
+   99,
    0,
-   104,
-   1,
-   "VAE"
-  ],
-  [
-   471,
    103,
-   1,
-   105,
    0,
    "LATENT"
   ],
   [
-   472,
-   16,
+   471,
+   25,
    0,
-   105,
+   103,
    1,
+   "LATENT_UPSCALE_MODEL"
+  ],
+  [
+   472,
+   15,
+   0,
+   103,
+   2,
    "VAE"
   ],
   [
    473,
-   76,
+   15,
    0,
-   106,
+   104,
    0,
-   "AUDIO"
-  ],
-  [
-   474,
-   106,
-   0,
-   107,
-   0,
-   "AUDIO"
-  ],
-  [
-   475,
-   16,
-   0,
-   107,
-   1,
    "VAE"
   ],
   [
-   476,
-   107,
+   474,
+   102,
    0,
-   108,
+   104,
+   1,
+   "IMAGE"
+  ],
+  [
+   475,
+   103,
+   0,
+   104,
+   2,
+   "LATENT"
+  ],
+  [
+   476,
+   104,
+   0,
+   106,
    0,
    "LATENT"
   ],
   [
    477,
-   52,
-   0,
-   108,
+   99,
    1,
-   "MASK"
+   106,
+   1,
+   "LATENT"
   ],
   [
    478,
-   94,
-   0,
-   109,
-   0,
-   "LATENT"
-  ],
-  [
-   479,
-   108,
-   0,
-   109,
-   1,
-   "LATENT"
-  ],
-  [
-   480,
-   51,
-   0,
-   110,
-   2,
-   "BOOLEAN"
-  ],
-  [
-   481,
-   94,
-   0,
-   110,
-   0,
-   "LATENT"
-  ],
-  [
-   482,
-   109,
-   0,
-   110,
-   1,
-   "LATENT"
-  ],
-  [
-   483,
-   104,
-   0,
-   111,
-   0,
-   "IMAGE"
-  ],
-  [
-   484,
-   112,
-   0,
-   113,
-   5,
-   "STRING"
-  ],
-  [
-   485,
-   4,
-   0,
-   113,
-   0,
-   "CLIP"
-  ],
-  [
-   486,
-   125,
-   0,
-   113,
-   1,
-   "IMAGE"
-  ],
-  [
-   487,
-   115,
-   0,
-   114,
-   1,
-   "STRING"
-  ],
-  [
-   488,
-   19,
-   0,
-   114,
-   0,
-   "CLIP"
-  ],
-  [
-   489,
-   6,
-   0,
-   115,
-   2,
-   "BOOLEAN"
-  ],
-  [
-   490,
-   112,
-   0,
-   115,
-   0,
-   "STRING"
-  ],
-  [
-   491,
-   113,
-   0,
-   115,
-   1,
-   "STRING"
-  ],
-  [
-   492,
-   115,
-   0,
-   116,
-   0,
-   "STRING"
-  ],
-  [
-   493,
-   39,
-   0,
-   117,
-   2,
-   "FLOAT"
-  ],
-  [
-   494,
-   114,
-   0,
-   117,
-   0,
-   "CONDITIONING"
-  ],
-  [
-   495,
-   18,
-   0,
-   117,
-   1,
-   "CONDITIONING"
-  ],
-  [
-   496,
    10,
    0,
-   119,
+   107,
    0,
    "MODEL"
   ],
   [
-   497,
-   117,
+   479,
+   94,
    0,
-   119,
+   107,
    1,
    "CONDITIONING"
   ],
   [
-   498,
-   117,
+   480,
+   94,
    1,
-   119,
+   107,
    2,
    "CONDITIONING"
   ],
   [
-   499,
-   118,
+   481,
+   105,
    0,
-   120,
+   108,
    0,
    "NOISE"
   ],
   [
-   500,
-   119,
+   482,
+   107,
    0,
-   120,
+   108,
    1,
    "GUIDER"
   ],
   [
-   501,
-   21,
+   483,
+   45,
    0,
-   120,
+   108,
    2,
    "SAMPLER"
   ],
   [
-   502,
-   23,
+   484,
+   43,
    0,
-   120,
+   108,
    3,
    "SIGMAS"
   ],
   [
-   503,
-   139,
+   485,
+   106,
    0,
-   120,
+   108,
    4,
    "LATENT"
   ],
   [
-   504,
+   486,
+   108,
+   0,
+   109,
+   0,
+   "LATENT"
+  ],
+  [
+   487,
+   109,
+   0,
+   110,
+   0,
+   "LATENT"
+  ],
+  [
+   488,
    15,
    0,
-   121,
-   0,
+   110,
+   1,
    "VAE"
   ],
   [
-   505,
-   125,
-   0,
-   121,
+   489,
+   109,
    1,
+   111,
+   0,
+   "LATENT"
+  ],
+  [
+   490,
+   16,
+   0,
+   111,
+   1,
+   "VAE"
+  ],
+  [
+   491,
+   79,
+   0,
+   112,
+   0,
+   "AUDIO"
+  ],
+  [
+   492,
+   112,
+   0,
+   113,
+   0,
+   "AUDIO"
+  ],
+  [
+   493,
+   16,
+   0,
+   113,
+   1,
+   "VAE"
+  ],
+  [
+   494,
+   113,
+   0,
+   114,
+   0,
+   "LATENT"
+  ],
+  [
+   495,
+   52,
+   0,
+   114,
+   1,
+   "MASK"
+  ],
+  [
+   496,
+   100,
+   0,
+   115,
+   0,
+   "LATENT"
+  ],
+  [
+   497,
+   114,
+   0,
+   115,
+   1,
+   "LATENT"
+  ],
+  [
+   498,
+   51,
+   0,
+   116,
+   2,
+   "BOOLEAN"
+  ],
+  [
+   499,
+   100,
+   0,
+   116,
+   0,
+   "LATENT"
+  ],
+  [
+   500,
+   115,
+   0,
+   116,
+   1,
+   "LATENT"
+  ],
+  [
+   501,
+   110,
+   0,
+   117,
+   0,
    "IMAGE"
   ],
   [
-   506,
-   36,
+   502,
+   119,
    0,
    121,
    2,
-   "LATENT"
+   "BOOLEAN"
   ],
   [
-   507,
+   503,
+   117,
+   0,
+   121,
+   0,
+   "IMAGE"
+  ],
+  [
+   504,
    120,
+   0,
+   121,
+   1,
+   "IMAGE"
+  ],
+  [
+   505,
+   118,
+   0,
+   122,
+   5,
+   "STRING"
+  ],
+  [
+   506,
+   4,
    0,
    122,
    0,
-   "LATENT"
+   "CLIP"
+  ],
+  [
+   507,
+   134,
+   0,
+   122,
+   1,
+   "IMAGE"
   ],
   [
    508,
-   121,
-   0,
-   123,
-   0,
-   "LATENT"
-  ],
-  [
-   509,
-   29,
+   124,
    0,
    123,
    1,
-   "LATENT"
+   "STRING"
+  ],
+  [
+   509,
+   19,
+   0,
+   123,
+   0,
+   "CLIP"
   ],
   [
    510,
-   111,
+   6,
    0,
    124,
-   0,
-   "IMAGE"
+   2,
+   "BOOLEAN"
   ],
   [
    511,
+   118,
+   0,
    124,
    0,
-   125,
-   0,
-   "IMAGE"
+   "STRING"
   ],
   [
    512,
    122,
    0,
-   126,
-   0,
-   "LATENT"
+   124,
+   1,
+   "STRING"
   ],
   [
    513,
-   25,
+   124,
    0,
-   126,
-   1,
-   "LATENT_UPSCALE_MODEL"
+   125,
+   0,
+   "STRING"
   ],
   [
    514,
-   15,
+   39,
    0,
    126,
    2,
-   "VAE"
+   "FLOAT"
   ],
   [
    515,
-   15,
+   123,
    0,
-   127,
+   126,
    0,
-   "VAE"
+   "CONDITIONING"
   ],
   [
    516,
-   125,
+   18,
    0,
-   127,
+   126,
    1,
-   "IMAGE"
+   "CONDITIONING"
   ],
   [
    517,
-   126,
-   0,
-   127,
-   2,
-   "LATENT"
-  ],
-  [
-   518,
-   127,
-   0,
-   129,
-   0,
-   "LATENT"
-  ],
-  [
-   519,
-   122,
-   1,
-   129,
-   1,
-   "LATENT"
-  ],
-  [
-   520,
    10,
    0,
-   130,
+   128,
    0,
    "MODEL"
   ],
   [
-   521,
-   117,
+   518,
+   126,
    0,
-   130,
+   128,
    1,
    "CONDITIONING"
   ],
   [
-   522,
-   117,
+   519,
+   126,
    1,
-   130,
+   128,
    2,
    "CONDITIONING"
   ],
   [
-   523,
-   128,
+   520,
+   127,
    0,
-   131,
+   129,
    0,
    "NOISE"
   ],
   [
-   524,
-   130,
+   521,
+   128,
    0,
-   131,
+   129,
    1,
    "GUIDER"
   ],
   [
-   525,
-   45,
+   522,
+   21,
    0,
-   131,
+   129,
    2,
    "SAMPLER"
   ],
   [
-   526,
-   43,
+   523,
+   23,
    0,
-   131,
+   129,
    3,
    "SIGMAS"
   ],
   [
-   527,
-   129,
+   524,
+   148,
    0,
-   131,
+   129,
    4,
    "LATENT"
   ],
   [
-   528,
-   131,
+   525,
+   15,
    0,
-   132,
+   130,
+   0,
+   "VAE"
+  ],
+  [
+   526,
+   134,
+   0,
+   130,
+   1,
+   "IMAGE"
+  ],
+  [
+   527,
+   36,
+   0,
+   130,
+   2,
+   "LATENT"
+  ],
+  [
+   528,
+   129,
+   0,
+   131,
    0,
    "LATENT"
   ],
   [
    529,
-   132,
+   130,
    0,
-   133,
+   132,
    0,
    "LATENT"
   ],
   [
    530,
-   15,
+   29,
    0,
-   133,
+   132,
    1,
-   "VAE"
+   "LATENT"
   ],
   [
    531,
-   132,
-   1,
+   121,
+   0,
+   133,
+   0,
+   "IMAGE"
+  ],
+  [
+   532,
+   133,
+   0,
    134,
+   0,
+   "IMAGE"
+  ],
+  [
+   533,
+   131,
+   0,
+   135,
    0,
    "LATENT"
   ],
   [
-   532,
-   16,
-   0,
-   134,
-   1,
-   "VAE"
-  ],
-  [
-   533,
-   105,
-   0,
-   135,
-   0,
-   "AUDIO"
-  ],
-  [
    534,
+   25,
+   0,
    135,
-   0,
-   136,
-   0,
-   "AUDIO"
+   1,
+   "LATENT_UPSCALE_MODEL"
   ],
   [
    535,
-   16,
+   15,
    0,
-   136,
-   1,
+   135,
+   2,
    "VAE"
   ],
   [
    536,
+   15,
+   0,
    136,
    0,
-   137,
-   0,
-   "LATENT"
+   "VAE"
   ],
   [
    537,
-   52,
+   134,
    0,
-   137,
+   136,
    1,
-   "MASK"
+   "IMAGE"
   ],
   [
    538,
-   123,
+   135,
    0,
-   138,
-   0,
+   136,
+   2,
    "LATENT"
   ],
   [
    539,
-   137,
+   136,
    0,
    138,
-   1,
+   0,
    "LATENT"
   ],
   [
    540,
-   51,
-   0,
-   139,
-   2,
-   "BOOLEAN"
+   131,
+   1,
+   138,
+   1,
+   "LATENT"
   ],
   [
    541,
-   123,
+   10,
    0,
    139,
    0,
-   "LATENT"
+   "MODEL"
   ],
   [
    542,
-   138,
+   126,
    0,
    139,
    1,
-   "LATENT"
+   "CONDITIONING"
   ],
   [
    543,
-   24,
-   0,
-   140,
-   8,
-   "INT"
+   126,
+   1,
+   139,
+   2,
+   "CONDITIONING"
   ],
   [
    544,
-   48,
+   137,
    0,
    140,
    0,
-   "IMAGE"
+   "NOISE"
   ],
   [
    545,
-   75,
-   0,
-   140,
-   2,
-   "IMAGE"
-  ],
-  [
-   546,
-   104,
-   0,
-   140,
-   4,
-   "IMAGE"
-  ],
-  [
-   547,
-   133,
-   0,
-   140,
-   6,
-   "IMAGE"
-  ],
-  [
-   548,
-   49,
+   139,
    0,
    140,
    1,
-   "AUDIO"
+   "GUIDER"
   ],
   [
-   549,
-   76,
+   546,
+   45,
+   0,
+   140,
+   2,
+   "SAMPLER"
+  ],
+  [
+   547,
+   43,
    0,
    140,
    3,
-   "AUDIO"
+   "SIGMAS"
+  ],
+  [
+   548,
+   138,
+   0,
+   140,
+   4,
+   "LATENT"
+  ],
+  [
+   549,
+   140,
+   0,
+   141,
+   0,
+   "LATENT"
   ],
   [
    550,
-   105,
+   141,
    0,
-   140,
-   5,
-   "AUDIO"
+   142,
+   0,
+   "LATENT"
   ],
   [
    551,
-   134,
+   15,
    0,
-   140,
-   7,
-   "AUDIO"
+   142,
+   1,
+   "VAE"
   ],
   [
    552,
-   147,
-   0,
    141,
+   1,
+   143,
    0,
-   "IMAGE"
+   "LATENT"
   ],
   [
    553,
-   142,
+   16,
    0,
-   141,
+   143,
    1,
    "VAE"
   ],
   [
    554,
-   143,
+   111,
    0,
    144,
    0,
-   "MODEL"
+   "AUDIO"
   ],
   [
    555,
-   149,
-   0,
    144,
-   1,
-   "CONDITIONING"
-  ],
-  [
-   556,
-   149,
-   1,
-   144,
-   2,
-   "CONDITIONING"
-  ],
-  [
-   557,
-   152,
-   0,
-   144,
-   3,
-   "LATENT"
-  ],
-  [
-   558,
-   153,
    0,
    145,
    0,
-   "LATENT"
+   "AUDIO"
   ],
   [
-   559,
-   142,
+   556,
+   16,
    0,
    145,
    1,
    "VAE"
   ],
   [
-   560,
-   140,
+   557,
+   145,
    0,
    146,
    0,
-   "IMAGE"
+   "LATENT"
   ],
   [
-   561,
+   558,
+   52,
+   0,
    146,
+   1,
+   "MASK"
+  ],
+  [
+   559,
+   132,
    0,
    147,
    0,
-   "IMAGE"
+   "LATENT"
+  ],
+  [
+   560,
+   146,
+   0,
+   147,
+   1,
+   "LATENT"
+  ],
+  [
+   561,
+   51,
+   0,
+   148,
+   2,
+   "BOOLEAN"
   ],
   [
    562,
-   145,
+   132,
    0,
    148,
    0,
-   "IMAGE"
+   "LATENT"
   ],
   [
    563,
-   146,
+   147,
    0,
    148,
    1,
-   "IMAGE"
+   "LATENT"
   ],
   [
    564,
-   143,
+   24,
    0,
    149,
-   0,
-   "MODEL"
-  ],
-  [
-   565,
-   152,
-   0,
-   149,
-   1,
-   "LATENT"
-  ],
-  [
-   566,
-   141,
-   0,
-   150,
-   0,
-   "LATENT"
-  ],
-  [
-   567,
-   144,
-   0,
-   151,
-   0,
-   "LATENT"
-  ],
-  [
-   568,
-   150,
-   1,
-   151,
-   1,
+   8,
    "INT"
   ],
   [
-   569,
-   154,
+   565,
+   48,
    0,
-   152,
+   149,
+   0,
+   "IMAGE"
+  ],
+  [
+   566,
+   78,
+   0,
+   149,
    2,
-   "BOOLEAN"
+   "IMAGE"
+  ],
+  [
+   567,
+   110,
+   0,
+   149,
+   4,
+   "IMAGE"
+  ],
+  [
+   568,
+   142,
+   0,
+   149,
+   6,
+   "IMAGE"
+  ],
+  [
+   569,
+   49,
+   0,
+   149,
+   1,
+   "AUDIO"
   ],
   [
    570,
-   141,
+   79,
    0,
-   152,
-   0,
-   "LATENT"
+   149,
+   3,
+   "AUDIO"
   ],
   [
    571,
-   150,
+   111,
    0,
-   152,
-   1,
-   "LATENT"
+   149,
+   5,
+   "AUDIO"
   ],
   [
    572,
-   154,
+   143,
    0,
-   153,
-   2,
-   "BOOLEAN"
+   149,
+   7,
+   "AUDIO"
   ],
   [
    573,
-   144,
+   55,
    0,
-   153,
-   0,
-   "LATENT"
+   149,
+   10,
+   "BOOLEAN"
   ],
   [
    574,
-   151,
+   87,
    0,
-   153,
-   1,
-   "LATENT"
+   149,
+   11,
+   "BOOLEAN"
   ],
   [
    575,
-   155,
+   119,
    0,
-   156,
-   2,
+   149,
+   12,
    "BOOLEAN"
   ],
   [
    576,
-   140,
-   0,
    156,
+   0,
+   150,
    0,
    "IMAGE"
   ],
   [
    577,
-   148,
+   151,
+   0,
+   150,
+   1,
+   "VAE"
+  ],
+  [
+   578,
+   152,
+   0,
+   153,
+   0,
+   "MODEL"
+  ],
+  [
+   579,
+   158,
+   0,
+   153,
+   1,
+   "CONDITIONING"
+  ],
+  [
+   580,
+   158,
+   1,
+   153,
+   2,
+   "CONDITIONING"
+  ],
+  [
+   581,
+   161,
+   0,
+   153,
+   3,
+   "LATENT"
+  ],
+  [
+   582,
+   162,
+   0,
+   154,
+   0,
+   "LATENT"
+  ],
+  [
+   583,
+   151,
+   0,
+   154,
+   1,
+   "VAE"
+  ],
+  [
+   584,
+   149,
+   0,
+   155,
+   0,
+   "IMAGE"
+  ],
+  [
+   585,
+   155,
    0,
    156,
+   0,
+   "IMAGE"
+  ],
+  [
+   586,
+   154,
+   0,
+   157,
+   0,
+   "IMAGE"
+  ],
+  [
+   587,
+   155,
+   0,
+   157,
    1,
    "IMAGE"
   ],
   [
-   578,
-   157,
+   588,
+   152,
    0,
    158,
+   0,
+   "MODEL"
+  ],
+  [
+   589,
+   161,
+   0,
+   158,
+   1,
+   "LATENT"
+  ],
+  [
+   590,
+   150,
+   0,
+   159,
+   0,
+   "LATENT"
+  ],
+  [
+   591,
+   153,
+   0,
+   160,
+   0,
+   "LATENT"
+  ],
+  [
+   592,
+   159,
+   1,
+   160,
+   1,
+   "INT"
+  ],
+  [
+   593,
+   163,
+   0,
+   161,
+   2,
+   "BOOLEAN"
+  ],
+  [
+   594,
+   150,
+   0,
+   161,
+   0,
+   "LATENT"
+  ],
+  [
+   595,
+   159,
+   0,
+   161,
+   1,
+   "LATENT"
+  ],
+  [
+   596,
+   163,
+   0,
+   162,
+   2,
+   "BOOLEAN"
+  ],
+  [
+   597,
+   153,
+   0,
+   162,
+   0,
+   "LATENT"
+  ],
+  [
+   598,
+   160,
+   0,
+   162,
+   1,
+   "LATENT"
+  ],
+  [
+   599,
+   164,
+   0,
+   165,
+   2,
+   "BOOLEAN"
+  ],
+  [
+   600,
+   149,
+   0,
+   165,
+   0,
+   "IMAGE"
+  ],
+  [
+   601,
+   157,
+   0,
+   165,
+   1,
+   "IMAGE"
+  ],
+  [
+   602,
+   166,
+   0,
+   167,
    0,
    "INTERP_MODEL"
   ],
   [
-   579,
-   156,
+   603,
+   165,
    0,
-   158,
+   167,
    1,
    "IMAGE"
   ],
   [
-   580,
+   604,
    39,
    0,
-   159,
+   168,
    0,
    "FLOAT"
   ],
   [
-   581,
-   160,
+   605,
+   169,
    0,
-   161,
+   170,
    2,
    "BOOLEAN"
   ],
   [
-   582,
-   156,
+   606,
+   165,
    0,
-   161,
+   170,
    0,
    "IMAGE"
   ],
   [
-   583,
-   158,
+   607,
+   167,
    0,
-   161,
+   170,
    1,
    "IMAGE"
   ],
   [
-   584,
-   160,
+   608,
+   169,
    0,
-   162,
+   171,
    2,
    "BOOLEAN"
   ],
   [
-   585,
+   609,
    39,
    0,
-   162,
+   171,
    0,
    "FLOAT"
   ],
   [
-   586,
-   159,
+   610,
+   168,
    0,
-   162,
+   171,
    1,
    "FLOAT"
   ]

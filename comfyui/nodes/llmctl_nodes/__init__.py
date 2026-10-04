@@ -252,7 +252,8 @@ class LlmctlJoinClips:
     every join, however long LTX's audio for a clip came out. Each join is
     crossfaded (equal power) within the one frame the clips share, so it does
     not click; a jump in level between two clips' sounds is what *Ton
-    fortsetzen* in the chain workflows takes care of."""
+    fortsetzen* in the chain workflows takes care of. Where cut_N is on, clip N
+    starts on a picture of its own: none is dropped, and the join is a hard cut."""
     CATEGORY = "llmctl"
     FUNCTION = "join"
     RETURN_TYPES = ("IMAGE", "AUDIO")
@@ -267,17 +268,22 @@ class LlmctlJoinClips:
                              "crossfade": ("FLOAT", {"default": 0.04, "min": 0.0, "max": 0.5, "step": 0.01,
                                                      "tooltip": "seconds of crossfade at each join, at most the one "
                                                                 "frame the clips share; 0 = hard cut"})},
-                "optional": {k: v for k, v in clip.items() if not k.endswith("_1")}}
+                "optional": {**{k: v for k, v in clip.items() if not k.endswith("_1")},
+                             **{f"cut_{i}": ("BOOLEAN", {"default": False,
+                                                         "tooltip": f"clip {i} starts on its own picture: a hard cut"})
+                                for i in range(2, cls.CLIPS + 1)}}}
 
     def join(self, frame_rate, crossfade=0.0, **clips):
         import math
         import torch
-        pictures, sound, rate, raw = [], [], None, []
+        pictures, sound, rate, raw, cut = [], [], None, [], []
         for i in range(1, self.CLIPS + 1):
             images, audio = clips.get(f"images_{i}"), clips.get(f"audio_{i}")
             if images is None or audio is None:
                 continue
-            skip = 1 if pictures else 0
+            hard = bool(pictures) and bool(clips.get(f"cut_{i}"))
+            cut.append(hard)
+            skip = 1 if pictures and not hard else 0
             images = images[skip:]
             wave = audio["waveform"]
             if rate is None:
@@ -310,7 +316,7 @@ class LlmctlJoinClips:
                 out_w, out_off = raw[j]
                 in_w, in_off = raw[j + 1]
                 width = min(round(crossfade * rate), in_off, sound[j].shape[-1])
-                if width <= 0:
+                if width <= 0 or cut[j + 1]:
                     continue
                 pos = torch.arange(at - width, at)
                 ramp = (torch.arange(width, dtype=joined.dtype) + 0.5) / width * (math.pi / 2)
