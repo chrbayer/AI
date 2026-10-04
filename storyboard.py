@@ -8,7 +8,8 @@ between them. Three steps, each run again only where its input changed:
    of an edit gathers noise). With "object", that object is cut out of
    keyframe 1 (SAM 3) and given to every later edit as a second picture, so it
    looks the same in all of them.
-2. A contact sheet of the keyframes (sheet.jpg) and, with --vision, a check by a
+2. A contact sheet of the keyframes (sheet.jpg), the object's size measured in
+   each (SAM 3; it must stay the same within a shot) and, with --vision, a check by a
    vision model: per picture where the person and the object are, against what
    the plan expects there, and over all pictures whether they make one scene.
    Look before rendering: an hour of LTX is worth it only for keyframes that fit.
@@ -22,12 +23,16 @@ The plan (JSON):
     {"photo": "beach.png",                     relative to the plan file
      "object": "the pale spiral seashell",     optional: SAM 3's prompt for it
      "size": "1280x704", "seed": 1,            optional
+     "pull": 0.5,                              optional: Stärke Zielbild
      "keys": [{"edit": "...", "check": "..."}, ... five],
      "clips": [{"prompt": "..."}, ...,        four; a clip with
                {"prompt": "...", "cut": {"edit": "...", "check": "..."}}]}
 
 "edit" is the Qwen Edit prompt: <image1> is the photo, <image2> the object; a
-picture's own "seed" tries another take of it.
+picture's own "seed" tries another take of it. "object_stays": true pastes the
+object in where it lies in key 1 — until it is picked up it must not move (Qwen
+draws it somewhere else each time, and LTX then kicks or throws it there); its
+edit then leaves the object out and places the person by it.
 "check" says where things should be, in the picture's own terms ("the shell
 lies front left, in the direction she walks"). What one keyframe has to reach
 from the one before must be a natural movement in a clip's 5 s — the same shot
@@ -151,29 +156,42 @@ class Board:
         print(f"  {name}: made")
         return out
 
+    def object_box(self, picture, name):
+        """Where SAM 3 finds the object in a picture: (x0, y0, x1, y1) in its pixels, or None."""
+        from PIL import Image
+        mask = self.dir / f"{name}_mask.png"
+        key = digest(Path(picture), self.plan["object"])
+        if not self.fresh(mask, key):
+            comfy = self.need_comfy()
+            g = json.loads((self.workflows / SAM).read_text())
+            for n in g.values():
+                if n["class_type"] == "LoadImage":
+                    n["inputs"]["image"] = comfy.upload(picture, UPLOAD_DIR)
+                if n["class_type"] == "SAM3Segment":
+                    n["inputs"].update(prompt=self.plan["object"], max_segments=1)
+            comfy.run(g, mask)
+            self.made(mask, key)
+        m = Image.open(mask).convert("L")
+        box = m.point([0] * 128 + [255] * 128).getbbox()
+        if not box:
+            return None
+        w, h = Image.open(picture).size
+        sx, sy = w / m.width, h / m.height
+        return box[0] * sx, box[1] * sy, box[2] * sx, box[3] * sy
+
     def cut_object(self, key1):
         """The object from keyframe 1: SAM 3's mask, its box grown a little, cut out."""
         from PIL import Image
-        out, mask = self.dir / "object.png", self.dir / "object_mask.png"
+        out = self.dir / "object.png"
         key = digest(key1, self.plan["object"])
         if self.fresh(out, key):
             print("  object: unchanged")
             return out
-        comfy = self.need_comfy()
-        g = json.loads((self.workflows / SAM).read_text())
-        for n in g.values():
-            if n["class_type"] == "LoadImage":
-                n["inputs"]["image"] = comfy.upload(key1, UPLOAD_DIR)
-            if n["class_type"] == "SAM3Segment":
-                n["inputs"].update(prompt=self.plan["object"], max_segments=1)
-        comfy.run(g, mask)
-        m = Image.open(mask).convert("L")
-        box = m.point([0] * 128 + [255] * 128).getbbox()
-        if not box:
+        found = self.object_box(key1, "key_1")
+        if not found:
             sys.exit(f"SAM 3 found no '{self.plan['object']}' in key_1.png — reword 'object' or the first edit")
+        x0, y0, x1, y1 = found
         picture = Image.open(key1).convert("RGB")
-        sx, sy = picture.width / m.width, picture.height / m.height
-        x0, y0, x1, y1 = box[0] * sx, box[1] * sy, box[2] * sx, box[3] * sy
         grow = 0.15 * max(x1 - x0, y1 - y0)
         box = (max(0, int(x0 - grow)), max(0, int(y0 - grow)),
                min(picture.width, int(x1 + grow)), min(picture.height, int(y1 + grow)))
@@ -181,6 +199,57 @@ class Board:
         self.made(out, key)
         print(f"  object: cut out of key_1 at {box}")
         return out
+
+    def paste_object(self, key1, picture, name):
+        """The object as it lies in keyframe 1, pasted into a later picture at the
+        same place (SAM 3's mask, its edge softened): until it is picked up it must
+        not move, and Qwen draws it somewhere else in every edit — LTX then kicks,
+        throws or blends it from one place to the other."""
+        from PIL import Image, ImageFilter
+        out = self.dir / f"{name}_pasted.png"
+        key = digest(Path(key1), Path(picture), self.plan["object"])
+        if self.fresh(out, key):
+            return out
+        mask = self.dir / "key_1_mask.png"
+        self.object_box(key1, "key_1")                      # makes the mask if need be
+        src = Image.open(key1).convert("RGB")
+        dst = Image.open(picture).convert("RGB")
+        if dst.size != src.size:
+            sys.exit(f"{name}: {dst.size} is not the size of key_1 {src.size}; the object cannot be pasted")
+        m = Image.open(mask).convert("L").resize(src.size).point([0] * 128 + [255] * 128)
+        m = m.filter(ImageFilter.MaxFilter(5)).filter(ImageFilter.GaussianBlur(2))
+        dst.paste(src, (0, 0), m)
+        dst.save(out)
+        self.made(out, key)
+        print(f"  {name}: object pasted where it lies in key_1")
+        return out
+
+    def sizes(self, shown, made):
+        """The object's size, measured: within a shot (from one cut to the next the
+        camera stays where it is) it must stay about the same — a hand over it
+        hides some, so within 0.6 to 1.6 times the first picture of the shot it
+        was found in. Generated pictures drift here, and a vision model is no
+        judge of it."""
+        lines, ref, bad = [], None, 0
+        for name, _ in shown:
+            if name.startswith("cut_"):
+                ref = None                                   # a new shot
+            box = self.object_box(made[name], name)
+            if not box:
+                lines.append(f"{name}: not found")
+                continue
+            size = max(box[2] - box[0], box[3] - box[1])
+            if ref is None:
+                ref = (name, size)
+                lines.append(f"{name}: {size:.0f} px")
+                continue
+            ratio = size / ref[1]
+            ok = 0.6 <= ratio <= 1.6
+            bad += not ok
+            lines.append(f"{name}: {size:.0f} px, {ratio:.2f}× {ref[0]}" + ("" if ok else " — MISMATCH: size"))
+        for line in lines:
+            print(f"  size {line}")
+        return lines, bad
 
     def keyframes(self):
         seed = int(self.plan.get("seed", 1))
@@ -190,7 +259,10 @@ class Board:
         ref = self.cut_object(made["key_1"]) if self.plan.get("object") else None
         for i, (name, k) in enumerate(shown[1:], 2):
             made[name] = self.edit(name, k["edit"], int(k.get("seed", seed + i)), ref)
+            if k.get("object_stays"):
+                made[name] = self.paste_object(made["key_1"], made[name], name)
         self.sheet(shown, made)
+        self.measured = self.sizes(shown, made) if self.plan.get("object") else ([], 0)
         return shown, made
 
     def sheet(self, shown, made):
@@ -253,6 +325,8 @@ class Board:
              "inconsistency with the pictures' numbers, or say that there is none.")
         answer = ask([{"type": "text", "text": q}, *[image(made[n]) for n, _ in shown]])
         report.append(f"## All pictures\n\n{answer}\n")
+        if self.measured[0]:
+            report.append("## Size of the object (measured)\n\n" + "\n".join(f"- {x}" for x in self.measured[0]) + "\n")
         (self.dir / "check.md").write_text("\n".join(report))
         print(f"  check: {self.dir / 'check.md'}")
 
@@ -268,6 +342,8 @@ class Board:
                 i = int(t.split()[2])
                 cut = made.get(f"cut_{i}", made["key_1"])
                 n["inputs"]["image"] = comfy.upload(cut, UPLOAD_DIR)
+            if n["class_type"] == "PrimitiveFloat" and t == "Stärke Zielbild" and "pull" in self.plan:
+                n["inputs"]["value"] = float(self.plan["pull"])
             if n["class_type"] == "PrimitiveBoolean" and t.startswith("Schnitt vor Clip "):
                 n["inputs"]["value"] = f"cut_{t.split()[3]}" in made
             if n["class_type"] == "PrimitiveStringMultiline" and t.startswith("Prompt "):

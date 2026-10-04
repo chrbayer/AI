@@ -1554,16 +1554,43 @@ llmctl update comfy --master          # master instead of the releases (download
     right").
   - Each picture must be reachable from the one before by a natural movement
     in 5 s; anything else is a cut.
+  - Keyframes are resting states (standing by the shell, holding it, shell at
+    the ear), not a moment in the middle of a movement. With "bending down,
+    hand at the shell" as the end of a clip, LTX picked the shell up early,
+    then put it down again to reach the picture.
+  - Keep the object small. A shell "the size of a hand" came out as a giant
+    conch that LTX could not hold together: it wobbled and blew away like
+    foam.
+  - Close-ups made from a full-figure photo get a face Qwen invents; try a
+    few seeds and take close-ups that match each other and the photo.
+  - An object that lies still must lie at the same pixels in every picture
+    until it is picked up. Qwen draws it somewhere else in each edit, and LTX
+    then gets it there anyway: at *Stärke Zielbild* 0.5 by blending, at 0.7
+    the woman kicked it, at 1.0 it flew in through the air.
+  - *Stärke Zielbild* against resting-state keyframes (clip 1, the walk to
+    the shell, three times):
+    - 0.5: she rocked in place and jumped to the end picture in its last
+      frame, with a ghost of herself.
+    - 0.7: she walked there, arrived at frame ~90 and stood still for 1.2 s,
+      which a resting state allows.
+    - 1.0: the same walk, with the flying shell.
+
+    So 0.7 for resting states, 0.5 where a clip must keep moving to its end.
 
   `llmctl storyboard <plan.json>` does this on the running ComfyUI
   (`examples/storyboard.json` is the beach scene below). The plan
   names a photo, five keyframes (an `edit` prompt and a `check` of where
-  things should be), four clip prompts, and optionally an `object` and a
-  `cut`. The steps:
+  things should be), four clip prompts, and optionally an `object`, a
+  `cut` and `pull` (*Stärke Zielbild*). The steps:
   1. **Keyframes:** each straight from the photo with Qwen-Image Edit Turbo.
      The `object` is cut out of keyframe 1 (SAM 3) and goes into every later
-     edit as `<image2>`, so it stays the same.
-  2. **Contact sheet** of the keyframes (`sheet.jpg`).
+     edit as `<image2>`, so it stays the same. A keyframe with
+     `"object_stays": true` gets it pasted in where it lies in keyframe 1;
+     its edit leaves the object out and places the person by it.
+  2. **Contact sheet** of the keyframes (`sheet.jpg`), and the object's size
+     measured in each (SAM 3). Within a shot it must stay within 0.6–1.6
+     times the first picture; the vision model had called a shell 1.4 times
+     as large "the same size".
   3. **Check** with `--vision URL`: a vision model describes each picture
      (where the person and the object are, which way she moves, shot size,
      how many people, anything doubled or half transparent), compares it with
@@ -1578,11 +1605,19 @@ llmctl update comfy --master          # master instead of the releases (download
   (`llmctl start qwen-vl 2 --mmproj`, then `--vision http://127.0.0.1:8002`).
   Keyframes take ~30 s each, the check ~1 min, the render about an hour.
   The beach scene (`examples/storyboard.json`): a woman walks to a shell
-  lying in the sand, picks it up, holds it to her ear, then a cut to a
-  close-up where she listens, opens her eyes and smiles. It came out as 20 s
-  (482 frames, the sound 20.083 s) in 62 min. One woman throughout, the same
-  shell from first to last frame, the cut clean between frames 360 and 361.
-  No click at any join; the level moves at most 7 dB, at the cut.
+  lying in the sand, picks it up and holds it to her ear, then a cut to a
+  close-up where she listens, opens her eyes and smiles. It took three
+  rounds, each fixing what the one before showed:
+  - **v1:** a giant shell, put down again before it was picked up.
+  - **v2:** a small shell, resting-state keyframes, but at pull 0.5 a ghost
+    at every clip's end, and the shell moved from one keyframe to the next.
+  - **v3:** the shell pasted in where it lies, pull 0.7. Each clip reaches
+    its keyframe, with no ghost and no jump; the cut is clean between frames
+    360 and 361. 20 s (482 frames, the sound 20.083 s) in 62 min, no click
+    at any join, the level moving at most 5.4 dB, at the cut.
+
+  Left in v3: sand flies about her feet on the walk, and clip 4 pulls back a
+  little, its end picture framed wider than its start.
 - **Music videos** (#47): `llmctl musicvideo <song> <picture>...` makes one on
   the running ComfyUI. The song is cut into sections (`--seconds`, 5 by
   default); in each the pictures take turns to sing it (LTX-2.5 Talking), or a

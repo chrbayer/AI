@@ -5,43 +5,48 @@
   "seed": 7,
   "keys": [
     {
-      "edit": "Keep <image1> exactly as it is — the same woman, pose, clothes, beach, sea, light and camera — and add one large pale cream spiral seashell, about the size of a hand, lying on the wet sand in the lower left part of the picture, a few steps to the left of the woman, in the direction she is looking.",
-      "check": "Full figure of the woman in the middle of the picture, looking towards the left edge; a pale spiral seashell lies on the sand in the lower left part of the picture."
+      "edit": "Keep <image1> exactly as it is — the same woman, pose, clothes, beach, sea, light and camera — and add one a small pale cream spiral seashell that fits in the palm of her hand, lying on the wet sand in the lower left part of the picture, a few steps to the left of the woman, in the direction she is looking. The shell is small, no bigger than her palm, about a third as long as her foot.",
+      "check": "Full figure of the woman in the middle of the picture, looking towards the left edge; a small seashell lies on the sand in the lower left part of the picture."
     },
     {
-      "edit": "The woman from <image1> has moved: she is now walking barefoot towards the left edge of the picture, mid-step, seen from the side, left of the middle of the picture — the same woman, same face, long dark hair, dark coat and jeans, and she is the only person in the picture. Exactly one seashell, the one from <image2>, lies on the wet sand in the lower left part of the picture, just in front of her. Same beach, sea, golden evening light and camera distance as <image1>, full figure, photo.",
-      "check": "Full figure, the woman left of the middle walking towards the left edge; the seashell lies on the sand just in front of her, lower left.",
-      "seed": 22
+      "edit": "The woman from <image1> has moved: she now stands still in the left part of the picture, about a quarter of the way in from the left edge, and looks down at the wet sand just to the right of her feet — the same woman, same face, long dark hair, dark coat and jeans, and she is the only person in the picture; nobody stands in the middle any more. Nothing lies on the sand. Same beach, sea, golden evening light and camera distance as <image1>, full figure, photo.",
+      "check": "Full figure, the woman standing still in the left part of the picture, looking down at the small seashell on the sand right in front of her feet.",
+      "object_stays": true
     },
     {
-      "edit": "The woman from <image1> has moved: she is now in the left part of the picture, bending down with knees bent, her hand reaching for the seashell from <image2> which lies on the wet sand right in front of her feet — the same woman, same face, long dark hair, dark coat and jeans, and she is the only person in the picture; nobody stands in the middle any more. Same beach, sea, golden evening light and camera distance as <image1>, full figure, photo.",
-      "check": "Full figure, the woman in the left part of the picture bending down, her hand at the seashell on the sand at her feet."
+      "edit": "The woman from <image1> has moved: she now stands upright in the left part of the picture and holds the small seashell from <image2> (the shell is small, no bigger than her palm, about a third as long as her foot) in both hands in front of her, looking at it — the same woman, same face, long dark hair, dark coat and jeans, and she is the only person in the picture; nobody stands in the middle any more, and nothing lies on the sand. Same beach, sea, golden evening light and camera distance as <image1>, full figure, photo.",
+      "check": "Full figure, the woman standing upright in the left part of the picture, holding the small seashell in both hands in front of her, looking at it; nothing on the sand.",
+      "seed": 33
     },
     {
-      "edit": "The same woman as in <image1>, same face, long dark hair, dark coat and jeans, in the left part of the picture, standing upright again, the only person in the picture, and holding the seashell from <image2> to her ear with her eyes closed, listening; nothing lies on the sand. Same beach, sea, golden evening light and camera distance as <image1>, full figure, photo.",
-      "check": "Full figure, the woman in the left part of the picture standing and holding the seashell to her ear, eyes closed; no shell on the sand."
+      "edit": "The same woman as in <image1>, same face, long dark hair, dark coat and jeans, in the left part of the picture, standing upright again, the only person in the picture, and holding the small seashell from <image2> (the shell is small, no bigger than her palm, about a third as long as her foot) to her ear with her eyes closed, listening; nothing lies on the sand. Same beach, sea, golden evening light and camera distance as <image1>, full figure, photo.",
+      "check": "Full figure, the woman in the left part of the picture standing and holding the seashell to her ear, eyes closed; no shell on the sand.",
+      "seed": 42
     },
     {
-      "edit": "Close-up of the same woman as in <image1>, same face and long dark hair blowing in the wind, dark coat: she has opened her eyes and smiles, holding the seashell from <image2> in front of her chest, looking out over the sea towards the left edge of the picture; the sea and the low golden sun behind her. Head and shoulders, photo.",
-      "check": "Close-up, head and shoulders: the woman with eyes open, smiling, the seashell in front of her chest, looking towards the left edge of the picture."
+      "edit": "Close-up of the same woman as in <image1>, same face and long dark hair blowing in the wind, dark coat: she has opened her eyes and smiles, holding the small seashell from <image2> (no bigger than her palm) in front of her chest, looking out over the sea towards the left edge of the picture; the sea and the low golden sun behind her. Head and shoulders, photo.",
+      "check": "Close-up, head and shoulders: the woman with eyes open, smiling, the seashell in front of her chest, looking towards the left edge of the picture.",
+      "seed": 143
     }
   ],
   "clips": [
     {
-      "prompt": "The young woman stands on the beach at golden hour, the wind in her long dark hair and coat; she notices the pale seashell lying on the wet sand to the left and starts to walk barefoot towards it, to the left. Natural continuous movement, steady camera, sound of wind and surf."
+      "prompt": "The young woman stands on the beach at golden hour, the wind in her long dark hair and coat; she notices the small seashell lying completely still on the wet sand to the left of her, walks a few slow barefoot steps to the left towards it and stops right next to it, looking down at it. The seashell does not move. Natural continuous movement, steady camera, sound of wind and surf."
     },
     {
-      "prompt": "She walks on to the left over the wet sand, slows down at the pale seashell lying in front of her feet and bends down, reaching for it. Continuous movement, steady camera, sound of waves and footsteps."
+      "prompt": "She bends down and picks up the small seashell, which lies still on the sand, in one smooth movement, straightens up and looks at it in her hands. Calm continuous movement, steady camera, sound of waves."
     },
     {
-      "prompt": "She picks up the seashell from the sand, straightens up, looks at it and lifts it to her ear, closing her eyes, listening. Calm, continuous movement, steady camera, wind and surf."
+      "prompt": "Holding the small seashell, she takes a few slow steps to the right along the beach while lifting it to her ear, then stops and closes her eyes, listening. Calm, continuous movement, steady camera, wind and surf."
     },
     {
-      "prompt": "Close-up: with the seashell at her ear and her eyes closed she listens, then opens her eyes, smiles, lowers the shell to her chest and looks out over the sea, the wind in her hair. Calm, gentle movement, the surf in the background.",
+      "prompt": "Close-up: with the seashell at her ear and her eyes closed she listens, then opens her eyes, smiles, lowers the small shell to her chest and looks out over the sea, the wind in her hair. Calm, gentle movement, the surf in the background.",
       "cut": {
-        "edit": "Close-up of the same woman as in <image1>, same face and long dark hair blowing in the wind, dark coat, holding the seashell from <image2> to her ear with her eyes closed, listening; the sea and the low golden sun behind her. Head and shoulders, photo.",
-        "check": "Close-up, head and shoulders: the woman with eyes closed holding the seashell to her ear."
+        "edit": "Close-up of the same woman as in <image1>, same face and long dark hair blowing in the wind, dark coat, holding the small seashell from <image2> (no bigger than her palm) to her ear with her eyes closed, listening; the sea and the low golden sun behind her. Head and shoulders, photo.",
+        "check": "Close-up, head and shoulders: the woman with eyes closed holding the seashell to her ear.",
+        "seed": 233
       }
     }
-  ]
+  ],
+  "pull": 0.7
 }
