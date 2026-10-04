@@ -1631,12 +1631,22 @@ llmctl update comfy --master          # master instead of the releases (download
   - **v2:** a small shell, resting-state keyframes, but at pull 0.5 a ghost
     at every clip's end, and the shell moved from one keyframe to the next.
   - **v3:** the shell pasted in where it lies, pull 0.7. Each clip reaches
-    its keyframe, with no ghost and no jump; the cut is clean between frames
-    360 and 361. 20 s (482 frames, the sound 20.083 s) in 62 min, no click
-    at any join, the level moving at most 5.4 dB, at the cut.
+    its keyframe with no ghost and no jump, but clip 2 (pick it up, 5 s)
+    stood still for a second before 10 s.
+  - **v4:** clip 2 at 4 s and pull 0.6 kept moving. But clip 3 had her walk
+    back to where Qwen had put her in Bild 4, and LTX dissolved her there.
+  - **v5:** Bild 4 made from Bild 3, so she stays where she is. "Brushes the
+    sand off it" in clip 2 became a fountain of sand with a small figure
+    floating out of it, and the close-up's face dissolved from the middle
+    to the edge.
+  - **v6:** no sand in the prompt, Bild 5 made from the cut's picture, clip
+    3 at 2⅔ s. No ghost (checked every 0.5 s), no jump. 16.75 s (402
+    frames, the sound to the sample) in ~40 min.
 
-  Left in v3: sand flies about her feet on the walk, and clip 4 pulls back a
-  little, its end picture framed wider than its start.
+  Left in v6: sand flies about her feet on the walk, as in every version.
+  Clip 3 ends with 1.2 s of listening, eyes closed, before the cut; the
+  motion check calls that a stall. It cannot tell a still moment meant from
+  one waited out, so read its stalls as hints.
 - **Music videos** (#47): `llmctl musicvideo <song> <picture>...` makes one on
   the running ComfyUI. The song is cut into sections (`--seconds`, 5 by
   default); in each the pictures take turns to sing it (LTX-2.5 Talking), or a
