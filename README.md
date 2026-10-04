@@ -1625,7 +1625,7 @@ llmctl update comfy --master          # master instead of the releases (download
   Keyframes take ~30 s each, the check ~1 min, the render about an hour.
   The beach scene (`examples/storyboard.json`): a woman walks to a shell
   lying in the sand, picks it up and holds it to her ear, then a cut to a
-  close-up where she listens, opens her eyes and smiles. It took three
+  close-up where she listens, opens her eyes and smiles. It took six
   rounds, each fixing what the one before showed:
   - **v1:** a giant shell, put down again before it was picked up.
   - **v2:** a small shell, resting-state keyframes, but at pull 0.5 a ghost
