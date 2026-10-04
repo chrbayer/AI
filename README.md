@@ -1623,7 +1623,7 @@ llmctl update comfy --master          # master instead of the releases (download
      (where the person and the object are, which way she moves, shot size,
      how many people, anything doubled or half transparent), compares it with
      its `check`, then looks at all pictures together.
-  4. **Render** with `--render`, then the motion measured: a stall (half a
+  4. **Render** with `--render` (`--redo-clip N` for one clip again), then the motion measured: a stall (half a
      second and more nearly still at a clip's end, so give it fewer
      `seconds`, a lower `pull` or more to do) and a jump at a join (the clip
      did not get there). On v3 it found the stall you see before 10 s.
@@ -1663,6 +1663,25 @@ llmctl update comfy --master          # master instead of the releases (download
     crosses it and it stays in sight; other waves in every keyframe, so the
     sea moves (0.4–1.4 instead of 0.2–0.3). No ghost, the shell never
     hidden, 16.75 s in ~40 min.
+
+  **One clip again:** `--redo-clip N` (with `--seed S` for another take)
+  renders clip N alone and splices it into the finished video at its
+  frames. It starts on the video's own frame before it (at a cut, on its
+  picture) and runs to its keyframe, as in the chain; the rest stays as it
+  was (the video before is kept as `<plan>.before_redo.mp4`), then motion
+  and ambience again. In v7 the background snapped over in one frame at
+  9.85 s inside clip 3 (Bild 4's other waves and smoothed sand). Clip 3
+  again with another seed took 5 min instead of the whole video's 40; the
+  jump was gone, the rest unchanged.
+
+  **Sound:** LTX makes the sound clip by clip, each clip a soundscape of its
+  own. In v7 it jumped 8 dB at a join (surf in one clip, wind in the next),
+  and from about 5 s LTX added music nobody asked for. With `"ambience":
+  "<what is heard>"` in the plan the video gets one soundtrack instead:
+  Stable Audio 3 (SFX) makes it as long as the video, three takes, and the
+  most even one goes under the picture, which is copied as it is
+  (`<plan>_ambience.mp4` beside the video). That costs ~10 s and was even
+  from first to last frame.
 
   The motion check's stalls and jumps are hints, not verdicts:
   - **Stalls:** it cannot tell a still moment meant (listening, eyes closed,

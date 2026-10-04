@@ -18,8 +18,11 @@ between them. Three steps, each run again only where its input changed:
    and the motion measured: stalls and jumps. --check-video looks at a rendered
    video again, with --vision for ghosts too (two people, a half-transparent
    one: LTX dissolving someone to a place it does not walk her to).
+   --redo-clip N renders one clip again (--seed: another take) and splices it
+   in at its frames, the rest of the video as it was.
 
-    storyboard.py --url URL --workflows DIR PLAN.json [--vision URL] [--render | --check-video] [--out FILE]
+    storyboard.py --url URL --workflows DIR PLAN.json [--vision URL]
+                  [--render | --redo-clip N [--seed S] | --check-video] [--out FILE]
 
 The plan (JSON):
 
@@ -27,6 +30,7 @@ The plan (JSON):
      "object": "the pale spiral seashell",     optional: SAM 3's prompt for it
      "size": "1280x704", "seed": 1,            optional
      "pull": 0.5,                              optional: Stärke Zielbild, all clips
+     "ambience": "steady surf and wind ...",   optional: one soundtrack for it all
      "keys": [{"edit": "...", "check": "..."}, ... five],
      "clips": [{"prompt": "...", "seconds": 4, "pull": 0.7}, ...,   four; a clip with
                {"prompt": "...", "cut": {"edit": "...", "check": "..."}}]}
@@ -73,7 +77,9 @@ from musicvideo import Comfy  # noqa: E402
 
 EDIT = "Qwen-Image 2.1 Edit Turbo (bf16, 4 Schritte).json"
 SAM = "SAM 3 Select.json"
+AMBIENCE = "audio/Stable Audio 3 Medium (8 Schritte).json"
 CHAIN = "video/LTX-2.5 Chain Keyframes (int8, distilled, 4 clips).json"
+SINGLE = "video/LTX-2.5 First-Last Frame (int8, distilled).json"
 CLIPS = 4
 UPLOAD_DIR = "storyboard"
 FPS = 24
@@ -444,6 +450,114 @@ class Board:
         comfy.run(g, out)
         print(f"  video: {out}")
         self.motion(out)
+        if self.plan.get("ambience"):
+            self.ambience(out)
+
+    def ambience(self, video):
+        """One soundtrack for the whole video instead of LTX's, which it makes clip by
+        clip: each clip a soundscape of its own, so the sound jumps at every join
+        (8 dB in the beach scene, where one clip had the surf and the next the
+        wind). Stable Audio 3 (SFX) makes "ambience" as long as the video, three
+        takes, the most even one (the least spread of loudness from second to
+        second) goes under the picture, which is copied as it is."""
+        import subprocess
+        import numpy as np
+        comfy = self.need_comfy()
+        length = float(subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v", "-show_entries",
+                                       "stream=duration", "-of", "csv=p=0", str(video)],
+                                      capture_output=True, text=True, check=True).stdout)
+        takes = []
+        for seed in (1, 2, 3):
+            take = self.dir / f"ambience_{seed}.flac"
+            key = digest(self.plan["ambience"], seed, round(length, 2))
+            if not self.fresh(take, key):
+                g = json.loads((self.workflows / AMBIENCE).read_text())
+                for n in g.values():
+                    t = n.get("_meta", {}).get("title", "")
+                    if t.startswith("User: short description"):
+                        n["inputs"]["value"] = self.plan["ambience"]
+                    if n["class_type"] == "CustomCombo":
+                        n["inputs"].update(choice="SFX", index=2)
+                    if t == "Float (Duration)":
+                        n["inputs"]["value"] = math.ceil(length + 1)
+                    if n["class_type"] == "KSampler":
+                        n["inputs"]["seed"] = seed
+                    if n["class_type"] == "SaveAudioAdvanced":
+                        n["inputs"].update(filename_prefix=f"audio/storyboard_{self.dir.stem}", format="flac")
+                comfy.run(g, take)
+                self.made(take, key)
+            raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(take), "-t", str(length), "-ac", "1", "-ar", "48000",
+                                  "-f", "s16le", "-"], capture_output=True, check=True).stdout
+            x = np.frombuffer(raw, np.int16).astype(float)
+            level = [20 * np.log10(np.sqrt(np.mean(x[i:i + 48000] ** 2)) / 32768 + 1e-9)
+                     for i in range(0, len(x) - 48000, 48000)]
+            takes.append((max(level) - min(level), take))
+        spread, best = min(takes)
+        out = video.with_name(video.stem + "_ambience.mp4")
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(video), "-i", str(best), "-map", "0:v", "-map", "1:a",
+                        "-c:v", "copy", "-af", f"atrim=0:{length},afade=t=in:d=0.3,afade=t=out:st={length - 0.8}:d=0.8,"
+                        "loudnorm=I=-20:TP=-2,aresample=48000", "-c:a", "aac", "-b:a", "192k", "-shortest", str(out)],
+                       check=True)
+        print(f"  ambience: {out} ({best.name}, loudness within {spread:.0f} dB)")
+
+    def redo_clip(self, made, i, seed):
+        """Clip i alone again, spliced into the finished video at its frames — for
+        the one clip that failed in a video otherwise good. It starts on the
+        video's own last frame before it (or, at a cut, on its picture) and runs
+        to its keyframe, as in the chain; everything else is copied as it is."""
+        import shutil
+        import subprocess
+        comfy = self.need_comfy()
+        video = self.video()
+        clips = self.plan["clips"]
+        if not 1 <= i <= len(clips):
+            sys.exit(f"--redo-clip: 1 to {len(clips)}")
+        clip, frames = clips[i - 1], clip_frames(float(clips[i - 1].get("seconds", 5)))
+        start = sum(clip_frames(float(c.get("seconds", 5))) - (0 if j == 1 or c.get("cut") else 1)
+                    for j, c in enumerate(clips[:i - 1], 1))      # this clip's first new frame in the video
+        follows = i > 1 and not clip.get("cut")                   # starts on the frame before it
+        first = self.dir / f"redo_{i}_start.png"
+        if follows:
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(video), "-vf", f"select='eq(n\\,{start - 1})'",
+                            "-frames:v", "1", str(first)], check=True)
+        else:
+            shutil.copy(made[f"cut_{i}"] if clip.get("cut") else made["key_1"], first)
+        g = json.loads((self.workflows / SINGLE).read_text())
+        pull = float(clip.get("pull", self.plan.get("pull", 0.5)))
+        for n in g.values():
+            t = n.get("_meta", {}).get("title", "")
+            if n["class_type"] == "LoadImage":
+                end = made[f"key_{i + 1}"]
+                n["inputs"]["image"] = comfy.upload(first if t == "Load First Frame" else end, UPLOAD_DIR)
+            if n["class_type"] == "LTXVAddGuide":
+                n["inputs"]["strength"] = (1.0 if follows else n["inputs"]["strength"]) if n["inputs"]["frame_idx"] == 0 else pull
+            if n["class_type"] == "ComfyMathExpression" and n["inputs"].get("expression", "").strip() == "a * b + 1":
+                n["inputs"]["expression"] = str(frames)
+            if n["class_type"] == "PrimitiveStringMultiline":
+                n["inputs"]["value"] = clip["prompt"]
+            if self.plan.get("size") and n["class_type"] == "PrimitiveInt" and t.lower() in ("width", "height"):
+                n["inputs"]["value"] = self.plan["size"][t.lower() == "height"]
+            if n["class_type"] == "RandomNoise":
+                n["inputs"]["noise_seed"] = seed
+            if n["class_type"] == "SaveVideo":
+                n["inputs"]["filename_prefix"] = f"video/storyboard_{self.dir.stem}_clip{i}"
+        new = self.dir / f"redo_{i}.mp4"
+        print(f"  clip {i} again ({frames} frames, seed {seed}) …", flush=True)
+        comfy.run(g, new)
+        keep = video.with_name(video.stem + ".before_redo.mp4")
+        shutil.copy(video, keep)
+        skip = 1 if follows else 0
+        stop = start + frames - skip
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(keep), "-i", str(new), "-filter_complex",
+                        f"[0:v]trim=start_frame=0:end_frame={start},setpts=PTS-STARTPTS[a];"
+                        f"[1:v]trim=start_frame={skip}:end_frame={frames},setpts=PTS-STARTPTS[b];"
+                        f"[0:v]trim=start_frame={stop},setpts=PTS-STARTPTS[c];[a][b][c]concat=n=3:v=1:a=0,format=yuv420p[v]",
+                        "-map", "[v]", "-map", "0:a?", "-c:v", "libx264", "-crf", "14", "-preset", "slow", "-r", str(FPS),
+                        "-c:a", "copy", str(video)], check=True)
+        print(f"  video: {video} (frames {start}–{stop - 1} new; the one before: {keep.name})")
+        self.motion(video)
+        if self.plan.get("ambience"):
+            self.ambience(video)
 
     def video(self):
         return Path(self.a.out) if self.a.out else self.dir / f"{Path(self.a.plan).stem}.mp4"
@@ -518,6 +632,8 @@ def main():
     ap.add_argument("--workflows", required=True, help=argparse.SUPPRESS)
     ap.add_argument("--vision", help="an OpenAI base URL of a model that sees pictures, for the check")
     ap.add_argument("--render", action="store_true", help="render the clips (else: keyframes, sheet, check only)")
+    ap.add_argument("--redo-clip", type=int, metavar="N", help="render clip N alone again and splice it into the video")
+    ap.add_argument("--seed", type=int, default=4242, help="the seed of --redo-clip (another take: another seed)")
     ap.add_argument("--check-video", action="store_true",
                     help="check the rendered video: motion (stalls, jumps), with --vision ghosts too")
     ap.add_argument("--out", help="the video (default: PLAN.storyboard/PLAN.mp4)")
@@ -537,7 +653,12 @@ def main():
     if a.vision:
         print("Check:")
         board.check(shown, made)
-    if a.render:
+    if a.redo_clip:
+        if not board.video().is_file():
+            sys.exit(f"no video yet: {board.video()} — render it with --render")
+        print("Video:")
+        board.redo_clip(made, a.redo_clip, a.seed)
+    elif a.render:
         print("Video:")
         board.render(made)
     elif not a.vision:

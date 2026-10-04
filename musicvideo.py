@@ -116,7 +116,7 @@ class Comfy:
         return f"{d['subfolder']}/{d['name']}" if d.get("subfolder") else d["name"]
 
     def run(self, graph, dest):
-        """Queue a graph, wait, fetch its video to dest."""
+        """Queue a graph, wait, fetch what it made (a picture, video or sound) to dest."""
         r = requests.post(f"{self.url}/prompt", json={"prompt": graph, "client_id": str(uuid.uuid4())}, timeout=60)
         d = r.json()
         if not d.get("prompt_id") or d.get("node_errors"):
@@ -129,7 +129,7 @@ class Comfy:
             if h and h["status"].get("completed"):
                 break
             time.sleep(3)
-        out = next(i for o in h["outputs"].values() for i in o.get("images", []) + o.get("videos", []))
+        out = next(i for o in h["outputs"].values() for i in o.get("images", []) + o.get("videos", []) + o.get("audio", []))
         r = requests.get(f"{self.url}/view", params={"filename": out["filename"], "subfolder": out.get("subfolder", ""),
                                                       "type": out.get("type", "output")}, timeout=600)
         r.raise_for_status()
