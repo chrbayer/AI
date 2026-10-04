@@ -1566,6 +1566,13 @@ llmctl update comfy --master          # master instead of the releases (download
     the ear), not a moment in the middle of a movement. With "bending down,
     hand at the shell" as the end of a clip, LTX picked the shell up early,
     then put it down again to reach the picture.
+  - Nobody stands perfectly still. A clip that reaches its keyframe early
+    holds it rigidly: in clip 3 the motion fell from 0.95 to 0.02 within a
+    second, an abrupt halt. With idle motion in its prompt ("even standing
+    still she keeps moving a little: breathing calmly, swaying very
+    slightly, the wind in her hair") and pull 0.6 instead of 0.7, it stayed
+    at 0.3–0.5 and ran out softly to 0.23. Done with `--redo-clip 3` in 5
+    min.
   - Keep the object small. A shell "the size of a hand" came out as a giant
     conch that LTX could not hold together: it wobbled and blew away like
     foam.
