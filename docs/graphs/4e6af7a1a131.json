@@ -1,0 +1,198 @@
+{
+ "1": {
+  "inputs": {
+   "aspect_ratio": "1:1 (Square)",
+   "megapixels": 1.0,
+   "multiple": 32
+  },
+  "class_type": "ResolutionSelector",
+  "_meta": {
+   "title": "Resolution Selector"
+  }
+ },
+ "2": {
+  "inputs": {
+   "images": [
+    "9",
+    0
+   ]
+  },
+  "class_type": "PreviewImage",
+  "_meta": {
+   "title": "Save Image (Advanced)"
+  }
+ },
+ "3": {
+  "inputs": {
+   "image": "mv_shot0.png"
+  },
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "Load Image"
+  },
+  "is_changed": [
+   "88784a015fe7bc33eea888acff6eaa3aa28fb0339be316869e5c7a8c5d496d01"
+  ]
+ },
+ "5": {
+  "inputs": {
+   "unet_name": "qwen_image_2.1_bf16.safetensors",
+   "weight_dtype": "default"
+  },
+  "class_type": "UNETLoader",
+  "_meta": {
+   "title": "Load Diffusion Model"
+  }
+ },
+ "6": {
+  "inputs": {
+   "clip_name": "qwen3vl_8b_bf16.safetensors",
+   "type": "qwen_image",
+   "device": "default"
+  },
+  "class_type": "CLIPLoader",
+  "_meta": {
+   "title": "Load CLIP"
+  }
+ },
+ "7": {
+  "inputs": {
+   "vae_name": "qwen_image_2.1_vae_bf16.safetensors"
+  },
+  "class_type": "VAELoader",
+  "_meta": {
+   "title": "Load VAE"
+  }
+ },
+ "8": {
+  "inputs": {
+   "width": [
+    "1",
+    0
+   ],
+   "height": [
+    "1",
+    1
+   ],
+   "batch_size": 1
+  },
+  "class_type": "EmptyLatentImage",
+  "_meta": {
+   "title": "Empty Latent Image"
+  }
+ },
+ "9": {
+  "inputs": {
+   "samples": [
+    "17",
+    0
+   ],
+   "vae": [
+    "7",
+    0
+   ]
+  },
+  "class_type": "VAEDecode",
+  "_meta": {
+   "title": "VAE Decode"
+  }
+ },
+ "11": {
+  "inputs": {
+   "switch": false,
+   "on_false": [
+    "13",
+    2
+   ],
+   "on_true": [
+    "8",
+    0
+   ]
+  },
+  "class_type": "ComfySwitchNode",
+  "_meta": {
+   "title": "If/Else Switch"
+  }
+ },
+ "13": {
+  "inputs": {
+   "prompt": "The same woman, same hair and clothes, seen from the side in profile, singing with her eyes closed, same neon stage lights, music video still.",
+   "negative_prompt": "",
+   "resolution": 0,
+   "clip": [
+    "6",
+    0
+   ],
+   "images.image_1": [
+    "3",
+    0
+   ],
+   "vae": [
+    "7",
+    0
+   ]
+  },
+  "class_type": "TextEncodeQwenImage21",
+  "_meta": {
+   "title": "Text Encode Qwen Image 2.1"
+  }
+ },
+ "15": {
+  "inputs": {
+   "lora_name": "Qwen-Image-2.1-Fun-Acc-4Step-comfyui.safetensors",
+   "strength_model": 1.0,
+   "model": [
+    "5",
+    0
+   ]
+  },
+  "class_type": "LoraLoaderModelOnly",
+  "_meta": {
+   "title": "4-step Acc LoRA (alibaba-pai)"
+  }
+ },
+ "16": {
+  "inputs": {
+   "device": "auto",
+   "dtype": "default",
+   "model": [
+    "15",
+    0
+   ]
+  },
+  "class_type": "QwenImage21Cache",
+  "_meta": {
+   "title": "Qwen Image 2.1 Cache"
+  }
+ },
+ "17": {
+  "inputs": {
+   "seed": 1070478148268574,
+   "steps": 4,
+   "cfg": 1.0,
+   "sampler_name": "euler",
+   "scheduler": "simple",
+   "denoise": 1.0,
+   "model": [
+    "16",
+    0
+   ],
+   "positive": [
+    "13",
+    0
+   ],
+   "negative": [
+    "13",
+    1
+   ],
+   "latent_image": [
+    "11",
+    0
+   ]
+  },
+  "class_type": "KSampler",
+  "_meta": {
+   "title": "Sampler (Turbo)"
+  }
+ }
+}

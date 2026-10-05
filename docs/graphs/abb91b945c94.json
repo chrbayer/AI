@@ -1,0 +1,97 @@
+{
+ "451": {
+  "class_type": "UNETLoader",
+  "inputs": {
+   "unet_name": "qwen_image_2.1_bf16.safetensors",
+   "weight_dtype": "default"
+  }
+ },
+ "453": {
+  "class_type": "CLIPLoader",
+  "inputs": {
+   "clip_name": "qwen3vl_8b_bf16_heretic.safetensors",
+   "type": "qwen_image",
+   "device": "default"
+  }
+ },
+ "454": {
+  "class_type": "VAELoader",
+  "inputs": {
+   "vae_name": "qwen_image_2.1_vae_bf16.safetensors"
+  }
+ },
+ "452": {
+  "class_type": "TextEncodeQwenImage21",
+  "inputs": {
+   "clip": [
+    "453",
+    0
+   ],
+   "prompt": "A cozy bookshop window at dusk. A hand-painted wooden sign above the door reads \"Kellers Antiquariat\". In the window: a ginger cat asleep on a stack of old leather-bound books, a brass globe, and a small chalkboard that says \"Heute geöffnet bis 20 Uhr\". Warm light, rain on the glass, reflections of a tram passing behind.",
+   "negative_prompt": "",
+   "resolution": 1024,
+   "vae": [
+    "454",
+    0
+   ]
+  }
+ },
+ "456": {
+  "class_type": "EmptyLatentImage",
+  "inputs": {
+   "width": 1024,
+   "height": 1024,
+   "batch_size": 1
+  }
+ },
+ "458": {
+  "class_type": "KSampler",
+  "inputs": {
+   "model": [
+    "451",
+    0
+   ],
+   "positive": [
+    "452",
+    0
+   ],
+   "negative": [
+    "452",
+    1
+   ],
+   "latent_image": [
+    "456",
+    0
+   ],
+   "seed": 7,
+   "steps": 14,
+   "cfg": 1.0,
+   "sampler_name": "dpmpp_2m",
+   "scheduler": "simple",
+   "denoise": 1.0
+  }
+ },
+ "457": {
+  "class_type": "VAEDecode",
+  "inputs": {
+   "samples": [
+    "458",
+    0
+   ],
+   "vae": [
+    "454",
+    0
+   ]
+  }
+ },
+ "9": {
+  "class_type": "SaveImage",
+  "inputs": {
+   "images": [
+    "457",
+    0
+   ],
+   "filename_prefix": "cmp-qwen3vl_8b_bf16_heretic"
+  }
+ }
+}

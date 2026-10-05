@@ -1,0 +1,27 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>llmctl gallery</title>
+<style>
+:root{--bg:#fbfaf7;--fg:#1f1d1a;--muted:#6b665e;--card:#fff;--line:#e4e0d8;--accent:#2f6f8f;--code:#f3f0ea}
+@media (prefers-color-scheme:dark){:root{--bg:#161514;--fg:#ebe7e0;--muted:#a39d93;--card:#201f1d;--line:#34312d;--accent:#7fb6d1;--code:#2a2826}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{border-bottom:1px solid var(--line);padding:18px 16px}header a{color:var(--fg);text-decoration:none;font-weight:600}
+nav{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:8px;font-size:14px}nav a{color:var(--muted);text-decoration:none}nav a.on,nav a:hover{color:var(--accent)}
+main{max-width:1100px;margin:0 auto;padding:16px}h1{font-size:28px;margin:12px 0 4px}h2{font-size:21px;margin:34px 0 6px}
+.lead{color:var(--muted);max-width:760px}p{max-width:760px}a{color:var(--accent)}
+.ex{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin:18px 0}.ex>h2{margin-top:0}
+.media{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin:12px 0}
+.media.wide{grid-template-columns:1fr}figure{margin:0}figure img,figure video{width:100%;height:auto;border-radius:6px;display:block;background:#0003}
+figure audio{width:100%}figcaption{font-size:13px;color:var(--muted);margin-top:4px}
+model-viewer{width:100%;height:360px;background:#0001;border-radius:6px}
+details{margin-top:10px;font-size:14px}details h3{font-size:14px;margin:14px 0 2px}summary{cursor:pointer;color:var(--accent)}
+dl{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;margin:8px 0}dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere}
+pre,code{background:var(--code);border-radius:5px;font:13px/1.45 ui-monospace,Menlo,monospace}pre{padding:10px;overflow-x:auto;white-space:pre-wrap}code{padding:1px 4px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}.cards a{display:block;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;color:var(--fg);text-decoration:none}
+.cards a:hover{border-color:var(--accent)}.cards b{display:block;margin-bottom:4px}.cards span{color:var(--muted);font-size:14px}
+table{border-collapse:collapse;font-size:14px;margin:10px 0}td,th{border-bottom:1px solid var(--line);padding:5px 10px;text-align:left}
+footer{color:var(--muted);font-size:13px;padding:30px 16px;text-align:center}
+@media (max-width:600px){.media{grid-template-columns:1fr}h1{font-size:24px}}
+</style><script type="module" src="https://unpkg.com/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script></head><body>
+<header><a href="index.html">llmctl gallery</a><nav><a href="storyboard.html">Scenes from a storyboard</a><a href="musicvideo.html">A music video</a><a href="video.html">Video</a><a href="images.html">Pictures</a><a href="sound.html">Music and sound</a><a href="3d.html">3D from a picture</a><a href="llm.html">Language models</a></nav></header>
+<main><h1>llmctl gallery</h1><div class="lead"><p>What llmctl makes on one machine (an AMD Strix Halo, Radeon 8060S, 128 GB unified memory), with the files and settings it was made from. Each example has a <b>How it was made</b> block: the models, prompts, seeds and steps read from the file itself, and the ComfyUI graph to make it again.</p>
+<p>The <a href="https://github.com/chrbayer/AI#readme">README</a> is the reference; these pages show results.</p></div><div class="cards"><a href="storyboard.html"><b>Scenes from a storyboard</b><span>A 20 s scene from one photo: keyframes, four LTX clips, a cut — and what each of seven rounds taught.</span></a><a href="musicvideo.html"><b>A music video</b><span>A song, a singer in three shots, lip-synced section by section with LTX-2.5.</span></a><a href="video.html"><b>Video</b><span>LTX-2.5: a picture or a prompt to a clip with its sound, first to last frame, talking pictures.</span></a><a href="images.html"><b>Pictures</b><span>Z-Image Turbo, Qwen-Image 2.1, FLUX.2 — making, editing, comparing.</span></a><a href="sound.html"><b>Music and sound</b><span>ACE-Step songs in German and English, YuE2, Stable Audio, voices.</span></a><a href="3d.html"><b>3D from a picture</b><span>Pixal3D and TRELLIS.2: a photo to a textured mesh.</span></a><a href="llm.html"><b>Language models</b><span>One model on three engines: llama.cpp, gufo and halogen, measured.</span></a></div></main><footer>Examples and results, made with llmctl on one Strix Halo machine. <a href="https://github.com/chrbayer/AI">github.com/chrbayer/AI</a></footer></body></html>

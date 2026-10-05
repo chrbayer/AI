@@ -1,0 +1,56 @@
+{
+ "2": {
+  "inputs": {
+   "audio": "voice-frau.wav"
+  },
+  "class_type": "LoadAudio",
+  "_meta": {
+   "title": "Load Audio"
+  },
+  "is_changed": [
+   "5d99ec918d9dd5bba4cd5f931d49801d042600145235d152685e54f41b7c83d6"
+  ]
+ },
+ "3": {
+  "inputs": {
+   "target_text": "Hello! I am a voice for announcements and longer texts. The sky over Hamburg is grey today.",
+   "model_choice": "1.7B",
+   "device": "auto",
+   "precision": "bf16",
+   "language": "English",
+   "ref_text": "",
+   "seed": 7,
+   "max_new_tokens": 2048,
+   "top_p": 1.0,
+   "top_k": 50,
+   "temperature": 0.9,
+   "repetition_penalty": 1.05,
+   "x_vector_only": true,
+   "instruct": "",
+   "attention": "sdpa",
+   "unload_model_after_generate": false,
+   "custom_model_path": "",
+   "ref_audio": [
+    "2",
+    0
+   ]
+  },
+  "class_type": "FB_Qwen3TTSVoiceClone",
+  "_meta": {
+   "title": "🎭 Qwen3-TTS VoiceClone"
+  }
+ },
+ "4": {
+  "inputs": {
+   "filename_prefix": "tts/ia2v_en",
+   "audio": [
+    "3",
+    0
+   ]
+  },
+  "class_type": "SaveAudio",
+  "_meta": {
+   "title": "Save Audio (FLAC) (DEPRECATED)"
+  }
+ }
+}

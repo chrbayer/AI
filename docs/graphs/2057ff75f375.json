@@ -1,0 +1,277 @@
+{
+ "unet": {
+  "class_type": "UNETLoader",
+  "inputs": {
+   "unet_name": "flux-2-klein-9b.safetensors",
+   "weight_dtype": "default"
+  }
+ },
+ "clip": {
+  "class_type": "CLIPLoader",
+  "inputs": {
+   "clip_name": "qwen_3_8b.safetensors",
+   "type": "flux2",
+   "device": "default"
+  }
+ },
+ "vae": {
+  "class_type": "VAELoader",
+  "inputs": {
+   "vae_name": "full_encoder_small_decoder.safetensors"
+  }
+ },
+ "pos": {
+  "class_type": "CLIPTextEncode",
+  "inputs": {
+   "clip": [
+    "clip",
+    0
+   ],
+   "text": "Put the light blue denim shirt from image 2 on the person in image 1, keep face, hair, pose, background and lighting unchanged"
+  }
+ },
+ "neg": {
+  "class_type": "ConditioningZeroOut",
+  "inputs": {
+   "conditioning": [
+    "pos",
+    0
+   ]
+  }
+ },
+ "noise": {
+  "class_type": "RandomNoise",
+  "inputs": {
+   "noise_seed": 42
+  }
+ },
+ "sampler": {
+  "class_type": "KSamplerSelect",
+  "inputs": {
+   "sampler_name": "euler"
+  }
+ },
+ "sample": {
+  "class_type": "SamplerCustomAdvanced",
+  "inputs": {
+   "noise": [
+    "noise",
+    0
+   ],
+   "guider": [
+    "guider",
+    0
+   ],
+   "sampler": [
+    "sampler",
+    0
+   ],
+   "sigmas": [
+    "sched",
+    0
+   ],
+   "latent_image": [
+    "latent",
+    0
+   ]
+  }
+ },
+ "dec": {
+  "class_type": "VAEDecode",
+  "inputs": {
+   "samples": [
+    "sample",
+    0
+   ],
+   "vae": [
+    "vae",
+    0
+   ]
+  }
+ },
+ "save": {
+  "class_type": "SaveImage",
+  "inputs": {
+   "images": [
+    "dec",
+    0
+   ],
+   "filename_prefix": "klein/edit"
+  }
+ },
+ "img1": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "portrait_model_denim.png"
+  },
+  "is_changed": [
+   "d888e9396587a3fd4ad500bbf5988fed0f7ba60ffa71628c29fced78bece3ac6"
+  ]
+ },
+ "img2": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "clothing_light_blue_denim_shirt.png"
+  },
+  "is_changed": [
+   "5f8d348aa0079922743e53ab687ba5661c57696d373a0113cc61dae9a36761a3"
+  ]
+ },
+ "s1": {
+  "class_type": "ImageScaleToTotalPixels",
+  "inputs": {
+   "image": [
+    "img1",
+    0
+   ],
+   "upscale_method": "lanczos",
+   "megapixels": 1.0,
+   "resolution_steps": 1
+  }
+ },
+ "e1": {
+  "class_type": "VAEEncode",
+  "inputs": {
+   "pixels": [
+    "s1",
+    0
+   ],
+   "vae": [
+    "vae",
+    0
+   ]
+  }
+ },
+ "rp1": {
+  "class_type": "ReferenceLatent",
+  "inputs": {
+   "conditioning": [
+    "pos",
+    0
+   ],
+   "latent": [
+    "e1",
+    0
+   ]
+  }
+ },
+ "rn1": {
+  "class_type": "ReferenceLatent",
+  "inputs": {
+   "conditioning": [
+    "neg",
+    0
+   ],
+   "latent": [
+    "e1",
+    0
+   ]
+  }
+ },
+ "s2": {
+  "class_type": "ImageScaleToTotalPixels",
+  "inputs": {
+   "image": [
+    "img2",
+    0
+   ],
+   "upscale_method": "lanczos",
+   "megapixels": 1.0,
+   "resolution_steps": 1
+  }
+ },
+ "e2": {
+  "class_type": "VAEEncode",
+  "inputs": {
+   "pixels": [
+    "s2",
+    0
+   ],
+   "vae": [
+    "vae",
+    0
+   ]
+  }
+ },
+ "rp2": {
+  "class_type": "ReferenceLatent",
+  "inputs": {
+   "conditioning": [
+    "rp1",
+    0
+   ],
+   "latent": [
+    "e2",
+    0
+   ]
+  }
+ },
+ "rn2": {
+  "class_type": "ReferenceLatent",
+  "inputs": {
+   "conditioning": [
+    "rn1",
+    0
+   ],
+   "latent": [
+    "e2",
+    0
+   ]
+  }
+ },
+ "size": {
+  "class_type": "GetImageSize",
+  "inputs": {
+   "image": [
+    "s1",
+    0
+   ]
+  }
+ },
+ "latent": {
+  "class_type": "EmptyFlux2LatentImage",
+  "inputs": {
+   "width": [
+    "size",
+    0
+   ],
+   "height": [
+    "size",
+    1
+   ],
+   "batch_size": 1
+  }
+ },
+ "sched": {
+  "class_type": "Flux2Scheduler",
+  "inputs": {
+   "steps": 4,
+   "width": [
+    "size",
+    0
+   ],
+   "height": [
+    "size",
+    1
+   ]
+  }
+ },
+ "guider": {
+  "class_type": "CFGGuider",
+  "inputs": {
+   "model": [
+    "unet",
+    0
+   ],
+   "positive": [
+    "rp2",
+    0
+   ],
+   "negative": [
+    "rn2",
+    0
+   ],
+   "cfg": 1.0
+  }
+ }
+}

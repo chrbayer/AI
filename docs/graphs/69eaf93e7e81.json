@@ -1,0 +1,143 @@
+{
+ "img": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "qwen21_test_00001_.png"
+  },
+  "is_changed": [
+   "c80c6e00297632bb3f5ba752680d81dd5e87c1db0b93b2e9e4da8359a575f99f"
+  ]
+ },
+ "vae": {
+  "class_type": "VAELoader",
+  "inputs": {
+   "vae_name": "seedvr2_ema_vae_fp16.safetensors"
+  }
+ },
+ "unet": {
+  "class_type": "UNETLoader",
+  "inputs": {
+   "unet_name": "seedvr2_7b_fp16.safetensors",
+   "weight_dtype": "default"
+  }
+ },
+ "rs": {
+  "class_type": "ResizeImageMaskNode",
+  "inputs": {
+   "input": [
+    "img",
+    0
+   ],
+   "resize_type": "scale by multiplier",
+   "resize_type.multiplier": 2.0,
+   "scale_method": "lanczos"
+  }
+ },
+ "pre": {
+  "class_type": "SeedVR2Preprocess",
+  "inputs": {
+   "resized_images": [
+    "rs",
+    0
+   ]
+  }
+ },
+ "enc": {
+  "class_type": "VAEEncodeTiled",
+  "inputs": {
+   "pixels": [
+    "pre",
+    0
+   ],
+   "vae": [
+    "vae",
+    0
+   ],
+   "tile_size": 512,
+   "overlap": 128,
+   "temporal_size": 4096,
+   "temporal_overlap": 8
+  }
+ },
+ "cond": {
+  "class_type": "SeedVR2Conditioning",
+  "inputs": {
+   "model": [
+    "unet",
+    0
+   ],
+   "vae_conditioning": [
+    "enc",
+    0
+   ]
+  }
+ },
+ "ks": {
+  "class_type": "KSampler",
+  "inputs": {
+   "model": [
+    "unet",
+    0
+   ],
+   "positive": [
+    "cond",
+    0
+   ],
+   "negative": [
+    "cond",
+    1
+   ],
+   "latent_image": [
+    "enc",
+    0
+   ],
+   "seed": 959948902156062,
+   "steps": 1,
+   "cfg": 1.0,
+   "sampler_name": "euler",
+   "scheduler": "simple",
+   "denoise": 1.0
+  }
+ },
+ "dec": {
+  "class_type": "VAEDecodeTiled",
+  "inputs": {
+   "samples": [
+    "ks",
+    0
+   ],
+   "vae": [
+    "vae",
+    0
+   ],
+   "tile_size": 512,
+   "overlap": 128,
+   "temporal_size": 4096,
+   "temporal_overlap": 8
+  }
+ },
+ "post": {
+  "class_type": "SeedVR2PostProcessing",
+  "inputs": {
+   "images": [
+    "dec",
+    0
+   ],
+   "original_resized_images": [
+    "rs",
+    0
+   ],
+   "color_correction_method": "lab"
+  }
+ },
+ "save": {
+  "class_type": "SaveImage",
+  "inputs": {
+   "images": [
+    "post",
+    0
+   ],
+   "filename_prefix": "seedvr2/fox_x2"
+  }
+ }
+}
