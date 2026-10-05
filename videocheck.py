@@ -22,6 +22,8 @@ pictures (storyboard's --vision).
     videocheck.py VIDEO [--cuts F,...] [--joins F,...] [--json]
 
 --joins (the first frame of each later clip) names the join an event lies at.
+A video storyboard made has both beside it (<video>.layout.json), read when
+neither is given: a planned cut is no fault, nor the last frames before it.
 """
 import argparse
 import json
@@ -58,7 +60,7 @@ def events(move, rest, fps=24, cuts=()):
     found = []
     # jumps: unexplained change far above the second around it
     for i in range(len(rest)):
-        if i + 1 in cuts:
+        if any(0 <= c - (i + 1) <= 2 for c in cuts):          # the cut, and a clip's last frames before it
             continue
         around = np.r_[rest[max(0, i - fps // 2):i], rest[i + 1:i + 1 + fps // 2]]
         base = float(np.median(around)) if len(around) else 0.0
@@ -123,6 +125,17 @@ def check(path, fps=24, cuts=(), joins=()):
     return found, curve, len(x)
 
 
+def layout_of(video):
+    """The joins and planned cuts storyboard wrote beside a video (<video>.layout.json),
+    or ([], []) for a video from elsewhere."""
+    from pathlib import Path
+    f = Path(str(video) + ".layout.json")
+    if not f.is_file():
+        return [], []
+    d = json.loads(f.read_text())
+    return d.get("joins", []), d.get("cuts", [])
+
+
 def main():
     ap = argparse.ArgumentParser(description="where a video jumps, halts or freezes")
     ap.add_argument("video")
@@ -132,13 +145,16 @@ def main():
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args()
     nums = lambda s: [int(v) for v in s.split(",") if v.strip()]
-    found, curve, n = check(a.video, a.fps, nums(a.cuts), nums(a.joins))
+    joins, cuts = nums(a.joins), nums(a.cuts)
+    if not a.joins and not a.cuts:
+        joins, cuts = layout_of(a.video)                     # storyboard's, if it made the video
+    found, curve, n = check(a.video, a.fps, cuts, joins)
     if a.json:
         print(json.dumps({"frames": n, "events": found, "movement": [round(v, 3) for v in curve]}))
         return
     print(f"{a.video}: {n} frames")
     for e in found:
-        print("  " + describe(e, a.fps, nums(a.joins)))
+        print("  " + describe(e, a.fps, joins))
     if not found:
         print("  no jump, halt or freeze")
     sys.exit(1 if found else 0)

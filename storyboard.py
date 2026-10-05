@@ -525,8 +525,16 @@ class Board:
 
     def write_layout(self, video, frames):
         """What each clip was rendered with, beside the video: --redo-clip cuts the
-        old video at these frames, whatever the plan says now."""
-        Path(str(video) + ".layout.json").write_text(json.dumps({"frames": frames}) + "\n")
+        old video at these frames, whatever the plan says now; videocheck finds
+        the joins and the planned cuts there."""
+        joins, cuts, at = [], [], 0
+        for i, (f, clip) in enumerate(zip(frames, self.plan["clips"]), 1):
+            if i > 1:
+                joins.append(at)
+                if clip.get("cut"):
+                    cuts.append(at)
+            at += f - (0 if i == 1 or clip.get("cut") else 1)
+        Path(str(video) + ".layout.json").write_text(json.dumps({"frames": frames, "joins": joins, "cuts": cuts}) + "\n")
 
     def layout(self, video):
         f = Path(str(video) + ".layout.json")
@@ -608,6 +616,7 @@ class Board:
             audio, shape, what = ["-i", str(video)], "anull", "LTX's sound"
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(picture), *audio, "-map", "0:v", "-map", "1:a",
                         "-c:v", "copy", "-af", shape, "-c:a", "aac", "-b:a", "192k", "-shortest", str(out)], check=True)
+        Path(str(out) + ".layout.json").write_text(Path(str(video) + ".layout.json").read_text())
         print(f"  final: {out} ({what})")
 
     def joins(self, video):

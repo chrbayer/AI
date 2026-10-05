@@ -1651,7 +1651,10 @@ llmctl update comfy --master          # master instead of the releases (download
      - **FREEZE:** a second and more nearly without movement: a clip done
        early.
 
-     Each comes with its time, frame and clip or join. Calibrated on the
+     Each comes with its time, frame and clip or join. A video the storyboard
+     made has its joins and planned cuts beside it (`<video>.layout.json`,
+     the final video too), which `llmctl videocheck` reads on its own. A
+     planned cut is no fault, nor a clip's last frames before it. Calibrated on the
      beach scene's versions, it found every jump and stop seen by eye: the
      background snap at 9.88 s (18× the change around it), the end of clip 2
      at 9.0 s (3.4×), the sand fountain (35×), the halts and freezes. A slow

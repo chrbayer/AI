@@ -995,6 +995,11 @@ class ArtifactNode(unittest.TestCase):
         self.assertNotIn(("jump", 120), kinds)                  # the cut is left out
         self.assertTrue(any(k == "halt" and 160 <= f <= 174 for k, f in kinds), kinds)
         self.assertTrue(any(k == "freeze" for k, f in kinds), kinds)
+        # the last frames of a clip before a planned cut belong to the cut
+        rest2 = np.full(240, 1.0)
+        rest2[117] = 9.0                                         # frame 118, two before the cut at 120
+        found2, _ = vc.events(np.full(240, 0.4), rest2, 24, {120})
+        self.assertEqual([e for e in found2 if e["kind"] == "jump"], [])
         self.assertEqual(vc.where(60, [121, 217]), "clip 1")
         self.assertEqual(vc.where(122, [121, 217]), "join 1/2")
 
