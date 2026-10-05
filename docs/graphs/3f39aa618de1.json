@@ -1,0 +1,233 @@
+{
+ "9": {
+  "inputs": {
+   "filename_prefix": "gallery/upscale",
+   "images": [
+    "87:65",
+    0
+   ]
+  },
+  "class_type": "SaveImage",
+  "_meta": {
+   "title": "Save Image"
+  }
+ },
+ "77": {
+  "inputs": {
+   "image": "gallery/Qwen_image_2.1_00002.png"
+  },
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "Load Image"
+  },
+  "is_changed": [
+   "b30ff21a69e057f42f4a09fd796e641840329c6fd6d03c75c68614dd2de2de48"
+  ]
+ },
+ "86": {
+  "inputs": {
+   "compare_view": {
+    "0": "",
+    "1": ""
+   },
+   "image_a": [
+    "77",
+    0
+   ],
+   "image_b": [
+    "87:65",
+    0
+   ]
+  },
+  "class_type": "ImageCompare",
+  "_meta": {
+   "title": "Compare Images"
+  }
+ },
+ "87:71": {
+  "inputs": {
+   "text": "",
+   "clip": [
+    "87:62",
+    0
+   ]
+  },
+  "class_type": "CLIPTextEncode",
+  "_meta": {
+   "title": "CLIP Text Encode (Negative Prompt)"
+  }
+ },
+ "87:79": {
+  "inputs": {
+   "upscale_model": [
+    "87:76",
+    0
+   ],
+   "image": [
+    "87:78",
+    0
+   ]
+  },
+  "class_type": "ImageUpscaleWithModel",
+  "_meta": {
+   "title": "Upscale Image (using Model)"
+  }
+ },
+ "87:80": {
+  "inputs": {
+   "pixels": [
+    "87:81",
+    0
+   ],
+   "vae": [
+    "87:63",
+    0
+   ]
+  },
+  "class_type": "VAEEncode",
+  "_meta": {
+   "title": "VAE Encode"
+  }
+ },
+ "87:81": {
+  "inputs": {
+   "upscale_method": "lanczos",
+   "scale_by": 0.5,
+   "image": [
+    "87:79",
+    0
+   ]
+  },
+  "class_type": "ImageScaleBy",
+  "_meta": {
+   "title": "Upscale Image By"
+  }
+ },
+ "87:69": {
+  "inputs": {
+   "seed": 42,
+   "steps": 5,
+   "cfg": 1.0,
+   "sampler_name": "dpmpp_2m_sde",
+   "scheduler": "beta",
+   "denoise": 0.33,
+   "model": [
+    "87:70",
+    0
+   ],
+   "positive": [
+    "87:67",
+    0
+   ],
+   "negative": [
+    "87:71",
+    0
+   ],
+   "latent_image": [
+    "87:80",
+    0
+   ]
+  },
+  "class_type": "KSampler",
+  "_meta": {
+   "title": "KSampler"
+  }
+ },
+ "87:66": {
+  "inputs": {
+   "unet_name": "z_image_turbo_bf16.safetensors",
+   "weight_dtype": "default"
+  },
+  "class_type": "UNETLoader",
+  "_meta": {
+   "title": "Load Diffusion Model"
+  }
+ },
+ "87:62": {
+  "inputs": {
+   "clip_name": "qwen_3_4b.safetensors",
+   "type": "lumina2",
+   "device": "default"
+  },
+  "class_type": "CLIPLoader",
+  "_meta": {
+   "title": "Load CLIP"
+  }
+ },
+ "87:67": {
+  "inputs": {
+   "text": "masterpiece, 8k",
+   "clip": [
+    "87:62",
+    0
+   ]
+  },
+  "class_type": "CLIPTextEncode",
+  "_meta": {
+   "title": "CLIP Text Encode (Positive Prompt) (fixed)"
+  }
+ },
+ "87:63": {
+  "inputs": {
+   "vae_name": "ae.safetensors"
+  },
+  "class_type": "VAELoader",
+  "_meta": {
+   "title": "Load VAE"
+  }
+ },
+ "87:76": {
+  "inputs": {
+   "model_name": "RealESRGAN_x4plus.safetensors"
+  },
+  "class_type": "UpscaleModelLoader",
+  "_meta": {
+   "title": "Load Upscale Model"
+  }
+ },
+ "87:70": {
+  "inputs": {
+   "shift": 3.0,
+   "sampling": "flow",
+   "model": [
+    "87:66",
+    0
+   ]
+  },
+  "class_type": "ModelSamplingAuraFlow",
+  "_meta": {
+   "title": "ModelSamplingAuraFlow"
+  }
+ },
+ "87:65": {
+  "inputs": {
+   "samples": [
+    "87:69",
+    0
+   ],
+   "vae": [
+    "87:63",
+    0
+   ]
+  },
+  "class_type": "VAEDecode",
+  "_meta": {
+   "title": "VAE Decode"
+  }
+ },
+ "87:78": {
+  "inputs": {
+   "upscale_method": "lanczos",
+   "megapixels": 1.0,
+   "resolution_steps": 1,
+   "image": [
+    "77",
+    0
+   ]
+  },
+  "class_type": "ImageScaleToTotalPixels",
+  "_meta": {
+   "title": "Scale Image to Total Pixels"
+  }
+ }
+}

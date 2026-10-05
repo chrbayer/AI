@@ -106,7 +106,18 @@ def small(src, media, limit_px=1280):
         dst = media / f"{src.stem[:40]}-{key}.jpg"
         if not dst.exists():
             from PIL import Image
-            im = Image.open(src).convert("RGB")
+            im = Image.open(src)
+            if im.mode in ("RGBA", "LA") or "transparency" in im.info:
+                # JPEG has no transparency: show it as a checkerboard, as editors do
+                im = im.convert("RGBA")
+                board = Image.new("RGBA", im.size, (236, 236, 236, 255))
+                tile = max(8, im.width // 64)
+                dark = Image.new("RGBA", (tile, tile), (200, 200, 200, 255))
+                for y in range(0, im.height, tile):
+                    for x in range((y // tile) % 2 * tile, im.width, 2 * tile):
+                        board.paste(dark, (x, y))
+                im = Image.alpha_composite(board, im)
+            im = im.convert("RGB")
             im.thumbnail((limit_px, limit_px))
             im.save(dst, quality=82, optimize=True)
     elif ext in VIDEO:

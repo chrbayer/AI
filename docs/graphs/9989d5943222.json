@@ -1,0 +1,257 @@
+{
+ "1": {
+  "inputs": {
+   "unet_name": "qwen_image_2.1_bf16.safetensors",
+   "weight_dtype": "default"
+  },
+  "class_type": "UNETLoader",
+  "_meta": {
+   "title": "Load Diffusion Model"
+  }
+ },
+ "2": {
+  "inputs": {
+   "clip_name": "qwen3vl_8b_bf16.safetensors",
+   "type": "qwen_image",
+   "device": "default"
+  },
+  "class_type": "CLIPLoader",
+  "_meta": {
+   "title": "Load CLIP"
+  }
+ },
+ "3": {
+  "inputs": {
+   "vae_name": "qwen_image_2.1_vae_bf16.safetensors"
+  },
+  "class_type": "VAELoader",
+  "_meta": {
+   "title": "Load VAE"
+  }
+ },
+ "4": {
+  "inputs": {
+   "name": "Qwen-Image-2.1-Fun-Controlnet-Union.safetensors"
+  },
+  "class_type": "ModelPatchLoader",
+  "_meta": {
+   "title": "Load Model Patch"
+  }
+ },
+ "5": {
+  "inputs": {
+   "image": "gallery/inpaint_input.png"
+  },
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "Image — paint the mask over what to redraw"
+  },
+  "is_changed": [
+   "5f0aedad1a8899f29e70b0f459ac3cf6d81df97ae0d1261eee65dd4d5cbf1b0b"
+  ]
+ },
+ "9": {
+  "inputs": {
+   "prompt": "A long bright red wool coat blowing in the wind, the same woman, the rest of the photo unchanged.",
+   "negative_prompt": "",
+   "resolution": 1024,
+   "clip": [
+    "2",
+    0
+   ]
+  },
+  "class_type": "TextEncodeQwenImage21",
+  "_meta": {
+   "title": "Text Encode Qwen Image 2.1"
+  }
+ },
+ "13": {
+  "inputs": {
+   "filename_prefix": "gallery/inpaint",
+   "images": [
+    "27",
+    0
+   ]
+  },
+  "class_type": "SaveImage",
+  "_meta": {
+   "title": "Save Image"
+  }
+ },
+ "20": {
+  "inputs": {
+   "image": [
+    "26",
+    1
+   ]
+  },
+  "class_type": "GetImageSize",
+  "_meta": {
+   "title": "Get Image Size"
+  }
+ },
+ "22": {
+  "inputs": {
+   "width": [
+    "20",
+    0
+   ],
+   "height": [
+    "20",
+    1
+   ],
+   "batch_size": 1
+  },
+  "class_type": "EmptyLatentImage",
+  "_meta": {
+   "title": "Empty Latent Image"
+  }
+ },
+ "24": {
+  "inputs": {
+   "samples": [
+    "35",
+    0
+   ],
+   "vae": [
+    "3",
+    0
+   ]
+  },
+  "class_type": "VAEDecode",
+  "_meta": {
+   "title": "VAE Decode"
+  }
+ },
+ "26": {
+  "inputs": {
+   "downscale_algorithm": "bilinear",
+   "upscale_algorithm": "bicubic",
+   "preresize": false,
+   "preresize_mode": "ensure minimum resolution",
+   "preresize_min_width": 1024,
+   "preresize_min_height": 1024,
+   "preresize_max_width": 16384,
+   "preresize_max_height": 16384,
+   "mask_fill_holes": true,
+   "mask_expand_pixels": 0,
+   "mask_invert": false,
+   "mask_blend_pixels": 32,
+   "mask_hipass_filter": 0.1,
+   "extend_for_outpainting": false,
+   "extend_up_factor": 1.0,
+   "extend_down_factor": 1.0,
+   "extend_left_factor": 1.0,
+   "extend_right_factor": 1.0,
+   "context_from_mask_extend_factor": 2.5,
+   "output_resize_to_target_size": true,
+   "output_target_width": 1024,
+   "output_target_height": 1024,
+   "output_padding": "32",
+   "device_mode": "gpu (much faster)",
+   "image": [
+    "5",
+    0
+   ],
+   "mask": [
+    "5",
+    1
+   ]
+  },
+  "class_type": "InpaintCropImproved",
+  "_meta": {
+   "title": "Crop around the mask"
+  }
+ },
+ "27": {
+  "inputs": {
+   "stitcher": [
+    "26",
+    0
+   ],
+   "inpainted_image": [
+    "24",
+    0
+   ]
+  },
+  "class_type": "InpaintStitchImproved",
+  "_meta": {
+   "title": "Stitch back"
+  }
+ },
+ "30": {
+  "inputs": {
+   "lora_name": "Qwen-Image-2.1-Fun-Acc-4Step-comfyui.safetensors",
+   "strength_model": 1.0,
+   "model": [
+    "1",
+    0
+   ]
+  },
+  "class_type": "LoraLoaderModelOnly",
+  "_meta": {
+   "title": "4-step Acc LoRA (alibaba-pai)"
+  }
+ },
+ "34": {
+  "inputs": {
+   "strength": 1.0,
+   "start_percent": 0.0,
+   "end_percent": 1.0,
+   "model": [
+    "30",
+    0
+   ],
+   "model_patch": [
+    "4",
+    0
+   ],
+   "vae": [
+    "3",
+    0
+   ],
+   "inpaint_image": [
+    "26",
+    1
+   ],
+   "mask": [
+    "26",
+    2
+   ]
+  },
+  "class_type": "ZImageFunControlnet",
+  "_meta": {
+   "title": "Apply Fun ControlNet"
+  }
+ },
+ "35": {
+  "inputs": {
+   "seed": 42,
+   "steps": 4,
+   "cfg": 1.0,
+   "sampler_name": "euler",
+   "scheduler": "simple",
+   "denoise": 1.0,
+   "model": [
+    "34",
+    0
+   ],
+   "positive": [
+    "9",
+    0
+   ],
+   "negative": [
+    "9",
+    1
+   ],
+   "latent_image": [
+    "22",
+    0
+   ]
+  },
+  "class_type": "KSampler",
+  "_meta": {
+   "title": "Sampler (Turbo)"
+  }
+ }
+}

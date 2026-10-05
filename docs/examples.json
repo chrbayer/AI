@@ -271,6 +271,24 @@
               "public": true
             }
           ]
+        },
+        {
+          "id": "seedvr2",
+          "title": "A clip made larger and sharper",
+          "public": true,
+          "text": "SeedVR2 3B Video Upscale: the 5 s beach clip from 1280×704 to 1920×1056 with real detail in hair, coat and surf, not just a softer enlargement. Slow here: 2864 s for the five seconds, with *Split Latent* on.",
+          "media": [
+            {
+              "file": "out:video/ltx_strand_00001_.mp4",
+              "caption": "1280×704",
+              "public": false
+            },
+            {
+              "file": "out:video/seedvr2_split_00001_.mp4",
+              "caption": "1920×1056 (SeedVR2)",
+              "public": true
+            }
+          ]
         }
       ]
     },
@@ -383,6 +401,116 @@
             {
               "file": "out:cmp-qwen3vl_8b_bf16_heretic_00001_.png",
               "caption": "bf16, heretic"
+            }
+          ]
+        },
+        {
+          "id": "control",
+          "title": "Control: edges, depth, pose",
+          "public": true,
+          "text": "A photo steers a new picture: its edges (Canny), its depth or the pose of the person in it, read by a preprocessor inside the workflow. 39–66 s each with the 4- and 8-step Turbo models.",
+          "media": [
+            {
+              "file": "bench:storyboard/strand.png",
+              "caption": "The photo",
+              "public": true
+            },
+            {
+              "file": "bench:gallery/canny.png",
+              "caption": "Canny: the same lines, a winter beach (Qwen-Image 2.1 Canny Control Turbo)",
+              "public": true
+            },
+            {
+              "file": "out:qwen21_test_00001_.png",
+              "caption": "The fox",
+              "public": true
+            },
+            {
+              "file": "bench:gallery/depth.png",
+              "caption": "Depth: a ceramic fox in the same pose (Z-Image Turbo Depth Control)",
+              "public": true
+            },
+            {
+              "file": "in:mv_shot0.png",
+              "caption": "The singer",
+              "public": true
+            },
+            {
+              "file": "bench:gallery/pose.png",
+              "caption": "Pose: another singer, the same pose (Qwen-Image 2.1 Pose Control Turbo)",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "inpaint",
+          "title": "Inpainting and outpainting",
+          "public": true,
+          "text": "Inpainting redraws what is masked — here the coat, its mask from SAM 3 (\"the dark coat\"), transparent in the picture loaded. Outpainting extends a picture beyond its edges, 256 px each side. 42 and 30 s with the Turbo models.",
+          "media": [
+            {
+              "file": "bench:gallery/inpaint_input.png",
+              "caption": "The mask: the coat, transparent",
+              "public": true
+            },
+            {
+              "file": "bench:gallery/inpaint.png",
+              "caption": "A red coat (Qwen-Image 2.1 Inpaint Crop Turbo)",
+              "public": true
+            },
+            {
+              "file": "bench:gallery/outpaint.png",
+              "caption": "The photo extended to both sides (Qwen-Image 2.1 Outpaint Turbo)",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "colorize",
+          "title": "Colour for a black-and-white photo",
+          "public": true,
+          "text": "The singer's medium shot turned grey, then coloured again by Qwen-Image 2.1 Colorize Turbo in 27 s — with the original to compare.",
+          "media": [
+            {
+              "file": "bench:gallery/colorize_input.png",
+              "caption": "Black and white",
+              "public": true
+            },
+            {
+              "file": "bench:gallery/colorize.png",
+              "caption": "Coloured",
+              "public": true
+            },
+            {
+              "file": "in:mv_shot1.png",
+              "caption": "The original",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "background",
+          "title": "The background removed",
+          "public": true,
+          "text": "BiRefNet cuts the subject free in 3 s and keeps the rest transparent (MIT licence).",
+          "media": [
+            {
+              "file": "bench:gallery/background.png",
+              "caption": "The fox, cut free",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "upscale",
+          "title": "Larger and sharper",
+          "public": true,
+          "text": "Z-Image Turbo 2K Upscale: the hedgehog from 1024² to 2048², redrawn lightly (5 steps, denoise 0.33) for detail, in 108 s.",
+          "media": [
+            {
+              "file": "bench:gallery/upscale.png",
+              "caption": "2048×2048",
+              "public": true
             }
           ]
         }

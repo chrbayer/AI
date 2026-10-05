@@ -129,7 +129,10 @@ class Comfy:
             if h and h["status"].get("completed"):
                 break
             time.sleep(3)
-        out = next(i for o in h["outputs"].values() for i in o.get("images", []) + o.get("videos", []) + o.get("audio", []))
+        made = [i for o in h["outputs"].values() for i in o.get("images", []) + o.get("videos", []) + o.get("audio", [])]
+        # what the graph saves before what it only previews (a control picture, a
+        # mask): the result, not the first picture shown
+        out = next((i for i in made if i.get("type") == "output"), made[0])
         r = requests.get(f"{self.url}/view", params={"filename": out["filename"], "subfolder": out.get("subfolder", ""),
                                                       "type": out.get("type", "output")}, timeout=600)
         r.raise_for_status()
