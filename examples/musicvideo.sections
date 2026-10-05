@@ -1,0 +1,23 @@
+# llmctl musicvideo song.flac shot0.png shot1.png shot2.png --sections musicvideo.sections
+#
+# One line per section of the song (5 s each by default, --seconds); past the
+# last line every section sings with the next of the pictures in turn. A
+# picture named here is relative to this file. # starts a comment.
+#
+#   sing                       the singer sings (the default)
+#   sing: <prompt>             ... with this prompt instead of --prompt
+#   sing <picture>: <prompt>   ... from this picture
+#   scene: <prompt>            a scene from the prompt alone, no singing
+#   scene <picture>: <prompt>  a scene that starts from this picture
+#
+# The 30 s German synthpop song of the gallery's music video, six sections:
+# the close-up for the verse lines with the most words (lips follow best
+# there), the wider shots for the chorus, an instrumental-like moment as a
+# scene.
+
+sing shot0.png: The singer sings this line with feeling, lips moving clearly with the words, small natural head movements, the neon lights pulse with the music.
+sing shot1.png: She sings into the vintage microphone on its stand, swaying a little to the beat, the neon lights pulse with the music.
+sing shot0.png: The singer sings this line with feeling, lips moving clearly with the words, the neon lights pulse with the music.
+scene shot2.png: She turns her head slowly towards the lights, eyes closed, lost in the music, the neon beams sweep across the stage.
+sing shot1.png: She sings the chorus with joy, smiling between the words, swaying to the beat.
+sing shot0.png: She sings the last line softly and smiles, the neon lights slowly dim.

@@ -122,9 +122,15 @@ def small(src, media, limit_px=1280):
             subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-vn", "-c:a", "libmp3lame", "-b:a", "128k",
                             "-map_metadata", "-1", str(dst)], check=True)
     elif ext in MODEL:
+        # decimated to 40,000 triangles, textures to 1024 px, Draco and JPEG
+        # (docs/tools/glb_small.py in Blender): a 27 MB model came out 0.6 MB
+        # and looked the same
         dst = media / f"{src.stem[:40]}-{key}{ext}"
         if not dst.exists():
-            shutil.copy(src, dst)
+            if not shutil.which("blender"):
+                sys.exit(f"{src.name}: making a GLB small takes Blender")
+            subprocess.run(["blender", "-b", "-P", str(HERE / "tools/glb_small.py"), "--", str(src), str(dst),
+                            "40000", "1024"], check=True, capture_output=True)
     else:
         dst = media / f"{src.stem[:40]}-{key}{ext}"
         if not dst.exists():

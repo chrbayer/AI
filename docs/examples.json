@@ -176,31 +176,39 @@
           "command": "llmctl musicvideo song.flac shot0.png shot1.png shot2.png --out musikvideo.mp4"
         },
         {
-          "id": "shots",
-          "title": "The singer's three shots",
+          "id": "walkthrough",
+          "title": "Making one, step by step",
           "public": true,
+          "text": "The music video above, made again from nothing. Every step runs on the same machine; ComfyUI on slot 9, its image API (`--proxy`) on port 8089.\n\n1. **The song.** ACE-Step 1.5 XL Turbo through llmctl's `/v1/audio/music`: style tags, lyrics with `[Verse]`/`[Chorus]`, tempo, key and language. 30 s in ~20 s.\n2. **The singer.** One picture with Z-Image Turbo: a close-up, the face filling much of the frame, 16:9 like the video.\n3. **More shots of the same person.** Qwen-Image Edit Turbo, every one edited from that first picture (an edit of an edit gathers noise): a medium shot at a microphone stand, a profile with eyes closed.\n4. **The sections.** Without a file the pictures take turns; with one (`--sections`, see `examples/musicvideo.sections`) each section gets its shot and its own prompt, or plays a scene instead of singing.\n5. **Look before rendering.** `--dry-run` shows the plan and the time it will take; then the render, ~6.5 min per 5 s section. Finished sections are kept beside the output, so a run that stops, or one with a few lines changed, renders only what is missing.",
+          "command": "# 1. the song (the image API of the ComfyUI slot)\ncurl -s localhost:8089/v1/audio/music -H 'Content-Type: application/json' -o song.mp3 -d '{\n  \"model\": \"ace-step-15-xl-turbo\", \"duration\": 30, \"language\": \"de\", \"bpm\": 112, \"key\": \"A minor\",\n  \"prompt\": \"German synth pop, catchy, 112 BPM, warm female lead vocals, punchy drums, shimmering synths, bright chorus\",\n  \"lyrics\": \"[Verse]\\nIch lauf durch die Straßen, die Lichter gehen an\\nDie Stadt hält den Atem, die Nacht fängt an\\n\\n[Chorus]\\nUnd wir tanzen, tanzen bis der Morgen kommt\\nUnd wir singen, singen bis die Sonne brennt\"}'\n\n# 2.–3. the shots: Z-Image Turbo T2I, then Qwen-Image 2.1 Edit Turbo from it (prompts below)\n\n# 4.–5. the video\nllmctl musicvideo song.mp3 shot0.png shot1.png shot2.png --sections examples/musicvideo.sections --dry-run\nllmctl musicvideo song.mp3 shot0.png shot1.png shot2.png --sections examples/musicvideo.sections",
           "media": [
             {
+              "file": "in:mv_song.flac",
+              "caption": "1. The song",
+              "public": true
+            },
+            {
               "file": "in:mv_shot0.png",
-              "caption": "Shot 1 (Z-Image Turbo)",
+              "caption": "2. The singer (Z-Image Turbo)",
               "public": true
             },
             {
               "file": "in:mv_shot1.png",
-              "caption": "Shot 2 (Qwen-Image Edit, from shot 1)",
+              "caption": "3. Medium shot (Qwen-Image Edit, from 2.)",
               "public": true
             },
             {
               "file": "in:mv_shot2.png",
-              "caption": "Shot 3 (Qwen-Image Edit, from shot 1)",
-              "public": true
-            },
-            {
-              "file": "in:mv_song.flac",
-              "caption": "The song (ACE-Step 1.5 XL)",
+              "caption": "3. Profile (Qwen-Image Edit, from 2.)",
               "public": true
             }
           ]
+        },
+        {
+          "id": "tips",
+          "title": "What makes it work",
+          "public": true,
+          "text": "- **Close-ups for lines with many words.** With the face filling the frame the lips follow the singing closely; at head-and-shoulders they drift.\n- **Wider shots and profiles for the chorus** and for long notes, where the mouth matters less.\n- **Scenes for instrumental parts** (`scene: …` in the sections file): no singing, the song goes on underneath.\n- **Every shot from the first picture.** The same face in every section; an edit of an edit drifts and gathers grain.\n- **`--continuous`** starts each section on the last frame of the one before: one continuous take, but the face drifts a little with every section. For a story to a song without lip sync, a storyboard with the song as `\"soundtrack\"` keeps the person the same over far more seconds.\n- **The song stays the song.** The video's sound is the original track, not LTX's: the picture is cut to the song's frames, never the other way round."
         }
       ]
     },
@@ -473,7 +481,7 @@
       "id": "3d",
       "title": "3D from a picture",
       "summary": "Pixal3D and TRELLIS.2: a photo to a textured mesh.",
-      "intro": "`Pixal3D TRELLIS.2 Image to Model (int8)`: the background cut away, the shape and colours built as voxels, meshed, decimated to 200,000 triangles and baked into 4096 px textures. Drag to turn.",
+      "intro": "`Pixal3D TRELLIS.2 Image to Model (int8)`: the background cut away, the shape and colours built as voxels, meshed, decimated to 200,000 triangles and baked into 4096 px textures. Drag to turn. On these public pages the models are made small for the web (40,000 triangles, 1024 px textures, ~1 MB); the originals have 200,000 triangles and 4096 px textures.",
       "examples": [
         {
           "id": "fox3d",
@@ -487,7 +495,8 @@
             },
             {
               "file": "out:3d/v200_trellis2_figur_00001.glb",
-              "caption": "The model"
+              "caption": "The model",
+              "public": true
             }
           ],
           "public": true
@@ -498,9 +507,11 @@
           "text": "Pixal3D, 2308 s; 50 MB.",
           "media": [
             {
-              "file": "out:3d/v200_pixal3d_haus_00001.glb"
+              "file": "out:3d/v200_pixal3d_haus_00001.glb",
+              "public": true
             }
-          ]
+          ],
+          "public": true
         },
         {
           "id": "bag3d",
@@ -508,9 +519,11 @@
           "text": "TRELLIS.2, 3788 s. Plain white surfaces are hard for both; extra views of the object (*Mehrere Ansichten*) helped its side profile.",
           "media": [
             {
-              "file": "out:3d/v200_trellis2_tasche_00001.glb"
+              "file": "out:3d/v200_trellis2_tasche_00001.glb",
+              "public": true
             }
-          ]
+          ],
+          "public": true
         }
       ]
     },
