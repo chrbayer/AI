@@ -22,7 +22,7 @@ ZSHCOMP   = $(DESTDIR)$(PREFIX)/share/zsh/site-functions
 
 # Everything that answers without a GPU, a model or the network.
 test:
-	shellcheck -S warning llmctl patches/build-tts-server.sh tests/smoke.sh completions/llmctl.bash
+	shellcheck -S warning llmctl patches/build-tts-server.sh patches/build-kolibri-server.sh tests/smoke.sh completions/llmctl.bash
 	tests/smoke.sh
 	python3 tests/test_python.py
 
@@ -61,7 +61,8 @@ install:
 	install -Dm644 comfyui/watch.conf $(SHAREDIR)/comfyui/watch.conf
 	install -Dm644 -t $(SHAREDIR)/tts/voices tts/voices/*
 	install -Dm755 patches/build-tts-server.sh $(SHAREDIR)/patches/build-tts-server.sh
-	install -Dm644 -t $(SHAREDIR)/patches patches/llama.cpp-pr26603-*.patch
+	install -Dm755 patches/build-kolibri-server.sh $(SHAREDIR)/patches/build-kolibri-server.sh
+	install -Dm644 -t $(SHAREDIR)/patches patches/llama.cpp-pr26603-*.patch patches/llama.cpp-kolibri1.patch
 	install -Dm644 README.md $(DOCDIR)/README.md
 	install -Dm644 completions/llmctl.bash $(BASHCOMP)/llmctl
 	install -Dm644 completions/_llmctl $(ZSHCOMP)/_llmctl

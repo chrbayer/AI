@@ -4831,6 +4831,22 @@ cmd_outdated() {
         fi
     fi
 
+    # Kolibri-1 (models.conf "kolibri") runs on a patched build until llama.cpp
+    # knows its architecture; once master does, build-kolibri-server.sh can go.
+    if [[ -x "$DATA_DIR/llama.cpp-kolibri/build/bin/llama-server" ]]; then
+        printf '\n\033[1mKolibri build (patched llama.cpp)\033[0m\n'
+        local master_arch
+        master_arch=$(curl -fsSL --max-time 20 https://raw.githubusercontent.com/ggml-org/llama.cpp/master/src/llama-arch.cpp 2>/dev/null)
+        if [[ -z "$master_arch" ]]; then
+            echo "  cannot ask GitHub"
+        elif grep -q '"kolibri1"' <<< "$master_arch"; then
+            echo "  llama.cpp master knows kolibri1 now — point kolibri at the ordinary build; build-kolibri-server.sh can go"
+            newer=$(( newer + 1 ))
+        else
+            echo "  llama.cpp master does not know kolibri1 yet (#29922) — the patched build stays"
+        fi
+    fi
+
     printf '\n\033[1maudio.cpp\033[0m\n'
     if [[ -d "$AUDIOCPP_DIR/.git" ]]; then
         local built; built=$(git -C "$AUDIOCPP_DIR" rev-parse HEAD 2>/dev/null)
@@ -5604,6 +5620,21 @@ bench_model() {
     fi
 
     echo "  $m_label"
+    # A model on a build of its own (a patched llama.cpp, an architecture the
+    # ordinary builds cannot load yet) is measured with that build's llama-bench.
+    local own_server="${_r_binary//\~/$HOME}" own_bench=""
+    if [[ "$own_server" == */* && "$own_server" != "$(command -v "${LLAMA_DEFAULT_BIN:-llama-server}" 2>/dev/null)" ]]; then
+        own_bench="$(dirname "$own_server")/llama-bench"
+    fi
+    if [[ -n "$own_bench" ]]; then
+        if [[ -x "$own_bench" ]]; then
+            echo "    its own build ($(dirname "$own_server")):"
+            run_bench "$own_bench" "$model_path" "" "vulkan" "$m_name" "$result_file"
+        else
+            echo "    its own build has no llama-bench ($own_bench) — build it beside its llama-server"
+        fi
+        return
+    fi
     if [[ "$full_mode" == "full" ]]; then
         # Full test: all 8 ROCm env combos + Vulkan
         echo "    ROCM:"

@@ -2631,6 +2631,27 @@ sources' names, sizes and SHA-256 in place of parts, and the recipe. So
 Hub, and when they change, `download` fetches them and makes the file again.
 The sources are deleted once the file is made.
 
+### A model the ordinary llama.cpp cannot load yet
+
+Aleph Alpha's **Kolibri-1** (`kolibri`; German and English, 78B total and
+3.46B active per token, Apache-2.0) has an architecture llama.cpp does not
+know yet (feature request #29922). It runs on a build of its own:
+`patches/build-kolibri-server.sh` puts llama.cpp at the commit the community
+patch was made on into a worktree (`~/.local/share/llmctl/llama.cpp-kolibri`),
+applies `patches/llama.cpp-kolibri1.patch` (MIT, Hob-forge/Seraphiel102,
+checked against a PyTorch reference of Aleph Alpha's own code) and builds
+`llama-server` and `llama-bench` with Vulkan, in ~1.5 min. The entry names
+that `llama-server` as its binary, and `llmctl bench` measures a model on its
+own build with that build's `llama-bench`. `outdated` asks whether llama.cpp
+master knows `kolibri1`; when it does, the entry can go back to the ordinary
+build and the script can go.
+
+Measured with Q8_0 (83.1 GB): prefill 1324 t/s (pp512), decode 50.1 t/s. On
+six German prompts at reasoning `low` it wrote natural German throughout
+(where Qwen3.8-27B answered one almost wholly in English), in a fraction of
+the time; it reasons in English, and in one explanation it left out a step
+Qwen had right.
+
 ## Architecture
 
 - `llmctl` — Main entry point for all commands
