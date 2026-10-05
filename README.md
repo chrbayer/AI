@@ -1756,8 +1756,16 @@ llmctl update comfy --master          # master instead of the releases (download
     Neither jump showed afterwards, and at the keyframes' resting states
     the easing leaves at most a faint edge on a swinging coat for 2–3
     frames. Cuts are left alone; `"smooth_joins": false` turns it off.
+  - **Cuts can dissolve.** `"cut": {…, "dissolve": 0.75}` (seconds)
+    cross-dissolves the last frames of the clip before into the first of
+    the new one, eased at both ends, instead of switching hard. Nothing is
+    rendered again; the video comes out that many frames shorter. In the
+    beach scene the close-up rose out of the wide shot while she listened in
+    both, in 0.75 s (20.0 s instead of 20.75). The dissolve is in the final
+    video's layout, so videocheck does not report it.
   - **The sound** is the `"soundtrack"` (a song, from `"soundtrack_start"`
-    seconds, faded out at the end), else the `"ambience"`, else LTX's own.
+    seconds, faded out at the end), else the `"ambience"`, else LTX's own,
+    made to the final video's length.
 
   **A scene to a song** (the link to `musicvideo`, #47/#48): with a song as
   the `"soundtrack"`, the storyboard runs as one continuous scene under it.

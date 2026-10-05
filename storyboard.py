@@ -36,6 +36,8 @@ The plan (JSON):
      "soundtrack": "song.mp3",                 optional: a song under it instead
      "soundtrack_start": 12.5,                 (where in the song it begins)
      "smooth_joins": true,                     the default: see smooth_joins
+A clip's "cut" may say "dissolve": 0.75 (seconds) for a cross-dissolve into it
+instead of a hard switch: in the final video, the video n frames shorter.
      "keys": [{"edit": "...", "check": "..."}, ... five],
      "clips": [{"prompt": "...", "seconds": 4, "pull": 0.7}, ...,   four; a clip with
                {"prompt": "...", "cut": {"edit": "...", "check": "..."}}]}
@@ -144,14 +146,20 @@ def picture_part(p, kind="png"):
     return {"type": "image_url", "image_url": {"url": f"data:image/{kind};base64," + base64.b64encode(data).decode()}}
 
 
-def smooth_joins(src, dst, joins, tone=24, blend=3):
-    """Where one clip goes on from the last frame of the one before, the new clip
-    starts a little darker and softer (its first frame is that last frame through
-    the VAE once more): 3 levels of brightness and a fifth of the sharpness in the
-    beach scene, a jump there. Here the new clip takes the tone (mean and spread
-    of each colour) of the frame before it, fading back to its own over `tone`
-    frames, and its first `blend` frames are eased in from that frame. At a join
-    nothing moves much (keyframes are resting states), so that leaves no ghost."""
+def smooth_joins(src, dst, joins, dissolves=(), tone=24, blend=3):
+    """The picture's joins made soft, the frames as they are otherwise.
+
+    joins: where one clip goes on from the last frame of the one before, the new
+    clip starts a little darker and softer (its first frame is that last frame
+    through the VAE once more): 3 levels of brightness and a fifth of the
+    sharpness in the beach scene, a jump there. The new clip takes the tone (mean
+    and spread of each colour) of the frame before it, fading back to its own over
+    `tone` frames, and its first `blend` frames are eased in from that frame. At a
+    join nothing moves much (keyframes are resting states): no ghost.
+
+    dissolves: [(cut, n)] — at a planned cut, instead of switching, the last n
+    frames before it and the first n after it are cross-dissolved (eased), so the
+    video is n frames shorter there. Frame numbers are the source's."""
     import subprocess
     import numpy as np
     w, h = (int(v) for v in subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v", "-show_entries",
@@ -175,14 +183,29 @@ def smooth_joins(src, dst, joins, tone=24, blend=3):
                 v = (k + 1) / (blend + 1)
                 f = (1 - v) * a + v * f
             x[j + k] = np.clip(f, 0, 255).astype(np.uint8)
+    pieces, at = [], 0
+    for cut, n in sorted(dissolves):
+        n = min(n, cut, len(x) - cut)
+        if n <= 0:
+            continue
+        pieces.append(x[at:cut - n])
+        mixed = np.empty((n, h, w, 3), np.uint8)
+        for k in range(n):
+            t = (k + 0.5) / n
+            t = t * t * (3 - 2 * t)                               # eased: slow out, slow in
+            mixed[k] = np.clip((1 - t) * x[cut - n + k].astype(np.float32) + t * x[cut + k].astype(np.float32),
+                               0, 255).astype(np.uint8)
+        pieces.append(mixed)
+        at = cut + n
+    pieces.append(x[at:])
     enc = subprocess.Popen(["ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{w}x{h}",
                             "-r", str(FPS), "-i", "-", "-c:v", "libx264", "-crf", "14", "-preset", "slow",
                             "-pix_fmt", "yuv420p", str(dst)], stdin=subprocess.PIPE)
-    enc.stdin.write(x.tobytes())
+    for piece in pieces:
+        enc.stdin.write(piece.tobytes())
     enc.stdin.close()
     if enc.wait():
         sys.exit("smoothing the joins failed")
-
 
 def clip_frames(seconds):
     """The frames LTX makes for a clip of `seconds`: 8·n + 1, the nearest (a tie
@@ -591,17 +614,25 @@ class Board:
         sound — the "soundtrack" (a song: a scene that runs through it), else the
         "ambience", else LTX's own."""
         import subprocess
-        length = float(subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v", "-show_entries",
-                                       "stream=duration", "-of", "csv=p=0", str(video)],
-                                      capture_output=True, text=True, check=True).stdout)
         out = video.with_name(video.stem + "_final.mp4")
         picture = video
-        if self.plan.get("smooth_joins", True):
-            joins = [j for j, cut in self.joins(video) if not cut]
+        layout = json.loads(Path(str(video) + ".layout.json").read_text()) if Path(str(video) + ".layout.json").is_file() \
+            else {"frames": self.layout(video)}
+        joins = [j for j, cut in self.joins(video) if not cut] if self.plan.get("smooth_joins", True) else []
+        dissolves = []                                            # (cut frame, frames dissolved)
+        for (j, cut), clip in zip(self.joins(video), self.plan["clips"][1:]):
+            if cut and isinstance(clip.get("cut"), dict) and float(clip["cut"].get("dissolve", 0)) > 0:
+                dissolves.append((j, max(1, round(float(clip["cut"]["dissolve"]) * FPS))))
+        if joins or dissolves:
+            picture = video.with_name(video.stem + "_smoothed.mp4")
+            smooth_joins(video, picture, joins, dissolves)
             if joins:
-                picture = video.with_name(video.stem + "_smoothed.mp4")
-                smooth_joins(video, picture, joins)
                 print(f"  joins smoothed at frames {', '.join(map(str, joins))}")
+            for j, n in dissolves:
+                print(f"  cut at frame {j} cross-dissolved over {n} frames ({n / FPS:.2f} s)")
+        length = float(subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v", "-show_entries",
+                                       "stream=duration", "-of", "csv=p=0", str(picture)],
+                                      capture_output=True, text=True, check=True).stdout)
         if self.plan.get("soundtrack"):
             song, start = self.plan["soundtrack"], float(self.plan.get("soundtrack_start", 0))
             fade = min(2.0, length / 4)
@@ -616,7 +647,14 @@ class Board:
             audio, shape, what = ["-i", str(video)], "anull", "LTX's sound"
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(picture), *audio, "-map", "0:v", "-map", "1:a",
                         "-c:v", "copy", "-af", shape, "-c:a", "aac", "-b:a", "192k", "-shortest", str(out)], check=True)
-        Path(str(out) + ".layout.json").write_text(Path(str(video) + ".layout.json").read_text())
+        # the final video's own layout: a dissolve takes n frames out at its cut,
+        # and its span counts as planned for videocheck
+        shift = lambda f: f - sum(n for c, n in dissolves if c < f)
+        final = {"frames": layout.get("frames"),
+                 "joins": [shift(j) for j, _ in self.joins(video)],
+                 "cuts": [shift(j) for j, cut in self.joins(video) if cut and not any(c == j for c, _ in dissolves)],
+                 "dissolves": [[c - n - sum(m for d, m in dissolves if d < c), n] for c, n in dissolves]}
+        Path(str(out) + ".layout.json").write_text(json.dumps(final) + "\n")
         print(f"  final: {out} ({what})")
 
     def joins(self, video):

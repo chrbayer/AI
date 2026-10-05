@@ -133,7 +133,10 @@ def layout_of(video):
     if not f.is_file():
         return [], []
     d = json.loads(f.read_text())
-    return d.get("joins", []), d.get("cuts", [])
+    cuts = list(d.get("cuts", []))
+    for start, n in d.get("dissolves", []):                     # a planned dissolve: each of its frames
+        cuts += range(start, start + n + 1)
+    return d.get("joins", []), cuts
 
 
 def main():

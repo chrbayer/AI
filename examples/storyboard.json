@@ -54,7 +54,8 @@
       "cut": {
         "edit": "Close-up of the same woman as in <image1>, same face and long dark hair blowing in the wind, dark coat, holding the small seashell from <image2> (no bigger than her palm) to her ear with her eyes closed, listening; the sea and the low golden sun behind her. Head and shoulders, photo.",
         "check": "Close-up, head and shoulders: the woman with eyes closed holding the seashell to her ear.",
-        "seed": 233
+        "seed": 233,
+        "dissolve": 0.75
       },
       "seconds": 7.67,
       "pull": 0.5,

@@ -1000,6 +1000,14 @@ class ArtifactNode(unittest.TestCase):
         rest2[117] = 9.0                                         # frame 118, two before the cut at 120
         found2, _ = vc.events(np.full(240, 0.4), rest2, 24, {120})
         self.assertEqual([e for e in found2 if e["kind"] == "jump"], [])
+        # a planned dissolve in the layout counts as planned, every frame of it
+        import json as _json, tempfile, os
+        with tempfile.TemporaryDirectory() as d:
+            v = os.path.join(d, "x.mp4")
+            open(v + ".layout.json", "w").write(_json.dumps({"joins": [121, 217], "cuts": [], "dissolves": [[200, 18]]}))
+            joins, cuts = vc.layout_of(v)
+            self.assertEqual(joins, [121, 217])
+            self.assertTrue(set(range(200, 219)) <= set(cuts))
         self.assertEqual(vc.where(60, [121, 217]), "clip 1")
         self.assertEqual(vc.where(122, [121, 217]), "join 1/2")
 
