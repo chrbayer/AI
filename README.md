@@ -2647,10 +2647,12 @@ master knows `kolibri1`; when it does, the entry can go back to the ordinary
 build and the script can go.
 
 Measured with Q8_0 (83.1 GB): prefill 1324 t/s (pp512), decode 50.1 t/s. On
-six German prompts at reasoning `low` it wrote natural German throughout
-(where Qwen3.8-27B answered one almost wholly in English), in a fraction of
-the time; it reasons in English, and in one explanation it left out a step
-Qwen had right.
+six German prompts at reasoning `low`, against `llama3.3` (Llama 3.3 70B, the
+German reference so far): German at least as good, more natural and concise;
+both right on the trick question, the code and the table; both weak on how a
+fridge works, Llama's answer physically wrong; 3–45 s an answer against 7–92 s
+(~50 t/s against ~8). Qwen3.8-27B answered one of the six almost wholly in
+English. Kolibri reasons in English.
 
 ## Architecture
 
