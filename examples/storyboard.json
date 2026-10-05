@@ -18,9 +18,9 @@
       "object_stays": true
     },
     {
-      "edit": "The woman from <image1> has moved: she now stands upright in the left part of the picture and holds the small seashell from <image2> (the shell is small, no bigger than her palm, about a third as long as her foot) in both hands in front of her, looking at it — the same woman, same face, long dark hair, dark coat and jeans, and she is the only person in the picture; nobody stands in the middle any more, and nothing lies on the sand. Same beach, golden evening light and camera distance as <image1>, full figure, photo. The sea has moved on since <image1>: other waves are breaking now, in other places, with fresh white foam.",
-      "check": "Full figure, the woman standing upright in the left part of the picture, holding the small seashell in both hands in front of her, looking at it; nothing on the sand.",
-      "seed": 33
+      "edit": "Keep <image1> as it is — the same woman at the same place in the picture, the same camera, beach, sky and golden light — only she has picked up the small seashell from <image2> (no bigger than her palm) that lay on the sand to the left of her feet: she now stands upright and holds it in both hands in front of her, looking at it; nothing lies on the sand any more. The sea has moved on: the breaking waves and their foam are in other places. She is the only person in the picture. Photo.",
+      "check": "Full figure, the woman at the same place as in the picture before (left part of the picture), standing upright, holding the small seashell in both hands, looking at it; nothing on the sand.",
+      "from": "key_2"
     },
     {
       "edit": "Keep <image1> exactly as it is — the same woman at the same place in the picture, the same pose of her body and legs, the same clothes, the same camera position and framing, the same horizon height, the same beach and sand, the same sky and golden light — only she now holds the small seashell from <image2> (no bigger than her palm) to her ear with one hand and has her eyes closed, listening, and the waves behind her have moved on a little: the breaking waves and their foam are in slightly other places. She is the only person in the picture; nothing lies on the sand. Photo.",
@@ -65,7 +65,8 @@
           "pull": 0.5,
           "edit": "Keep <image1> as it is — the same woman at the same place and size in the picture, the same framing, face, eyes still closed, the same hand holding the small seashell from <image2> to her ear, the same coat, sky and light — only the wind has blown her long hair into other strands and the waves behind her have moved on: the breaking waves and their foam are in other places. Photo."
         }
-      ]
+      ],
+      "seed": 7001
     }
   ],
   "pull": 0.7,

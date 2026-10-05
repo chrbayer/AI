@@ -19,7 +19,9 @@ between them. Three steps, each run again only where its input changed:
    video again, with --vision for ghosts too (two people, a half-transparent
    one: LTX dissolving someone to a place it does not walk her to).
    --redo-clip N renders one clip again (--seed: another take) and splices it
-   in at its frames, the rest of the video as it was.
+   in at its frames, the rest of the video as it was; the seed goes into the
+   plan, and --render makes every clip with a "seed" or "guides" that way after
+   the chain, so the plan says the whole video.
 
     storyboard.py --url URL --workflows DIR PLAN.json [--vision URL]
                   [--render | --redo-clip N [--seed S] | --check-video] [--out FILE]
@@ -31,6 +33,9 @@ The plan (JSON):
      "size": "1280x704", "seed": 1,            optional
      "pull": 0.5,                              optional: Stärke Zielbild, all clips
      "ambience": "steady surf and wind ...",   optional: one soundtrack for it all
+     "soundtrack": "song.mp3",                 optional: a song under it instead
+     "soundtrack_start": 12.5,                 (where in the song it begins)
+     "smooth_joins": true,                     the default: see smooth_joins
      "keys": [{"edit": "...", "check": "..."}, ... five],
      "clips": [{"prompt": "...", "seconds": 4, "pull": 0.7}, ...,   four; a clip with
                {"prompt": "...", "cut": {"edit": "...", "check": "..."}}]}
@@ -87,6 +92,7 @@ CHAIN = "video/LTX-2.5 Chain Keyframes (int8, distilled, 4 clips).json"
 SINGLE = "video/LTX-2.5 First-Last Frame (int8, distilled).json"
 CLIPS = 4
 UPLOAD_DIR = "storyboard"
+DEFAULT_SEED = 4242
 FPS = 24
 
 
@@ -118,6 +124,10 @@ def load_plan(path):
         plan["object_image"] = str(base / plan["object_image"])
         if not Path(plan["object_image"]).is_file():
             sys.exit(f"no such object image: {plan['object_image']}")
+    if plan.get("soundtrack"):
+        plan["soundtrack"] = str(base / plan["soundtrack"])
+        if not Path(plan["soundtrack"]).is_file():
+            sys.exit(f"no such soundtrack: {plan['soundtrack']}")
     if plan.get("size"):
         try:
             w, h = (int(x) for x in plan["size"].lower().split("x"))
@@ -132,6 +142,46 @@ def picture_part(p, kind="png"):
     """A picture as a chat message part."""
     data = p if isinstance(p, bytes) else Path(p).read_bytes()
     return {"type": "image_url", "image_url": {"url": f"data:image/{kind};base64," + base64.b64encode(data).decode()}}
+
+
+def smooth_joins(src, dst, joins, tone=24, blend=3):
+    """Where one clip goes on from the last frame of the one before, the new clip
+    starts a little darker and softer (its first frame is that last frame through
+    the VAE once more): 3 levels of brightness and a fifth of the sharpness in the
+    beach scene, a jump there. Here the new clip takes the tone (mean and spread
+    of each colour) of the frame before it, fading back to its own over `tone`
+    frames, and its first `blend` frames are eased in from that frame. At a join
+    nothing moves much (keyframes are resting states), so that leaves no ghost."""
+    import subprocess
+    import numpy as np
+    w, h = (int(v) for v in subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v", "-show_entries",
+                                            "stream=width,height", "-of", "csv=p=0", str(src)],
+                                           capture_output=True, text=True, check=True).stdout.strip().split(","))
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(src), "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+                         capture_output=True, check=True).stdout
+    x = np.frombuffer(raw, np.uint8).reshape(-1, h, w, 3).copy()
+    for j in joins:
+        if not 0 < j < len(x):
+            continue
+        a = x[j - 1].astype(np.float32)
+        ma, sa = a.reshape(-1, 3).mean(0), a.reshape(-1, 3).std(0)
+        b = x[j].astype(np.float32)
+        mb, sb = b.reshape(-1, 3).mean(0), b.reshape(-1, 3).std(0)
+        for k in range(min(tone, len(x) - j)):
+            f = x[j + k].astype(np.float32)
+            weight = 1 - k / tone
+            f = weight * ((f - mb) * (sa / (sb + 1e-6)) + ma) + (1 - weight) * f
+            if k < blend:
+                v = (k + 1) / (blend + 1)
+                f = (1 - v) * a + v * f
+            x[j + k] = np.clip(f, 0, 255).astype(np.uint8)
+    enc = subprocess.Popen(["ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{w}x{h}",
+                            "-r", str(FPS), "-i", "-", "-c:v", "libx264", "-crf", "14", "-preset", "slow",
+                            "-pix_fmt", "yuv420p", str(dst)], stdin=subprocess.PIPE)
+    enc.stdin.write(x.tobytes())
+    enc.stdin.close()
+    if enc.wait():
+        sys.exit("smoothing the joins failed")
 
 
 def clip_frames(seconds):
@@ -464,9 +514,14 @@ class Board:
         comfy.run(g, out)
         print(f"  video: {out}")
         self.write_layout(out, [clip_frames(float(c.get("seconds", 5))) for c in self.plan["clips"]])
+        # the clips made apart from the chain, in order: a clip with its own seed (a
+        # take chosen with --redo-clip) or with guides (the chain has start and end
+        # alone) — so the plan says the whole video, not the chain and some redos
+        for i, clip in enumerate(self.plan["clips"], 1):
+            if "seed" in clip or clip.get("guides"):
+                self.redo_clip(made, i, int(clip.get("seed", DEFAULT_SEED)), finish=False)
         self.motion(out)
-        if self.plan.get("ambience"):
-            self.ambience(out)
+        self.finish(out)
 
     def write_layout(self, video, frames):
         """What each clip was rendered with, beside the video: --redo-clip cuts the
@@ -519,14 +574,52 @@ class Board:
                      for i in range(0, len(x) - 48000, 48000)]
             takes.append((max(level) - min(level), take))
         spread, best = min(takes)
-        out = video.with_name(video.stem + "_ambience.mp4")
-        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(video), "-i", str(best), "-map", "0:v", "-map", "1:a",
-                        "-c:v", "copy", "-af", f"atrim=0:{length},afade=t=in:d=0.3,afade=t=out:st={length - 0.8}:d=0.8,"
-                        "loudnorm=I=-20:TP=-2,aresample=48000", "-c:a", "aac", "-b:a", "192k", "-shortest", str(out)],
-                       check=True)
-        print(f"  ambience: {out} ({best.name}, loudness within {spread:.0f} dB)")
+        print(f"  ambience: {best.name}, loudness within {spread:.0f} dB")
+        return best
 
-    def redo_clip(self, made, i, seed):
+    def finish(self, video):
+        """The video to watch, <plan>_final.mp4, from the rendered one (which stays
+        as it is, for --redo-clip): its joins smoothed (smooth_joins) and its
+        sound — the "soundtrack" (a song: a scene that runs through it), else the
+        "ambience", else LTX's own."""
+        import subprocess
+        length = float(subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v", "-show_entries",
+                                       "stream=duration", "-of", "csv=p=0", str(video)],
+                                      capture_output=True, text=True, check=True).stdout)
+        out = video.with_name(video.stem + "_final.mp4")
+        picture = video
+        if self.plan.get("smooth_joins", True):
+            joins = [j for j, cut in self.joins(video) if not cut]
+            if joins:
+                picture = video.with_name(video.stem + "_smoothed.mp4")
+                smooth_joins(video, picture, joins)
+                print(f"  joins smoothed at frames {', '.join(map(str, joins))}")
+        if self.plan.get("soundtrack"):
+            song, start = self.plan["soundtrack"], float(self.plan.get("soundtrack_start", 0))
+            fade = min(2.0, length / 4)
+            audio = ["-ss", str(start), "-i", song]
+            shape = f"atrim=0:{length},afade=t=out:st={length - fade}:d={fade},loudnorm=I=-16:TP=-1.5,aresample=48000"
+            what = f"soundtrack {Path(song).name} from {start:g} s"
+        elif self.plan.get("ambience"):
+            audio = ["-i", str(self.ambience(video))]
+            shape = f"atrim=0:{length},afade=t=in:d=0.3,afade=t=out:st={length - 0.8}:d=0.8,loudnorm=I=-20:TP=-2,aresample=48000"
+            what = "ambience"
+        else:
+            audio, shape, what = ["-i", str(video)], "anull", "LTX's sound"
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(picture), *audio, "-map", "0:v", "-map", "1:a",
+                        "-c:v", "copy", "-af", shape, "-c:a", "aac", "-b:a", "192k", "-shortest", str(out)], check=True)
+        print(f"  final: {out} ({what})")
+
+    def joins(self, video):
+        """[(frame, cut)] where each later clip begins in the video."""
+        out, at = [], 0
+        for i, (made, clip) in enumerate(zip(self.layout(video), self.plan["clips"]), 1):
+            if i > 1:
+                out.append((at, bool(clip.get("cut"))))
+            at += made - (0 if i == 1 or clip.get("cut") else 1)
+        return out
+
+    def redo_clip(self, made, i, seed, finish=True):
         """Clip i alone again, spliced into the finished video at its frames — for
         the one clip that failed in a video otherwise good. It starts on the
         video's own last frame before it (or, at a cut, on its picture) and runs
@@ -573,6 +666,9 @@ class Board:
         new = self.dir / f"redo_{i}.mp4"
         print(f"  clip {i} again ({frames} frames, seed {seed}) …", flush=True)
         comfy.run(g, new)
+        # Lossless: a lossy pass would change the other clips' frames a little,
+        # and a later redo starting on one of them would come out another clip
+        # (the distilled sampler takes a start frame 0.15 off to a clip 10 off).
         keep = video.with_name(video.stem + ".before_redo.mp4")
         shutil.copy(video, keep)
         skip = 1 if follows else 0
@@ -581,14 +677,22 @@ class Board:
                         f"[0:v]trim=start_frame=0:end_frame={start},setpts=PTS-STARTPTS[a];"
                         f"[1:v]trim=start_frame={skip}:end_frame={frames},setpts=PTS-STARTPTS[b];"
                         f"[0:v]trim=start_frame={stop},setpts=PTS-STARTPTS[c];[a][b][c]concat=n=3:v=1:a=0,format=yuv420p[v]",
-                        "-map", "[v]", "-map", "0:a?", "-c:v", "libx264", "-crf", "14", "-preset", "slow", "-r", str(FPS),
+                        "-map", "[v]", "-map", "0:a?", "-c:v", "libx264", "-qp", "0", "-preset", "veryfast", "-r", str(FPS),
                         "-c:a", "copy", str(video)], check=True)
         old[i - 1] = frames
         self.write_layout(video, old)
         print(f"  video: {video} (clip {i} now frames {start}–{start + frames - skip - 1}; the one before: {keep.name})")
-        self.motion(video)
-        if self.plan.get("ambience"):
-            self.ambience(video)
+        if finish:
+            self.motion(video)
+            self.finish(video)
+
+    def record_seed(self, i, seed):
+        """The take chosen, into the plan file: a --render then makes it again."""
+        raw = json.loads(Path(self.a.plan).read_text())
+        raw["clips"][i - 1]["seed"] = seed
+        Path(self.a.plan).write_text(json.dumps(raw, indent=2, ensure_ascii=False) + "\n")
+        self.plan["clips"][i - 1]["seed"] = seed
+        print(f"  plan: clip {i} keeps seed {seed}")
 
     def add_guide(self, g, guide, made, frames):
         """One more picture a clip must pass through, at "at" seconds — a keyframe
@@ -652,13 +756,8 @@ class Board:
         clip done early (shorter, a lower pull, idle motion in its prompt). Cuts
         the plan has are left out."""
         import videocheck
-        frames, joins, cuts, at = self.layout(video), [], [], 0
-        for i, (made, clip) in enumerate(zip(frames, self.plan["clips"]), 1):
-            if i > 1:
-                joins.append(at)
-                if clip.get("cut"):
-                    cuts.append(at)
-            at += made - (0 if i == 1 or clip.get("cut") else 1)
+        joins = [j for j, _ in self.joins(video)]
+        cuts = [j for j, cut in self.joins(video) if cut]
         found, _, n = videocheck.check(video, FPS, cuts, joins)
         report = [videocheck.describe(e, FPS, joins).strip() for e in found] or ["no jump, halt or freeze"]
         for line in report:
@@ -676,7 +775,7 @@ def main():
     ap.add_argument("--vision", help="an OpenAI base URL of a model that sees pictures, for the check")
     ap.add_argument("--render", action="store_true", help="render the clips (else: keyframes, sheet, check only)")
     ap.add_argument("--redo-clip", type=int, metavar="N", help="render clip N alone again and splice it into the video")
-    ap.add_argument("--seed", type=int, default=4242, help="the seed of --redo-clip (another take: another seed)")
+    ap.add_argument("--seed", type=int, help="the seed of --redo-clip (another take: another seed); written into the plan")
     ap.add_argument("--check-video", action="store_true",
                     help="check the rendered video: motion (stalls, jumps), with --vision ghosts too")
     ap.add_argument("--out", help="the video (default: PLAN.storyboard/PLAN.mp4)")
@@ -700,7 +799,10 @@ def main():
         if not board.video().is_file():
             sys.exit(f"no video yet: {board.video()} — render it with --render")
         print("Video:")
-        board.redo_clip(made, a.redo_clip, a.seed)
+        clip = plan["clips"][a.redo_clip - 1] if 1 <= a.redo_clip <= len(plan["clips"]) else {}
+        seed = a.seed if a.seed is not None else int(clip.get("seed", DEFAULT_SEED))
+        board.redo_clip(made, a.redo_clip, seed)
+        board.record_seed(a.redo_clip, seed)
     elif a.render:
         print("Video:")
         board.render(made)

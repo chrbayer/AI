@@ -1589,6 +1589,11 @@ llmctl update comfy --master          # master instead of the releases (download
     `"from"` another too: the close-up's end picture, made from its start
     with "keep it as it is", had the same sea, and it stood still (0.05–0.1)
     until its edit asked for the waves to move on (0.8–1.0 after).
+  - The keyframe after an action shows where the action leaves her. With the
+    shell 40 cm to the left of her feet, picking it up takes a step to it;
+    a Bild 3 that had her back at her old place made LTX dissolve her there
+    (a ghost from 8.3 s on, with every seed tried). Bild 3 made `"from"`
+    Bild 2, standing where she picked it up, needed no seed search.
   - Her way must not cross the object: walking over the shell to stand
     beyond it, she raised a cloud of sand in which it vanished for a few
     frames.
@@ -1723,16 +1728,48 @@ llmctl update comfy --master          # master instead of the releases (download
   pull 0.5 than 0.7: at 0.7 the wide shot's 4 s listening clip snapped its
   background in (seeds 6001 and 6011 alike) and froze; at 0.5 it was clean.
   The beach scene ends that way: 20.75 s, about 3 s of listening in the wide
-  shot and 3.5 s in the close-up.
+  shot and 3.5 s in the close-up. `examples/storyboard.json` renders it with
+  one `--render` (~2 h): the chain, then clip 4 with its guide (seed 7001).
+  Afterwards no jump showed inside a clip and no ghost, the joins were
+  smoothed, and the only change left was a last frame before the cut.
 
   **Sound:** LTX makes the sound clip by clip, each clip a soundscape of its
   own. In v7 it jumped 8 dB at a join (surf in one clip, wind in the next),
   and from about 5 s LTX added music nobody asked for. With `"ambience":
   "<what is heard>"` in the plan the video gets one soundtrack instead:
   Stable Audio 3 (SFX) makes it as long as the video, three takes, and the
-  most even one goes under the picture, which is copied as it is
-  (`<plan>_ambience.mp4` beside the video). That costs ~10 s and was even
-  from first to last frame.
+  most even one goes under the picture. That costs ~10 s and was even from
+  first to last frame.
+
+  **The video to watch** is `<plan>_final.mp4`. The rendered video stays as
+  it is, so `--redo-clip` works on clean material; the final one is made
+  from it after every render and redo:
+  - **The joins are smoothed.** Where a clip goes on from the last frame of
+    the one before, it starts a little darker and softer (that frame went
+    through the VAE once more): 3 levels of brightness and a fifth of the
+    sharpness, which the optical-flow check measured as jumps of 5× and
+    3.2×. The new clip takes the tone of the frame before it, fading back
+    to its own within a second, and its first 3 frames are eased in.
+    Neither jump showed afterwards, and at the keyframes' resting states
+    the easing leaves at most a faint edge on a swinging coat for 2–3
+    frames. Cuts are left alone; `"smooth_joins": false` turns it off.
+  - **The sound** is the `"soundtrack"` (a song, from `"soundtrack_start"`
+    seconds, faded out at the end), else the `"ambience"`, else LTX's own.
+
+  **A scene to a song** (the link to `musicvideo`, #47/#48): with a song as
+  the `"soundtrack"`, the storyboard runs as one continuous scene under it.
+  The clips' `seconds` can follow the song's phrases, and the cut lands on
+  a phrase. `musicvideo` remains the way to have someone sing it,
+  lip-synced, section by section.
+
+  **The plan says the whole video:** `--redo-clip N` writes the seed it
+  used into clip N of the plan, and `--render` makes every clip with a
+  `"seed"` or `"guides"` that way after the chain, in order. So a plan
+  renders again to the video it describes. That takes the working video to
+  be spliced losslessly: re-encoded lossily after each redo, the other
+  clips' frames moved by 0.15 on average, and the next redo, starting on
+  one of them, made a clip 10 off from the one before (the 8-step distilled
+  sampler carries a small difference in its start frame far).
 
   The motion check's stalls and jumps are hints, not verdicts:
   - **Stalls:** it cannot tell a still moment meant (listening, eyes closed,
