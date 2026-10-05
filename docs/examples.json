@@ -1,0 +1,566 @@
+{
+  "title": "llmctl gallery",
+  "intro": "What llmctl makes on one machine (an AMD Strix Halo, Radeon 8060S, 128 GB unified memory), with the files and settings it was made from. Each example has a **How it was made** block: the models, prompts, seeds and steps read from the file itself, and the ComfyUI graph to make it again.\n\nThe [README](https://github.com/chrbayer/AI#readme) is the reference; these pages show results.",
+  "sections": [
+    {
+      "id": "storyboard",
+      "title": "Scenes from a storyboard",
+      "summary": "A 20 s scene from one photo: keyframes, four LTX clips, a cut — and what each of seven rounds taught.",
+      "intro": "`llmctl storyboard plan.json` makes a scene from a photo: keyframes with Qwen-Image Edit, four LTX-2.5 clips through them, checks before and after rendering, and a final video with one soundtrack. The beach scene below is `examples/storyboard.json`; one `--render` makes it (~2 h).",
+      "examples": [
+        {
+          "id": "final",
+          "title": "The finished scene",
+          "text": "A woman walks to a shell lying in the sand, picks it up, holds it to her ear and listens; the close-up rises out of the wide shot in a 0.75 s dissolve, and she listens on, opens her eyes and smiles. 20 s, rendered from the plan alone: the chain, then clip 4 with a guide picture in its middle. The sound is one track of surf and wind from Stable Audio, not LTX's per clip.",
+          "public": true,
+          "wide": true,
+          "open": true,
+          "media": [
+            {
+              "file": "bench:storyboard/strand.storyboard/canon_final.mp4",
+              "caption": "The scene, with its ambience",
+              "public": true
+            }
+          ],
+          "facts": {
+            "Plan": "`examples/storyboard.json`",
+            "Length": "20.0 s, 480 frames at 1280×704",
+            "Render": "~2 h on the Radeon 8060S",
+            "Checks": "no jump, halt or freeze (`llmctl videocheck`), no ghost (vision check every 0.5 s)"
+          },
+          "command": "llmctl start comfy 9\nllmctl storyboard examples/storyboard.json --render"
+        },
+        {
+          "id": "song",
+          "title": "The same scene to a song",
+          "text": "`\"soundtrack\": \"song.flac\"` lays a song under the storyboard instead of the ambience: one continuous scene to music. The song is a 30 s instrumental from Stable Audio 3 (guitar, piano, strings).",
+          "public": true,
+          "media": [
+            {
+              "file": "bench:storyboard/strand.storyboard/canon_song_final.mp4",
+              "caption": "With a song as soundtrack",
+              "public": true
+            },
+            {
+              "file": "out:audio/seaside_00001.flac",
+              "caption": "The song alone (Stable Audio 3, 30 s, made in ~10 s)",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "keyframes",
+          "title": "Keyframes",
+          "text": "Every keyframe is edited from the photo (or from the keyframe before, where the person must stay in place) with Qwen-Image Edit Turbo. The shell is pasted in at one fixed place until it is picked up; a vision model and SAM 3 check positions and sizes before an hour of rendering.",
+          "public": true,
+          "media": [
+            {
+              "file": "bench:storyboard/strand.png",
+              "caption": "The photo it starts from (Z-Image Turbo)",
+              "public": true
+            },
+            {
+              "file": "bench:storyboard/strand.storyboard/sheet.jpg",
+              "caption": "The contact sheet of the final keyframes",
+              "public": true
+            },
+            {
+              "file": "bench:storyboard/strand.storyboard/sheet_v1.jpg",
+              "caption": "Round 1: a shell 'the size of a hand' came out a giant conch",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "rounds",
+          "title": "Seven rounds, and what each taught",
+          "text": "Each version fixed what the one before showed:\n\n1. **v1** — a giant shell, picked up, put down again, picked up: the keyframe after an action was a moment inside it.\n2. **v2** — resting-state keyframes, a small shell; at pull 0.5 a ghost at every clip's end.\n3. **v3** — the shell pasted in where it lies, pull 0.7: every clip reaches its keyframe; a stall before 10 s.\n4. **v4** — clip lengths of their own; clip 3 had her walk back where she did not face, and LTX dissolved her there.\n5. **v5** — \"brushes the sand off\" became a sand fountain with a small figure floating out of it.\n6. **v6** — clean of ghosts and jumps; the sea did not move.\n7. **v7** — other waves in every keyframe: the sea moves.",
+          "public": true,
+          "media": [
+            {
+              "file": "out:video/storyboard_strand_00001_.mp4",
+              "caption": "v1 — the giant shell",
+              "public": true
+            },
+            {
+              "file": "out:video/storyboard_strand_00002_.mp4",
+              "caption": "v2 — ghosts at the clip ends",
+              "public": true
+            },
+            {
+              "file": "out:video/storyboard_strand_00004_.mp4",
+              "caption": "v4 — dissolved instead of walked (10.5–12.5 s)",
+              "public": true
+            },
+            {
+              "file": "out:video/storyboard_strand_00005_.mp4",
+              "caption": "v5 — the sand fountain (8–11 s)",
+              "public": true
+            },
+            {
+              "file": "out:video/storyboard_strand_00006_.mp4",
+              "caption": "v6 — clean, but the sea stands still",
+              "public": false
+            },
+            {
+              "file": "out:video/storyboard_strand_00007_.mp4",
+              "caption": "v7 — the sea moves",
+              "public": false
+            }
+          ]
+        },
+        {
+          "id": "pull",
+          "title": "How hard to pull a clip to its keyframe",
+          "text": "Clip 1 three times, the walk to the shell, with *Stärke Zielbild* 0.5, 0.7 and 1.0. At 0.5 she rocks in place and jumps to the end picture in its last frame; at 0.7 she walks there and stands still for 1.2 s; at 1.0 the shell flies in through the air. The shell moved at all because Qwen had drawn it elsewhere in each keyframe — hence pasting it in.",
+          "public": true,
+          "media": [
+            {
+              "file": "bench:storyboard/pull_0.5.mp4",
+              "caption": "pull 0.5",
+              "public": true
+            },
+            {
+              "file": "bench:storyboard/pull_0.7.mp4",
+              "caption": "pull 0.7",
+              "public": true
+            },
+            {
+              "file": "bench:storyboard/pull_1.0.mp4",
+              "caption": "pull 1.0",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "sea",
+          "title": "Why the sea stood still",
+          "text": "Edited from one photo, every keyframe had the same sea to the pixel, and LTX kept it still between them (0.1–0.3 of change a frame against 1.0–1.3 in a plain clip). Asking each edit for other waves raised it to 0.4–0.55, and the sand at her feet calmed down too.",
+          "media": [
+            {
+              "file": "bench:storyboard/sea/a_clip1.mp4",
+              "caption": "Same sea in both keyframes"
+            },
+            {
+              "file": "bench:storyboard/sea/b_clip1.mp4",
+              "caption": "Other waves in the end keyframe"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "musicvideo",
+      "title": "A music video",
+      "summary": "A song, a singer in three shots, lip-synced section by section with LTX-2.5.",
+      "intro": "`llmctl musicvideo song.flac shot1.png shot2.png ...` cuts a song into sections, has the pictures sing each with LTX-2.5 Talking, cuts every clip to exactly the frames of its section and lays the whole song underneath — so the lips stay on the sound from the first frame to the last.",
+      "examples": [
+        {
+          "id": "synthpop",
+          "title": "30 s of German synthpop",
+          "text": "The song from ACE-Step 1.5 XL; the singer from Z-Image, two more shots of the same person from Qwen-Image Edit (every one from the original, never an edit of an edit). Six sections of 5 s, the shots taking turns; ~6.5 min a section, ~40 min in all. The lips follow the singing; close-ups follow better than head-and-shoulders.",
+          "public": true,
+          "wide": true,
+          "open": true,
+          "media": [
+            {
+              "file": "out:video/musikvideo.mp4",
+              "caption": "The music video",
+              "public": true
+            }
+          ],
+          "facts": {
+            "Length": "30 s, 6 sections of 5 s at 1280×704",
+            "Render": "~40 min"
+          },
+          "command": "llmctl musicvideo song.flac shot0.png shot1.png shot2.png --out musikvideo.mp4"
+        },
+        {
+          "id": "shots",
+          "title": "The singer's three shots",
+          "public": true,
+          "media": [
+            {
+              "file": "in:mv_shot0.png",
+              "caption": "Shot 1 (Z-Image Turbo)",
+              "public": true
+            },
+            {
+              "file": "in:mv_shot1.png",
+              "caption": "Shot 2 (Qwen-Image Edit, from shot 1)",
+              "public": true
+            },
+            {
+              "file": "in:mv_shot2.png",
+              "caption": "Shot 3 (Qwen-Image Edit, from shot 1)",
+              "public": true
+            },
+            {
+              "file": "in:mv_song.flac",
+              "caption": "The song (ACE-Step 1.5 XL)",
+              "public": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "video",
+      "title": "Video",
+      "summary": "LTX-2.5: a picture or a prompt to a clip with its sound, first to last frame, talking pictures.",
+      "intro": "ComfyUI's LTX-2.5 templates (int8, distilled), set up and measured by llmctl. 5 s at 1280×704 with sound in 7–15 min.",
+      "examples": [
+        {
+          "id": "i2v",
+          "title": "A picture to a clip",
+          "text": "`LTX-2.5 Video`: the beach photo set in motion, wind and surf as its sound. 409 s.",
+          "public": true,
+          "media": [
+            {
+              "file": "out:video/ltx_strand_00001_.mp4",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "t2v",
+          "title": "A prompt alone",
+          "text": "*Switch to Text to Video?* on: a tram in a rainy street, from text alone. 450 s.",
+          "public": true,
+          "media": [
+            {
+              "file": "out:video/ltx_tram_00001_.mp4",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "flf",
+          "title": "From a first to a last picture",
+          "text": "`LTX-2.5 First-Last Frame`: the clip runs from one picture to another — the most natural movement of the three. 895 s. Below it the same clip at 48 fps, frames put between by FILM in 64 s.",
+          "public": true,
+          "media": [
+            {
+              "file": "out:video/ltx_flf_00001_.mp4",
+              "caption": "24 fps",
+              "public": true
+            },
+            {
+              "file": "out:video/ltx_flf_48fps_00001_.mp4",
+              "caption": "48 fps (FILM)",
+              "public": false
+            }
+          ]
+        },
+        {
+          "id": "talking",
+          "title": "A picture that speaks",
+          "text": "`LTX-2.5 Talking`: a voice (Qwen3-TTS) held fixed in LTX's audio latent while the video is made to it; padded to whole frames, the lips stop with the voice.",
+          "public": true,
+          "media": [
+            {
+              "file": "out:video/talking_en_00001_.mp4",
+              "public": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "images",
+      "title": "Pictures",
+      "summary": "Z-Image Turbo, Qwen-Image 2.1, FLUX.2 — making, editing, comparing.",
+      "intro": "ComfyUI's image models as llmctl sets them up, most of them also behind its OpenAI-style image API.",
+      "examples": [
+        {
+          "id": "zimage",
+          "title": "Z-Image Turbo",
+          "text": "8 steps, a 1024² picture in seconds; the source of most photos on these pages.",
+          "public": true,
+          "media": [
+            {
+              "file": "out:z-image-turbo_00001_.png",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "qwen",
+          "title": "Qwen-Image 2.1",
+          "text": "14 steps (dpmpp_2m) at 1024²: an editorial portrait, a hedgehog in morning mist.",
+          "public": true,
+          "media": [
+            {
+              "file": "out:Qwen_image_2.1_00001.png",
+              "public": true,
+              "caption": "An editorial portrait"
+            },
+            {
+              "file": "out:Qwen_image_2.1_00002.png",
+              "public": true,
+              "caption": "A hedgehog in morning mist"
+            }
+          ]
+        },
+        {
+          "id": "fox",
+          "title": "One fox, three models",
+          "text": "A fox in the snow from Qwen-Image 2.1 and from FLUX.2 klein 9B, and the Qwen one sharpened 2× with SeedVR2. Each picture's prompt is in its How it was made block.",
+          "public": true,
+          "media": [
+            {
+              "file": "out:qwen21_test_00001_.png",
+              "caption": "Qwen-Image 2.1",
+              "public": true
+            },
+            {
+              "file": "out:klein/t2i_00001_.png",
+              "caption": "FLUX.2 klein 9B",
+              "public": true
+            },
+            {
+              "file": "out:seedvr2/fox_x2_00001_.png",
+              "caption": "SeedVR2 2× upscale",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "samplers",
+          "title": "Samplers and steps",
+          "text": "The fox with dpmpp_2m at 14 steps and euler at 14 and 25 steps, side by side; the sampler and step count of each are in its How it was made block.",
+          "media": [
+            {
+              "file": "out:cmp/dpmpp_2m_14_00001_.png",
+              "caption": "dpmpp_2m, 14 steps"
+            },
+            {
+              "file": "out:cmp/euler_14_00001_.png",
+              "caption": "euler, 14 steps"
+            },
+            {
+              "file": "out:cmp/euler_25_00001_.png",
+              "caption": "euler, 25 steps"
+            }
+          ]
+        },
+        {
+          "id": "edit",
+          "title": "Editing: a shirt from a second picture",
+          "text": "FLUX.2 klein 9B Edit: the denim shirt from one picture put on the person in another; pose, face and light kept.",
+          "public": true,
+          "media": [
+            {
+              "file": "out:klein/edit_00001_.png",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "text",
+          "title": "Lettering, and the text encoder's precision",
+          "text": "A shop window with a sign and a chalkboard in German, from Qwen-Image 2.1 with its Qwen3-VL 8B text encoder at bf16, at w4a8 and as an uncensored ('heretic') version: the lettering came out readable in each.",
+          "public": true,
+          "media": [
+            {
+              "file": "out:cmp-qwen3vl_8b_bf16_00001_.png",
+              "caption": "bf16",
+              "public": true
+            },
+            {
+              "file": "out:cmp-qwen3vl_8b_w4a8_00001_.png",
+              "caption": "w4a8",
+              "public": true
+            },
+            {
+              "file": "out:cmp-qwen3vl_8b_bf16_heretic_00001_.png",
+              "caption": "bf16, heretic"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sound",
+      "title": "Music and sound",
+      "summary": "ACE-Step songs in German and English, YuE2, Stable Audio, voices.",
+      "intro": "ComfyUI's music templates, also behind llmctl's `/v1/audio/music`. The same lyrics and styles through each.",
+      "examples": [
+        {
+          "id": "ace",
+          "title": "ACE-Step 1.5 XL Turbo",
+          "text": "A German pop ballad, an English indie rock song and an orchestral instrumental; ~19 s for 30 s of song.",
+          "public": true,
+          "media": [
+            {
+              "file": "out:ace/xl_de_00001.mp3",
+              "caption": "German",
+              "public": true
+            },
+            {
+              "file": "out:ace/xl_en_00001.mp3",
+              "caption": "English",
+              "public": true
+            },
+            {
+              "file": "out:ace/xl_instr_00001.mp3",
+              "caption": "Instrumental",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "yue",
+          "title": "YuE2",
+          "text": "Songs with vocals from style and lyrics; 81–100 s for 90 s, strong in German and English.",
+          "public": true,
+          "media": [
+            {
+              "file": "out:mus/yue2_de_00001.mp3",
+              "caption": "German",
+              "public": true
+            },
+            {
+              "file": "out:mus/yue2_en_00001.mp3",
+              "caption": "English"
+            }
+          ]
+        },
+        {
+          "id": "stableaudio",
+          "title": "Stable Audio 3",
+          "text": "Instrumentals, loops and sound design, no singing: 90 s of orchestra in 14 s. The beach ambience under the storyboard scene is from it too (category SFX).",
+          "public": true,
+          "media": [
+            {
+              "file": "out:mus/sa3_instr_00001.mp3",
+              "caption": "Orchestral",
+              "public": true
+            },
+            {
+              "file": "out:mus/sa3_loop_00001.mp3",
+              "caption": "A drum loop",
+              "public": true
+            },
+            {
+              "file": "out:audio/beach_2_00001.flac",
+              "caption": "Surf and wind (SFX)",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "voices",
+          "title": "Voices",
+          "text": "Qwen3-TTS, as used for the talking picture.",
+          "public": true,
+          "media": [
+            {
+              "file": "out:tts/ia2v_en_00001.flac",
+              "caption": "English",
+              "public": true
+            },
+            {
+              "file": "out:tts/ia2v_de_00001.flac",
+              "caption": "German",
+              "public": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "3d",
+      "title": "3D from a picture",
+      "summary": "Pixal3D and TRELLIS.2: a photo to a textured mesh.",
+      "intro": "`Pixal3D TRELLIS.2 Image to Model (int8)`: the background cut away, the shape and colours built as voxels, meshed, decimated to 200,000 triangles and baked into 4096 px textures. Drag to turn.",
+      "examples": [
+        {
+          "id": "fox3d",
+          "title": "A ceramic fox",
+          "text": "TRELLIS.2, 620 s; 27 MB.",
+          "media": [
+            {
+              "file": "in:3d_figur.png",
+              "caption": "The picture",
+              "public": true
+            },
+            {
+              "file": "out:3d/v200_trellis2_figur_00001.glb",
+              "caption": "The model"
+            }
+          ],
+          "public": true
+        },
+        {
+          "id": "house3d",
+          "title": "A half-timbered house",
+          "text": "Pixal3D, 2308 s; 50 MB.",
+          "media": [
+            {
+              "file": "out:3d/v200_pixal3d_haus_00001.glb"
+            }
+          ]
+        },
+        {
+          "id": "bag3d",
+          "title": "A handbag",
+          "text": "TRELLIS.2, 3788 s. Plain white surfaces are hard for both; extra views of the object (*Mehrere Ansichten*) helped its side profile.",
+          "media": [
+            {
+              "file": "out:3d/v200_trellis2_tasche_00001.glb"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "llm",
+      "title": "Language models",
+      "summary": "One model on three engines: llama.cpp, gufo and halogen, measured.",
+      "intro": "llmctl runs LLMs on llama.cpp (Vulkan or ROCm), gufo and halogen, and measures them the same way (`llmctl bench`).",
+      "examples": [
+        {
+          "id": "engines",
+          "title": "Qwen3.8-27B (Q8) on three engines",
+          "text": "The same GGUF, greedy, the server's draft model on; tokens per second.",
+          "public": true,
+          "table": [
+            [
+              "engine",
+              "prefill 0.85K",
+              "prefill 6.6K",
+              "prefill 26K",
+              "decode prose",
+              "decode code"
+            ],
+            [
+              "llama.cpp (Vulkan)",
+              "312",
+              "286",
+              "247",
+              "11.8",
+              "19.0"
+            ],
+            [
+              "gufo 0.7.0",
+              "384",
+              "391",
+              "371",
+              "16.9",
+              "38.3"
+            ],
+            [
+              "halogen 0.1.4",
+              "694",
+              "668",
+              "575",
+              "14.5",
+              "44.7"
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -38,6 +38,8 @@ install:
 	install -Dm644 musicvideo.py $(LIBDIR)/musicvideo.py
 	install -Dm644 storyboard.py $(LIBDIR)/storyboard.py
 	install -Dm644 videocheck.py $(LIBDIR)/videocheck.py
+	install -Dm644 docs/build.py $(SHAREDIR)/docs/build.py
+	install -Dm644 docs/examples.json $(SHAREDIR)/docs/examples.json
 	install -Dm644 comfyui_models.py $(LIBDIR)/comfyui_models.py
 	install -Dm644 tts_server.py $(LIBDIR)/tts_server.py
 	install -Dm644 images_server.py $(LIBDIR)/images_server.py

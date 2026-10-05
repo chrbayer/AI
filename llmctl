@@ -5805,6 +5805,7 @@ cmd_help() {
     printf "  %-20s %s\n" "musicvideo <song> <pic>..." "a music video on ComfyUI: the pictures sing the song (LTX-2.5), sections"
     printf "  %-20s %s\n" "storyboard <plan.json>" "a scene on ComfyUI: keyframes from a photo, a check, four LTX-2.5 clips (--render)"
     printf "  %-20s %s\n" "videocheck <video>" "where a video jumps, halts or freezes (optical flow); --cuts, --joins"
+    printf "  %-20s %s\n" "docs" "the gallery of examples and results, built locally and opened"
     printf "  %-20s %s\n" ""                      "  cut to the frame and joined (--sections, --continuous, --dry-run; --help)"
     printf "  %-20s %s\n" "bench [opts] <m>"       "run benchmark (model or 'all'); halogen: measures the running slot"
     printf "  %-20s %s\n" "list"                   "show available models; for ComfyUI, which workflows have their models"
@@ -6949,6 +6950,18 @@ cmd_storyboard() {
     python3 "$LIB_DIR/storyboard.py" --url "$url" --workflows "$COMFYUI_SHARE/api" "$@"
 }
 
+# docs: the gallery of examples and results (docs/build.py, #53) — built from
+# docs/examples.json with every medium in full, where it lies, then opened.
+cmd_docs() {
+    case "${1:-}" in
+        -h|--help) echo "Usage: $PROG docs [--no-open]   build the local gallery ($DATA_DIR/docs) and open it"; return ;;
+    esac
+    _check_deps python3 ffprobe || return 1
+    python3 "$SHARE_DIR/docs/build.py" --local --out "$DATA_DIR/docs" || return 1
+    [[ "${1:-}" == --no-open ]] && return
+    command -v xdg-open > /dev/null && xdg-open "$DATA_DIR/docs/index.html" > /dev/null 2>&1 &
+}
+
 # videocheck: where a video jumps, halts or freezes, by optical flow
 # (videocheck.py, #48) — any video; storyboard runs it on its own after a render.
 cmd_videocheck() {
@@ -7005,5 +7018,6 @@ case "${1:-}" in
     musicvideo) shift; cmd_musicvideo "$@" ;;
     storyboard) shift; cmd_storyboard "$@" ;;
     videocheck) shift; cmd_videocheck "$@" ;;
+    docs)       shift; cmd_docs "$@" ;;
     *)          cmd_help; cmd_list ;;
 esac

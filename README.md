@@ -1787,6 +1787,18 @@ llmctl update comfy --master          # master instead of the releases (download
     before a cut) from one waited out.
   - **Jumps:** waves that start moving at a join count as one, where nothing
     jumps.
+- **The gallery** (#53): `llmctl docs` builds pages of examples and results
+  (storyboard, music video, video, pictures, music and sound, 3D, language
+  models) and opens them. Each example shows its media and a *How it was
+  made* block: the models, prompts, seeds and steps read from the files
+  themselves (ComfyUI stores its graph in every PNG, MP4 and FLAC), and the
+  graph to make it again. `docs/examples.json` lists the examples and
+  `docs/build.py` builds the pages:
+  - `--local` (what `llmctl docs` runs): every example, the media in full
+    where they lie, in `~/.local/share/llmctl/docs`.
+  - `--public`: the examples marked public, their media made small (pictures
+    to 1280 px JPEG, video to 960 px, sound to MP3), into `docs/` for GitHub
+    Pages; refused above 100 MB.
 - **Music videos** (#47): `llmctl musicvideo <song> <picture>...` makes one on
   the running ComfyUI. The song is cut into sections (`--seconds`, 5 by
   default); in each the pictures take turns to sing it (LTX-2.5 Talking), or a
