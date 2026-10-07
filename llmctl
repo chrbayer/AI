@@ -629,8 +629,8 @@ AUDIOCPP_GIT="https://github.com/0xShug0/audio.cpp.git"
 # audio.cpp follows its release tags, not main; outdated says when a new one is out.
 # audio.cpp follows its newest release tag (download --master: main). This one,
 # tried here, is what it falls back to when GitHub cannot be asked.
-AUDIOCPP_TAG=v0.9.0
-AUDIOCPP_COMMIT=795c45fbde0a7d29c93b22199728ff5caaec02e5
+AUDIOCPP_TAG=v0.9.1
+AUDIOCPP_COMMIT=cf124a67cc55d8f65a9a15eec69edbff0fb212c8
 AUDIOCPP_DIR="$DATA_DIR/audio.cpp"
 AUDIOCPP_CONF_DIR="$STATE_DIR/audiocpp"
 
@@ -724,7 +724,7 @@ PY
     _watch_start "$server_pid" "$server_log" "$port_server" || { _stop_slot "$slot" > /dev/null 2>&1; exit 1; }
     echo ""
     echo "  Try:   curl -s $url/v1/audio/transcriptions -F file=@aufnahme.wav -F model=$_r_client"
-    echo "  Live:  ffmpeg -f pulse -i default -ar 16000 -ac 1 -f s16le - | curl -sN -T - -H 'Expect:' \\"
+    echo "  Live:  ffmpeg -f pulse -i default -ar 16000 -ac 1 -f s16le - | curl -sN -X POST -T - -H 'Expect:' \\"
     echo "           '$url/v1/audio/transcriptions/live?model=$_r_client-live'"
     echo "  Logs:  tail -f $server_log"
     echo "  Stop:  $PROG stop $slot"

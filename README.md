@@ -2363,7 +2363,7 @@ with tts.audio.speech.with_streaming_response.create(
 
   ```bash
   ffmpeg -f pulse -i default -ar 16000 -ac 1 -f s16le - |
-    curl -sN -T - -H 'Expect:' 'http://127.0.0.1:8007/v1/audio/transcriptions/live?model=nemotron-asr-live'
+    curl -sN -X POST -T - -H 'Expect:' 'http://127.0.0.1:8007/v1/audio/transcriptions/live?model=nemotron-asr-live'
   ```
 
   Measured on a 25 s German passage: first text after 1 s, a delta every
@@ -2376,7 +2376,7 @@ with tts.audio.speech.with_streaming_response.create(
   clones audio.cpp at its newest release tag and builds it with Vulkan and only
   the model families `models.conf` names (85 s, 1.8 GB); when a newer release
   is out, `outdated` says so and `download asr-live` rebuilds at it
-  (`--master`: at main; v0.9.0 is the fallback when GitHub cannot be asked).
+  (`--master`: at main; v0.9.1 is the fallback when GitHub cannot be asked).
   New commits on main are only shown. The server takes its models from a JSON file llmctl writes
   per slot under `~/.local/state/llmctl/audiocpp/`.
 
