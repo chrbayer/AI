@@ -513,6 +513,34 @@
               "public": true
             }
           ]
+        },
+        {
+          "id": "detailer",
+          "title": "Faces and hands mended",
+          "public": true,
+          "text": "A group photo from Qwen-Image 2.1 Turbo, seven people with faces of about 40 px; two of them came out melted. The FLUX.2 klein 9B Detailer finds each face and hand (YOLO), outlines it with SAM, repaints it at up to 1024 px and pastes it back: both faces are faces again, the others keep who they are, the waving hands get their fingers. 294 s for 7 faces and 10 hands. The Qwen-Image 2.1 Detailer left these faces as they were — a bug in its mask, now fixed, and even then it repaints a melted small face melted.",
+          "media": [
+            {
+              "file": "bench:gallery/detailer_before.png",
+              "caption": "Before (Qwen-Image 2.1 T2I Turbo)",
+              "public": true
+            },
+            {
+              "file": "bench:gallery/detailer_klein_full.png",
+              "caption": "After (FLUX.2 klein 9B Detailer)",
+              "public": true
+            },
+            {
+              "file": "bench:gallery/klein_full_faces.png",
+              "caption": "The faces, twice the size: before above, after below",
+              "public": true
+            },
+            {
+              "file": "bench:gallery/klein_full_hands.png",
+              "caption": "Hands on the left: before above, after below",
+              "public": true
+            }
+          ]
         }
       ]
     },

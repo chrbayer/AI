@@ -1,7 +1,7 @@
 {
  "1": {
   "inputs": {
-   "unet_name": "qwen_image_2.1_bf16.safetensors",
+   "unet_name": "flux-2-klein-9b.safetensors",
    "weight_dtype": "default"
   },
   "class_type": "UNETLoader",
@@ -11,8 +11,8 @@
  },
  "2": {
   "inputs": {
-   "clip_name": "qwen3vl_8b_bf16.safetensors",
-   "type": "qwen_image",
+   "clip_name": "qwen_3_8b.safetensors",
+   "type": "flux2",
    "device": "default"
   },
   "class_type": "CLIPLoader",
@@ -22,7 +22,7 @@
  },
  "3": {
   "inputs": {
-   "vae_name": "qwen_image_2.1_vae_bf16.safetensors"
+   "vae_name": "full_encoder_small_decoder.safetensors"
   },
   "class_type": "VAELoader",
   "_meta": {
@@ -31,46 +31,45 @@
  },
  "5": {
   "inputs": {
-   "image": "detail.png"
+   "image": "musicvideo/detailer_before.png"
   },
   "class_type": "LoadImage",
   "_meta": {
    "title": "Bild"
-  }
+  },
+  "is_changed": [
+   "b9bfe4a9e001cb8de4d1d2b66c4fcedd2d86913130c2636613647ba6e9ebda82"
+  ]
  },
  "9": {
   "inputs": {
-   "prompt": "a natural, detailed human face with clear eyes, nose and mouth",
-   "negative_prompt": "",
-   "resolution": 1024,
+   "text": "a natural, detailed human face with clear eyes, nose and mouth",
    "clip": [
     "2",
     0
    ]
   },
-  "class_type": "TextEncodeQwenImage21",
+  "class_type": "CLIPTextEncode",
   "_meta": {
    "title": "Gesicht (fixed)"
   }
  },
  "10": {
   "inputs": {
-   "prompt": "a natural human hand with five well-formed fingers",
-   "negative_prompt": "",
-   "resolution": 1024,
+   "text": "a natural human hand with five well-formed fingers",
    "clip": [
     "2",
     0
    ]
   },
-  "class_type": "TextEncodeQwenImage21",
+  "class_type": "CLIPTextEncode",
   "_meta": {
    "title": "Hand (fixed)"
   }
  },
  "13": {
   "inputs": {
-   "filename_prefix": "Qwen_image_2.1_detailer",
+   "filename_prefix": "Flux2-Klein_detailer",
    "images": [
     "41",
     0
@@ -111,21 +110,21 @@
  },
  "40": {
   "inputs": {
-   "guide_size": 1024,
+   "guide_size": 1024.0,
    "guide_size_for": true,
-   "max_size": 1024,
+   "max_size": 1024.0,
    "seed": 42,
-   "steps": 14,
-   "cfg": 1,
-   "sampler_name": "dpmpp_2m",
+   "steps": 4,
+   "cfg": 1.0,
+   "sampler_name": "euler",
    "scheduler": "simple",
-   "denoise": 0.45,
+   "denoise": 0.5,
    "feather": 5,
    "noise_mask": true,
    "force_inpaint": true,
    "bbox_threshold": 0.5,
    "bbox_dilation": 10,
-   "bbox_crop_factor": 3,
+   "bbox_crop_factor": 3.0,
    "sam_detection_hint": "center-1",
    "sam_dilation": 0,
    "sam_threshold": 0.93,
@@ -160,8 +159,8 @@
     0
    ],
    "negative": [
-    "9",
-    1
+    "90",
+    0
    ],
    "bbox_detector": [
     "30",
@@ -179,13 +178,13 @@
  },
  "41": {
   "inputs": {
-   "guide_size": 1024,
+   "guide_size": 1024.0,
    "guide_size_for": true,
-   "max_size": 1024,
+   "max_size": 1024.0,
    "seed": 42,
-   "steps": 14,
-   "cfg": 1,
-   "sampler_name": "dpmpp_2m",
+   "steps": 4,
+   "cfg": 1.0,
+   "sampler_name": "euler",
    "scheduler": "simple",
    "denoise": 0.6,
    "feather": 5,
@@ -193,7 +192,7 @@
    "force_inpaint": true,
    "bbox_threshold": 0.5,
    "bbox_dilation": 10,
-   "bbox_crop_factor": 3,
+   "bbox_crop_factor": 3.0,
    "sam_detection_hint": "center-1",
    "sam_dilation": 0,
    "sam_threshold": 0.93,
@@ -228,8 +227,8 @@
     0
    ],
    "negative": [
-    "10",
-    1
+    "100",
+    0
    ],
    "bbox_detector": [
     "31",
@@ -243,6 +242,30 @@
   "class_type": "FaceDetailer",
   "_meta": {
    "title": "Hände nachbessern"
+  }
+ },
+ "90": {
+  "inputs": {
+   "conditioning": [
+    "9",
+    0
+   ]
+  },
+  "class_type": "ConditioningZeroOut",
+  "_meta": {
+   "title": "Gesicht leer (fixed)"
+  }
+ },
+ "100": {
+  "inputs": {
+   "conditioning": [
+    "10",
+    0
+   ]
+  },
+  "class_type": "ConditioningZeroOut",
+  "_meta": {
+   "title": "Hand leer (fixed)"
   }
  }
 }

@@ -1,8 +1,8 @@
 {
- "id": "9dde520b-121e-45e3-976d-4bcd88318a98",
+ "id": "6f14beea-bb8f-416e-988a-21a35d44f5d7",
  "revision": 0,
- "last_node_id": 41,
- "last_link_id": 38,
+ "last_node_id": 100,
+ "last_link_id": 42,
  "nodes": [
   {
    "id": 1,
@@ -44,8 +44,8 @@
      "name": "MODEL",
      "type": "MODEL",
      "links": [
-      24,
-      32
+      26,
+      34
      ]
     }
    ],
@@ -53,18 +53,18 @@
     "Node name for S&R": "UNETLoader",
     "models": [
      {
-      "name": "qwen_image_2.1_bf16.safetensors",
-      "url": "https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/diffusion_models/qwen_image_2.1_bf16.safetensors",
-      "directory": "diffusion_models"
+      "name": "flux-2-klein-9b.safetensors",
+      "directory": "diffusion_models",
+      "url": "https://huggingface.co/black-forest-labs/FLUX.2-klein-9B/resolve/main/flux-2-klein-9b.safetensors"
      }
     ]
    },
    "widgets_values": [
-    "qwen_image_2.1_bf16.safetensors",
+    "flux-2-klein-9b.safetensors",
     "default"
    ],
    "widgets_values_named": {
-    "unet_name": "qwen_image_2.1_bf16.safetensors",
+    "unet_name": "flux-2-klein-9b.safetensors",
     "weight_dtype": "default"
    }
   },
@@ -118,10 +118,10 @@
      "name": "CLIP",
      "type": "CLIP",
      "links": [
-      20,
-      21,
-      25,
-      33
+      22,
+      23,
+      27,
+      35
      ]
     }
    ],
@@ -129,20 +129,20 @@
     "Node name for S&R": "CLIPLoader",
     "models": [
      {
-      "name": "qwen3vl_8b_bf16.safetensors",
-      "url": "https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/text_encoders/qwen3vl_8b_bf16.safetensors",
-      "directory": "text_encoders"
+      "name": "qwen_3_8b.safetensors",
+      "directory": "text_encoders",
+      "url": "https://huggingface.co/Comfy-Org/vae-text-encorder-for-flux-klein-9b/resolve/main/split_files/text_encoders/qwen_3_8b.safetensors"
      }
     ]
    },
    "widgets_values": [
-    "qwen3vl_8b_bf16.safetensors",
-    "qwen_image",
+    "qwen_3_8b.safetensors",
+    "flux2",
     "default"
    ],
    "widgets_values_named": {
-    "clip_name": "qwen3vl_8b_bf16.safetensors",
-    "type": "qwen_image",
+    "clip_name": "qwen_3_8b.safetensors",
+    "type": "flux2",
     "device": "default"
    }
   },
@@ -177,8 +177,8 @@
      "name": "VAE",
      "type": "VAE",
      "links": [
-      26,
-      34
+      28,
+      36
      ]
     }
    ],
@@ -186,17 +186,17 @@
     "Node name for S&R": "VAELoader",
     "models": [
      {
-      "name": "qwen_image_2.1_vae_bf16.safetensors",
-      "url": "https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/vae/qwen_image_2.1_vae_bf16.safetensors",
-      "directory": "vae"
+      "name": "full_encoder_small_decoder.safetensors",
+      "directory": "vae",
+      "url": "https://huggingface.co/black-forest-labs/FLUX.2-small-decoder/resolve/main/full_encoder_small_decoder.safetensors"
      }
     ]
    },
    "widgets_values": [
-    "qwen_image_2.1_vae_bf16.safetensors"
+    "full_encoder_small_decoder.safetensors"
    ],
    "widgets_values_named": {
-    "vae_name": "qwen_image_2.1_vae_bf16.safetensors"
+    "vae_name": "full_encoder_small_decoder.safetensors"
    }
   },
   {
@@ -239,7 +239,7 @@
      "name": "IMAGE",
      "type": "IMAGE",
      "links": [
-      23
+      25
      ]
     },
     {
@@ -264,14 +264,14 @@
   },
   {
    "id": 9,
-   "type": "TextEncodeQwenImage21",
+   "type": "CLIPTextEncode",
    "pos": [
     482.798828125,
     130
    ],
    "size": [
     400,
-    206
+    200
    ],
    "flags": {},
    "order": 7,
@@ -281,99 +281,50 @@
      "localized_name": "clip",
      "name": "clip",
      "type": "CLIP",
-     "link": 20
+     "link": 22
     },
     {
-     "localized_name": "image_1",
-     "name": "images.image_1",
-     "shape": 7,
-     "type": "IMAGE",
-     "link": null
-    },
-    {
-     "localized_name": "vae",
-     "name": "vae",
-     "shape": 7,
-     "type": "VAE",
-     "link": null
-    },
-    {
-     "localized_name": "prompt",
-     "name": "prompt",
+     "localized_name": "text",
+     "name": "text",
      "type": "STRING",
      "widget": {
-      "name": "prompt"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "negative_prompt",
-     "name": "negative_prompt",
-     "type": "STRING",
-     "widget": {
-      "name": "negative_prompt"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "resolution",
-     "name": "resolution",
-     "type": "INT",
-     "widget": {
-      "name": "resolution"
+      "name": "text"
      },
      "link": null
     }
    ],
    "outputs": [
     {
-     "localized_name": "positive",
-     "name": "positive",
+     "localized_name": "CONDITIONING",
+     "name": "CONDITIONING",
      "type": "CONDITIONING",
      "links": [
-      27
+      29,
+      41
      ]
-    },
-    {
-     "localized_name": "negative",
-     "name": "negative",
-     "type": "CONDITIONING",
-     "links": [
-      28
-     ]
-    },
-    {
-     "localized_name": "latent",
-     "name": "latent",
-     "type": "LATENT",
-     "links": null
     }
    ],
    "title": "Gesicht (fixed)",
    "properties": {
-    "Node name for S&R": "TextEncodeQwenImage21"
+    "Node name for S&R": "CLIPTextEncode"
    },
    "widgets_values": [
-    "a natural, detailed human face with clear eyes, nose and mouth",
-    "",
-    1024
+    "a natural, detailed human face with clear eyes, nose and mouth"
    ],
    "widgets_values_named": {
-    "prompt": "a natural, detailed human face with clear eyes, nose and mouth",
-    "negative_prompt": "",
-    "resolution": 1024
+    "text": "a natural, detailed human face with clear eyes, nose and mouth"
    }
   },
   {
    "id": 10,
-   "type": "TextEncodeQwenImage21",
+   "type": "CLIPTextEncode",
    "pos": [
     482.798828125,
-    466
+    460
    ],
    "size": [
     400,
-    206
+    200
    ],
    "flags": {},
    "order": 8,
@@ -383,94 +334,45 @@
      "localized_name": "clip",
      "name": "clip",
      "type": "CLIP",
-     "link": 21
+     "link": 23
     },
     {
-     "localized_name": "image_1",
-     "name": "images.image_1",
-     "shape": 7,
-     "type": "IMAGE",
-     "link": null
-    },
-    {
-     "localized_name": "vae",
-     "name": "vae",
-     "shape": 7,
-     "type": "VAE",
-     "link": null
-    },
-    {
-     "localized_name": "prompt",
-     "name": "prompt",
+     "localized_name": "text",
+     "name": "text",
      "type": "STRING",
      "widget": {
-      "name": "prompt"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "negative_prompt",
-     "name": "negative_prompt",
-     "type": "STRING",
-     "widget": {
-      "name": "negative_prompt"
-     },
-     "link": null
-    },
-    {
-     "localized_name": "resolution",
-     "name": "resolution",
-     "type": "INT",
-     "widget": {
-      "name": "resolution"
+      "name": "text"
      },
      "link": null
     }
    ],
    "outputs": [
     {
-     "localized_name": "positive",
-     "name": "positive",
+     "localized_name": "CONDITIONING",
+     "name": "CONDITIONING",
      "type": "CONDITIONING",
      "links": [
-      35
+      37,
+      42
      ]
-    },
-    {
-     "localized_name": "negative",
-     "name": "negative",
-     "type": "CONDITIONING",
-     "links": [
-      36
-     ]
-    },
-    {
-     "localized_name": "latent",
-     "name": "latent",
-     "type": "LATENT",
-     "links": null
     }
    ],
    "title": "Hand (fixed)",
    "properties": {
-    "Node name for S&R": "TextEncodeQwenImage21"
+    "Node name for S&R": "CLIPTextEncode"
    },
    "widgets_values": [
-    "a natural human hand with five well-formed fingers",
-    "",
-    1024
+    "a natural human hand with five well-formed fingers"
    ],
    "widgets_values_named": {
-    "prompt": "a natural human hand with five well-formed fingers",
-    "negative_prompt": "",
-    "resolution": 1024
+    "text": "a natural human hand with five well-formed fingers"
    }
   },
   {
    "id": 13,
    "type": "SaveImage",
    "pos": [
-    1982.798828125,
+    2286.93359375,
     130
    ],
    "size": [
@@ -478,14 +380,14 @@
     58
    ],
    "flags": {},
-   "order": 11,
+   "order": 13,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "images",
      "name": "images",
      "type": "IMAGE",
-     "link": 22
+     "link": 24
     },
     {
      "localized_name": "filename_prefix",
@@ -507,10 +409,10 @@
    ],
    "properties": {},
    "widgets_values": [
-    "Qwen_image_2.1_detailer"
+    "Flux2-Klein_detailer"
    ],
    "widgets_values_named": {
-    "filename_prefix": "Qwen_image_2.1_detailer"
+    "filename_prefix": "Flux2-Klein_detailer"
    }
   },
   {
@@ -544,7 +446,7 @@
      "name": "BBOX_DETECTOR",
      "type": "BBOX_DETECTOR",
      "links": [
-      29
+      31
      ]
     },
     {
@@ -603,7 +505,7 @@
      "name": "BBOX_DETECTOR",
      "type": "BBOX_DETECTOR",
      "links": [
-      37
+      39
      ]
     },
     {
@@ -671,8 +573,8 @@
      "name": "SAM_MODEL",
      "type": "SAM_MODEL",
      "links": [
-      30,
-      38
+      32,
+      40
      ]
     }
    ],
@@ -700,7 +602,7 @@
    "id": 40,
    "type": "FaceDetailer",
    "pos": [
-    982.798828125,
+    1286.93359375,
     130
    ],
    "size": [
@@ -708,57 +610,57 @@
     960
    ],
    "flags": {},
-   "order": 9,
+   "order": 11,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "image",
      "name": "image",
      "type": "IMAGE",
-     "link": 23
+     "link": 25
     },
     {
      "localized_name": "model",
      "name": "model",
      "type": "MODEL",
-     "link": 24
+     "link": 26
     },
     {
      "localized_name": "clip",
      "name": "clip",
      "type": "CLIP",
-     "link": 25
+     "link": 27
     },
     {
      "localized_name": "vae",
      "name": "vae",
      "type": "VAE",
-     "link": 26
+     "link": 28
     },
     {
      "localized_name": "positive",
      "name": "positive",
      "type": "CONDITIONING",
-     "link": 27
+     "link": 29
     },
     {
      "localized_name": "negative",
      "name": "negative",
      "type": "CONDITIONING",
-     "link": 28
+     "link": 30
     },
     {
      "localized_name": "bbox_detector",
      "name": "bbox_detector",
      "type": "BBOX_DETECTOR",
-     "link": 29
+     "link": 31
     },
     {
      "localized_name": "sam_model_opt",
      "name": "sam_model_opt",
      "shape": 7,
      "type": "SAM_MODEL",
-     "link": 30
+     "link": 32
     },
     {
      "localized_name": "segm_detector_opt",
@@ -1044,7 +946,7 @@
      "name": "image",
      "type": "IMAGE",
      "links": [
-      31
+      33
      ]
     },
     {
@@ -1091,11 +993,11 @@
     1024,
     42,
     "randomize",
-    14,
+    4,
     1,
-    "dpmpp_2m",
+    "euler",
     "simple",
-    0.45,
+    0.5,
     5,
     true,
     true,
@@ -1122,11 +1024,11 @@
     "max_size": 1024,
     "seed": 42,
     "control_after_generate": "randomize",
-    "steps": 14,
+    "steps": 4,
     "cfg": 1,
-    "sampler_name": "dpmpp_2m",
+    "sampler_name": "euler",
     "scheduler": "simple",
-    "denoise": 0.45,
+    "denoise": 0.5,
     "feather": 5,
     "noise_mask": true,
     "force_inpaint": true,
@@ -1152,7 +1054,7 @@
    "id": 41,
    "type": "FaceDetailer",
    "pos": [
-    1482.798828125,
+    1786.93359375,
     130
    ],
    "size": [
@@ -1160,57 +1062,57 @@
     960
    ],
    "flags": {},
-   "order": 10,
+   "order": 12,
    "mode": 0,
    "inputs": [
     {
      "localized_name": "image",
      "name": "image",
      "type": "IMAGE",
-     "link": 31
+     "link": 33
     },
     {
      "localized_name": "model",
      "name": "model",
      "type": "MODEL",
-     "link": 32
+     "link": 34
     },
     {
      "localized_name": "clip",
      "name": "clip",
      "type": "CLIP",
-     "link": 33
+     "link": 35
     },
     {
      "localized_name": "vae",
      "name": "vae",
      "type": "VAE",
-     "link": 34
+     "link": 36
     },
     {
      "localized_name": "positive",
      "name": "positive",
      "type": "CONDITIONING",
-     "link": 35
+     "link": 37
     },
     {
      "localized_name": "negative",
      "name": "negative",
      "type": "CONDITIONING",
-     "link": 36
+     "link": 38
     },
     {
      "localized_name": "bbox_detector",
      "name": "bbox_detector",
      "type": "BBOX_DETECTOR",
-     "link": 37
+     "link": 39
     },
     {
      "localized_name": "sam_model_opt",
      "name": "sam_model_opt",
      "shape": 7,
      "type": "SAM_MODEL",
-     "link": 38
+     "link": 40
     },
     {
      "localized_name": "segm_detector_opt",
@@ -1496,7 +1398,7 @@
      "name": "image",
      "type": "IMAGE",
      "links": [
-      22
+      24
      ]
     },
     {
@@ -1543,9 +1445,9 @@
     1024,
     42,
     "randomize",
-    14,
+    4,
     1,
-    "dpmpp_2m",
+    "euler",
     "simple",
     0.6,
     5,
@@ -1574,9 +1476,9 @@
     "max_size": 1024,
     "seed": 42,
     "control_after_generate": "randomize",
-    "steps": 14,
+    "steps": 4,
     "cfg": 1,
-    "sampler_name": "dpmpp_2m",
+    "sampler_name": "euler",
     "scheduler": "simple",
     "denoise": 0.6,
     "feather": 5,
@@ -1599,11 +1501,85 @@
     "tiled_encode": false,
     "tiled_decode": false
    }
+  },
+  {
+   "id": 90,
+   "type": "ConditioningZeroOut",
+   "pos": [
+    982.798828125,
+    130
+   ],
+   "size": [
+    204.134765625,
+    26
+   ],
+   "flags": {},
+   "order": 9,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "conditioning",
+     "name": "conditioning",
+     "type": "CONDITIONING",
+     "link": 41
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "CONDITIONING",
+     "name": "CONDITIONING",
+     "type": "CONDITIONING",
+     "links": [
+      30
+     ]
+    }
+   ],
+   "title": "Gesicht leer (fixed)",
+   "properties": {
+    "Node name for S&R": "ConditioningZeroOut"
+   }
+  },
+  {
+   "id": 100,
+   "type": "ConditioningZeroOut",
+   "pos": [
+    982.798828125,
+    286
+   ],
+   "size": [
+    204.134765625,
+    26
+   ],
+   "flags": {},
+   "order": 10,
+   "mode": 0,
+   "inputs": [
+    {
+     "localized_name": "conditioning",
+     "name": "conditioning",
+     "type": "CONDITIONING",
+     "link": 42
+    }
+   ],
+   "outputs": [
+    {
+     "localized_name": "CONDITIONING",
+     "name": "CONDITIONING",
+     "type": "CONDITIONING",
+     "links": [
+      38
+     ]
+    }
+   ],
+   "title": "Hand leer (fixed)",
+   "properties": {
+    "Node name for S&R": "ConditioningZeroOut"
+   }
   }
  ],
  "links": [
   [
-   20,
+   22,
    2,
    0,
    9,
@@ -1611,7 +1587,7 @@
    "CLIP"
   ],
   [
-   21,
+   23,
    2,
    0,
    10,
@@ -1619,7 +1595,7 @@
    "CLIP"
   ],
   [
-   22,
+   24,
    41,
    0,
    13,
@@ -1627,31 +1603,31 @@
    "IMAGE"
   ],
   [
-   23,
+   25,
    5,
    0,
    40,
    0,
    "IMAGE"
-  ],
-  [
-   24,
-   1,
-   0,
-   40,
-   1,
-   "MODEL"
-  ],
-  [
-   25,
-   2,
-   0,
-   40,
-   2,
-   "CLIP"
   ],
   [
    26,
+   1,
+   0,
+   40,
+   1,
+   "MODEL"
+  ],
+  [
+   27,
+   2,
+   0,
+   40,
+   2,
+   "CLIP"
+  ],
+  [
+   28,
    3,
    0,
    40,
@@ -1659,7 +1635,7 @@
    "VAE"
   ],
   [
-   27,
+   29,
    9,
    0,
    40,
@@ -1667,15 +1643,15 @@
    "CONDITIONING"
   ],
   [
-   28,
-   9,
-   1,
+   30,
+   90,
+   0,
    40,
    5,
    "CONDITIONING"
   ],
   [
-   29,
+   31,
    30,
    0,
    40,
@@ -1683,7 +1659,7 @@
    "BBOX_DETECTOR"
   ],
   [
-   30,
+   32,
    32,
    0,
    40,
@@ -1691,7 +1667,7 @@
    "SAM_MODEL"
   ],
   [
-   31,
+   33,
    40,
    0,
    41,
@@ -1699,7 +1675,7 @@
    "IMAGE"
   ],
   [
-   32,
+   34,
    1,
    0,
    41,
@@ -1707,7 +1683,7 @@
    "MODEL"
   ],
   [
-   33,
+   35,
    2,
    0,
    41,
@@ -1715,7 +1691,7 @@
    "CLIP"
   ],
   [
-   34,
+   36,
    3,
    0,
    41,
@@ -1723,7 +1699,7 @@
    "VAE"
   ],
   [
-   35,
+   37,
    10,
    0,
    41,
@@ -1731,15 +1707,15 @@
    "CONDITIONING"
   ],
   [
-   36,
-   10,
-   1,
+   38,
+   100,
+   0,
    41,
    5,
    "CONDITIONING"
   ],
   [
-   37,
+   39,
    31,
    0,
    41,
@@ -1747,12 +1723,28 @@
    "BBOX_DETECTOR"
   ],
   [
-   38,
+   40,
    32,
    0,
    41,
    7,
    "SAM_MODEL"
+  ],
+  [
+   41,
+   9,
+   0,
+   90,
+   0,
+   "CONDITIONING"
+  ],
+  [
+   42,
+   10,
+   0,
+   100,
+   0,
+   "CONDITIONING"
   ]
  ],
  "groups": [],

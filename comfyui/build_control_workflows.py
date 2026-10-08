@@ -350,40 +350,70 @@ HAND_PROMPT = "a natural human hand with five well-formed fingers"
 CROP_CONTEXT = 2.5
 
 
-def detailer(sam=True):
+def detailer(sam=True, model="qwen"):
     """Faces, then hands: each found one is cropped, repainted at up to 1024 px
-    with Qwen-Image 2.1 and pasted back; SAM outlines it for the mask. Faces at
-    denoise 0.45, which keeps the person (0.6 turned brown eyes blue-green);
-    hands at 0.6, which mends their shape (0.45 only added detail). Tried on
-    seven pictures; the 4-step LoRA made skin coarse and aged, so no Turbo."""
+    and pasted back; SAM outlines it for the mask.
+
+    qwen — Qwen-Image 2.1, 14 steps: faces at denoise 0.45, which keeps the
+    person (0.6 turned brown eyes blue-green); hands at 0.6, which mends their
+    shape (0.45 only added detail). Tried on seven pictures; the 4-step LoRA made
+    skin coarse and aged, so no Turbo. It mends faces seen large; a distorted
+    face of ~40 px it repaints as distorted, even at 0.7 without a noise mask.
+
+    klein — FLUX.2 klein 9B, 4 steps, ~2.5× as fast: faces at 0.5, hands at 0.6.
+    On a group photo (seven faces of ~40 px, two of them distorted) it mended
+    both; on a large face it kept the person. Without a noise mask at 0.45 the
+    small faces came out cleaner but changed (glasses, a moustache) and the large
+    face lost its features.
+
+    The noise mask's blur (noise_mask_feather) works on the crop at its own size,
+    before the upscale: at 20 a face of 40 px was blurred away and the crop came
+    back unchanged (the latent moved 0.02 instead of 0.08), at 4 it is repainted."""
+    klein = model == "klein"
     def one(image, detector, cond, denoise):
         return {"class_type": "FaceDetailer", "inputs": {
             "image": image, "model": ["1", 0], "clip": ["2", 0], "vae": ["3", 0],
             "guide_size": 1024, "guide_size_for": True, "max_size": 1024, "seed": 42,
-            "steps": 14, "cfg": 1.0, "sampler_name": "dpmpp_2m", "scheduler": "simple",
-            "positive": [cond, 0], "negative": [cond, 1], "denoise": denoise, "feather": 5,
+            "steps": 4 if klein else 14, "cfg": 1.0, "sampler_name": "euler" if klein else "dpmpp_2m",
+            "scheduler": "simple", "positive": [cond, 0],
+            "negative": [cond + "0", 0] if klein else [cond, 1], "denoise": denoise, "feather": 5,
             "noise_mask": True, "force_inpaint": True, "bbox_threshold": 0.5, "bbox_dilation": 10,
             "bbox_crop_factor": 3.0, "sam_detection_hint": "center-1", "sam_dilation": 0,
             "sam_threshold": 0.93, "sam_bbox_expansion": 0, "sam_mask_hint_threshold": 0.7,
             "sam_mask_hint_use_negative": "False", "drop_size": 10, "bbox_detector": [detector, 0],
-            "wildcard": "", "cycle": 1, "inpaint_model": False, "noise_mask_feather": 20,
+            "wildcard": "", "cycle": 1, "inpaint_model": False, "noise_mask_feather": 4,
             "tiled_encode": False, "tiled_decode": False,
             **({"sam_model_opt": ["32", 0]} if sam else {})}}
-    g = {
-        "1": {"class_type": "UNETLoader", "inputs": {"unet_name": "qwen_image_2.1_bf16.safetensors", "weight_dtype": "default"}},
-        "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": "qwen3vl_8b_bf16.safetensors", "type": "qwen_image", "device": "default"}},
-        "3": {"class_type": "VAELoader", "inputs": {"vae_name": "qwen_image_2.1_vae_bf16.safetensors"}},
+    if klein:
+        g = {
+            "1": {"class_type": "UNETLoader", "inputs": {"unet_name": "flux-2-klein-9b.safetensors", "weight_dtype": "default"}},
+            "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": "qwen_3_8b.safetensors", "type": "flux2", "device": "default"}},
+            "3": {"class_type": "VAELoader", "inputs": {"vae_name": "full_encoder_small_decoder.safetensors"}},
+        }
+        for k, text, title in (("9", FACE_PROMPT, "Gesicht (fixed)"), ("10", HAND_PROMPT, "Hand (fixed)")):
+            g[k] = {"class_type": "CLIPTextEncode", "inputs": {"text": text, "clip": ["2", 0]}, "_meta": {"title": title}}
+            g[k + "0"] = {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": [k, 0]},
+                          "_meta": {"title": title.replace("(fixed)", "leer (fixed)")}}
+        faces, prefix = 0.5, "Flux2-Klein_detailer"
+    else:
+        g = {
+            "1": {"class_type": "UNETLoader", "inputs": {"unet_name": "qwen_image_2.1_bf16.safetensors", "weight_dtype": "default"}},
+            "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": "qwen3vl_8b_bf16.safetensors", "type": "qwen_image", "device": "default"}},
+            "3": {"class_type": "VAELoader", "inputs": {"vae_name": "qwen_image_2.1_vae_bf16.safetensors"}},
+            "9": {"class_type": "TextEncodeQwenImage21", "inputs": {"prompt": FACE_PROMPT, "negative_prompt": "", "resolution": 1024, "clip": ["2", 0]},
+                  "_meta": {"title": "Gesicht (fixed)"}},
+            "10": {"class_type": "TextEncodeQwenImage21", "inputs": {"prompt": HAND_PROMPT, "negative_prompt": "", "resolution": 1024, "clip": ["2", 0]},
+                   "_meta": {"title": "Hand (fixed)"}},
+        }
+        faces, prefix = 0.45, "Qwen_image_2.1_detailer"
+    g.update({
         "5": {"class_type": "LoadImage", "inputs": {"image": "detail.png"}, "_meta": {"title": "Bild"}},
-        "9": {"class_type": "TextEncodeQwenImage21", "inputs": {"prompt": FACE_PROMPT, "negative_prompt": "", "resolution": 1024, "clip": ["2", 0]},
-              "_meta": {"title": "Gesicht (fixed)"}},
-        "10": {"class_type": "TextEncodeQwenImage21", "inputs": {"prompt": HAND_PROMPT, "negative_prompt": "", "resolution": 1024, "clip": ["2", 0]},
-               "_meta": {"title": "Hand (fixed)"}},
         "30": {"class_type": "UltralyticsDetectorProvider", "inputs": {"model_name": "bbox/face_yolov8m.pt"}, "_meta": {"title": "Gesichter finden"}},
         "31": {"class_type": "UltralyticsDetectorProvider", "inputs": {"model_name": "bbox/hand_yolov8s.pt"}, "_meta": {"title": "Hände finden"}},
-        "40": {**one(["5", 0], "30", "9", 0.45), "_meta": {"title": "Gesichter nachbessern"}},
+        "40": {**one(["5", 0], "30", "9", faces), "_meta": {"title": "Gesichter nachbessern"}},
         "41": {**one(["40", 0], "31", "10", 0.6), "_meta": {"title": "Hände nachbessern"}},
-        "13": {"class_type": "SaveImage", "inputs": {"images": ["41", 0], "filename_prefix": "Qwen_image_2.1_detailer"}},
-    }
+        "13": {"class_type": "SaveImage", "inputs": {"images": ["41", 0], "filename_prefix": prefix}},
+    })
     if sam:
         g["32"] = {"class_type": "SAMLoader", "inputs": {"model_name": "sam_vit_h_4b8939.pth", "device_mode": "AUTO"}, "_meta": {"title": "SAM ViT-H"}}
     return g
@@ -962,6 +992,7 @@ WORKFLOWS = {
     "Qwen-Image 2.1 Outpaint": with_turbo(outpaint),
     "Qwen-Image 2.1 Colorize": with_turbo(colorize),
     "Qwen-Image 2.1 Detailer (bf16, dpmpp_2m 14)": detailer,
+    "FLUX.2 klein 9B Detailer (bf16, 4 Schritte)": lambda: detailer(model="klein"),
     "Z-Image Turbo T2I": zimage_t2i,
     "Z-Image Turbo Control": zimage_control,
     "Z-Image Turbo Inpaint": lambda: toggle_crop(zimage(inpaint)()),
@@ -1011,6 +1042,7 @@ SINGLE = {
     "Z-Image Turbo Inpaint (bf16, 8 Schritte)": zimage(inpaint),
     "Z-Image Turbo Colorize (bf16, 8 Schritte)": zimage(colorize),
     "Qwen-Image 2.1 Detailer (bf16, dpmpp_2m 14)": detailer,
+    "FLUX.2 klein 9B Detailer (bf16, 4 Schritte)": lambda: detailer(model="klein"),
     "Qwen-Image 2.1 Inpaint Crop (bf16, dpmpp_2m 14)": crop(inpaint),
     "Qwen-Image 2.1 Inpaint Crop Turbo (bf16, 4 Schritte)": crop(turbo(inpaint)),
     "Z-Image Turbo Inpaint Crop (bf16, 8 Schritte)": crop(zimage(inpaint)),

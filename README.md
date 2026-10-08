@@ -1173,6 +1173,19 @@ llmctl update comfy --master          # master instead of the releases (download
   - **No Turbo**: with the 4-step LoRA skin came out coarse and aged, at 0.45
     and at 0.6, where 14 steps keep it natural.
   - Missed: hands knitting, partly hidden behind the needles and the wool.
+
+  **Small faces, and `FLUX.2 klein 9B Detailer (bf16, 4 Schritte)`.** Faces of
+  ~40 px came back unchanged: the noise mask's blur (`noise_mask_feather`)
+  works on the crop at its own size, before the upscale, and at 20 it blurred a
+  small face away — the latent moved by 0.02 where it should by ~0.08. Both
+  detailers now blur by 4. Qwen-Image 2.1 still repaints a distorted small face
+  as distorted, even at 0.7 without a noise mask. The FLUX.2 klein variant (same
+  detectors and SAM, 4 steps, faces at 0.5, hands at 0.6) mends it: on a group
+  photo of seven people, two of them with melted faces, both came out as faces
+  and everyone stayed who they were, in 294 s for 7 faces and 10 hands (Qwen:
+  ~330 s for the faces alone); on a large face it kept the person. Without
+  its noise mask it made cleaner faces of other people (glasses, a moustache).
+  Through the image API as `flux2-klein-9b-detailer`.
 - **Background removal.** `Qwen-Image 2.1 Background Removal`
   is ComfyUI's own template on the bf16 models already here: an edit with
   the instruction "Remove the background, and output a PNG image", and
