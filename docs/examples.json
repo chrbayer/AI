@@ -658,7 +658,7 @@
     {
       "id": "llm",
       "title": "Language models",
-      "summary": "One model on three engines: llama.cpp, gufo and halogen, measured.",
+      "summary": "Every model measured: dense against MoE, three engines for one model, halogen-flash.",
       "intro": "llmctl runs LLMs on llama.cpp (Vulkan or ROCm), gufo and halogen, and measures them the same way (`llmctl bench`).",
       "examples": [
         {
@@ -698,6 +698,170 @@
               "575",
               "14.5",
               "44.7"
+            ],
+            [
+              "gufo 0.9.0 (2026-10-07)",
+              "353–381",
+              "345–390",
+              "345–367",
+              "16.2",
+              "36.4–36.7"
+            ]
+          ]
+        },
+        {
+          "id": "flash",
+          "title": "Qwen3.8 Flash-Next on halogen-flash",
+          "text": "The largest model here (Qwen3.8 Flash-Next, 4-bit, about 62 GiB, MoE with an MTP draft) on halogen-flash-server, which is built for this chip only. Same bench as the engines above; tokens per second.",
+          "public": true,
+          "table": [
+            [
+              "version",
+              "prefill 0.85K",
+              "prefill 6.6K",
+              "prefill 26K",
+              "decode prose",
+              "decode code"
+            ],
+            [
+              "0.16.2",
+              "1121",
+              "1560",
+              "1554",
+              "43.0",
+              "59.8"
+            ],
+            [
+              "0.16.4",
+              "1227",
+              "1622",
+              "1558",
+              "44.7",
+              "64.2"
+            ],
+            [
+              "0.17.1",
+              "1143",
+              "1565",
+              "1542",
+              "48.1",
+              "64.7"
+            ]
+          ]
+        },
+        {
+          "id": "allmodels",
+          "title": "Every model on this machine, dense against MoE",
+          "text": "`llmctl bench` on llama.cpp v0.6.0 (Vulkan b11429, ROCm b1340), pp512 and tg128 in tokens per second, flash attention on, the machine otherwise idle (2026-10-07). Decode is bound by the memory bandwidth: a dense model reads all its weights for every token, a MoE model only its active experts — so the MoE models decode 5–13× faster than dense ones of their size, and Kolibri-1 with 78B weights decodes faster than an 8B dense model. Vulkan beats ROCm almost everywhere, except Scout. Kolibri runs on its own patched build (Vulkan only).",
+          "public": true,
+          "table": [
+            [
+              "model",
+              "kind",
+              "weights",
+              "prefill Vulkan",
+              "decode Vulkan",
+              "prefill ROCm",
+              "decode ROCm"
+            ],
+            [
+              "gemma-moe — Gemma 4 26B-A4B",
+              "MoE, 4B active",
+              "25.0 GiB Q8_0",
+              "1752",
+              "47.6",
+              "1438",
+              "43.7"
+            ],
+            [
+              "kolibri — Kolibri-1 78B-A3.5B",
+              "MoE, 3.5B active",
+              "77.4 GiB Q8_0",
+              "1321",
+              "50.0",
+              "—",
+              "—"
+            ],
+            [
+              "qwen-moe — Qwen3.6 35B-A3B",
+              "MoE, 3B active",
+              "40.6 GiB Q8_0",
+              "1182",
+              "46.5",
+              "1024",
+              "43.5"
+            ],
+            [
+              "scout — Llama 4 Scout",
+              "MoE, 17B active",
+              "71.3 GiB Q5_K",
+              "415",
+              "15.9",
+              "465",
+              "16.9"
+            ],
+            [
+              "qwen-vl — Qwen3-VL 8B",
+              "dense 8B",
+              "8.1 GiB Q8_0",
+              "1366",
+              "26.6",
+              "1277",
+              "25.7"
+            ],
+            [
+              "muse — Muse-Glimmer 30B",
+              "dense 28B",
+              "27.6 GiB Q8_0",
+              "419",
+              "7.8",
+              "372",
+              "7.7"
+            ],
+            [
+              "qwen — Qwen3.8 27B",
+              "dense 27B",
+              "29.3 GiB Q8_0",
+              "382",
+              "7.3",
+              "357",
+              "7.2"
+            ],
+            [
+              "gemma — Gemma 4 31B",
+              "dense 31B",
+              "30.4 GiB Q8_0",
+              "355",
+              "6.7",
+              "295",
+              "6.6"
+            ],
+            [
+              "diamond — L3.3 70B Magnum Diamond",
+              "dense 70B",
+              "46.5 GiB Q5_K_M",
+              "140",
+              "4.6",
+              "118",
+              "4.4"
+            ],
+            [
+              "llama3.3 — Llama 3.3 70B",
+              "dense 70B",
+              "53.9 GiB Q6_K",
+              "134",
+              "3.9",
+              "103",
+              "3.9"
+            ],
+            [
+              "magnum — Magnum v4 72B",
+              "dense 72B",
+              "59.9 GiB Q6_K",
+              "135",
+              "3.5",
+              "120",
+              "3.5"
             ]
           ]
         }
