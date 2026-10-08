@@ -970,8 +970,8 @@ handle it. A models.conf entry with `_model_backend="comfyui"` describes it
 | --- | --- |
 | `binary` | the ComfyUI checkout, with its `.venv` beside `main.py` (`~/.local/share/llmctl/comfyui/app`) |
 | `model` | the directory of the image models (`~/.local/share/llmctl/models/comfyui`) |
-| `extra_args` | additional ComfyUI flags (`--disable-pinned-memory --use-pytorch-cross-attention`) |
-| `rocm_env` | its environment (`TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL=1`) |
+| `extra_args` | additional ComfyUI flags (`--disable-pinned-memory --use-pytorch-cross-attention --disable-async-offload`) |
+| `rocm_env` | extra environment as KEY=VAL pairs (empty: since torch 2.14 the flash attention runs on gfx1151 without `TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL`) |
 
 llmctl starts ComfyUI with `ROCPROFILER_REGISTER_ENABLED=0` (#54): otherwise
 torch's profiler registration takes the interrupt signals ROCm's event thread
