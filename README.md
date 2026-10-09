@@ -919,6 +919,16 @@ decodes at 7 t/s, the bandwidth limit for 29 GiB of Q8. unsloth's UD-Q8_K_XL,
 gufo's own target, ran no faster than HauhauCS's Q8_K_P. gufo runs MTP for
 Flash-Next only, so the 27B speculates with DFlash2.
 
+`flash-gufo` runs Flash-Next itself on gufo, from unsloth's UD-Q4_K_XL (four
+shards, 111 GB). gufo reads the model's 26.8 GiB per-layer n-gram table row by
+row from the SSD, past the page cache, so ~77 GiB of weights stay resident:
+88.8 GiB GTT after loading at 2 × 128K, 95.5 at 2 × 256K, and its prompt-cache
+snapshots go into GTT as well — capped at 8 GiB in models.conf so that 256K
+stays under the 104 GiB limit. Against `flash` (halogen 0.17.3) the same
+morning: prefill 1084–1164 / 1340–1403 / 1302–1332 t/s (1092 / 1528 / 1494),
+decode 31–32 prose and 49–50 code (50.5 / 72.4). halogen stays the one for
+daily use; the entry is there to see gufo catch up.
+
 What llmctl does for it:
 
 - **The container**: `podman run` as for halogen (`llmctl-gufo-<slot>`, the model
@@ -2524,6 +2534,7 @@ them are served by the Vulkan build — the ROCm build is opt-in per model
 - **qwen-gufo** — the same Qwen3.8-27B uncensored Q8 on the [gufo backend](#the-gufo-backend), DFlash2 draft, 64K per session (256K in preset `qwen-gufo-256k`), vision via `--mmproj`; prefill 30–55 % and code decoding ~2× faster than `qwen`
 - **qwen-halogen** — Qwen3.8-27B stock (not uncensored) on [halogen-server](#halogen-server-qwen38-27b), ~6.3 bpw, DFlash2 draft, 256K ctx, text only; prefill ~1.8× `qwen-gufo`, code decoding 45 t/s — meant for code
 - **flash** — Qwen3.8-Flash-Next 125B MoE on the [halogen backend](#the-halogen-backend), 4-bit `.hgn`, 256K ctx (512K with YaRN via `--ctx 524288`), vision via `--mmproj` (on in preset `flash`); ~82 GiB, other slots beside it only as they fit
+- **flash-gufo** — the same Flash-Next on the [gufo backend](#the-gufo-backend), unsloth UD-Q4_K_XL (111 GB, its 26.8 GiB n-gram table read from the SSD), MTP, 2 × 128K, vision via `--mmproj`; ~94 GiB GTT. Kept to follow gufo: decoding ~35 % slower than `flash` (32 / 50 t/s prose / code against 50 / 72)
 
 - **embed** — Qwen3-Embedding-8B, Q8_0, 8K ctx; `/v1/embeddings` for [retrieval](#building-blocks-for-retrieval-and-memory)
 - **rerank** — Qwen3-Reranker-0.6B, Q8_0, 8K ctx; `/v1/rerank`

@@ -748,7 +748,7 @@
         {
           "id": "flash",
           "title": "Qwen3.8 Flash-Next on halogen-flash",
-          "text": "The largest model here (Qwen3.8 Flash-Next, 4-bit, about 62 GiB, MoE with an MTP draft) on halogen-flash-server, which is built for this chip only. Same bench as the engines above; tokens per second.",
+          "text": "The largest model here (Qwen3.8 Flash-Next, 4-bit, about 62 GiB, MoE with an MTP draft) on halogen-flash-server, which is built for this chip only, and in the last row on gufo from unsloth's GGUF (about 77 GiB resident, its n-gram table read from the SSD). Same bench as the engines above; tokens per second.",
           "public": true,
           "table": [
             [
@@ -790,6 +790,14 @@
               "1479",
               "50.3",
               "68.9"
+            ],
+            [
+              "gufo 0.9.1 (unsloth UD-Q4_K_XL)",
+              "1084–1164",
+              "1340–1403",
+              "1302–1332",
+              "31.0–32.1",
+              "49.0–50.0"
             ]
           ]
         },
