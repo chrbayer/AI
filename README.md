@@ -956,11 +956,17 @@ What llmctl does for it:
   logs at debug. `--served-model-name` is the entry's name: gufo refuses a
   request for any other model, and `llmctl env` hands Claude Code exactly
   that one.
-- **Its proxy always runs and translates `/v1/messages`** to chat completions.
-  gufo 0.4.0's own Messages API returns the model's thinking inside the text
-  block, `</think>` and all; its chat completions split it off, and the
-  translation turns that into a proper thinking block. `LLMCTL_GUFO_NATIVE_MESSAGES=1`
-  passes the Messages API through instead, once gufo fixes it.
+- **Its proxy always runs and passes `/v1/messages` to gufo**, whose own
+  Messages API splits the thinking off into a thinking block and handles
+  tools, streamed or not, since 0.10.0 (0.4.0 still returned the thinking
+  inside the text, `</think>` and all). It reports the prompt cache as it
+  really was hit. Only what it lacks goes through chat completions: requests
+  with images (it refuses them on `/v1/messages`) and `count_tokens` (not
+  implemented there), which the proxy estimates. `LLMCTL_GUFO_TRANSLATE=1`
+  translates every request, as up to llmctl 1.75; `LLMCTL_GUFO_NATIVE_MESSAGES=1`
+  translates none. Claude Code also works against gufo's port directly, text
+  only, but loses the time stamp normalization (prompt-cache hits) and image
+  URLs.
 - **Vision with `--mmproj`**: gufo looks for `mmproj-BF16.gguf` beside the
   model and does not find HauhauCS's name on its own, so llmctl passes it;
   it is uploaded at the first image.

@@ -1484,12 +1484,15 @@ _start_proxy() {
         mapfile -t server_env < <(_halogen_server_proxy_env "$slot")
         backend_env+=("${server_env[@]}")
     elif [[ "${proxy_kind:-}" == gufo ]] || _slot_is_gufo "$slot"; then
-        # gufo's own /v1/messages hands back the model's thinking inside the text
-        # block, "</think>" and all (0.4.0); its chat completions split it off. So
-        # the proxy translates, unless LLMCTL_GUFO_NATIVE_MESSAGES=1 says gufo
-        # has fixed that.
+        # gufo's own /v1/messages splits the thinking off and handles tools since
+        # 0.10.0 (0.4.0 still handed it back inside the text, "</think>" and
+        # all), but refuses images there and has no count_tokens: the proxy
+        # translates just those to chat completions. LLMCTL_GUFO_TRANSLATE=1
+        # translates everything, as before; LLMCTL_GUFO_NATIVE_MESSAGES=1 nothing.
         backend_env=(LLM_PROXY_TIMEOUT="$HALOGEN_PROXY_TIMEOUT" LLM_INLINE_IMAGE_URLS=1)
-        [[ "${LLMCTL_GUFO_NATIVE_MESSAGES:-0}" == 1 ]] || backend_env+=(LLM_TRANSLATE_MESSAGES=1)
+        if [[ "${LLMCTL_GUFO_TRANSLATE:-0}" == 1 ]]; then backend_env+=(LLM_TRANSLATE_MESSAGES=1)
+        elif [[ "${LLMCTL_GUFO_NATIVE_MESSAGES:-0}" != 1 ]]; then backend_env+=(LLM_TRANSLATE_MESSAGES=images)
+        fi
     else
         backend_env=(LLM_PROXY_TIMEOUT="$LLAMA_SERVER_TIMEOUT")
         # llama-server fetches image URLs itself, from any address — through a
@@ -1913,8 +1916,8 @@ _start_gufo() {
         if [[ "$use_mmproj" == true ]]; then echo "Vision:   on (--mmproj; gufo uploads it at the first image)"
         elif [[ -n "$_r_mmproj" ]]; then echo "Vision:   available but not loaded (pass --mmproj)"; fi
         [[ -n "$reasoning" ]] && echo "Reasoning: $reasoning"
-        echo "Proxy:    always on :$port_proxy — translates /v1/messages (Claude Code) to chat completions,"
-        echo "          where gufo splits the thinking off; normalizes time stamps, inlines image URLs"
+        echo "Proxy:    always on :$port_proxy — passes /v1/messages (Claude Code) to gufo, translates only"
+        echo "          requests with images and count_tokens; normalizes time stamps, inlines image URLs"
         echo "----- effective config -----"
         echo "Command:"
         printf '  %s\n' "${cmd[*]}"
@@ -5860,7 +5863,7 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "    halogen-server (Qwen3.8-27B): --cache-ram N sizes its prompt cache (MiB), --reasoning,"
     printf "  %-20s %s\n" ""                      "    --temp, --top-p become request defaults; no YaRN, no vision, no thinking budget"
     printf "  %-20s %s\n" ""                      "  gufo models (backend=gufo) run gufo in podman, always with their proxy (it translates"
-    printf "  %-20s %s\n" ""                      "    /v1/messages); --ctx and --parallel size the KV it reserves at start, --spec off drops"
+    printf "  %-20s %s\n" ""                      "    images and count_tokens on /v1/messages); --ctx and --parallel size the KV it reserves at start, --spec off drops"
     printf "  %-20s %s\n" ""                      "    the draft; no --cache-ram, --similarity or --gpu-priority"
     printf "  %-20s %s\n" ""                      "  comfyui models (backend=comfyui) run ComfyUI with its web UI on the server port;"
     printf "  %-20s %s\n" ""                      "    only --host, --verbose, --clear-logs, --output DIR (where images go) and --proxy apply;"

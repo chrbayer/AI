@@ -229,6 +229,41 @@ class RequestDefaults(unittest.TestCase):
             self.assertEqual(chat["temperature"], 0.6)
 
 
+@unittest.skipIf(proxy is None, "proxy.py needs flask and requests")
+class TranslateImages(unittest.TestCase):
+    """gufo speaks the Messages API but refuses images there and has no
+    count_tokens: with LLM_TRANSLATE_MESSAGES=images only those are translated."""
+    IMAGE = {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "AA=="}}
+
+    def setUp(self):
+        self.saved = proxy.TRANSLATE_MESSAGES, proxy.TRANSLATE_IMAGES
+        proxy.TRANSLATE_MESSAGES, proxy.TRANSLATE_IMAGES = False, True
+
+    def tearDown(self):
+        proxy.TRANSLATE_MESSAGES, proxy.TRANSLATE_IMAGES = self.saved
+
+    def body(self, *content):
+        return {"messages": [{"role": "user", "content": list(content) or "Hi"}]}
+
+    def test_text_and_tools_pass_through(self):
+        tool = {"type": "tool_result", "tool_use_id": "t", "content": [{"type": "text", "text": "ok"}]}
+        self.assertFalse(proxy.translates("v1/messages", self.body()))
+        self.assertFalse(proxy.translates("v1/messages", self.body(tool)))
+
+    def test_an_image_is_translated_also_inside_a_tool_result(self):
+        self.assertTrue(proxy.translates("v1/messages", self.body(self.IMAGE)))
+        tool = {"type": "tool_result", "tool_use_id": "t", "content": [self.IMAGE]}
+        self.assertTrue(proxy.translates("v1/messages", self.body(tool)))
+
+    def test_count_tokens_is_answered_here(self):
+        self.assertTrue(proxy.translates("v1/messages/count_tokens", self.body()))
+
+    def test_other_paths_and_translate_off(self):
+        self.assertFalse(proxy.translates("v1/chat/completions", self.body(self.IMAGE)))
+        proxy.TRANSLATE_IMAGES = False
+        self.assertFalse(proxy.translates("v1/messages", self.body(self.IMAGE)))
+
+
 class ThinkingOff(unittest.TestCase):
     BODY = {"model": "m", "max_tokens": 100, "thinking": {"type": "disabled"},
             "output_config": {"effort": "high"}, "messages": [{"role": "user", "content": "Hi"}]}

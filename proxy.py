@@ -28,8 +28,12 @@ REQUEST_TIMEOUT = int(os.environ.get('LLM_PROXY_TIMEOUT', '300'))
 
 # Backends without /v1/messages (halogen): answer it here by translating to and
 # from /v1/chat/completions (see anthropic_compat.py). Off = pass-through, as
-# llama-server speaks the Messages API itself.
-TRANSLATE_MESSAGES = os.environ.get('LLM_TRANSLATE_MESSAGES', '') == '1'
+# llama-server speaks the Messages API itself. "images": only what the backend's
+# own Messages API lacks — gufo (0.10.0) refuses images there ("use
+# /v1/chat/completions") and has no count_tokens; the rest passes through.
+_TRANSLATE = os.environ.get('LLM_TRANSLATE_MESSAGES', '')
+TRANSLATE_MESSAGES = _TRANSLATE == '1'
+TRANSLATE_IMAGES = _TRANSLATE == 'images'
 # Largest token budget the backend accepts. halogen refuses a request above its
 # cap outright (HTTP 400) instead of shortening it, and Claude Code asks for
 # 32000 as a matter of course; clamping here keeps such requests alive.
@@ -177,6 +181,26 @@ def normalize_request(data):
             msg["content"] = optimize_prompt(msg["content"])
     if "system" in data:
         data["system"] = optimize_prompt(data["system"])
+
+
+def has_images(data):
+    """Whether a Messages request carries an image, also inside a tool result."""
+    def walk(blocks):
+        for block in blocks if isinstance(blocks, list) else []:
+            if isinstance(block, dict) and (block.get("type") == "image"
+                                            or walk(block.get("content"))):
+                return True
+        return False
+    return any(isinstance(m, dict) and walk(m.get("content"))
+               for m in (data.get("messages") or [] if isinstance(data, dict) else []))
+
+
+def translates(path, data):
+    """Whether this Messages request is answered here, through chat completions."""
+    if path not in ("v1/messages", "v1/messages/count_tokens"):
+        return False
+    return TRANSLATE_MESSAGES or (TRANSLATE_IMAGES and (path == "v1/messages/count_tokens"
+                                                        or has_images(data)))
 
 
 def apply_defaults(chat):
@@ -518,7 +542,7 @@ def proxy(path):
                     _client_addr(), MAX_CONCURRENCY)
         return _deny(429, "too many concurrent requests")
 
-    if TRANSLATE_MESSAGES and request.method == "POST" and path in ("v1/messages", "v1/messages/count_tokens"):
+    if request.method == "POST" and translates(path, data):
         return _messages(path, data)
 
     if INLINE_IMAGE_URLS and isinstance(data, dict):
@@ -565,6 +589,9 @@ if __name__ == '__main__':
     log.info("Backend: %s  Proxy: %s:%d  Timeout: %ds", TARGET_URL, PROXY_HOST, PROXY_PORT, REQUEST_TIMEOUT)
     if TRANSLATE_MESSAGES:
         log.info("Translating /v1/messages to /v1/chat/completions (backend has no Messages API)")
+    elif TRANSLATE_IMAGES:
+        log.info("Passing /v1/messages through; requests with images and count_tokens "
+                 "go to /v1/chat/completions, which the backend's Messages API lacks")
     if MAX_TOKENS_CAP:
         log.info("Token budgets above %d are clamped to it", MAX_TOKENS_CAP)
     if REQUEST_DEFAULTS:
