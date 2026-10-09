@@ -3339,6 +3339,62 @@ _lookup_footprint() {
     awk -F'\t' -v k="$key" '$1 == k { print $2; exit }' "$FOOTPRINT_FILE" 2>/dev/null
 }
 
+# What of a GGUF (all its parts, when split) gufo keeps in memory, and what it
+# leaves on the SSD — Flash-Next's n-gram table (per_layer_token_embd), read
+# with O_DIRECT: "resident ngram" in bytes, from the tensor table in the
+# headers. Without python3 or a readable header: the files' size, nothing out.
+_gguf_resident_bytes() {
+    local -a parts=("$1")
+    [[ "$1" =~ -00001-of-[0-9]+\.gguf$ ]] && parts=("${1%-00001-of-*}"-*-of-*.gguf)
+    python3 -I - "${parts[@]}" <<'PY' 2>/dev/null || { local f b=0; for f in "${parts[@]}"; do b=$(( b + $(stat -c%s "$f" 2>/dev/null || echo 0) )); done; echo "$b 0"; }
+import os, struct, sys
+SZ = {0: 1, 1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 4, 7: 1, 10: 8, 11: 8, 12: 8}
+total = ngram = 0
+for path in sys.argv[1:]:
+    with open(path, "rb") as f:
+        def u(fmt):
+            fmt = "<" + fmt
+            return struct.unpack(fmt, f.read(struct.calcsize(fmt)))[0]
+        def skip(t):
+            if t == 8:
+                f.seek(u("Q"), 1)
+            elif t == 9:
+                at, n = u("I"), u("Q")
+                if at == 8:
+                    for _ in range(n):
+                        f.seek(u("Q"), 1)
+                else:
+                    f.seek(SZ[at] * n, 1)
+            else:
+                f.seek(SZ[t], 1)
+        assert f.read(4) == b"GGUF"
+        u("I")
+        nt, nkv = u("Q"), u("Q")
+        align = 32
+        for _ in range(nkv):
+            key = f.read(u("Q"))
+            t = u("I")
+            if key == b"general.alignment" and t == 4:
+                align = u("I")
+            else:
+                skip(t)
+        tensors = []
+        for _ in range(nt):
+            name = f.read(u("Q")).decode()
+            f.seek(8 * u("I") + 4, 1)
+            tensors.append((u("Q"), name))
+        data = os.path.getsize(path) - (f.tell() + align - 1) // align * align
+    tensors.sort()
+    for i, (off, name) in enumerate(tensors):
+        size = (tensors[i + 1][0] if i + 1 < len(tensors) else data) - off
+        if name.startswith("per_layer_token_embd"):
+            ngram += size
+        else:
+            total += size
+print(total, ngram)
+PY
+}
+
 # Lower bound for a command never measured: the size of the files it loads.
 _estimate_cmd_mib() {
     local -a w; read -ra w <<< "$1"
@@ -3389,6 +3445,11 @@ _estimate_cmd_mib() {
     # ~6 GiB of working memory, and the KV it reserves for every session —
     # ~2 GiB per 32K tokens of context. Measured with Qwen3.8-27B Q8 and
     # DFlash2, two sessions: 41 / 45 / 54 / 68 GiB at 32K / 64K / 128K / 256K.
+    # Flash-Next is read differently: its n-gram table stays on the SSD (read
+    # with O_DIRECT, outside the page cache), and its state per session is
+    # smaller — ~8 GiB of working memory and snapshot cache, ~0.9 GiB per 32K
+    # and session. Measured with the unsloth UD-Q4_K_XL and its MTP head, two
+    # sessions: 94 / 101 GiB at 128K / 256K.
     if [[ " ${w[*]} " == *" --name $GUFO_CONTAINER_PREFIX"* ]]; then
         local model="" draft_dir="" draft="" ctx_n=0 sess=1 prev=""
         for (( i=0; i < ${#w[@]}; i++ )); do
@@ -3401,9 +3462,15 @@ _estimate_cmd_mib() {
             esac
             prev="${w[i]}"
         done
-        bytes=$(( $(stat -c%s "$model" 2>/dev/null || echo 0) ))
+        local resident ngram
+        read -r resident ngram < <(_gguf_resident_bytes "$model")
+        bytes=$resident
         [[ -n "$draft_dir" && -n "$draft" ]] && bytes=$(( bytes + $(stat -c%s "$draft_dir/$draft" 2>/dev/null || echo 0) ))
-        echo $(( bytes / 1048576 + 6 * 1024 + 2048 * sess * ctx_n / 32768 ))
+        if (( ngram > 0 )); then
+            echo $(( bytes / 1048576 + 8 * 1024 + 896 * sess * ctx_n / 32768 ))
+        else
+            echo $(( bytes / 1048576 + 6 * 1024 + 2048 * sess * ctx_n / 32768 ))
+        fi
         return
     fi
     echo $(( bytes / 1048576 ))
