@@ -476,7 +476,10 @@ _container_rss_mib() {
 # `download` sets it up (checkout, venv with ROCm torch, patches, workflows and the
 # models those workflows name), `update` keeps it current; see further below.
 COMFYUI_GIT="https://github.com/Comfy-Org/ComfyUI.git"
-COMFYUI_TORCH_INDEX="https://download.pytorch.org/whl/rocm7.2"
+COMFYUI_TORCH_INDEX="https://download.pytorch.org/whl/rocm7.14"
+# rocm7.14 has no torchaudio; torchaudio is plain Python since 2.9 (no torch pin,
+# no HIP code of its own), so the rocm7.2 one runs on the 7.14 torch.
+COMFYUI_TORCHAUDIO_INDEX="https://download.pytorch.org/whl/rocm7.2"
 COMFYUI_MODELS_SCRIPT="$LIB_DIR/comfyui_models.py"
 COMFYUI_SHARE="$SHARE_DIR/comfyui"      # bundled workflows/ and patches/
 IMAGES_SERVER_SCRIPT="$LIB_DIR/images_server.py"   # OpenAI image API, a comfyui slot's --proxy
@@ -6030,8 +6033,9 @@ _comfyui_pip() {
 _comfyui_python_deps() {
     mkdir -p "$COMFYUI_TMP"
     if [[ "${1:-}" == torch ]]; then
-        echo "  torch, torchvision, torchaudio from $COMFYUI_TORCH_INDEX"
-        _comfyui_pip install -q --upgrade torch torchvision torchaudio --index-url "$COMFYUI_TORCH_INDEX" || return 1
+        echo "  torch, torchvision from $COMFYUI_TORCH_INDEX, torchaudio from $COMFYUI_TORCHAUDIO_INDEX"
+        _comfyui_pip install -q --upgrade torch torchvision --index-url "$COMFYUI_TORCH_INDEX" || return 1
+        _comfyui_pip install -q --upgrade --no-deps torchaudio --index-url "$COMFYUI_TORCHAUDIO_INDEX" || return 1
     fi
     echo "  requirements.txt (torch stays on the installed ROCm build)"
     local constraints="$COMFYUI_TMP/torch-constraints.txt"
@@ -6052,7 +6056,7 @@ _comfyui_python_deps() {
 }
 
 _comfyui_gpu_check() {
-    "$c_app/.venv/bin/python" - <<'EOF' 2>&1 | grep -v '^(null)'
+    "$c_app/.venv/bin/python" - <<'EOF' 2>&1 | grep -v -e '^(null)' -e 'rocSHMEM.*libnuma'
 import sys, torch
 ok = torch.version.hip is not None and torch.cuda.is_available()
 print(f"  torch {torch.__version__}, HIP {torch.version.hip}, GPU: {torch.cuda.get_device_name(0) if ok else 'NOT available'}")
@@ -6443,9 +6447,11 @@ _tts_setup() {
         echo "  venv for voice design with $("$py" --version 2>&1)"
         "$py" -m venv "$TTS_DIR/venv" || return 1
         mkdir -p "$COMFYUI_TMP"
-        echo "  torch, torchaudio from $COMFYUI_TORCH_INDEX"
+        echo "  torch from $COMFYUI_TORCH_INDEX, torchaudio from $COMFYUI_TORCHAUDIO_INDEX"
         TMPDIR="$COMFYUI_TMP" "$TTS_DIR/venv/bin/python" -m pip install -q --disable-pip-version-check \
-            torch torchaudio --index-url "$COMFYUI_TORCH_INDEX" || return 1
+            torch --index-url "$COMFYUI_TORCH_INDEX" || return 1
+        TMPDIR="$COMFYUI_TMP" "$TTS_DIR/venv/bin/python" -m pip install -q --disable-pip-version-check \
+            --no-deps torchaudio --index-url "$COMFYUI_TORCHAUDIO_INDEX" || return 1
         echo "  qwen-tts"
         TMPDIR="$COMFYUI_TMP" "$TTS_DIR/venv/bin/python" -m pip install -q --disable-pip-version-check qwen-tts || return 1
     else
