@@ -5899,7 +5899,7 @@ _download_draft() {
         return 0
     }
     echo "  Draft model:"
-    _download_model "$repo" "$dir" "$pat" "$force"
+    _download_model "$repo" "$(_model_dl_dir "$dir/-" "" "$pat")" "$pat" "$force"
 }
 
 # Same idea for the mmproj, whose destination is simply where _model_mmproj says
@@ -5910,7 +5910,7 @@ _download_mmproj() {
     read -r repo pat <<< "$spec"
     [[ -z "$repo" || -z "$mmproj_path" ]] && return 0
     echo "  Vision projector:"
-    _download_model "$repo" "$(dirname "${mmproj_path//\~/$HOME}")" "$pat" "$force"
+    _download_model "$repo" "$(_model_dl_dir "$mmproj_path" "" "$pat")" "$pat" "$force"
 }
 
 
