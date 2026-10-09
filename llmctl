@@ -4961,7 +4961,7 @@ cmd_outdated() {
         IFS='|' read -r -a f <<< "$entry"
         _resolve_model "${f[0]}" || continue
         [[ -n "$_r_hf_repo" && -e "${_r_model//\~/$HOME}" ]] || continue
-        model_dir="${_r_hf_dir:-$(dirname "${_r_model//\~/$HOME}")}"; model_dir="${model_dir//\~/$HOME}"
+        model_dir=$(_model_dl_dir "$_r_model" "$_r_hf_dir" "$_r_hf_includes")
         report=$( {
             _download_model "$_r_hf_repo" "$model_dir" "$_r_hf_includes" ""
             [[ -n "$_r_hf_draft" ]] && _download_draft "$_r_hf_draft" "" "${_r_spec_args[@]}"
@@ -5913,6 +5913,28 @@ _download_mmproj() {
     _download_model "$repo" "$(dirname "${mmproj_path//\~/$HOME}")" "$pat" "$force"
 }
 
+
+# Where hf download puts a model's repo: _model_hf_dir, else the model file's
+# directory — or above it, where the includes name the subdirectory the model
+# lies in (UD-Q4_K_XL/* for …/UD-Q4_K_XL/x.gguf): hf keeps the repo's paths
+# under --local-dir, which would nest them one level too deep.
+_model_dl_dir() {
+    local model="${1//\~/$HOME}" hf_dir="${2//\~/$HOME}" dir pat sub
+    [[ -n "$hf_dir" ]] && { echo "$hf_dir"; return; }
+    dir="$(dirname "$model")"
+    local -a pats=(); read -ra pats <<< "$3"
+    for pat in "${pats[@]}"; do
+        [[ "$pat" == */* ]] || continue
+        sub="${pat%/*}"
+        # shellcheck disable=SC2053  # the include's directory may be a glob
+        if [[ "$dir" == */$sub ]]; then
+            local n="${sub//[^\/]/}"; n=$(( ${#n} + 1 ))
+            while (( n-- )); do dir="$(dirname "$dir")"; done
+            break
+        fi
+    done
+    echo "$dir"
+}
 
 _download_model() {
     local repo="$1"
@@ -6869,11 +6891,7 @@ _download_target() {
                 continue
             fi
             local model_dir
-            if [[ -n "$m_hf_dir" ]]; then
-                model_dir="${m_hf_dir//\~/$HOME}"
-            else
-                model_dir="$(dirname "${m_model//\~/$HOME}")"
-            fi
+            model_dir=$(_model_dl_dir "$m_model" "$m_hf_dir" "$m_hf_includes")
             echo "=== $m_label ==="
             _download_model "$m_hf_repo" "$model_dir" "$m_hf_includes" "$force"
             if [[ -n "$m_hf_draft" ]]; then
@@ -6907,11 +6925,7 @@ _download_target() {
     fi
 
     local model_dir
-    if [[ -n "$_r_hf_dir" ]]; then
-        model_dir="${_r_hf_dir//\~/$HOME}"
-    else
-        model_dir="$(dirname "${_r_model//\~/$HOME}")"
-    fi
+    model_dir=$(_model_dl_dir "$_r_model" "$_r_hf_dir" "$_r_hf_includes")
     _download_model "$_r_hf_repo" "$model_dir" "$_r_hf_includes" "$force"
     # A model made here from a repo that offers it only bigger (scout): the
     # download brought the sources; the file named in models.conf comes from

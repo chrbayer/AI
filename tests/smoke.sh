@@ -34,6 +34,7 @@ printf '#!/bin/sh\nexit 1\n' > "$SANDBOX/bin/podman"
 # hf answers a dry run as if every file were there.
 cat > "$SANDBOX/bin/hf" <<'STUB'
 #!/bin/sh
+[ -n "${HF_LOG:-}" ] && echo "$*" >> "$HF_LOG"
 case " $* " in *" --dry-run "*) printf '[dry-run] Will download 0 files (out of 2) totalling 0.0.\nfile\tsize\n' ;; esac
 exit 0
 STUB
@@ -233,6 +234,8 @@ check "download --check covers the draft" "Draft model"          -- "$L" downloa
 check "download --check sees a missing image" "to pull"          -- "$L" download flash --check
 check "download --check exits 1 when something is missing" "rc=1" -- sh -c "'$L' download flash --check >/dev/null; echo rc=\$?"
 check "download --check refuses --force" "have no meaning"       -- "$L" download qwen --check --force
+check "download puts a repo with subdirectories at its root" "--local-dir $LLMCTL_MODELS_DIR/Qwen3.8-Flash-Next-GGUF --include UD-Q4_K_XL/*" -- \
+    sh -c "HF_LOG='$SANDBOX/hf.log' '$L' download flash-gufo --check >/dev/null; cat '$SANDBOX/hf.log'"
 
 # ── things that must not happen ──────────────────────────────
 check "no command leaks the sandbox"     "!$HOME/.local/share/llmctl/tts" -- "$L" start speech 5 --print-cmd
