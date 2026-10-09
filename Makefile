@@ -58,6 +58,7 @@ install:
 	install -Dm644 comfyui/sources.json $(SHAREDIR)/comfyui/sources.json
 	install -Dm644 comfyui/custom_nodes.txt $(SHAREDIR)/comfyui/custom_nodes.txt
 	install -Dm644 comfyui/retired_workflows.txt $(SHAREDIR)/comfyui/retired_workflows.txt
+	install -Dm644 comfyui/workflow_versions.txt $(SHAREDIR)/comfyui/workflow_versions.txt
 	install -Dm644 comfyui/watch.conf $(SHAREDIR)/comfyui/watch.conf
 	install -Dm644 -t $(SHAREDIR)/tts/voices tts/voices/*
 	install -Dm755 patches/build-tts-server.sh $(SHAREDIR)/patches/build-tts-server.sh

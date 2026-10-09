@@ -1,0 +1,13 @@
+# Earlier bundled versions of the workflows (SHA-256): sync replaces a copy in
+# ComfyUI's workflow directory that is one of these with the current one, and keeps
+# one that matches none (changed in the UI). Add the old version's line whenever a
+# workflow in comfyui/workflows/ changes (tests check it).
+2037c39bf61070459f1396ffd6ad7397ff92b475dda5624d8acbacae163a56ef  LTX-2.5 Chain (int8, distilled, 4 clips).json
+b713a05a7a0fa2922c8ff4e2bda78e83e560bcfcdabad2f5351076b821e58d7c  LTX-2.5 Chain (int8, distilled, 4 clips).json
+602396c25ec276f11b43e72aa9b95204cb1627a7189445d866613bd6732a3a1e  LTX-2.5 Chain Keyframes (int8, distilled, 4 clips).json
+ac09d0c01d7a9bac38a421ca72605bb3b0c30adc73625c6cc8b131fe4a539c56  LTX-2.5 Chain Keyframes (int8, distilled, 4 clips).json
+d8107deef9a9b005a3eff41e12520225a344b65381d74686ac22dc4e65d19c21  LTX-2.5 First-Last Frame (int8, distilled).json
+e9906e2e8533f6bac0d06351ec864b39a8b71932fca070a1fbddd8e62c7a84df  LTX-2.5 Talking (int8, distilled).json
+03b136ba0ad752c1e91e496a23fa4f4826ef881777d591dc9129c459922e7dac  LTX-2.5 Video (int8, distilled).json
+f44cefeb0ff4313b9557df55d751893ccab6159f2c59ff2b8877a9a116e783af  Pixal3D TRELLIS.2 Image to Model (int8).json
+3a074bf6560add4e3841d8c841f91e6554cd6a191815f5e5f04ddc6d695c0923  Qwen-Image 2.1 Detailer (bf16, dpmpp_2m 14).json

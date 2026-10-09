@@ -6098,26 +6098,38 @@ _comfyui_revert_patches() {
     done
 }
 
-# Copy the bundled workflows that ComfyUI does not have yet. One the user changed
-# in the UI is theirs and stays; it is only named. A workflow directory that is a
-# symlink into the checkout (see README) already is the bundled set.
+# Copy the bundled workflows that ComfyUI does not have yet, and replace a copy
+# that is still an earlier bundled version (workflow_versions.txt) with the
+# current one. One the user changed in the UI matches no bundled version: it is
+# theirs and stays; it is only named. A workflow directory that is a symlink into
+# the checkout (see README) already is the bundled set.
 _comfyui_sync_workflows() {
     local src="$COMFYUI_SHARE/workflows" f name
     [[ -d "$src" ]] || return 0
     mkdir -p "$c_wf"
     [[ "$(readlink -f "$c_wf")" == "$(readlink -f "$src")" ]] && { echo "  workflows: linked to $src"; return 0; }
-    local added=0 differ=()
+    local -A earlier=()
+    local sum
+    while read -r sum name; do
+        [[ -z "$sum" || "$sum" == \#* ]] || earlier["$sum  $name"]=1
+    done < "$COMFYUI_SHARE/workflow_versions.txt" 2>/dev/null
+    local added=0 updated=0 differ=()
     for f in "$src"/*.json; do
         name="$(basename "$f")"
         if [[ ! -e "$c_wf/$name" ]]; then
             cp "$f" "$c_wf/$name"; added=$(( added + 1 ))
         elif ! cmp -s "$f" "$c_wf/$name"; then
-            differ+=("$name")
+            if [[ -n "${earlier["$(sha256sum "$c_wf/$name" | cut -d' ' -f1)  $name"]:-}" ]]; then
+                cp "$f" "$c_wf/$name"; updated=$(( updated + 1 ))
+            else
+                differ+=("$name")
+            fi
         fi
     done
     echo "  workflows: $added added to $c_wf"
+    (( updated )) && echo "  workflows: $updated updated to the bundled version (unchanged since the last one)"
     # Retired ones (now variants of a workflow with switches): gone if untouched.
-    local sum removed=0 kept=()
+    local removed=0 kept=()
     while read -r sum name; do
         [[ -z "$sum" || "$sum" == \#* || ! -e "$c_wf/$name" ]] && continue
         if [[ "$(sha256sum "$c_wf/$name" | cut -d' ' -f1)" == "$sum" ]]; then

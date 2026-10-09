@@ -988,7 +988,7 @@ saved workflows), `input/`, `output/`, `temp/` and `custom_nodes/`
 llmctl download comfy                 # set it up, fetch every model its workflows name
 llmctl download comfy klein           # …only what the workflows with "klein" in the name need
 llmctl start comfy 9                  # web UI on http://127.0.0.1:8009
-llmctl update comfy                   # to the newest release, Python dependencies, new workflows
+llmctl update comfy                   # to the newest release, Python dependencies, new and updated workflows
 llmctl update comfy --torch           # …and torch itself
 llmctl update comfy --master          # master instead of the releases (download comfy --master too)
 ```
@@ -1010,8 +1010,8 @@ llmctl update comfy --master          # master instead of the releases (download
   whose branch is past its pin, `update --master` moves it there. A plain
   `update` never moves a pack back: past its pin, it stays.
 - **Setup.** `download` does whatever is still missing: a git checkout of
-  ComfyUI, a venv with torch built for ROCm 7.2 (`COMFYUI_PYTHON` picks the
-  interpreter, default `python3.13`), `requirements.txt` held to that torch, the
+  ComfyUI, a venv with torch built for ROCm 7.14 (torchaudio, which 7.14 lacks,
+  from ROCm 7.2; `COMFYUI_PYTHON` picks the interpreter, default `python3.13`), `requirements.txt` held to that torch, the
   CUDA packages a dependency drags in removed, the patches from
   `comfyui/patches/` applied, the bundled workflows copied, and the models.
   `--from DIR` moves an existing checkout into place instead of building a new
@@ -1020,8 +1020,10 @@ llmctl update comfy --master          # master instead of the releases (download
   new path. On one filesystem all of it is a rename.
 - **Workflows.** `comfyui/workflows/` holds the workflows, and `download`/`update`
   copy the ones ComfyUI does not have yet into
-  `~/.local/share/llmctl/comfyui/user/default/workflows/`. A workflow you
-  changed in the UI stays as it is; they only report that it differs. To keep
+  `~/.local/share/llmctl/comfyui/user/default/workflows/`, and replace a copy
+  that is still an earlier bundled version (`comfyui/workflow_versions.txt`
+  lists their SHA-256) with the current one. A workflow you changed in the UI
+  matches none of them and stays as it is; they only report that it differs. To keep
   the workflows under version control instead, link the directory to a checkout
   — what the UI saves then lands there:
   `ln -sfn ~/AI/comfyui/workflows ~/.local/share/llmctl/comfyui/user/default/workflows`

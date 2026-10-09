@@ -493,6 +493,22 @@ class ImageApi(unittest.TestCase):
         for parts in retired:
             self.assertNotIn(" ".join(parts).removesuffix(".json"), wfs)
 
+    def test_earlier_workflow_versions_are_listed(self):
+        # Sync replaces a copy that is an earlier bundled version; without its line
+        # a changed workflow would never reach an existing ComfyUI.
+        import hashlib, subprocess
+        wf_dir = ROOT / "comfyui" / "workflows"
+        listed = {tuple(line.split("  ", 1)) for line in (ROOT / "comfyui" / "workflow_versions.txt").read_text().splitlines()
+                  if line and not line.startswith("#")}
+        for f in sorted(wf_dir.glob("*.json")):
+            with self.subTest(f.name):
+                self.assertNotIn((hashlib.sha256(f.read_bytes()).hexdigest(), f.name), listed)
+                head = subprocess.run(["git", "-C", str(ROOT), "show", f"HEAD:comfyui/workflows/{f.name}"],
+                                      capture_output=True)
+                if head.returncode == 0 and head.stdout != f.read_bytes():
+                    line = (hashlib.sha256(head.stdout).hexdigest(), f.name)
+                    self.assertTrue(line in listed, "add to comfyui/workflow_versions.txt: " + "  ".join(line))
+
     def test_resolving_a_switch_cuts_the_other_branch(self):
         g = {"1": {"class_type": "UNETLoader", "inputs": {"unet_name": "a"}},
              "2": {"class_type": "UNETLoader", "inputs": {"unet_name": "b"}},
