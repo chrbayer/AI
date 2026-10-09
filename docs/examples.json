@@ -742,13 +742,21 @@
               "351–355",
               "15.1–16.0",
               "32.5–35.4"
+            ],
+            [
+              "gufo 0.10.0 (2026-10-10)",
+              "381",
+              "388",
+              "369",
+              "15.0",
+              "38.0"
             ]
           ]
         },
         {
           "id": "flash",
           "title": "Qwen3.8 Flash-Next on halogen-flash",
-          "text": "The largest model here (Qwen3.8 Flash-Next, 4-bit, about 62 GiB, MoE with an MTP draft) on halogen-flash-server, which is built for this chip only, and in the last row on gufo from unsloth's GGUF (about 77 GiB resident, its n-gram table read from the SSD). Same bench as the engines above; tokens per second.",
+          "text": "The largest model here (Qwen3.8 Flash-Next, 4-bit, about 62 GiB, MoE with an MTP draft) on halogen-flash-server, which is built for this chip only, and in the last rows on gufo from unsloth's GGUF (about 77 GiB resident, its n-gram table read from the SSD) and from vmlinux's uncensored Q4 Mix. Same bench as the engines above; tokens per second.",
           "public": true,
           "table": [
             [
@@ -798,6 +806,22 @@
               "1302–1332",
               "31.0–32.1",
               "49.0–50.0"
+            ],
+            [
+              "gufo 0.10.0 (unsloth UD-Q4_K_XL)",
+              "1149",
+              "1444",
+              "1404",
+              "32.0",
+              "52.4"
+            ],
+            [
+              "gufo 0.10.0, uncensored (vmlinux Q4 Mix)",
+              "1049–1064",
+              "977–1290",
+              "1283–1307",
+              "32.1–32.7",
+              "51.3–53.1"
             ]
           ]
         },

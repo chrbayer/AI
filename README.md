@@ -927,7 +927,19 @@ snapshots go into GTT as well — capped at 8 GiB in models.conf so that 256K
 stays under the 104 GiB limit. Against `flash` (halogen 0.17.3) the same
 morning: prefill 1084–1164 / 1340–1403 / 1302–1332 t/s (1092 / 1528 / 1494),
 decode 31–32 prose and 49–50 code (50.5 / 72.4). halogen stays the one for
-daily use; the entry is there to see gufo catch up.
+daily use; the entry is there to see gufo catch up. gufo 0.10.0 brought the
+prefill up a little (1149 / 1444 / 1404), the answers byte for byte the same.
+
+`flash-gufo-unc` is the uncensored Flash-Next on gufo: vmlinux's Q4 Mix of
+orcarouter's Qwen3.8-Flash-Next-Uncensored (one file, 110 GB), with the MTP
+predictor from jcbtc's CIRU Orca release. Its speed and memory are those of
+`flash-gufo` (decode 32.7 / 53.1 t/s, 87.3 GiB GTT after loading at 2 × 128K,
+94.0 at 2 × 256K); of eight borderline requests it refused none, where
+`flash-gufo` and `flash` decline to explain opening one's own padlock.
+
+Before a gufo start llmctl weighs what it will take — the GGUF's tensors, read
+from its header, without Flash-Next's n-gram table, the draft, and the KV per
+session — so a model it has not measured yet starts without `--ignore-memory`.
 
 What llmctl does for it:
 
@@ -2535,6 +2547,7 @@ them are served by the Vulkan build — the ROCm build is opt-in per model
 - **qwen-halogen** — Qwen3.8-27B stock (not uncensored) on [halogen-server](#halogen-server-qwen38-27b), ~6.3 bpw, DFlash2 draft, 256K ctx, text only; prefill ~1.8× `qwen-gufo`, code decoding 45 t/s — meant for code
 - **flash** — Qwen3.8-Flash-Next 125B MoE on the [halogen backend](#the-halogen-backend), 4-bit `.hgn`, 256K ctx (512K with YaRN via `--ctx 524288`), vision via `--mmproj` (on in preset `flash`); ~82 GiB, other slots beside it only as they fit
 - **flash-gufo** — the same Flash-Next on the [gufo backend](#the-gufo-backend), unsloth UD-Q4_K_XL (111 GB, its 26.8 GiB n-gram table read from the SSD), MTP, 2 × 128K, vision via `--mmproj`; ~94 GiB GTT. Kept to follow gufo: decoding ~35 % slower than `flash` (32 / 50 t/s prose / code against 50 / 72)
+- **flash-gufo-unc** — the uncensored Flash-Next on gufo (vmlinux's Q4 Mix, 110 GB, MTP from jcbtc's CIRU Orca), otherwise as `flash-gufo`; refuses none of the borderline requests the others decline
 
 - **embed** — Qwen3-Embedding-8B, Q8_0, 8K ctx; `/v1/embeddings` for [retrieval](#building-blocks-for-retrieval-and-memory)
 - **rerank** — Qwen3-Reranker-0.6B, Q8_0, 8K ctx; `/v1/rerank`
