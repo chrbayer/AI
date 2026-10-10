@@ -3,9 +3,10 @@
 One command for a local AI machine (AMD Strix Halo): language models on
 llama.cpp, halogen and gufo behind OpenAI- and Anthropic-compatible proxies (for
 Claude Code and other clients), speech in and out, and pictures, video, music and
-3D on ComfyUI with an image API. It starts, stops and combines them in slots and
-presets, checks that they fit in memory, downloads models, measures them, and
-tells what has a newer version.
+3D on ComfyUI with an image API, and a web page for editing photos from the
+phone ([`llmctl fotos`](#photos-from-the-phone-llmctl-fotos)). It starts, stops
+and combines them in slots and presets, checks that they fit in memory,
+downloads models, measures them, and tells what has a newer version.
 
 ## Installation & directories
 
@@ -24,9 +25,9 @@ your home directory:
 
 | Where | What | Override |
 | --- | --- | --- |
-| `~/.config/llmctl/` | `models.conf`, `presets.conf`, `tokens`, `tls/` | `LLMCTL_CONFIG_DIR` (tokens/tls also `LLM_CONF_DIR`, `LLM_TOKEN_FILE`) |
+| `~/.config/llmctl/` | `models.conf`, `presets.conf`, `tokens`, `tls/`, `fotos_tunnel_key` | `LLMCTL_CONFIG_DIR` (tokens/tls also `LLM_CONF_DIR`, `LLM_TOKEN_FILE`) |
 | `~/.local/share/llmctl/models/` | the GGUF files (`$MODELS_DIR` in `models.conf`), ComfyUI's models in `comfyui/` | `LLMCTL_MODELS_DIR`, or set `MODELS_DIR` in `models.conf` |
-| `~/.local/share/llmctl/` | `llama.cpp/` (prebuilt llama-server, see below), `benchmarks/`, `claude/<model>[-<slot>]` (Claude Code profiles set by `env`), `comfyui/` (ComfyUI's checkout in `app/`, its workflows, input and output), `tts/` (voices; a voice-design venv only without ComfyUI) | `LLMCTL_DATA_DIR` |
+| `~/.local/share/llmctl/` | `llama.cpp/` (prebuilt llama-server, see below), `benchmarks/`, `claude/<model>[-<slot>]` (Claude Code profiles set by `env`), `comfyui/` (ComfyUI's checkout in `app/`, its workflows, input and output), `tts/` (voices; a voice-design venv only without ComfyUI), `fotos/` (the Fotos page's jobs, own templates, push subscriptions and VAPID key) | `LLMCTL_DATA_DIR` |
 | `~/.local/state/llmctl/` | `logs/`, `pids/`, `slots/` | `LLMCTL_STATE_DIR` |
 
 **llama-server** itself: `llmctl download llama` installs prebuilt builds at
@@ -113,6 +114,7 @@ llmctl clear                           # Clear env vars
 llmctl download <model>                # Download model(s); --check: only say what is missing
 llmctl prune [--dry-run]               # Models nothing names any more; deletes after a typed yes
 llmctl outdated [--quick]              # What has a newer version (images, builds, ComfyUI, models)
+llmctl fotos enable|disable|status|key # Photo editing from the phone: a user service with its own tunnel
 llmctl version                         # Print the version
 ```
 
@@ -2926,12 +2928,15 @@ English. Kolibri reasons in English.
 - `halogen_bench.py` — `bench` for halogen models: prefill and decode speed of a running slot
 - `hf_parts.py` — joins models the Hub holds as byte parts (`*.partNofM`), checks them against its hashes and keeps those in `X.gguf.parts.json`
 - `images_server.py` — OpenAI image API in front of a ComfyUI slot (`start comfy N --proxy`); `comfyui/export_api.py` makes the API-format workflows in `comfyui/api/` it runs
+- `fotos_server.py` — the Fotos web server (`llmctl fotos`, port 8190): the job queue in front of the image API, templates, cancelling, notifications; it serves `fotos.html` (the phone page), `fotos_prompts.json` (the template library) and the service worker
+- `webpush.py` — Web Push for the Fotos page without a library of its own: aes128gcm encryption (RFC 8291) and VAPID (RFC 8292) with `cryptography`
 - `examples/models.conf` — Model definitions (paths, binaries, ROCm env vars); read from `~/.config/llmctl/`
 - `examples/presets.conf` — Named configurations: which models run together, on which slots, with which flags (`llmctl preset <name>`)
 - `templates/` — chat templates referenced from `models.conf` as `$SHARE_DIR/templates/…`
 - `Makefile` — `install`, `install-link`, `uninstall`, `test`
 - `tests/` — `smoke.sh` and `test_python.py`, see [Tests](#tests)
 - `deploy/vps-llm-tunnel-vhost.conf` — Apache vhost on the server for tunnelled LLM slots (`/sN/`, the token as the login)
+- `deploy/vps-comfy-vhost.conf` — Apache vhost on the server for ComfyUI, the image API and `/fotos`, behind Basic Auth
 
 ## Tests
 
