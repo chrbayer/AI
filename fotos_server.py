@@ -23,6 +23,7 @@ import argparse
 import base64
 import io
 import json
+import math
 import os
 import queue
 import shutil
@@ -30,6 +31,7 @@ import subprocess
 import threading
 import time
 import uuid
+import wave
 from pathlib import Path
 
 import requests
@@ -116,6 +118,47 @@ ACTIONS = {
         "prompt": "", "text": "prompt", "text_label": "Was soll an die markierte Stelle?",
         "text_placeholder": "z. B. eine Vase mit Sonnenblumen",
         "max_side": 2048, "seconds": (35, 90), "mask": True,
+        # Form behalten: the photo's edges steer the repaint — a coat masked to be
+        # red leather stays the same coat, buttons and folds, in red leather. Only
+        # if all of it is marked: half a coat stayed black.
+        "keep": ("qwen-image-21-canny-inpaint-turbo", "qwen-image-21-canny-inpaint"),
+    },
+    # Pulls one named thing out of the picture (Qwen-Image Layered Control at
+    # 640 px): the first layer, the thing alone on transparency.
+    "cutout": {
+        "label": "Ausschneiden", "hint": "Ein Ding als PNG, ohne Rest",
+        "model": ("qwen-image-layered-control", "qwen-image-layered-control"),
+        "prompt": "", "text": "prompt", "text_label": "Was soll ausgeschnitten werden?",
+        "text_placeholder": "z. B. die Gitarre, die Frau, das rote Auto",
+        "max_side": 1024, "png": True, "layers": 2, "seconds": (120, 120),
+    },
+    # The ControlNet workflows: something new on the photo's pose, layout or
+    # lines. Z-Image Turbo's came out crisper than Qwen-Image's Turbo; the
+    # thorough one is Qwen-Image at 14 steps. Both want the new scene described
+    # in full: "als Raumschiff-Quartier" alone left the living room as it was.
+    "pose": {
+        "label": "Pose übernehmen", "hint": "Jemand anderes, gleiche Haltung",
+        "model": ("z-image-turbo-pose-control", "qwen-image-21-pose-control"),
+        "prompt": "", "text": "prompt", "text_label": "Wer oder was soll so dastehen, und wo?",
+        "text_placeholder": "z. B. eine Tänzerin im roten Kleid auf einer Bühne",
+        "max_pixels": 1_600_000, "seconds": (45, 75),
+    },
+    "restyle": {
+        "label": "Neu gestalten", "hint": "Gleicher Raum, anderer Stil",
+        "model": ("z-image-turbo-depth-control", "qwen-image-21-depth-control"),
+        "prompt": "", "text": "prompt", "text_label": "Wie soll es jetzt aussehen?",
+        "text_placeholder": "z. B. dasselbe Wohnzimmer als gemütliche Almhütte aus altem Holz, "
+                            "Kamin, rote Teppiche – je genauer, desto besser",
+        "max_pixels": 1_600_000, "seconds": (35, 75),
+    },
+    # Canny on Qwen-Image: Z-Image's (strength 0.65) lost the layout without a
+    # description — a beach as watercolour came back an empty landscape.
+    "art": {
+        "label": "Als Kunstwerk", "hint": "Aquarell, Zeichnung, Comic …",
+        "model": ("qwen-image-21-canny-control-turbo", "qwen-image-21-canny-control"),
+        "prompt": "", "text": "optional", "text_label": "Was ist zu sehen? (optional, hilft dem Modell)",
+        "text_placeholder": "z. B. zwei Kinder am Strand mit einem Hund",
+        "max_pixels": 1_600_000, "seconds": (25, 75), "styles": True,
     },
     # LTX-2.5: the picture comes to life as a clip with sound; with a second
     # picture the clip runs from the first to it (First-Last Frame). Fast takes
@@ -130,7 +173,33 @@ ACTIONS = {
         "max_side": 1536, "seconds": (90, 380), "end_seconds": (160, 900), "second": True,
         "second_label": "Endbild (optional) – das Video läuft dorthin",
     },
+    # LTX-2.5 Talking: the picture speaks or sings along to a voice recorded on
+    # the phone, the clip as long as the voice. seconds: for 5 s of voice.
+    "talk": {
+        "label": "Sprechen lassen", "hint": "Das Foto spricht deine Aufnahme",
+        "model": ("ltx-25-talking", "ltx-25-talking"), "video": True, "audio": True,
+        "prompt": ("The person speaks the words clearly and naturally, lips moving exactly with the voice, "
+                   "small natural head movements and facial expressions. The camera holds still."),
+        "text": "replace", "text_label": "Wie soll es wirken? (optional)",
+        "text_placeholder": "z. B. Sie singt mit geschlossenen Augen, ganz gefühlvoll",
+        "max_side": 1536, "seconds": (105, 380),
+    },
 }
+# How the page groups the actions.
+GROUPS = [("Verbessern", ["colorize", "restore", "detail", "upscale"]),
+          ("Verändern", ["background", "cutout", "remove", "paint", "edit", "expand"]),
+          ("Neu erschaffen", ["pose", "restyle", "art"]),
+          ("Video", ["animate", "talk"])]
+# Als Kunstwerk: the style, and the prompt it makes (the photo's edges keep the layout).
+STYLES = {
+    "watercolour": ("Aquarell", "A delicate watercolour painting, soft washes of colour on textured paper"),
+    "pencil": ("Bleistift", "A detailed pencil drawing, graphite on white paper, fine hatching"),
+    "oil": ("Ölgemälde", "An impressionist oil painting, visible brush strokes, rich colours"),
+    "comic": ("Comic", "A comic book illustration, bold ink outlines, flat vivid colours"),
+    "anime": ("Anime", "An anime illustration, clean line art, soft cel shading"),
+}
+# Sprechen lassen: the longest voice, in seconds.
+VOICE_MAX = 10
 # Animieren with an end picture.
 FIRST_LAST = "ltx-25-first-last-frame"
 # Animieren and the video model of Erzeugen: how long a clip may be.
@@ -336,7 +405,9 @@ def edit_form(job):
     spec = ACTIONS[job["action"]]
     form = {"model": job["model"], "response_format": "b64_json", "n": "1"}
     text = (job.get("text") or "").strip()
-    if spec["text"] == "prompt":
+    if spec.get("styles"):
+        form["prompt"] = STYLES[job.get("style") or "watercolour"][1] + (" of " + text if text else "")
+    elif spec["text"] == "prompt":
         form["prompt"] = text
     elif spec["text"] == "optional":
         form["prompt"] = spec["prompt"] + (", " + text if text else "")
@@ -348,6 +419,8 @@ def edit_form(job):
         form["prompt"] = spec["prompt"]
     if spec.get("sides"):
         form["pad"] = json.dumps(SIDES[job.get("sides") or "wide"])
+    if spec.get("layers"):
+        form["layers"] = str(spec["layers"])
     return form
 
 
@@ -363,6 +436,8 @@ def edit_files(d):
         raise RuntimeError("das Ausgangsbild fehlt")
     if (d / "mask.png").is_file():
         files.append(("mask", ("mask.png", (d / "mask.png").read_bytes(), "image/png")))
+    if (d / "voice.wav").is_file():
+        files.append(("audio", ("voice.wav", (d / "voice.wav").read_bytes(), "audio/wav")))
     return files
 
 
@@ -401,7 +476,7 @@ def run_job(jid):
 def run_clip(job, d):
     """A video job: the clip from the image API, and a still of it for the list."""
     jid = job["id"]
-    form = {"model": job["model"], "prompt": clip_prompt(job), "seconds": str(job["seconds"]),
+    form = {"model": job["model"], "prompt": clip_prompt(job), "seconds": str(min(10, job["seconds"])),
             "quality": "full" if job.get("quality") == "best" else "fast"}
     if job["action"] == "generate" and input_file(d) is None:
         r = requests.post(f"{ARGS.api}/v1/images/generations", timeout=ARGS.timeout,
@@ -592,6 +667,9 @@ def actions():
                     "models": bool(a.get("models")), "second": bool(a.get("second")),
                     "sides": bool(a.get("sides")), "mask": bool(a.get("mask")),
                     "video": bool(a.get("video")), "second_label": a.get("second_label"),
+                    "audio": bool(a.get("audio")), "styles": bool(a.get("styles")),
+                    "keep": bool(a.get("keep")), "keep_available": avail(a["keep"][0]) if a.get("keep") else None,
+                    "group": next(g for g, ids in GROUPS for i in ids if i == key),
                     "second_available": avail(FIRST_LAST) if a.get("video") else True,
                     "available": avail(fast), "best_available": avail(best),
                     "uncensored": [unc(fast), unc(best)]})
@@ -601,7 +679,8 @@ def actions():
                      uncensored=unc(v.get("frame_model", k))) for k, v in table.items()]
 
     return jsonify({"actions": out, "edit_models": models(EDIT_MODELS), "gen_models": models(GEN_MODELS),
-                    "aspects": list(ASPECTS), "clip_seconds": list(CLIP_SECONDS)})
+                    "aspects": list(ASPECTS), "clip_seconds": list(CLIP_SECONDS), "voice_max": VOICE_MAX,
+                    "groups": [g for g, _ in GROUPS], "styles": [[k, v[0]] for k, v in STYLES.items()]})
 
 
 def new_job(fields, files=()):
@@ -616,6 +695,21 @@ def new_job(fields, files=()):
         write_job(job)
     _queue.put(jid)
     return job
+
+
+def voice(data):
+    """The recording as WAV, cut to VOICE_MAX seconds to the sample, and its
+    length. The phone records WebM/Opus or MP4/AAC; ffmpeg reads both."""
+    r = subprocess.run(["ffmpeg", "-v", "error", "-i", "pipe:0", "-ac", "1", "-ar", "48000", "-f", "s16le", "pipe:1"],
+                       input=data, capture_output=True, timeout=120)
+    pcm = r.stdout[:VOICE_MAX * 48000 * 2]
+    if r.returncode != 0 or len(pcm) < 48000:                     # under half a second
+        raise Refused("die Aufnahme lässt sich nicht lesen" if r.returncode or not pcm else "die Aufnahme ist zu kurz")
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(48000)
+        w.writeframes(pcm)
+    return buf.getvalue(), len(pcm) / (2 * 48000)
 
 
 def clip_seconds(value):
@@ -681,9 +775,14 @@ def create_job():
             if model not in EDIT_MODELS:
                 raise Refused("unbekanntes Modell")
             label = EDIT_MODELS[model]["label"]
+        elif spec.get("keep") and f.get("keep") == "1":
+            model, label = spec["keep"][1 if quality == "best" else 0], "Form behalten"
         else:
             model = spec["model"][1 if quality == "best" else 0]
             label = None
+        style = f.get("style") if f.get("style") in STYLES else "watercolour"
+        if spec.get("styles"):
+            label = STYLES[style][0]
         data, parent = picture("image", "from")
         if data is None:
             raise Refused("kein Bild")
@@ -703,6 +802,13 @@ def create_job():
             if "mask" not in request.files:
                 raise Refused("bitte erst die Stelle markieren")
             files.append(("mask.png", fit_mask(request.files["mask"].read(), size)))
+        seconds = clip_seconds(f.get("seconds")) if spec.get("video") and not spec.get("audio") else None
+        if spec.get("audio"):
+            if "audio" not in request.files:
+                raise Refused("bitte erst etwas aufnehmen oder eine Audiodatei wählen")
+            wav, length = voice(request.files["audio"].read())
+            files.append(("voice.wav", wav))
+            seconds = max(1, math.ceil(length - 1e-6))
         sides = f.get("sides") if f.get("sides") in SIDES else "wide"
         job = new_job({"action": action, "label": spec["label"], "text": text, "quality": quality,
                        "model": resolve(model, uncensored), "model_label": label,
@@ -710,7 +816,8 @@ def create_job():
                        "parent": parent, "parent2": parent2, "two": data2 is not None,
                        "sides": sides if spec.get("sides") else None,
                        "input_size": list(size), "png": bool(spec.get("png")),
-                       **({"video": True, "seconds": clip_seconds(f.get("seconds"))} if spec.get("video") else {})},
+                       "style": style if spec.get("styles") else None,
+                       **({"video": True, "seconds": seconds} if spec.get("video") else {})},
                       files)
         return jsonify([public(job)])
     except Refused as e:

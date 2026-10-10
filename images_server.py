@@ -17,7 +17,8 @@
     POST /v1/video/clips          multipart or JSON: "prompt", "image" (or two in image[]: first
                                   and last), "model", "seconds" (1-10), "size", "quality":
                                   fast|full, "seed": an MP4 with sound (LTX-2.5, api/video/);
-                                  without an image from the prompt alone. It stays in
+                                  without an image from the prompt alone; with "audio" (up
+                                  to 10 s) the picture speaks or sings it (ltx-25-talking). It stays in
                                   ComfyUI's output/llmctl-api/: there is no temp node for video
     POST /v1/images/check         image (+ prompt, max_area): the artifacts a vision model sees,
                                   with boxes to repaint and a prompt for each (needs --vision)
@@ -47,6 +48,7 @@ import subprocess
 import threading
 import time
 import uuid
+import wave
 from pathlib import Path
 
 import requests
@@ -436,8 +438,8 @@ def boxes_mask(boxes, size, margin=None):
     return buf.getvalue()
 
 
-def upload(data):
-    name = hashlib.sha256(data).hexdigest()[:24] + ".png"
+def upload(data, suffix=".png"):
+    name = hashlib.sha256(data).hexdigest()[:24] + suffix
     r = requests.post(f"{ARGS.comfy}/upload/image",
                       files={"image": (name, data)},
                       data={"subfolder": "llmctl-api", "type": "input", "overwrite": "true"},
@@ -1079,10 +1081,12 @@ def music():
 # ── video clips ──────────────────────────────────────────────
 
 # The clip workflows (api/video/) this API serves: a picture comes to life, or
-# a prompt alone; or the clip between a first and a last picture. The chains and
-# Talking are `llmctl musicvideo`'s.
+# a prompt alone; or the clip between a first and a last picture; or a picture
+# that speaks or sings along to a voice, as long as the voice. The chains are
+# `llmctl musicvideo`'s.
 CLIP_WORKFLOWS = {"ltx-25-video": "LTX-2.5 Video (int8, distilled)",
-                  "ltx-25-first-last-frame": "LTX-2.5 First-Last Frame (int8, distilled)"}
+                  "ltx-25-first-last-frame": "LTX-2.5 First-Last Frame (int8, distilled)",
+                  "ltx-25-talking": "LTX-2.5 Talking (int8, distilled)"}
 CLIP_SECONDS_MIN, CLIP_SECONDS_MAX, CLIP_SECONDS_DEFAULT = 1, 10, 5
 # The templates' 1280×704: ~0.9 MP, in steps of 64 — the first stage samples at
 # half the size, and LTX's VAE wants multiples of 32 there.
@@ -1140,15 +1144,40 @@ def first_stage(graph):
     return True
 
 
-def set_clip(graph, name, prompt, images, seconds, size, fast, seed):
+def voice_wav(data):
+    """The voice as WAV, as LoadAudio reads it whatever the phone recorded
+    (WebM/Opus, MP4/AAC), and its length in seconds."""
+    r = subprocess.run(["ffmpeg", "-v", "error", "-i", "pipe:0", "-ac", "1", "-ar", "48000", "-f", "s16le", "pipe:1"],
+                       input=data, capture_output=True, timeout=120)
+    if r.returncode != 0 or not r.stdout:
+        raise Refused("that is no audio ffmpeg can read")
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(48000)
+        w.writeframes(r.stdout)
+    return buf.getvalue(), len(r.stdout) / (2 * 48000)
+
+
+def set_clip(graph, name, prompt, images, seconds, size, fast, seed, audio=None):
     """The request into a clip workflow; returns the clip's (width, height)."""
     for key in [k for k, n in graph.items() if n["class_type"] in UI_ONLY]:
         del graph[key]
+    talks = any(n["class_type"] == "LoadAudio" for n in graph.values())
+    if talks != (audio is not None):
+        raise Refused("the talking clip takes an audio file — and only it does")
+    if talks:
+        if not images:
+            raise Refused("the talking clip takes a picture of who speaks")
+        wav, length = voice_wav(audio)
+        if not 0.3 <= length <= CLIP_SECONDS_MAX:
+            raise Refused(f"the voice is {length:.1f} s; it may be up to {CLIP_SECONDS_MAX} s")
+        clip_node(graph, "LoadAudio", "Voice or song")["inputs"]["audio"] = upload(wav, ".wav")
+        seconds = None
     try:
-        seconds = CLIP_SECONDS_DEFAULT if seconds in (None, "") else int(seconds)
+        seconds = None if talks else CLIP_SECONDS_DEFAULT if seconds in (None, "") else int(seconds)
     except (TypeError, ValueError):
         raise Refused(f"seconds is a whole number, not '{seconds}'") from None
-    if not CLIP_SECONDS_MIN <= seconds <= CLIP_SECONDS_MAX:
+    if not talks and not CLIP_SECONDS_MIN <= seconds <= CLIP_SECONDS_MAX:
         raise Refused(f"seconds is {CLIP_SECONDS_MIN} to {CLIP_SECONDS_MAX}")
     slots = image_nodes(graph)
     if name == "ltx-25-first-last-frame" and len(images) != 2:
@@ -1167,7 +1196,8 @@ def set_clip(graph, name, prompt, images, seconds, size, fast, seed):
         Image.new("RGB", (64, 64)).save(buf, "PNG")
         graph[slots[0]]["inputs"]["image"] = upload(buf.getvalue())
     clip_node(graph, "PrimitiveStringMultiline", "Prompt")["inputs"]["value"] = prompt
-    clip_node(graph, "PrimitiveInt", "Duration")["inputs"]["value"] = seconds
+    if not talks:                                 # a voice is as long as it is
+        clip_node(graph, "PrimitiveInt", "Duration")["inputs"]["value"] = seconds
     w, h = clip_size(size, images[0] if images else None)
     out = (w, h)
     if fast and first_stage(graph):
@@ -1191,18 +1221,21 @@ def clips():
             images = [x.read() for key in ("image", "image[]") for x in request.files.getlist(key)]
             prompt, model, size, seconds = f.get("prompt", ""), f.get("model"), f.get("size"), f.get("seconds")
             quality, seed = f.get("quality"), f.get("seed")
+            audio = request.files["audio"].read() if "audio" in request.files else None
         else:
             j = request.get_json(silent=True) or {}
             raw = j.get("images") or j.get("image") or []
             images = [data_url(x) for x in (raw if isinstance(raw, list) else [raw])]
             prompt, model, size, seconds = j.get("prompt", ""), j.get("model"), j.get("size"), j.get("seconds")
             quality, seed = j.get("quality"), j.get("seed")
+            audio = data_url(j["audio"]) if j.get("audio") else None
         if not isinstance(prompt, str) or not prompt.strip():
             raise Refused("prompt is required: what happens in the clip")
         if quality not in (None, "", "fast", "full"):
             raise Refused("quality is fast or full")
         known = clip_workflows()
-        name = model or ("ltx-25-first-last-frame" if len(images) == 2 else "ltx-25-video")
+        name = model or ("ltx-25-talking" if audio is not None else
+                         "ltx-25-first-last-frame" if len(images) == 2 else "ltx-25-video")
         if name not in known:
             raise Refused(f"no video model '{name}' — there are: {', '.join(known) or 'none'}")
         graph = json.loads(known[name].read_text())
@@ -1212,7 +1245,7 @@ def clips():
                           f"— llmctl download comfy \"{known[name].stem}\"")
         seed = random.randrange(2**48) if seed in (None, "") else int(seed)
         t0 = time.time()
-        w, h = set_clip(graph, name, prompt.strip(), images, seconds, size, quality == "fast", seed)
+        w, h = set_clip(graph, name, prompt.strip(), images, seconds, size, quality == "fast", seed, audio)
         made = [v for out in execute(graph).values() for v in out.get("images", []) + out.get("videos", [])
                 if str(v.get("filename", "")).endswith((".mp4", ".webm", ".mkv"))]
         if not made:
@@ -1220,7 +1253,7 @@ def clips():
         q = {"filename": made[0]["filename"], "subfolder": made[0].get("subfolder", ""), "type": made[0].get("type", "output")}
         v = requests.get(f"{ARGS.comfy}/view", params=q, timeout=300)
         v.raise_for_status()
-        app.logger.info("clip %s: %dx%d, %s s in %.1f s, seed %d", name, w, h, seconds or CLIP_SECONDS_DEFAULT,
+        app.logger.info("clip %s: %dx%d, %s s in %.1f s, seed %d", name, w, h, seconds or "voice-long",
                         time.time() - t0, seed)
         return Response(v.content, mimetype="video/mp4",
                         headers={"X-Seed": str(seed), "X-Model": name, "X-Size": f"{w}x{h}"})

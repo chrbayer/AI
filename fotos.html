@@ -84,6 +84,15 @@ main { padding: 0 16px; max-width: 640px; margin: 0 auto; display: flex; flex-di
        font-size: 14px; color: var(--muted); gap: 8px; }
 .link { background: none; border: none; color: var(--accent); padding: 8px 0; font-weight: 550; }
 .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.group { font-size: 13px; font-weight: 650; color: var(--muted); margin: 16px 2px 8px; }
+.group:first-child { margin-top: 0; }
+.voice { display: flex; flex-direction: column; gap: 10px; }
+.voice .buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.voice .btn.rec { color: var(--bad); font-weight: 650; }
+.voice .btn.rec.on { background: var(--bad); border-color: var(--bad); color: #fff; }
+.voice audio { width: 100%; }
+.voice label.btn { display: flex; align-items: center; justify-content: center; }
+.voice input { display: none; }
 .action, .model { text-align: left; border: 1.5px solid var(--line); background: var(--panel); border-radius: 12px;
                   padding: 11px 12px; display: flex; flex-direction: column; gap: 2px; }
 .action { min-height: 72px; }
@@ -211,7 +220,7 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
 
   <section class="card" id="editAction">
     <h2>Was soll passieren?</h2>
-    <div class="actions" id="actions"></div>
+    <div id="actions"></div>
     <div class="options">
       <div class="seg small" id="quality">
         <button type="button" data-q="fast" aria-pressed="true">Schnell</button>
@@ -229,6 +238,22 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
           <div class="row"><span id="source2Info"></span><button class="link" id="source2Clear" type="button">Entfernen</button></div>
         </div>
       </div>
+      <div class="field" id="keepWrap"><label>Wie?</label>
+        <div class="seg small" id="keep">
+          <button type="button" data-v="0" aria-pressed="true">Neu malen</button>
+          <button type="button" data-v="1" aria-pressed="false">Form behalten</button>
+        </div>
+        <p class="note" style="margin-top:6px">Form behalten: Schnitt, Falten und Kanten bleiben, z. B. derselbe Mantel in rotem Leder. Dafür das Ding ganz markieren.</p></div>
+      <div class="field" id="stylesWrap"><label>Stil</label><div class="chips" id="styles"></div></div>
+      <div class="field" id="audioWrap"><label>Stimme (bis <span id="voiceMax">10</span> s) – das Video ist so lang wie die Aufnahme</label>
+        <div class="voice">
+          <div class="buttons">
+            <button class="btn rec" id="recBtn" type="button">● Aufnehmen</button>
+            <label class="btn"><input type="file" accept="audio/*" id="audioFile">Audiodatei</label>
+          </div>
+          <audio id="voicePlayer" controls class="hidden"></audio>
+          <p class="note" id="voiceInfo"></p>
+        </div></div>
       <div class="field" id="secondsWrap"><label>Länge</label><div class="chips" id="seconds"></div></div>
       <div class="field" id="sidesWrap"><label>Wo soll mehr Bild hin?</label>
         <div class="chips" id="sides">
@@ -332,7 +357,7 @@ const S = {
   comfy: "down", message: "", mode: "edit", unc: false,
   actions: [], editModels: [], genModels: [], aspects: [],
   action: null, quality: "fast", editModel: "qwen-image-21-turbo", sides: "wide",
-  genModel: "z-image-turbo", aspect: "1:1", count: 1, clipSeconds: [], seconds: 5, genSeconds: 5, genQuality: "fast",
+  genModel: "z-image-turbo", aspect: "1:1", count: 1, clipSeconds: [], seconds: 5, style: "watercolour", keep: "0", voice: null, voiceMax: 10, groups: [], styles: [], genSeconds: 5, genQuality: "fast",
   source: null, source2: null,   // {blob, url, w, h} | {from: jobId, url, w, h}
   mask: null,                    // {blob, preview} — transparent where to redraw
   jobs: [], viewing: null, pollTimer: null,
@@ -417,7 +442,21 @@ async function loadActions() {
   S.clipSeconds = r.clip_seconds || [];
   secondsChips("seconds", (n) => { S.seconds = n; renderEdit(); });
   secondsChips("genSeconds", (n) => { S.genSeconds = n; renderGen(); });
+  S.groups = r.groups || []; S.styles = r.styles || []; S.voiceMax = r.voice_max || 10;
+  $("voiceMax").textContent = S.voiceMax;
   const box = $("actions"); box.innerHTML = "";
+  const grids = {};
+  for (const g of S.groups) {
+    const h = document.createElement("div"); h.className = "group"; h.textContent = g;
+    const grid = document.createElement("div"); grid.className = "actions";
+    box.append(h, grid); grids[g] = grid;
+  }
+  const st = $("styles"); st.innerHTML = "";
+  for (const [id, label] of S.styles) {
+    const b = document.createElement("button"); b.type = "button"; b.dataset.v = id; b.textContent = label;
+    b.onclick = () => { S.style = id; store("style", id); renderEdit(); };
+    st.appendChild(b);
+  }
   for (const a of S.actions) {
     const b = document.createElement("button");
     b.type = "button"; b.className = "action"; b.dataset.id = a.id;
@@ -426,7 +465,7 @@ async function loadActions() {
     b.querySelector("span").textContent = a.available === false ? "Modell fehlt in ComfyUI" : a.hint;
     b.disabled = a.available === false;
     b.onclick = () => chooseAction(a.id);
-    box.appendChild(b);
+    (grids[a.group] || box).appendChild(b);
   }
   modelCards("editModels", S.editModels, (m) => { S.editModel = m.id; store("editModel", m.id); renderEdit(); });
   modelCards("genModels", S.genModels, (m) => { S.genModel = m.id; store("genModel", m.id); renderGen(); });
@@ -514,7 +553,10 @@ function chooseAction(id, quiet) {
 function renderEdit() {
   const a = S.actions.find((x) => x.id === S.action);
   if (!a) { renderGo(); return; }
-  press("actions", "id", a.id);
+  for (const b of $("actions").querySelectorAll(".action")) b.setAttribute("aria-pressed", String(b.dataset.id === a.id));
+  show("keepWrap", a.keep && a.keep_available !== false); press("keep", "v", S.keep);
+  show("stylesWrap", a.styles); press("styles", "v", S.style);
+  show("audioWrap", a.audio);
   show("quality", a.qualities);
   if (a.best_available === false && S.quality === "best") S.quality = "fast";
   press("quality", "q", S.quality);
@@ -527,7 +569,7 @@ function renderEdit() {
   const m = S.editModels.find((x) => x.id === S.editModel);
   show("secondWrap", a.second && (a.video ? a.second_available !== false : !m || m.images > 1));
   $("secondLabel").textContent = a.second_label || "Zweites Foto (optional) – im Text „Bild 2“";
-  show("secondsWrap", a.video); press("seconds", "v", S.seconds);
+  show("secondsWrap", a.video && !a.audio); press("seconds", "v", S.seconds);
   show("pick2", !S.source2); show("source2", !!S.source2);
   show("sidesWrap", a.sides); press("sides", "v", S.sides);
   show("maskWrap", a.mask);
@@ -539,7 +581,8 @@ function renderEdit() {
   $("textLabel").textContent = a.text_label || "";
   $("text").placeholder = a.text_placeholder || "";
   const secs = typical({ action: a.id, model_label: a.models && m ? m.label : null, quality: S.quality,
-                         seconds: S.seconds, two: a.video && !!S.source2 });
+                         seconds: a.audio ? (S.voice ? Math.max(1, Math.ceil(S.voice.seconds)) : 5) : S.seconds,
+                         two: a.video && !a.audio && !!S.source2 });
   $("estimate").textContent = "Dauert " + duration(secs)
     + " (beim ersten Mal länger, weil das Modell lädt). Du kannst den Bildschirm sperren – das Ergebnis wartet im Verlauf.";
   renderGo();
@@ -622,6 +665,52 @@ function setSource2(src) {
   S.source2 = src;
   if (src) { $("source2Img").src = src.url; $("source2Info").textContent = "Bild 2" + (src.w ? " · " + src.w + " × " + src.h : ""); }
   clearInputs(); renderEdit();
+}
+
+// ── the voice ────────────────────────────────────────────
+const R = { rec: null, chunks: [], timer: null, started: 0 };
+
+async function setVoice(blob, name) {
+  if (S.voice) URL.revokeObjectURL(S.voice.url);
+  const url = URL.createObjectURL(blob);
+  // A recording's duration is often unknown (Infinity) to the browser: then the stopwatch's.
+  const measured = await new Promise((ok) => {
+    const a = new Audio(); a.preload = "metadata";
+    a.onloadedmetadata = () => ok(isFinite(a.duration) ? a.duration : 0);
+    a.onerror = () => ok(0); a.src = url;
+  });
+  const seconds = measured || (R.stopped - R.started) / 1000 || 0;
+  S.voice = { blob, name, url, seconds: Math.min(seconds, S.voiceMax) };
+  $("voicePlayer").src = url; show("voicePlayer", true);
+  $("voiceInfo").textContent = (seconds > S.voiceMax ? "Wird nach " + S.voiceMax + " s abgeschnitten. " : "")
+    + (seconds ? "Länge: " + S.voice.seconds.toFixed(1) + " s" : "");
+  renderEdit();
+}
+
+async function toggleRecording() {
+  if (R.rec) { R.rec.stop(); return; }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (e) { $("formErr").textContent = "Kein Zugriff aufs Mikrofon – im Browser erlauben oder eine Audiodatei wählen."; return; }
+  const type = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm"].find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || "";
+  R.rec = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+  R.chunks = [];
+  R.rec.ondataavailable = (e) => { if (e.data.size) R.chunks.push(e.data); };
+  R.rec.onstop = () => {
+    R.stopped = Date.now();
+    stream.getTracks().forEach((t) => t.stop()); clearInterval(R.timer);
+    const blob = new Blob(R.chunks, { type: R.rec.mimeType || "audio/webm" });
+    R.rec = null; $("recBtn").classList.remove("on"); $("recBtn").textContent = "● Neu aufnehmen";
+    setVoice(blob, "stimme." + (blob.type.includes("mp4") ? "m4a" : "webm"));
+  };
+  R.started = Date.now(); R.rec.start();
+  $("recBtn").classList.add("on");
+  const tick = () => {
+    const s = (Date.now() - R.started) / 1000;
+    $("recBtn").textContent = "■ Stopp · " + Math.floor(s) + " / " + S.voiceMax + " s";
+    if (s >= S.voiceMax && R.rec && R.rec.state === "recording") R.rec.stop();
+  };
+  tick(); R.timer = setInterval(tick, 250);
 }
 
 // ── painting the mask ────────────────────────────────────
@@ -737,7 +826,13 @@ async function go() {
     fd.append("action", a.id); fd.append("quality", S.quality); fd.append("text", text);
     if (a.models) fd.append("model", S.editModel);
     if (a.sides) fd.append("sides", S.sides);
-    if (a.video) fd.append("seconds", String(S.seconds));
+    if (a.video && !a.audio) fd.append("seconds", String(S.seconds));
+    if (a.styles) fd.append("style", S.style);
+    if (a.keep) fd.append("keep", S.keep);
+    if (a.audio) {
+      if (!S.voice) { $("formErr").textContent = "Bitte erst etwas aufnehmen oder eine Audiodatei wählen."; return; }
+      fd.append("audio", S.voice.blob, S.voice.name);
+    }
     appendPicture(fd, S.source, "image", "from");
     const m = S.editModels.find((x) => x.id === S.editModel);
     if (a.second && S.source2 && (a.video || !m || m.images > 1)) appendPicture(fd, S.source2, "image2", "from2");
@@ -958,6 +1053,9 @@ $("source2Clear").onclick = () => setSource2(null);
 for (const b of $("mode").children) b.onclick = () => setMode(b.dataset.mode);
 for (const b of $("quality").children) b.onclick = () => { if (!b.disabled) { S.quality = b.dataset.q; store("quality", S.quality); renderEdit(); } };
 for (const b of $("sides").children) b.onclick = () => { S.sides = b.dataset.v; renderEdit(); };
+for (const b of $("keep").children) b.onclick = () => { S.keep = b.dataset.v; renderEdit(); };
+$("recBtn").onclick = toggleRecording;
+$("audioFile").onchange = (e) => { const f = e.target.files[0]; if (f) setVoice(f, f.name); e.target.value = ""; };
 for (const b of $("count").children) b.onclick = () => { S.count = Number(b.dataset.n); renderGen(); };
 for (const b of $("genQuality").children) b.onclick = () => { S.genQuality = b.dataset.q; store("genQuality", S.genQuality); renderGen(); };
 $("unc").onchange = (e) => setUnc(e.target.checked);
@@ -986,6 +1084,7 @@ S.editModel = recall("editModel") || S.editModel;
 S.genModel = recall("genModel") || S.genModel;
 S.aspect = recall("aspect") || S.aspect;
 S.genQuality = recall("genQuality") === "best" ? "best" : "fast";
+S.style = recall("style") || S.style;
 $("unc").checked = S.unc = recall("unc") === "1";
 setMode(recall("mode") === "generate" ? "generate" : "edit");
 loadActions();

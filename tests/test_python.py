@@ -327,9 +327,9 @@ class Fotos(unittest.TestCase):
         """A job made through the endpoint, as the page makes it; its id(s)."""
         client = fotos.app.test_client()
         data = {k: v for k, v in form.items() if not k.startswith("_")}
-        for key in ("image", "image2", "mask"):
+        for key in ("image", "image2", "mask", "audio"):
             if key in data:
-                data[key] = (io.BytesIO(data[key]), key + (".png" if key == "mask" else ".jpg"))
+                data[key] = (io.BytesIO(data[key]), key + {"mask": ".png", "audio": ".wav"}.get(key, ".jpg"))
         r = client.post("/fotos/api/jobs", data=data, content_type="multipart/form-data")
         while not fotos._queue.empty():
             fotos._queue.get_nowait()
@@ -444,6 +444,49 @@ class Fotos(unittest.TestCase):
             self.assertEqual(r.status_code, 200)
             thread.assert_called_once()
         fotos._comfy.update(state=None)
+
+    def test_every_action_has_its_group(self):
+        ids = [i for _, group in fotos.GROUPS for i in group]
+        self.assertEqual(sorted(ids), sorted(fotos.ACTIONS))
+
+    def test_pose_and_restyle_take_the_users_words(self):
+        _, form, _ = self.sent(action="pose", text="a dancer on a stage")
+        self.assertEqual((form["model"], form["prompt"]), ("z-image-turbo-pose-control", "a dancer on a stage"))
+        self.assertEqual(self.sent(action="restyle", text="x", quality="best")[1]["model"], "qwen-image-21-depth-control")
+        self.assertEqual(self.post(action="pose", image=self.jpeg(64, 64)).status_code, 400)
+
+    def test_art_makes_the_prompt_from_the_style(self):
+        _, form, _ = self.sent(action="art", style="pencil", text="two children on a beach")
+        self.assertEqual(form["model"], "qwen-image-21-canny-control-turbo")
+        self.assertEqual(form["prompt"], "A detailed pencil drawing, graphite on white paper, fine hatching"
+                                         " of two children on a beach")
+        self.assertTrue(self.sent(action="art", style="nonsense")[1]["prompt"].startswith("A delicate watercolour"))
+
+    def test_paint_can_keep_the_shape(self):
+        from PIL import Image
+        buf = io.BytesIO()
+        Image.new("RGBA", (64, 64), (0, 0, 0, 0)).save(buf, "PNG")
+        _, form, files = self.sent(action="paint", text="red leather", keep="1", mask=buf.getvalue())
+        self.assertEqual(form["model"], "qwen-image-21-canny-inpaint-turbo")
+        self.assertIn("mask", files)
+
+    def test_cutout_asks_for_layers_and_keeps_transparency(self):
+        _, form, _ = self.sent(action="cutout", text="the guitar")
+        self.assertEqual((form["model"], form["layers"], form["prompt"]), ("qwen-image-layered-control", "2", "the guitar"))
+
+    @unittest.skipIf(shutil.which("ffmpeg") is None, "needs ffmpeg")
+    def test_talk_sends_the_voice_cut_to_its_longest(self):
+        import wave
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as w:
+            w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000)
+            w.writeframes(b"\0\0" * 16000 * 12)
+        path, form, files, job = self.clip(action="talk", audio=buf.getvalue())
+        self.assertEqual((path, form["model"]), ("http://api/v1/video/clips", "ltx-25-talking"))
+        self.assertEqual(files, ["image[]", "audio"])
+        self.assertEqual(job["seconds"], 10)
+        self.assertTrue(form["prompt"].startswith("The person speaks"))
+        self.assertEqual(self.post(action="talk", image=self.jpeg(64, 64)).status_code, 400)
 
     def clip(self, **form):
         """A video job run against a mocked image API: (path, form, files, job)."""
@@ -1232,7 +1275,7 @@ class ImageClips(unittest.TestCase):
 
     def setUp(self):
         self.upload = images.upload
-        images.upload = lambda data: "llmctl-api/x.png"
+        images.upload = lambda data, suffix=".png": "llmctl-api/x" + suffix
 
     def tearDown(self):
         images.upload = self.upload
@@ -1299,6 +1342,30 @@ class ImageClips(unittest.TestCase):
         for bad in (0, 11, "x"):
             with self.subTest(bad), self.assertRaises(images.Refused):
                 images.set_clip(self.graph(self.VIDEO), "ltx-25-video", "p", [self.png(64, 36)], bad, None, False, 1)
+
+    @staticmethod
+    def wav(seconds):
+        import wave
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as w:
+            w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000)
+            w.writeframes(b"\0\0" * int(16000 * seconds))
+        return buf.getvalue()
+
+    @unittest.skipIf(shutil.which("ffmpeg") is None, "needs ffmpeg")
+    def test_a_picture_speaks_as_long_as_the_voice(self):
+        g = self.graph("LTX-2.5 Talking (int8, distilled).json")
+        size = images.set_clip(g, "ltx-25-talking", "she speaks", [self.png(720, 1280)], None, None, True, 1,
+                               self.wav(3.2))
+        self.assertEqual(size, (352, 640))
+        self.assertEqual(self.node(g, "LoadAudio", "Voice or song")["inputs"]["audio"], "llmctl-api/x.wav")
+        for audio in (None, self.wav(12)):
+            with self.subTest(audio=audio and len(audio)), self.assertRaises(images.Refused):
+                images.set_clip(self.graph("LTX-2.5 Talking (int8, distilled).json"), "ltx-25-talking", "p",
+                                [self.png(64, 64)], None, None, True, 1, audio)
+        with self.assertRaises(images.Refused):                  # a voice for a clip that has none
+            images.set_clip(self.graph(self.VIDEO), "ltx-25-video", "p", [self.png(64, 64)], 5, None, True, 1,
+                            self.wav(2))
 
     def test_the_endpoint_wants_a_prompt(self):
         images.ARGS.api = str(ROOT / "comfyui" / "api")
