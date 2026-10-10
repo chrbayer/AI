@@ -72,7 +72,6 @@ main { padding: 0 16px; max-width: 640px; margin: 0 auto; display: flex; flex-di
 .pick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .pick label { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
               min-height: 100px; border: 1.5px dashed var(--line); border-radius: 12px; font-weight: 550; text-align: center; }
-.pick.small { grid-template-columns: 1fr; }
 .pick.small label { min-height: 56px; flex-direction: row; font-size: 15px; }
 .pick label svg { width: 28px; height: 28px; }
 .pick.small label svg { width: 22px; height: 22px; }
@@ -214,6 +213,14 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
 .tpl span { display: block; font-size: 13px; color: var(--muted); line-height: 1.3; margin-top: 2px;
             display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .tpl em { font-style: normal; font-size: 11px; font-weight: 650; color: var(--accent); }
+.labelrow .links { display: flex; gap: 16px; }
+.tplrow { position: relative; }
+.tplrow .tpl { padding-right: 52px; }
+.tplrow .del { position: absolute; top: 0; right: 0; height: 44px; min-width: 44px; padding: 0 12px; border: none;
+               background: none; color: var(--muted); font-size: 20px; border-radius: 0 12px 0 12px; }
+.tplrow .del.sure { background: var(--bad); color: #fff; font-size: 13px; font-weight: 650; }
+#saveTitle { width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+             border-radius: 11px; padding: 11px 12px; }
 </style>
 </head>
 <body>
@@ -263,7 +270,9 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
         <label id="secondLabel">Zweites Foto (optional) – im Text „Bild 2“</label>
         <div class="pick small" id="pick2">
           <label><input type="file" accept="image/*" data-slot="2">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>Foto hinzufügen</label>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg>Galerie</label>
+          <label><input type="file" accept="image/*" capture="environment" data-slot="2">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Aufnehmen</label>
         </div>
         <div class="source small hidden" id="source2">
           <img id="source2Img" alt="Zweites Bild">
@@ -303,7 +312,8 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
       </div>
       <div class="field" id="textWrap">
         <div class="labelrow"><label for="text" id="textLabel"></label>
-          <button class="link" type="button" data-tpl="edit">Vorlagen</button></div>
+          <span class="links"><button class="link hidden" type="button" data-save="edit" id="saveEdit">Speichern</button>
+          <button class="link" type="button" data-tpl="edit">Vorlagen</button></span></div>
         <textarea id="text" rows="2"></textarea>
       </div>
       <p class="note" id="estimate"></p>
@@ -315,7 +325,8 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
     <h2>Bild erzeugen</h2>
     <div class="options" style="margin-top:0">
       <div class="field"><div class="labelrow"><label for="genText">Was soll auf dem Bild sein?</label>
-          <button class="link" type="button" data-tpl="generate">Vorlagen</button></div>
+          <span class="links"><button class="link hidden" type="button" data-save="generate" id="saveGen">Speichern</button>
+          <button class="link" type="button" data-tpl="generate">Vorlagen</button></span></div>
         <textarea id="genText" rows="3" placeholder="z. B. Ein roter Fuchs im Schnee bei Morgenlicht"></textarea></div>
       <div class="field"><label>Modell</label><div class="models" id="genModels"></div></div>
       <div class="field"><label>Format</label><div class="chips" id="aspects"></div></div>
@@ -396,6 +407,16 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
     </div>
   </div>
   <div class="tpllist" id="tplList"></div>
+</div>
+
+<div class="sheet-bg" id="saveBg"></div>
+<div class="sheet" id="saveSheet" role="dialog" aria-modal="true">
+  <h3>Als Vorlage speichern</h3>
+  <p id="saveInfo"></p>
+  <input id="saveTitle" maxlength="60" placeholder="Titel" autocomplete="off" enterkeyhint="done">
+  <p class="err" id="saveErr" style="margin:8px 0 0"></p>
+  <button class="btn primary" id="saveOk" type="button">Speichern</button>
+  <button class="btn" id="saveCancel" type="button">Abbrechen</button>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -817,7 +838,12 @@ function renderTemplates() {
       if (p.action !== here) { const e = document.createElement("em"); e.textContent = " · " + actionLabel(p.action); b.querySelector("b").appendChild(e); }
       b.querySelector("span").textContent = p.text;
       b.onclick = () => useTemplate(p);
-      box.appendChild(b);
+      if (!p.own) { box.appendChild(b); continue; }
+      const row = document.createElement("div"); row.className = "tplrow"; row.appendChild(b);
+      const del = document.createElement("button"); del.type = "button"; del.className = "del";
+      del.textContent = "×"; del.setAttribute("aria-label", "Vorlage löschen");
+      del.onclick = () => deleteTemplate(p, del);
+      row.appendChild(del); box.appendChild(row);
     }
   }
 }
@@ -840,12 +866,72 @@ function useTemplate(p) {
   if (o.keep) S.keep = o.keep;
   if (p.action !== "generate") renderEdit();
   field.value = p.text;
+  updateSave();
   const at = p.text.indexOf("[");
   field.focus();
   if (at >= 0) field.setSelectionRange(at, p.text.indexOf("]", at) + 1);
   else field.setSelectionRange(p.text.length, p.text.length);
   field.scrollIntoView({ block: "center", behavior: "smooth" });
   if (at >= 0) toast("Markierten Platzhalter überschreiben");
+}
+
+// The first tap on × asks, the second deletes — no browser dialog.
+async function deleteTemplate(p, del) {
+  if (!del.classList.contains("sure")) {
+    del.classList.add("sure"); del.textContent = "Löschen?";
+    setTimeout(() => { del.classList.remove("sure"); del.textContent = "×"; }, 3000);
+    return;
+  }
+  try {
+    await api("/prompts/" + encodeURIComponent(p.id), { method: "DELETE" });
+    T.data = await api("/prompts");
+    if (!T.data.prompts.some((x) => x.action === (T.from === "generate" ? "generate" : S.action))) T.scope = "all";
+    renderTemplates(); toast("Vorlage gelöscht");
+  } catch (e) { toast(e.message); }
+}
+
+// What a template of the current text keeps besides it: the settings the action has.
+function saveOptions(from) {
+  if (from === "generate") return {};
+  const a = S.actions.find((x) => x.id === S.action) || {}, o = {};
+  if (a.sides) o.sides = S.sides;
+  if (a.styles) o.style = S.style;
+  if (a.keep) o.keep = S.keep;
+  return o;
+}
+
+function updateSave() {
+  const a = S.actions.find((x) => x.id === S.action);
+  show("saveEdit", !!$("text").value.trim() && !!a && a.text !== null);
+  show("saveGen", !!$("genText").value.trim());
+}
+
+const V = { from: "edit" };
+function openSave(from) {
+  V.from = from;
+  const text = $(from === "generate" ? "genText" : "text").value.trim();
+  const o = saveOptions(from), extra = [];
+  if (o.sides) extra.push($("sides").querySelector('[aria-pressed="true"]')?.textContent || o.sides);
+  if (o.style) extra.push(($("styles").querySelector('[aria-pressed="true"]')?.textContent) || o.style);
+  if (o.keep === "1") extra.push("Form behalten");
+  $("saveInfo").textContent = "Für " + actionLabel(from === "generate" ? "generate" : S.action)
+    + (extra.length ? " · " + extra.join(" · ") : "") + ". Zu finden unter „Eigene“ in den Vorlagen.";
+  $("saveTitle").value = text.replace(/[\[\]]/g, "").split(/\s+/).slice(0, 4).join(" ").replace(/[.,:;]+$/, "").slice(0, 60);
+  $("saveErr").textContent = "";
+  $("saveSheet").classList.add("on"); $("saveBg").classList.add("on");
+  $("saveTitle").focus(); $("saveTitle").select();
+}
+function closeSave() { $("saveSheet").classList.remove("on"); $("saveBg").classList.remove("on"); }
+
+async function saveTemplate() {
+  const from = V.from;
+  const body = { title: $("saveTitle").value.trim(), text: $(from === "generate" ? "genText" : "text").value.trim(),
+                 action: from === "generate" ? "generate" : S.action, options: saveOptions(from) };
+  if (!body.title) { $("saveErr").textContent = "Bitte einen Titel eingeben."; return; }
+  try {
+    await api("/prompts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  } catch (e) { $("saveErr").textContent = e.message; return; }
+  T.data = null; closeSave(); toast("Als Vorlage gespeichert");
 }
 
 // ── painting the mask ────────────────────────────────────
@@ -919,6 +1005,7 @@ async function finishPainter() {
 
 // ── go ───────────────────────────────────────────────────
 function renderGo() {
+  updateSave();
   const b = $("goBtn");
   if (S.comfy !== "up") {
     const busy = S.comfy === "starting" || S.comfy === "stopping";
@@ -1269,6 +1356,10 @@ $("recBtn").onclick = toggleRecording;
 for (const b of document.querySelectorAll("[data-tpl]")) b.onclick = () => openTemplates(b.dataset.tpl);
 $("tplClose").onclick = closeTemplates; $("tplBg").onclick = closeTemplates;
 $("tplSearch").oninput = renderTemplates;
+for (const b of document.querySelectorAll("[data-save]")) b.onclick = () => openSave(b.dataset.save);
+$("saveOk").onclick = saveTemplate; $("saveCancel").onclick = closeSave; $("saveBg").onclick = closeSave;
+$("saveTitle").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); saveTemplate(); } };
+$("text").addEventListener("input", updateSave); $("genText").addEventListener("input", updateSave);
 for (const b of $("tplScope").children) b.onclick = () => { if (!b.disabled) { T.scope = b.dataset.v; renderTemplates(); } };
 $("audioFile").onchange = (e) => { const f = e.target.files[0]; if (f) setVoice(f, f.name); e.target.value = ""; };
 for (const b of $("count").children) b.onclick = () => { S.count = Number(b.dataset.n); renderGen(); };

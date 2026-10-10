@@ -2093,7 +2093,7 @@ that fills the picture works best: from a full-length photo the mouth
 moves with the words, but small and soft.
 
 **Vorlagen.** Next to each text field, *Vorlagen* opens a library of
-prompts (`fotos_prompts.json`, ~65): weather and light, seasons, tidying
+prompts (`fotos_prompts.json`, ~70): weather and light, seasons, tidying
 up, people, backgrounds, rooms, new scenes, video, and pictures to make
 (product photo, postcard, birthday card, logo). The search goes through
 title, keywords and text, with umlauts folded ("sonne", "regen" and
@@ -2101,6 +2101,14 @@ title, keywords and text, with umlauts folded ("sonne", "regen" and
 the chosen action. A tap puts the text in and switches to its action;
 a `[placeholder]` is selected to type over — left standing, its words
 count, the brackets are dropped.
+
+Own ones: with text in the field, *Speichern* beside *Vorlagen* keeps it
+under a title, with the action and what it has set (Erweitern's sides, a
+style, *Form behalten*). They are kept on the server
+(`~/.local/share/llmctl/fotos/prompts.json`, up to 200), so the phone and
+the desk see the same, and stand first under *Eigene*; × and a second tap
+deletes one. The second photo (*Bild 2*, *Animieren*'s end frame) can be
+taken with the camera, too.
 
 **Fehler suchen.** A picture made in *Erzeugen* (or a repaired one) has
 *Fehler suchen* in the viewer: the image API's check from `/repair`. The

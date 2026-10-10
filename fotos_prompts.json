@@ -120,6 +120,12 @@
     {"topic": "Hintergrund", "title": "Breiteres Panorama", "action": "expand",
      "text": "Ein weites Panorama der ganzen Landschaft, die sich links und rechts natürlich fortsetzt",
      "tags": ["erweitern", "panorama", "breiter", "landschaft", "zu eng", "ausschnitt"]},
+    {"topic": "Hintergrund", "title": "Fürs Hochformat", "action": "expand", "options": {"sides": "tall"},
+     "text": "Die Szene setzt sich oben und unten natürlich fort: mehr Himmel darüber, mehr Boden darunter",
+     "tags": ["erweitern", "hochformat", "handy", "hintergrund", "story", "wallpaper", "höher", "querformat"]},
+    {"topic": "Hintergrund", "title": "Zu knapp angeschnitten", "action": "expand", "options": {"sides": "all"},
+     "text": "Die ganze Szene mit etwas mehr Umgebung ringsum, nichts abgeschnitten",
+     "tags": ["erweitern", "angeschnitten", "abgeschnitten", "zu eng", "ausschnitt", "rand", "rundherum", "mehr platz"]},
 
     {"topic": "Räume", "title": "Skandinavisch einrichten", "action": "restyle",
      "text": "Derselbe Raum im skandinavischen Stil: helles Eichenholz, weiße Wände, Leinen und Wolle in Naturtönen, Pflanzen, viel Tageslicht",

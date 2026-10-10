@@ -464,6 +464,39 @@ class Fotos(unittest.TestCase):
                 if p["action"] != "generate":
                     self.assertIsNotNone(fotos.ACTIONS[p["action"]]["text"])
 
+    def test_own_templates_are_kept_listed_first_and_deleted(self):
+        client = fotos.app.test_client()
+        r = client.post("/fotos/api/prompts", json={
+            "title": "  Mehr   Himmel bitte ", "action": "expand", "text": "Weiter Himmel",
+            "options": {"sides": "top", "style": "oil", "keep": "1"}})
+        self.assertEqual(r.status_code, 201)
+        own = r.get_json()
+        # only what Erweitern has is kept
+        self.assertEqual((own["title"], own["options"]), ("Mehr Himmel bitte", {"sides": "top"}))
+        client.post("/fotos/api/prompts", json={"title": "Fuchs", "action": "generate", "text": "Ein Fuchs"})
+        data = client.get("/fotos/api/prompts").get_json()
+        self.assertEqual(data["topics"][0], fotos.OWN_TOPIC)
+        self.assertEqual([p["title"] for p in data["prompts"][:2]], ["Fuchs", "Mehr Himmel bitte"])
+        self.assertTrue(all(p["own"] and p["topic"] == fotos.OWN_TOPIC for p in data["prompts"][:2]))
+        self.assertFalse(data["prompts"][2].get("own"))
+        self.assertEqual(client.delete(f"/fotos/api/prompts/{own['id']}").status_code, 200)
+        self.assertEqual(client.delete(f"/fotos/api/prompts/{own['id']}").status_code, 404)
+        self.assertEqual([p["title"] for p in fotos.own_prompts()], ["Fuchs"])
+
+    def test_an_own_template_needs_a_title_and_an_action_with_text(self):
+        from unittest import mock
+        client = fotos.app.test_client()
+        for body in ({"title": "", "action": "edit", "text": "x"},
+                     {"title": "t", "action": "edit", "text": " "},
+                     {"title": "t", "action": "upscale", "text": "x"},
+                     {"title": "t", "action": "nope", "text": "x"},
+                     {"title": "t", "action": "edit", "text": "x" * 2001}):
+            with self.subTest(body=body):
+                self.assertEqual(client.post("/fotos/api/prompts", json=body).status_code, 400)
+        with mock.patch.object(fotos, "OWN_MAX", 1):
+            self.assertEqual(client.post("/fotos/api/prompts", json={"title": "a", "action": "edit", "text": "x"}).status_code, 201)
+            self.assertEqual(client.post("/fotos/api/prompts", json={"title": "b", "action": "edit", "text": "x"}).status_code, 409)
+
     def test_a_placeholder_left_standing_counts_with_its_words(self):
         _, form, _ = self.sent(action="edit", text="Lass [die Person] lächeln.")
         self.assertEqual(form["prompt"], "Lass die Person lächeln.")

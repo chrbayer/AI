@@ -5,7 +5,9 @@
     GET  /fotos/api/status         ComfyUI and the image API: up, down, starting, stopping
     POST /fotos/api/comfy          {"action": "start"|"stop"}: llmctl starts or stops ComfyUI
     GET  /fotos/api/actions        what the page offers, and which of it ComfyUI can do now
-    GET  /fotos/api/prompts        the library of prompts (fotos_prompts.json), searched on the page
+    GET  /fotos/api/prompts        the library of prompts (fotos_prompts.json) and the user's own, searched on the page
+    POST /fotos/api/prompts        {"title", "action", "text", "options"}: keep one of the user's own
+    DELETE /fotos/api/prompts/<id>
     POST /fotos/api/jobs           multipart: image (or from=<job id>), action, quality, text
     GET  /fotos/api/jobs           the jobs, newest first
     GET  /fotos/api/jobs/<id>      one job
@@ -266,6 +268,8 @@ SIDES = {
     "top": {"left": 0, "right": 0, "top": 384, "bottom": 0},
 }
 KEEP_JOBS = 100
+OWN_MAX = 200                                  # the user's own templates
+OWN_TOPIC = "Eigene"
 # What ComfyUI should find free: Qwen-Image 2.1 with its text encoder takes
 # 25-30 GB while it works. Below this the page asks before starting it — beside
 # Flash-Next (~82 GiB) the machine would go into zram or worse.
@@ -275,6 +279,7 @@ _jobs_lock = threading.Lock()
 _queue = queue.Queue()
 _comfy = {"state": None, "message": ""}       # state: starting / stopping while llmctl runs
 _comfy_lock = threading.Lock()
+_own_lock = threading.Lock()
 _last_done = {"at": 0.0, "freed": True}
 
 
@@ -784,15 +789,82 @@ def comfy():
     return jsonify({"comfy": _comfy["state"]})
 
 
+def own_file():
+    return Path(ARGS.data) / "prompts.json"
+
+
+def own_prompts():
+    """The user's own templates, kept beside the jobs so phone and desk see the same."""
+    try:
+        return json.loads(own_file().read_text())
+    except (OSError, ValueError):
+        return []
+
+
+def write_own(items):
+    path = own_file()
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(items, ensure_ascii=False, indent=1))
+    tmp.replace(path)
+
+
 @app.get("/fotos/api/prompts")
 def prompts():
-    """The library of prompts the page searches (fotos_prompts.json)."""
+    """The library of prompts the page searches (fotos_prompts.json), the
+    user's own first under their own topic."""
     try:
         data = json.loads(PROMPTS.read_text())
     except (OSError, ValueError):
         data = {"topics": [], "prompts": []}
     data.pop("_comment", None)
+    own = own_prompts()
+    if own:
+        data["topics"] = [OWN_TOPIC] + data["topics"]
+        data["prompts"] = [dict(p, topic=OWN_TOPIC, own=True, tags=[]) for p in own] + data["prompts"]
     return jsonify(data)
+
+
+@app.post("/fotos/api/prompts")
+def save_prompt():
+    f = request.get_json(silent=True) or {}
+    title = " ".join(str(f.get("title") or "").split())[:60]
+    text = str(f.get("text") or "").strip()
+    action = f.get("action")
+    if not title or not text:
+        return error("Titel und Text fehlen")
+    if len(text) > 2000:
+        return error("Der Text ist zu lang (höchstens 2000 Zeichen)")
+    spec = ACTIONS.get(action)
+    if action != "generate" and (not spec or spec["text"] is None):
+        return error("Für diese Aktion gibt es keine Vorlagen")
+    # only what the action has: Erweitern's sides, a style, Form behalten
+    o, options = f.get("options") or {}, {}
+    if spec and spec.get("sides") and o.get("sides") in SIDES:
+        options["sides"] = o["sides"]
+    if spec and spec.get("styles") and o.get("style") in STYLES:
+        options["style"] = o["style"]
+    if spec and spec.get("keep") and o.get("keep") in ("0", "1"):
+        options["keep"] = o["keep"]
+    with _own_lock:
+        items = own_prompts()
+        if len(items) >= OWN_MAX:
+            return error(f"Schon {OWN_MAX} eigene Vorlagen – bitte erst welche löschen", 409)
+        item = {"id": uuid.uuid4().hex[:8], "title": title, "action": action, "text": text}
+        if options:
+            item["options"] = options
+        write_own([item] + items)
+    return jsonify(item), 201
+
+
+@app.delete("/fotos/api/prompts/<pid>")
+def delete_prompt(pid):
+    with _own_lock:
+        items = own_prompts()
+        rest = [p for p in items if p.get("id") != pid]
+        if len(rest) == len(items):
+            return error("Diese Vorlage gibt es nicht", 404)
+        write_own(rest)
+    return jsonify({"deleted": pid})
 
 
 @app.get("/fotos/api/actions")
