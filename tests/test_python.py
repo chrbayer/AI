@@ -302,8 +302,8 @@ class Fotos(unittest.TestCase):
 
     def test_an_edit_is_held_to_its_pixel_budget(self):
         w, h = fotos.fit(self.jpeg(4000, 3000), "restore")[2]
-        self.assertLessEqual(w * h, 1_600_000)
-        self.assertGreater(w * h, 1_500_000)
+        self.assertLessEqual(w * h, fotos.EDIT_PIXELS)
+        self.assertGreater(w * h, fotos.EDIT_PIXELS * 0.98)
 
     def test_a_small_picture_is_not_enlarged(self):
         self.assertEqual(fotos.fit(self.jpeg(640, 480), "colorize")[2], (640, 480))

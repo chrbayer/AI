@@ -2089,6 +2089,12 @@ as it is. *Schnell* is the first stage alone, as for *Animieren*. A face
 that fills the picture works best: from a full-length photo the mouth
 moves with the words, but small and soft.
 
+**Edits at 1 MP.** Qwen-Image Edit works at the picture's own size, and its
+time grows faster than the pixels: a rainy street made sunny took 151 s at
+1.6 MP, 62 s at 1.0 MP and 33 s at 0.7 MP (Turbo, warm). 1.0 MP was as sharp
+as 1.6; at 0.7 MP it was softer and the framing shifted. Ändern, Entfernen
+and Restaurieren bring the photo to 1 MP first.
+
 "Entfernen" is an instruction edit, not Inpaint: a mask in the shape of a
 person, SAM 3's, had another person painted into it (both Inpaint Crop
 variants); told to remove her, Qwen-Image Edit filled in beach and waves —

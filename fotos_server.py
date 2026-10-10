@@ -43,6 +43,12 @@ app = Flask(__name__)
 ARGS = argparse.Namespace()
 PAGE = Path(__file__).with_name("fotos.html")
 
+# Qwen-Image Edit works at the picture's own size, and its time grows faster
+# than the pixels: a weather change took 151 s at 1.6 MP, 62 s at 1.0 MP and
+# 33 s at 0.7 MP (warm) — 1.0 MP as sharp as 1.6, 0.7 MP softer and its
+# framing shifted. The ControlNet workflows scale to 1 MP themselves.
+EDIT_PIXELS = 1_050_000
+
 # What the page offers. model: (fast, best) — the image API's names; max_side /
 # max_pixels: what the picture is brought down to first (SeedVR2 enlarges by 4,
 # Qwen-Image edits at the picture's own size). text: whether the user writes
@@ -62,7 +68,7 @@ ACTIONS = {
         "prompt": ("Restore this old photograph: remove scratches, dust, stains, creases and noise, "
                    "sharpen it gently. Keep the people, their faces, the composition and the colours "
                    "exactly as they are."),
-        "text": None, "max_pixels": 1_600_000, "seconds": (40, 120),
+        "text": None, "max_pixels": EDIT_PIXELS, "seconds": (40, 120),
     },
     # Thorough: FLUX.2 klein's detailer, which redraws small faces (a group
     # photo) where Qwen-Image's repaints a smear.
@@ -90,7 +96,7 @@ ACTIONS = {
         "prompt": "Entferne {} aus dem Foto. Alles andere bleibt genau so, wie es ist.",
         "text": "fill", "text_label": "Was soll weg?",
         "text_placeholder": "z. B. die Person, den Mülleimer, die Stromleitungen",
-        "max_pixels": 1_600_000, "seconds": (45, 120),
+        "max_pixels": EDIT_PIXELS, "seconds": (45, 120),
     },
     # The model is the user's (EDIT_MODELS), and a second picture may come along.
     "edit": {
@@ -99,7 +105,7 @@ ACTIONS = {
         "prompt": "", "text": "prompt", "text_label": "Was soll sich ändern?",
         "text_placeholder": "z. B. Mach den Himmel abendrot – oder mit 2 Fotos: "
                             "Setze die Person aus Bild 1 in die Szene aus Bild 2",
-        "max_pixels": 1_600_000, "seconds": (45, 150), "models": True, "second": True,
+        "max_pixels": EDIT_PIXELS, "seconds": (45, 150), "models": True, "second": True,
     },
     # Outpaint: the picture is scaled to ~0.8 MP and padded; the prompt describes
     # the whole wider scene (its own, unless the user writes one).
@@ -141,7 +147,7 @@ ACTIONS = {
         "model": ("z-image-turbo-pose-control", "qwen-image-21-pose-control"),
         "prompt": "", "text": "prompt", "text_label": "Wer oder was soll so dastehen, und wo?",
         "text_placeholder": "z. B. eine Tänzerin im roten Kleid auf einer Bühne",
-        "max_pixels": 1_600_000, "seconds": (45, 75),
+        "max_pixels": EDIT_PIXELS, "seconds": (45, 75),
     },
     "restyle": {
         "label": "Neu gestalten", "hint": "Gleicher Raum, anderer Stil",
@@ -149,7 +155,7 @@ ACTIONS = {
         "prompt": "", "text": "prompt", "text_label": "Wie soll es jetzt aussehen?",
         "text_placeholder": "z. B. dasselbe Wohnzimmer als gemütliche Almhütte aus altem Holz, "
                             "Kamin, rote Teppiche – je genauer, desto besser",
-        "max_pixels": 1_600_000, "seconds": (35, 75),
+        "max_pixels": EDIT_PIXELS, "seconds": (35, 75),
     },
     # Canny on Qwen-Image: Z-Image's (strength 0.65) lost the layout without a
     # description — a beach as watercolour came back an empty landscape.
@@ -158,7 +164,7 @@ ACTIONS = {
         "model": ("qwen-image-21-canny-control-turbo", "qwen-image-21-canny-control"),
         "prompt": "", "text": "optional", "text_label": "Was ist zu sehen? (optional, hilft dem Modell)",
         "text_placeholder": "z. B. zwei Kinder am Strand mit einem Hund",
-        "max_pixels": 1_600_000, "seconds": (25, 75), "styles": True,
+        "max_pixels": EDIT_PIXELS, "seconds": (25, 75), "styles": True,
     },
     # LTX-2.5: the picture comes to life as a clip with sound; with a second
     # picture the clip runs from the first to it (First-Last Frame). Fast takes
@@ -206,7 +212,7 @@ FIRST_LAST = "ltx-25-first-last-frame"
 CLIP_SECONDS = (3, 5, 8)
 # Ändern: which model. images: how many pictures its workflow takes.
 EDIT_MODELS = {
-    "qwen-image-21-turbo": {"label": "Qwen-Image Turbo", "hint": "schnell, 2 Fotos", "images": 2, "seconds": 45},
+    "qwen-image-21-turbo": {"label": "Qwen-Image Turbo", "hint": "schnell, 2 Fotos", "images": 2, "seconds": 60},
     "qwen-image-21": {"label": "Qwen-Image", "hint": "gründlicher, 2 Fotos", "images": 2, "seconds": 150},
     "flux2-klein-9b": {"label": "FLUX.2 klein", "hint": "lebendig, 1 Foto", "images": 1, "seconds": 65},
     "flux2-dev-turbo": {"label": "FLUX.2 dev Turbo", "hint": "beste Qualität, langsam", "images": 2, "seconds": 300},
