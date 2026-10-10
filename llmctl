@@ -1115,8 +1115,14 @@ _start_comfyui() {
     # takes 4096 interrupt signals at start and leaves KFD none for ROCr's own;
     # its AsyncEventsLoop then polls without an event and keeps a core at 100%
     # for as long as ComfyUI runs, idle or not (ROCm/TheRock#7051, ComfyUI#16339).
+    # The soft limit of open files up to the hard one: ROCm holds a dmabuf file
+    # descriptor for every block of GPU memory, and after a few models in one
+    # session (Z-Image, klein, Qwen-Image, a detailer) ComfyUI ran into the
+    # default 1024 — "HIP kernel launch failed: out of memory", then "Too many
+    # open files" on every request, with 82 GiB free.
     local server_pid=""
-    server_pid=$(cd "$app" && _spawn_detached "$PID_DIR/server-${slot}.pid" "$server_log" append \
+    server_pid=$(cd "$app" && { ulimit -Sn "$(ulimit -Hn)" 2>/dev/null || true; } &&
+        _spawn_detached "$PID_DIR/server-${slot}.pid" "$server_log" append \
         env TMPDIR="$COMFYUI_TMP" PYTHONUNBUFFERED=1 ROCPROFILER_REGISTER_ENABLED=0 \
             LLMCTL_IMAGES_API="http://127.0.0.1:$(( PORT_BASE_PROXY + slot ))" $_r_rocm_env "${cmd[@]}")
     if [[ -z "$server_pid" ]]; then
