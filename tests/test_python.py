@@ -279,6 +279,7 @@ class Fotos(unittest.TestCase):
         import tempfile
         self.tmp = tempfile.TemporaryDirectory()
         fotos.ARGS.data, fotos.ARGS.api, fotos.ARGS.timeout = self.tmp.name, "http://api", 10
+        fotos.ARGS.comfy = "http://comfy"
         fotos.jobs_dir().mkdir(parents=True)
 
     def tearDown(self):
@@ -496,6 +497,126 @@ class Fotos(unittest.TestCase):
         with mock.patch.object(fotos, "OWN_MAX", 1):
             self.assertEqual(client.post("/fotos/api/prompts", json={"title": "a", "action": "edit", "text": "x"}).status_code, 201)
             self.assertEqual(client.post("/fotos/api/prompts", json={"title": "b", "action": "edit", "text": "x"}).status_code, 409)
+
+    def test_varianten_make_a_job_each_and_only_where_words_steer(self):
+        r = self.post(action="edit", text="Lass ihn lächeln", n="3", image=self.jpeg(64, 64))
+        ids = [j["id"] for j in r.get_json()]
+        self.assertEqual(len(set(ids)), 3)
+        for jid in ids:
+            self.assertTrue((fotos.job_path(jid) / "input.jpg").is_file())
+        self.assertEqual(len(self.post(action="edit", text="x", n="9", image=self.jpeg(64, 64)).get_json()),
+                         fotos.VARIANTS_MAX)
+        self.assertEqual(len(self.post(action="colorize", n="3", image=self.jpeg(64, 64)).get_json()), 1)
+        self.assertEqual(len(self.post(action="animate", n="3", image=self.jpeg(64, 64)).get_json()), 1)
+
+    def test_a_waiting_job_is_crossed_out_and_not_run(self):
+        from unittest import mock
+        jid = self.post(action="edit", text="x", image=self.jpeg(64, 64)).get_json()[0]["id"]
+        r = fotos.app.test_client().post(f"/fotos/api/jobs/{jid}/cancel")
+        self.assertEqual(r.status_code, 200)
+        with mock.patch.object(fotos.requests, "post") as post:
+            fotos.run_job(jid)
+        post.assert_not_called()
+        job = fotos.read_job(jid)
+        self.assertEqual((job["state"], job["error"], job["cancelled"]), ("failed", "Abgebrochen", True))
+        self.assertEqual(fotos.app.test_client().post(f"/fotos/api/jobs/{jid}/cancel").status_code, 409)
+
+    def test_a_running_job_interrupts_comfyui_and_ends_as_cancelled(self):
+        from unittest import mock
+        jid = self.post(action="edit", text="x", image=self.jpeg(64, 64)).get_json()[0]["id"]
+        client = fotos.app.test_client()
+        calls = []
+
+        def post(url, **kw):
+            calls.append(url)
+            if url.endswith("/v1/images/edits"):
+                # the user cancels while ComfyUI works; the interrupted workflow fails
+                self.assertEqual(client.post(f"/fotos/api/jobs/{jid}/cancel").status_code, 200)
+                return mock.Mock(status_code=500, json=lambda: {"error": {"message": "ComfyUI failed: see its log"}})
+            return mock.Mock(status_code=200)
+        with mock.patch.object(fotos.requests, "post", side_effect=post), \
+                mock.patch.object(fotos, "notify") as notify:
+            fotos.run_job(jid)
+        self.assertEqual(calls[1], "http://comfy/interrupt")
+        job = fotos.read_job(jid)
+        self.assertEqual((job["state"], job["error"], job.get("cancelled")), ("failed", "Abgebrochen", True))
+        self.assertNotIn(jid, fotos._cancel)
+        notify.assert_called_once_with(jid)
+
+    def test_a_repair_stops_between_its_runs_when_cancelled(self):
+        from unittest import mock
+        job = fotos.new_job({"action": "repair", "label": "Repariert", "model": "m", "base": "",
+                             "boxes": [[0, 0, 4, 4, "a"], [200, 200, 204, 204, "b"]]},
+                            [("input.png", self.png(256, 256))])
+        while not fotos._queue.empty():
+            fotos._queue.get_nowait()
+        png = base64.b64encode(self.png(256, 256)).decode()
+
+        def post(url, **kw):
+            fotos._cancel.add(job["id"])            # cancelled during the first run, which still ends
+            return mock.Mock(status_code=200, json=lambda: {"data": [{"b64_json": png}], "seed": 1})
+        with mock.patch.object(fotos.requests, "post", side_effect=post) as p, mock.patch.object(fotos, "notify"):
+            fotos.run_job(job["id"])
+        self.assertEqual(p.call_count, 1)
+        self.assertTrue(fotos.read_job(job["id"])["cancelled"])
+
+    def png(self, w, h):
+        from PIL import Image
+        buf = io.BytesIO()
+        Image.new("RGB", (w, h)).save(buf, "PNG")
+        return buf.getvalue()
+
+    def test_a_push_subscription_is_kept_once_and_removed(self):
+        if fotos.webpush is None:
+            self.skipTest("no cryptography")
+        client = fotos.app.test_client()
+        info = client.get("/fotos/api/push").get_json()
+        self.assertTrue(info["available"])
+        self.assertEqual(len(fotos.webpush.unb64u(info["key"])), 65)
+        self.assertEqual(info["key"], client.get("/fotos/api/push").get_json()["key"])    # kept, not made anew
+        sub = {"endpoint": "https://push.example/abc", "keys": {"p256dh": "x", "auth": "y"}}
+        sid = client.post("/fotos/api/push", json={"subscription": sub}).get_json()["id"]
+        self.assertEqual(client.post("/fotos/api/push", json={"subscription": sub}).get_json()["id"], sid)
+        self.assertEqual(len(fotos.subscriptions()), 1)
+        bad = dict(sub, endpoint="http://push.example/abc")
+        self.assertEqual(client.post("/fotos/api/push", json={"subscription": bad}).status_code, 400)
+        client.delete(f"/fotos/api/push/{sid}")
+        self.assertEqual(fotos.subscriptions(), [])
+        sw = client.get("/fotos/sw.js")
+        self.assertEqual(sw.headers["Service-Worker-Allowed"], "/fotos")
+
+    def test_a_finished_job_is_pushed_but_not_to_a_page_being_looked_at(self):
+        if fotos.webpush is None:
+            self.skipTest("no cryptography")
+        from unittest import mock
+        fotos.write_subscriptions([{"id": "a", "subscription": {"endpoint": "https://p/a"}},
+                                   {"id": "b", "subscription": {"endpoint": "https://p/b"}},
+                                   {"id": "c", "subscription": {"endpoint": "https://p/c"}}])
+        job = fotos.new_job({"action": "edit", "label": "Ändern", "text": "Lass ihn lächeln"})
+        fotos.update_job(job["id"], state="done", started=100.0, finished=162.0)
+        fotos.app.test_client().get("/fotos/api/prompts", headers={"X-Fotos-Device": "b"})
+        sent = []
+
+        class Now:                              # run the sender's thread at once
+            def __init__(self, target, daemon):
+                self.target = target
+
+            def start(self):
+                self.target()
+        with mock.patch.object(fotos.webpush, "send",
+                               side_effect=lambda sub, payload, key: sent.append((sub["endpoint"], json.loads(payload)))
+                               or (410 if sub["endpoint"].endswith("c") else 201)), \
+                mock.patch.object(fotos.threading, "Thread", Now):
+            fotos.notify(job["id"])
+        self.assertEqual([e for e, _ in sent], ["https://p/a", "https://p/c"])
+        self.assertEqual(sent[0][1]["title"], "Fertig: Ändern · 62 s")
+        self.assertEqual(sent[0][1]["url"], f"/fotos#job={job['id']}")
+        self.assertEqual([s["id"] for s in fotos.subscriptions()], ["a", "b"])    # c is gone: 410
+        fotos._seen.clear()
+        fotos.update_job(job["id"], cancelled=True)
+        with mock.patch.object(fotos.webpush, "send") as send:
+            fotos.notify(job["id"])
+        send.assert_not_called()
 
     def test_a_placeholder_left_standing_counts_with_its_words(self):
         _, form, _ = self.sent(action="edit", text="Lass [die Person] lächeln.")
@@ -1393,6 +1514,57 @@ class RepairPage(unittest.TestCase):
 
 
 @unittest.skipIf(images is None or images.Image is None, "images_server needs flask, requests and pillow")
+class WebPush(unittest.TestCase):
+    """The message as the browser decrypts it (RFC 8291), and the VAPID token
+    as the push service checks it."""
+
+    def setUp(self):
+        try:
+            import webpush
+        except ImportError:
+            self.skipTest("no cryptography")
+        self.wp = webpush
+
+    def test_the_browser_can_read_the_message(self):
+        import os
+        import struct
+        from cryptography.hazmat.primitives.asymmetric import ec
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        wp = self.wp
+        ua = ec.generate_private_key(ec.SECP256R1())          # the browser's keys
+        ua_pub, auth = wp.raw_public(ua), os.urandom(16)
+        body = wp.encrypt("Fertig: Ändern · 62 s".encode(), ua_pub, auth)
+        salt, rs, idlen = body[:16], *struct.unpack(">IB", body[16:21])
+        as_pub, record = body[21:21 + idlen], body[21 + idlen:]
+        self.assertEqual((rs, idlen), (4096, 65))
+        shared = ua.exchange(ec.ECDH(), ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), as_pub))
+        ikm = wp.hkdf(auth, b"WebPush: info\x00" + ua_pub + as_pub, 32, shared)
+        cek = wp.hkdf(salt, b"Content-Encoding: aes128gcm\x00", 16, ikm)
+        nonce = wp.hkdf(salt, b"Content-Encoding: nonce\x00", 12, ikm)
+        plain = AESGCM(cek).decrypt(nonce, record, None)
+        self.assertEqual(plain, "Fertig: Ändern · 62 s".encode() + b"\x02")
+
+    def test_the_vapid_token_verifies_with_the_public_key(self):
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.asymmetric import ec
+        from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
+        wp = self.wp
+        with tempfile.TemporaryDirectory() as tmp:
+            key = wp.load_key(Path(tmp) / "vapid.pem")
+            self.assertEqual(oct((Path(tmp) / "vapid.pem").stat().st_mode & 0o777), "0o600")
+            self.assertEqual(wp.public_key(wp.load_key(Path(tmp) / "vapid.pem")), wp.public_key(key))
+        header = wp.vapid("https://fcm.googleapis.com/fcm/send/xyz", key, now=1000)
+        token, k = re.match(r"vapid t=(\S+), k=(\S+)$", header).groups()
+        self.assertEqual(k, wp.public_key(key))
+        head, claims, sig = token.split(".")
+        self.assertEqual(json.loads(wp.unb64u(claims)),
+                         {"aud": "https://fcm.googleapis.com", "exp": 1000 + 12 * 3600, "sub": wp.SUBJECT})
+        raw = wp.unb64u(sig)
+        pub = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), wp.unb64u(k))
+        pub.verify(encode_dss_signature(int.from_bytes(raw[:32], "big"), int.from_bytes(raw[32:], "big")),
+                   f"{head}.{claims}".encode(), ec.ECDSA(hashes.SHA256()))
+
+
 class ImageClips(unittest.TestCase):
     """/v1/video/clips: the request into the LTX-2.5 workflows, without ComfyUI."""
     VIDEO = "LTX-2.5 Video (int8, distilled).json"

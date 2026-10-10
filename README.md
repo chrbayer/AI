@@ -15,6 +15,7 @@ sudo make install-link     # instead: /usr/local/bin/llmctl → this checkout, e
 sudo make uninstall
 
 pip install flask requests pillow # for proxy.py and the image API
+pip install cryptography   # optional: notifications from the Fotos page
 pip install waitress       # optional, recommended for production proxy
 ```
 
@@ -2109,6 +2110,32 @@ style, *Form behalten*). They are kept on the server
 the desk see the same, and stand first under *Eigene*; × and a second tap
 deletes one. The second photo (*Bild 2*, *Animieren*'s end frame) can be
 taken with the camera, too.
+
+**Varianten, Abbrechen, Zoom.** Where one's own words steer the result
+(*Ändern*, *Übermalen*, *Entfernen*, *Erweitern*, *Pose übernehmen*, *Neu gestalten*,
+*Als Kunstwerk*), *Varianten* 1–3 makes as many jobs, each with a seed of
+its own and a card of its own: the same sunset on the beach came out once
+with the sun hidden, once with it on the horizon and its glitter on the
+sand, 21 and 17 s. A waiting or running job has *Abbrechen*: one that waits
+is crossed out, one that runs has ComfyUI's workflow interrupted — it
+stopped after 1 to 4 s (the step it was in) and the next job ran on at
+once. *Fehler suchen* cannot stop flash mid-answer; its answer is dropped and
+flash stopped as usual. In the viewer two fingers zoom up to 4×, one finger
+then moves the picture, a double tap zooms in 2.5× or back out (the wheel on
+a desk); the slider and the boxes keep their size on screen.
+
+**Benachrichtigungen.** *Benachrichtigen, wenn fertig* subscribes the device
+to Web Push: when a job ends, the server sends "Fertig: Ändern · 62 s" (or
+what went wrong), and a tap opens it. Not for a cancelled job, nor for a
+device whose page is being looked at — the page sends its device id with
+each request while it is visible (`X-Fotos-Device`). `webpush.py` encrypts
+the message for the browser (RFC 8291) and signs it with VAPID (RFC 8292),
+with `cryptography` — no push library, no service in between; the key is
+made on first use (`~/.local/share/llmctl/fotos/vapid.pem`), the
+subscriptions are in `push.json` beside it, and one the push service calls
+gone (404/410) is dropped. Tested against Mozilla's push service: the
+message arrived 3 s after the job and decrypted. On an iPhone, Web Push needs
+the page added to the home screen and opened from there; the switch says so.
 
 **Fehler suchen.** A picture made in *Erzeugen* (or a repaired one) has
 *Fehler suchen* in the viewer: the image API's check from `/repair`. The

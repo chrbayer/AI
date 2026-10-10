@@ -68,6 +68,8 @@ main { padding: 0 16px; max-width: 640px; margin: 0 auto; display: flex; flex-di
 .switch i::after { content: ""; position: absolute; left: 3px; top: 3px; width: 26px; height: 26px; border-radius: 50%;
                    background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .15s; }
 .switch input:checked + i { background: var(--bad); }
+.switch.ok input:checked + i { background: var(--accent); }
+.toggle + .toggle { margin-top: 10px; }
 .switch input:checked + i::after { transform: translateX(20px); }
 .pick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .pick label { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
@@ -160,12 +162,23 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
 .layer .bar button svg { width: 22px; height: 22px; }
 .layer .bar button.primary { background: var(--accent); color: #fff; }
 .layer .bar button:disabled { opacity: .4; }
+.waiting .cancel { margin-top: 18px; background: rgba(255,255,255,.14); border: none; color: #fff; border-radius: 999px;
+                   padding: 10px 22px; font: inherit; font-weight: 600; }
+.waiting .cancel:disabled { opacity: .5; }
+.stage .frame { transform-origin: center; will-change: transform; }
+/* zoomed: what lies on the picture keeps its size on screen (--iz = 1 / zoom) */
+.stage .line { width: calc(2px * var(--iz, 1)); }
+.stage .line::after { transform: translate(-50%, -50%) scale(var(--iz, 1)); }
+.stage .tag { transform: scale(var(--iz, 1)); }
+.stage .tag.l { transform-origin: top left; } .stage .tag.r { transform-origin: top right; }
 .stage .box { position: absolute; border: 2px solid #ffd60a; border-radius: 4px; box-shadow: 0 0 0 1px rgba(0,0,0,.5);
               pointer-events: auto; cursor: pointer; }
 .stage .box.off { border-style: dashed; border-color: rgba(255,255,255,.55); }
 .stage .box i { position: absolute; left: -2px; top: -22px; background: #ffd60a; color: #000; font: 700 12px system-ui;
                 font-style: normal; border-radius: 6px; padding: 2px 6px; }
 .stage .box.off i { background: rgba(255,255,255,.55); }
+.stage .box { border-width: calc(2px * var(--iz, 1)); }
+.stage .box i { transform: scale(var(--iz, 1)); transform-origin: bottom left; }
 .layer.checking .stage img { max-height: 46dvh; }
 .found { max-height: 34dvh; overflow-y: auto; padding: 4px 12px 0; display: flex; flex-direction: column; gap: 8px; }
 .found label { display: flex; gap: 10px; align-items: flex-start; background: rgba(255,255,255,.08); border-radius: 12px; padding: 9px 10px; }
@@ -296,6 +309,11 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
           <p class="note" id="voiceInfo"></p>
         </div></div>
       <div class="field" id="secondsWrap"><label>Länge</label><div class="chips" id="seconds"></div></div>
+      <div class="field" id="variantsWrap"><label>Varianten – jede mit anderem Zufall, die beste behalten</label>
+        <div class="seg small" id="variants">
+          <button type="button" data-n="1" aria-pressed="true">1</button><button type="button" data-n="2" aria-pressed="false">2</button>
+          <button type="button" data-n="3" aria-pressed="false">3</button>
+        </div></div>
       <div class="field" id="sidesWrap"><label>Wo soll mehr Bild hin?</label>
         <div class="chips" id="sides">
           <button type="button" data-v="wide" aria-pressed="true">Links und rechts</button>
@@ -349,6 +367,10 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
     <label class="toggle">
       <span>Unzensiert<small>Modelle ohne Inhaltsfilter, wo es sie gibt</small></span>
       <span class="switch"><input type="checkbox" id="unc"><i></i></span>
+    </label>
+    <label class="toggle hidden" id="pushRow">
+      <span>Benachrichtigen, wenn fertig<small id="pushNote">Auf diesem Gerät, auch bei gesperrtem Bildschirm</small></span>
+      <span class="switch ok"><input type="checkbox" id="push"><i></i></span>
     </label>
   </div>
   <p class="err" id="formErr"></p>
@@ -429,7 +451,7 @@ const S = {
   comfy: "down", message: "", mode: "edit", unc: false,
   actions: [], editModels: [], genModels: [], aspects: [],
   action: null, quality: "fast", editModel: "qwen-image-21-turbo", sides: "wide",
-  genModel: "z-image-turbo", aspect: "1:1", count: 1, clipSeconds: [], seconds: 5, style: "watercolour", keep: "0", voice: null, voiceMax: 10, groups: [], styles: [], genSeconds: 5, genQuality: "fast",
+  genModel: "z-image-turbo", aspect: "1:1", count: 1, variants: 1, clipSeconds: [], seconds: 5, style: "watercolour", keep: "0", voice: null, voiceMax: 10, groups: [], styles: [], genSeconds: 5, genQuality: "fast",
   source: null, source2: null,   // {blob, url, w, h} | {from: jobId, url, w, h}
   mask: null,                    // {blob, preview} — transparent where to redraw
   jobs: [], viewing: null, pollTimer: null,
@@ -449,6 +471,8 @@ function duration(s) { return s < 90 ? "etwa " + s + " Sekunden" : "etwa " + Mat
 function short(s) { return s < 90 ? s + " s" : Math.round(s / 60) + " min"; }
 
 async function api(path, opts = {}) {
+  const dev = recall("pushId");
+  if (dev && !document.hidden) opts.headers = Object.assign({ "X-Fotos-Device": dev }, opts.headers || {});
   const r = await fetch(API + path, opts);
   let body = null;
   try { body = await r.json(); } catch (e) {}
@@ -644,6 +668,7 @@ function renderEdit() {
   show("secondWrap", a.second && (a.video ? a.second_available !== false : !m || m.images > 1));
   $("secondLabel").textContent = a.second_label || "Zweites Foto (optional) – im Text „Bild 2“";
   show("secondsWrap", a.video && !a.audio); press("seconds", "v", S.seconds);
+  show("variantsWrap", a.variants); press("variants", "n", S.variants);
   show("pick2", !S.source2); show("source2", !!S.source2);
   show("sidesWrap", a.sides); press("sides", "v", S.sides);
   show("maskWrap", a.mask);
@@ -657,7 +682,8 @@ function renderEdit() {
   const secs = typical({ action: a.id, model_label: a.models && m ? m.label : null, quality: S.quality,
                          seconds: a.audio ? (S.voice ? Math.max(1, Math.ceil(S.voice.seconds)) : 5) : S.seconds,
                          two: a.video && !a.audio && !!S.source2 });
-  $("estimate").textContent = "Dauert " + duration(secs)
+  const many = a.variants && S.variants > 1;
+  $("estimate").textContent = (many ? S.variants + " Varianten nacheinander, je " : "Dauert ") + duration(secs)
     + " (beim ersten Mal länger, weil das Modell lädt). Du kannst den Bildschirm sperren – das Ergebnis wartet im Verlauf.";
   renderGo();
 }
@@ -1020,7 +1046,7 @@ function renderGo() {
   }
   if (!S.source) { b.textContent = "Bild wählen"; b.disabled = true; return; }
   const a = S.actions.find((x) => x.id === S.action);
-  b.textContent = (a ? a.label : "Los") + " ›"; b.disabled = !a;
+  b.textContent = (a ? a.label + (a.variants && S.variants > 1 ? " · " + S.variants + " Varianten" : "") : "Los") + " ›"; b.disabled = !a;
 }
 
 function appendPicture(fd, src, field, fromField) {
@@ -1051,6 +1077,7 @@ async function go() {
     if (a.video && !a.audio) fd.append("seconds", String(S.seconds));
     if (a.styles) fd.append("style", S.style);
     if (a.keep) fd.append("keep", S.keep);
+    if (a.variants) fd.append("n", String(S.variants));
     if (a.audio) {
       if (!S.voice) { $("formErr").textContent = "Bitte erst etwas aufnehmen oder eine Audiodatei wählen."; return; }
       fd.append("audio", S.voice.blob, S.voice.name);
@@ -1089,6 +1116,7 @@ function elapsed(job) {
 }
 
 function stateText(job) {
+  if (job.cancelled) return "Abgebrochen";
   if (job.state === "queued") return job.position > 1 ? "Wartet (#" + job.position + ")" : "Wartet";
   if (job.state === "running") return "Läuft · " + elapsed(job);
   if (job.state === "done") return "Fertig";
@@ -1130,7 +1158,8 @@ function openViewer(id) {
   $("viewer").classList.add("on");
   document.body.style.overflow = "hidden";
   $("vTitle").textContent = job.label + (job.text ? " · " + job.text : "");
-  const stage = $("stage"); stage.innerHTML = ""; stage.onpointerdown = stage.onpointermove = stage.onpointerup = null;
+  const stage = $("stage"); stage.innerHTML = ""; stage.classList.remove("zoomed");
+  stage.onpointerdown = stage.onpointermove = stage.onpointerup = stage.onpointercancel = stage.onwheel = null;
   const done = job.state === "done";
   for (const b of $("vBar").children) b.style.visibility = done || b.id === "vDelete" ? "" : "hidden";
   if (job.video) $("vMore").style.visibility = "hidden";        // a clip is no picture to edit on
@@ -1147,9 +1176,12 @@ function openViewer(id) {
   else {
     const w = document.createElement("div"); w.className = "waiting";
     if (job.state === "failed") w.innerHTML = '<b>Das hat nicht geklappt.</b><span id="vErr"></span>';
-    else w.innerHTML = '<div class="spinner"></div><b id="vState"></b><span id="vHint"></span>';
+    else w.innerHTML = '<div class="spinner"></div><b id="vState"></b><span id="vHint"></span>'
+      + '<button type="button" class="cancel" id="vCancel">Abbrechen</button>';
     stage.appendChild(w);
-    if (job.state === "failed") $("vErr").textContent = job.error || "";
+    if (job.state === "failed") $("vErr").textContent = job.cancelled ? "" : job.error || "";
+    else $("vCancel").onclick = () => cancelJob(job.id);
+    if (job.cancelled) w.querySelector("b").textContent = "Abgebrochen.";
     updateWaiting(job);
   }
   $("vInfo").textContent = done ? info(job) : "";
@@ -1164,14 +1196,17 @@ function info(job) {
   if (job.uncensored) parts.push("unzensiert");
   if (job.started && job.finished) parts.push(elapsed(job));
   if (job.action === "check") return (job.artifacts.length ? job.artifacts.length + " Stelle(n) gefunden – abwählen, was gesund ist" : "Keine Fehler gefunden") + " · " + elapsed(job);
-  return parts.join(" · ") + (job.action === "generate" || job.video ? "" : " — Regler ziehen für vorher/nachher");
+  return parts.join(" · ") + (job.video ? "" : job.action === "generate" ? " — zwei Finger zum Zoomen" : " — Regler ziehen für vorher/nachher, zwei Finger zum Zoomen");
 }
 
 function updateWaiting(job) {
   if (!$("vState")) return;
+  const stopping = job.phase === "Wird abgebrochen …";
+  $("vCancel").disabled = stopping; $("vCancel").textContent = stopping ? "Wird abgebrochen …" : "Abbrechen";
   $("vState").textContent = stateText(job);
   const typ = typical(job);
-  $("vHint").textContent = job.state === "queued" ? "Vorher ist noch etwas anderes dran."
+  $("vHint").textContent = stopping ? "ComfyUI hält nach dem laufenden Schritt an."
+    : job.state === "queued" ? "Vorher ist noch etwas anderes dran."
     : job.phase ? job.phase + " Du kannst die Seite schließen – das Ergebnis kommt in den Verlauf."
     : (typ ? "Üblich sind " + duration(typ) + ". " : "") + "Du kannst die Seite schließen – das Ergebnis kommt in den Verlauf.";
 }
@@ -1180,6 +1215,82 @@ function showSingle(job) {
   const frame = document.createElement("div"); frame.className = "frame";
   const img = document.createElement("img"); img.alt = "Ergebnis"; img.src = `${API}/jobs/${job.id}/result`;
   frame.appendChild(img); $("stage").appendChild(frame);
+  zoomable(frame);
+}
+
+// Two fingers zoom (up to 4×), one finger then moves the picture, a double tap
+// zooms in 2.5× there or back out; the mouse wheel zooms on a desk. Unzoomed,
+// one finger is what it was before: the before/after slider (slide), or a tap
+// on a box.
+const ZOOM_MAX = 4;
+function zoomable(frame, slide) {
+  const stage = $("stage");
+  const Z = { s: 1, x: 0, y: 0 };
+  const pts = new Map();
+  let pinch = null, pan = null, sliding = false, lastTap = 0;
+  const centre = () => { const r = stage.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
+  const clamp = () => {
+    const mx = (Z.s - 1) * frame.offsetWidth / 2, my = (Z.s - 1) * frame.offsetHeight / 2;
+    Z.x = Math.min(mx, Math.max(-mx, Z.x)); Z.y = Math.min(my, Math.max(-my, Z.y));
+  };
+  const apply = () => {
+    if (Z.s <= 1.01) { Z.s = 1; Z.x = 0; Z.y = 0; }
+    clamp();
+    frame.style.transform = Z.s === 1 ? "" : `translate(${Z.x}px, ${Z.y}px) scale(${Z.s})`;
+    frame.style.setProperty("--iz", String(1 / Z.s));
+    stage.classList.toggle("zoomed", Z.s > 1);
+  };
+  // the point under (px, py) stays where it is
+  const zoomAt = (px, py, s1, from = Z) => {
+    const [cx, cy] = centre();
+    s1 = Math.min(ZOOM_MAX, Math.max(1, s1));
+    Z.x = px - cx - s1 * (px - cx - from.x) / from.s;
+    Z.y = py - cy - s1 * (py - cy - from.y) / from.s;
+    Z.s = s1; apply();
+  };
+  const two = () => { const [a, b] = [...pts.values()]; return { d: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, m: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] }; };
+  stage.onpointerdown = (e) => {
+    pts.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pts.size === 2) {
+      const t = two(); pinch = { d: t.d, m: t.m, s: Z.s, x: Z.x, y: Z.y }; pan = null; sliding = false;
+      for (const id of pts.keys()) try { stage.setPointerCapture(id); } catch (err) {}
+      return;
+    }
+    if (pts.size > 2) return;
+    const now = Date.now();
+    if (now - lastTap < 300) {                     // double tap
+      lastTap = 0;
+      if (Z.s > 1) { Z.s = 1; apply(); } else zoomAt(e.clientX, e.clientY, 2.5);
+      return;
+    }
+    lastTap = now;
+    if (Z.s > 1) pan = { px: e.clientX, py: e.clientY, x: Z.x, y: Z.y, moved: false };
+    else if (slide) { sliding = true; try { stage.setPointerCapture(e.pointerId); } catch (err) {} slide(e); }
+  };
+  stage.onpointermove = (e) => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pinch && pts.size >= 2) {
+      const t = two();
+      Z.s = pinch.s; Z.x = pinch.x + t.m[0] - pinch.m[0]; Z.y = pinch.y + t.m[1] - pinch.m[1];
+      zoomAt(t.m[0], t.m[1], pinch.s * t.d / pinch.d, { s: pinch.s, x: Z.x, y: Z.y });
+    } else if (pan) {
+      const dx = e.clientX - pan.px, dy = e.clientY - pan.py;
+      if (!pan.moved && Math.hypot(dx, dy) < 5) return;
+      if (!pan.moved) { pan.moved = true; lastTap = 0; try { stage.setPointerCapture(e.pointerId); } catch (err) {} }
+      Z.x = pan.x + dx; Z.y = pan.y + dy; apply();
+    } else if (sliding) slide(e);
+  };
+  stage.onpointerup = stage.onpointercancel = (e) => {
+    pts.delete(e.pointerId);
+    if (pts.size < 2 && pinch) {
+      pinch = null; lastTap = 0;
+      const rest = [...pts.values()][0];        // one finger left: it moves the picture on
+      if (rest && Z.s > 1) pan = { px: rest[0], py: rest[1], x: Z.x, y: Z.y, moved: true };
+    }
+    if (!pts.size) { pan = null; sliding = false; }
+  };
+  stage.onwheel = (e) => { e.preventDefault(); zoomAt(e.clientX, e.clientY, Z.s * (e.deltaY < 0 ? 1.2 : 1 / 1.2)); };
 }
 
 // Fehler suchen: the picture with the boxes, numbered, and the list to tick.
@@ -1199,6 +1310,7 @@ function showChecked(job) {
     b.el = el; frame.appendChild(el);
   }
   $("stage").appendChild(frame);
+  zoomable(frame);
   const list = $("vFound"); list.innerHTML = "";
   if (!C.boxes.length) {
     const p = document.createElement("p");
@@ -1278,11 +1390,8 @@ function showCompare(job) {
     line.style.left = `calc(${p * 100}% - 1px)`;
   };
   set(0.5);
-  const move = (e) => { const r = frame.getBoundingClientRect(); set((e.clientX - r.left) / r.width); };
-  let dragging = false;
-  stage.onpointerdown = (e) => { dragging = true; stage.setPointerCapture(e.pointerId); move(e); };
-  stage.onpointermove = (e) => { if (dragging) move(e); };
-  stage.onpointerup = stage.onpointercancel = () => { dragging = false; };
+  // the frame's box on screen, zoomed or not: the slider stays under the finger
+  zoomable(frame, (e) => { const r = frame.getBoundingClientRect(); set((e.clientX - r.left) / r.width); });
 }
 
 function closeViewer() {
@@ -1314,6 +1423,12 @@ function continueWith() {
 }
 
 const confirmDelete = {};
+async function cancelJob(id) {
+  $("vCancel").disabled = true;
+  try { await api("/jobs/" + id + "/cancel", { method: "POST" }); } catch (e) { toast(e.message); }
+  refreshJobs();
+}
+
 async function removeJob() {
   const id = S.viewing.id;
   if (confirmDelete.armed !== id) {
@@ -1322,6 +1437,63 @@ async function removeJob() {
   confirmDelete.armed = null;
   try { await api("/jobs/" + id, { method: "DELETE" }); } catch (e) { toast(e.message); return; }
   S.jobs = S.jobs.filter((j) => j.id !== id); renderJobs(); closeViewer();
+}
+
+// ── notifications ────────────────────────────────────────
+// Web Push: the service worker shows what the server sends when a job ends.
+// The server leaves out a device whose page is being looked at (X-Fotos-Device).
+const PUSH = { key: null };
+function pushSupported() { return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window; }
+function isIOS() { return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1); }
+
+function b64bytes(b64) {
+  const s = atob(b64.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - b64.length % 4) % 4));
+  return Uint8Array.from(s, (c) => c.charCodeAt(0));
+}
+
+async function initPush() {
+  let info;
+  try { info = await api("/push"); } catch (e) { return; }
+  if (!info.available) return;
+  PUSH.key = info.key;
+  show("pushRow", true);
+  if (!pushSupported()) {
+    $("push").disabled = true;
+    $("pushNote").textContent = isIOS() && !navigator.standalone
+      ? "Auf dem iPhone: Teilen → „Zum Home-Bildschirm“, dann die Seite von dort öffnen."
+      : "Dieser Browser kann keine Benachrichtigungen.";
+    return;
+  }
+  const reg = await navigator.serviceWorker.getRegistration("/fotos");
+  const sub = reg && await reg.pushManager.getSubscription();
+  $("push").checked = !!(sub && recall("pushId") && Notification.permission === "granted");
+  if (!$("push").checked && recall("pushId")) store("pushId", "");
+  if (Notification.permission === "denied") $("pushNote").textContent = "Im Browser blockiert – in den Website-Einstellungen erlauben.";
+}
+
+async function setPush(on) {
+  $("push").disabled = true;
+  try {
+    if (on) {
+      if (await Notification.requestPermission() !== "granted") throw new Error("Benachrichtigungen sind nicht erlaubt.");
+      const reg = await navigator.serviceWorker.register("/fotos/sw.js", { scope: "/fotos" });
+      await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription()
+        || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64bytes(PUSH.key) });
+      const r = await api("/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: sub.toJSON() }) });
+      store("pushId", r.id); toast("Benachrichtigungen an");
+    } else {
+      const id = recall("pushId"); store("pushId", "");
+      const reg = await navigator.serviceWorker.getRegistration("/fotos");
+      const sub = reg && await reg.pushManager.getSubscription();
+      if (sub) await sub.unsubscribe();
+      if (id) await api("/push/" + encodeURIComponent(id), { method: "DELETE" });
+      toast("Benachrichtigungen aus");
+    }
+  } catch (e) {
+    toast(e.message, 4000); $("push").checked = !on;
+  }
+  $("push").disabled = false;
 }
 
 // ── sheet ────────────────────────────────────────────────
@@ -1340,7 +1512,7 @@ async function tick() { await Promise.all([refreshStatus(), refreshJobs()]); sch
 async function openFromHash() {
   const m = location.hash.match(/^#job=([0-9a-f-]+)$/);
   if (!m) return;
-  if (!S.jobs.length) await refreshJobs();
+  if (!S.jobs.some((j) => j.id === m[1])) await refreshJobs();
   openViewer(m[1]);
 }
 
@@ -1362,9 +1534,11 @@ $("saveTitle").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault();
 $("text").addEventListener("input", updateSave); $("genText").addEventListener("input", updateSave);
 for (const b of $("tplScope").children) b.onclick = () => { if (!b.disabled) { T.scope = b.dataset.v; renderTemplates(); } };
 $("audioFile").onchange = (e) => { const f = e.target.files[0]; if (f) setVoice(f, f.name); e.target.value = ""; };
+for (const b of $("variants").children) b.onclick = () => { S.variants = Number(b.dataset.n); renderEdit(); };
 for (const b of $("count").children) b.onclick = () => { S.count = Number(b.dataset.n); renderGen(); };
 for (const b of $("genQuality").children) b.onclick = () => { S.genQuality = b.dataset.q; store("genQuality", S.genQuality); renderGen(); };
 $("unc").onchange = (e) => setUnc(e.target.checked);
+$("push").onchange = (e) => setPush(e.target.checked);
 $("maskBtn").onclick = openPainter;
 $("pCancel").onclick = closePainter;
 $("pDone").onclick = finishPainter;
@@ -1397,6 +1571,7 @@ $("unc").checked = S.unc = recall("unc") === "1";
 setMode(recall("mode") === "generate" ? "generate" : "edit");
 loadActions();
 tick().then(openFromHash);
+initPush();
 </script>
 </body>
 </html>

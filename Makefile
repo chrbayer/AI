@@ -49,6 +49,7 @@ install:
 	install -Dm644 fotos_server.py $(LIBDIR)/fotos_server.py
 	install -Dm644 fotos.html $(LIBDIR)/fotos.html
 	install -Dm644 fotos_prompts.json $(LIBDIR)/fotos_prompts.json
+	install -Dm644 webpush.py $(LIBDIR)/webpush.py
 	install -Dm644 tts_voice_design.py $(LIBDIR)/tts_voice_design.py
 	install -Dm644 -t $(SHAREDIR)/templates templates/*
 	install -Dm644 -t $(SHAREDIR)/examples examples/*.conf examples/*.json examples/*.png

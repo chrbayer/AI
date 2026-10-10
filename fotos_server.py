@@ -8,11 +8,15 @@
     GET  /fotos/api/prompts        the library of prompts (fotos_prompts.json) and the user's own, searched on the page
     POST /fotos/api/prompts        {"title", "action", "text", "options"}: keep one of the user's own
     DELETE /fotos/api/prompts/<id>
-    POST /fotos/api/jobs           multipart: image (or from=<job id>), action, quality, text
+    POST /fotos/api/jobs           multipart: image (or from=<job id>), action, quality, text, n
     GET  /fotos/api/jobs           the jobs, newest first
     GET  /fotos/api/jobs/<id>      one job
     GET  /fotos/api/jobs/<id>/<input|result>[?thumb=1][&download=1]
+    POST /fotos/api/jobs/<id>/cancel   stop a job that waits or runs
     DELETE /fotos/api/jobs/<id>
+    GET  /fotos/api/push           the server's key for pushManager.subscribe
+    POST /fotos/api/push           a browser's subscription: told when a job is done
+    DELETE /fotos/api/push/<id>
 
 Unlike the image API it does not belong to the ComfyUI slot: it runs on its own
 (`llmctl fotos enable`, a user service with its own tunnel), so the page is
@@ -42,6 +46,11 @@ import requests
 from flask import Flask, Response, jsonify, request, send_file
 
 from PIL import Image, ImageOps
+
+try:
+    import webpush                      # needs `cryptography`; without it, no notifications
+except ImportError:
+    webpush = None
 
 app = Flask(__name__)
 ARGS = argparse.Namespace()
@@ -99,7 +108,7 @@ ACTIONS = {
         "label": "Entfernen", "hint": "Etwas aus dem Bild nehmen",
         "model": ("qwen-image-21-turbo", "qwen-image-21"),
         "prompt": "Entferne {} aus dem Foto. Alles andere bleibt genau so, wie es ist.",
-        "text": "fill", "text_label": "Was soll weg?",
+        "variants": True, "text": "fill", "text_label": "Was soll weg?",
         "text_placeholder": "z. B. die Person, den Mülleimer, die Stromleitungen",
         "max_pixels": EDIT_PIXELS, "seconds": (45, 120),
     },
@@ -107,7 +116,7 @@ ACTIONS = {
     "edit": {
         "label": "Ändern", "hint": "In eigenen Worten, auch mit 2 Fotos",
         "model": ("qwen-image-21-turbo", "qwen-image-21"),
-        "prompt": "", "text": "prompt", "text_label": "Was soll sich ändern?",
+        "prompt": "", "variants": True, "text": "prompt", "text_label": "Was soll sich ändern?",
         "text_placeholder": "z. B. Mach den Himmel abendrot – oder mit 2 Fotos: "
                             "Setze die Person aus Bild 1 in die Szene aus Bild 2",
         "max_pixels": EDIT_PIXELS, "seconds": (45, 150), "models": True, "second": True,
@@ -118,7 +127,7 @@ ACTIONS = {
         "label": "Erweitern", "hint": "Mehr Rand ums Bild",
         "model": ("qwen-image-21-outpaint-turbo", "qwen-image-21-outpaint"),
         "prompt": "A wide panoramic photograph of the whole scene, continuing naturally beyond the frame",
-        "text": "replace", "text_label": "Die ganze Szene beschreiben (optional)",
+        "variants": True, "text": "replace", "text_label": "Die ganze Szene beschreiben (optional)",
         "text_placeholder": "z. B. Ein Strand bei Sonnenuntergang mit Dünen",
         "max_side": 2048, "seconds": (30, 80), "sides": True,
     },
@@ -126,7 +135,7 @@ ACTIONS = {
     "paint": {
         "label": "Übermalen", "hint": "Stelle markieren, neu malen",
         "model": ("qwen-image-21-inpaint-crop-turbo", "qwen-image-21-inpaint-crop"),
-        "prompt": "", "text": "prompt", "text_label": "Was soll an die markierte Stelle?",
+        "prompt": "", "variants": True, "text": "prompt", "text_label": "Was soll an die markierte Stelle?",
         "text_placeholder": "z. B. eine Vase mit Sonnenblumen",
         "max_side": 2048, "seconds": (35, 90), "mask": True,
         # Form behalten: the photo's edges steer the repaint — a coat masked to be
@@ -150,7 +159,7 @@ ACTIONS = {
     "pose": {
         "label": "Pose übernehmen", "hint": "Jemand anderes, gleiche Haltung",
         "model": ("z-image-turbo-pose-control", "qwen-image-21-pose-control"),
-        "prompt": "", "text": "prompt", "text_label": "Wer oder was soll so dastehen, und wo?",
+        "prompt": "", "variants": True, "text": "prompt", "text_label": "Wer oder was soll so dastehen, und wo?",
         "text_placeholder": "z. B. eine Tänzerin im roten Kleid auf einer Bühne",
         "max_pixels": EDIT_PIXELS, "seconds": (45, 75),
     },
@@ -160,7 +169,7 @@ ACTIONS = {
     "restyle": {
         "label": "Neu gestalten", "hint": "Gleicher Raum, anderer Stil",
         "model": ("qwen-image-21-depth-control-turbo", "qwen-image-21-depth-control"),
-        "prompt": "", "text": "prompt", "text_label": "Wie soll es jetzt aussehen?",
+        "prompt": "", "variants": True, "text": "prompt", "text_label": "Wie soll es jetzt aussehen?",
         "text_placeholder": "z. B. dasselbe Wohnzimmer als gemütliche Almhütte aus altem Holz, "
                             "Kamin, rote Teppiche – je genauer, desto besser",
         "max_pixels": EDIT_PIXELS, "seconds": (30, 75),
@@ -170,7 +179,7 @@ ACTIONS = {
     "art": {
         "label": "Als Kunstwerk", "hint": "Aquarell, Zeichnung, Comic …",
         "model": ("qwen-image-21-canny-control-turbo", "qwen-image-21-canny-control"),
-        "prompt": "", "text": "optional", "text_label": "Was ist zu sehen? (optional, hilft dem Modell)",
+        "prompt": "", "variants": True, "text": "optional", "text_label": "Was ist zu sehen? (optional, hilft dem Modell)",
         "text_placeholder": "z. B. zwei Kinder am Strand mit einem Hund",
         "max_pixels": EDIT_PIXELS, "seconds": (25, 75), "styles": True,
     },
@@ -270,6 +279,7 @@ SIDES = {
 KEEP_JOBS = 100
 OWN_MAX = 200                                  # the user's own templates
 OWN_TOPIC = "Eigene"
+VARIANTS_MAX = 3                               # Varianten of an edit at once
 # What ComfyUI should find free: Qwen-Image 2.1 with its text encoder takes
 # 25-30 GB while it works. Below this the page asks before starting it — beside
 # Flash-Next (~82 GiB) the machine would go into zram or worse.
@@ -280,6 +290,10 @@ _queue = queue.Queue()
 _comfy = {"state": None, "message": ""}       # state: starting / stopping while llmctl runs
 _comfy_lock = threading.Lock()
 _own_lock = threading.Lock()
+_cancel = set()                                # running jobs asked to stop
+_push_lock = threading.Lock()
+_seen = {}                                     # push device id → when its page last asked, visible
+SEEN_FOR = 12                                  # a page seen this recently is looked at: no push
 _last_done = {"at": 0.0, "freed": True}
 
 
@@ -467,8 +481,29 @@ def edit_files(d):
     return files
 
 
+class Cancelled(Exception):
+    pass
+
+
+def claim(jid):
+    """The job from the queue, running now — unless it was cancelled meanwhile."""
+    with _jobs_lock:
+        job = read_job(jid)
+        if job is None or job["state"] != "queued":
+            return None
+        job.update(state="running", started=time.time())
+        write_job(job)
+        return job
+
+
+def check_cancel(jid):
+    """Between the steps of a job: stop here if it was cancelled."""
+    if jid in _cancel:
+        raise Cancelled()
+
+
 def run_job(jid):
-    job = update_job(jid, state="running", started=time.time())
+    job = claim(jid)
     if job is None:
         return
     d = job_path(jid)
@@ -495,12 +530,17 @@ def run_job(jid):
         update_job(jid, state="done", finished=time.time(), result_size=list(size),
                    seed=r.json().get("seed"))
         app.logger.info("job %s %s (%s): %.0f s", jid, job["action"], job["model"], time.time() - job["started"])
-    except requests.ConnectionError:
-        update_job(jid, state="failed", finished=time.time(), error="ComfyUI läuft nicht (mehr)")
     except Exception as e:                                        # noqa: BLE001
-        update_job(jid, state="failed", finished=time.time(), error=str(e))
+        if jid in _cancel or isinstance(e, Cancelled):
+            update_job(jid, state="failed", finished=time.time(), phase=None, error="Abgebrochen", cancelled=True)
+        elif isinstance(e, requests.ConnectionError):
+            update_job(jid, state="failed", finished=time.time(), error="ComfyUI läuft nicht (mehr)")
+        else:
+            update_job(jid, state="failed", finished=time.time(), error=str(e))
     finally:
+        _cancel.discard(jid)
         _last_done.update(at=time.time(), freed=False)
+        notify(jid)
 
 
 def run_clip(job, d):
@@ -515,6 +555,7 @@ def run_clip(job, d):
         if r.status_code != 200:
             raise RuntimeError("Startbild: " + api_error(r))
         (d / "input.png").write_bytes(base64.b64decode(r.json()["data"][0]["b64_json"]))
+        check_cancel(jid)
     r = requests.post(f"{ARGS.api}/v1/video/clips", timeout=ARGS.timeout, data=form, files=edit_files(d))
     if r.status_code != 200:
         raise RuntimeError(api_error(r))
@@ -540,6 +581,8 @@ def vision(action, jid):
     want = "up" if action == "start" else "down"
     deadline = time.time() + 900
     while time.time() < deadline:
+        if action == "start":
+            check_cancel(jid)
         state, _, message = vision_state()
         if state == want:
             return
@@ -559,9 +602,10 @@ def run_check(job, d):
             raise RuntimeError("ComfyUI läuft ohne Vision-Modell – über die Seite stoppen und neu starten, "
                                "dann startet es mit --vision " + str(getattr(ARGS, "vision_slot", 0) or "?"))
         update_job(jid, phase="Vision-Modell startet (ComfyUI gibt dafür seinen Speicher frei) …")
-        vision("start", jid)
-        started = True
+        started = True                         # stopped again below, also when cancelled while it starts
     try:
+        if started:
+            vision("start", jid)
         update_job(jid, phase="Vision-Modell sucht Fehler …")
         src = input_file(d)
         r = requests.post(f"{ARGS.api}/v1/images/check", timeout=ARGS.timeout,
@@ -570,6 +614,7 @@ def run_check(job, d):
         if r.status_code != 200:
             raise RuntimeError(api_error(r))
         found = r.json()
+        check_cancel(jid)                      # flash cannot be stopped mid-answer: its answer is dropped
     finally:
         if started:
             update_job(jid, phase="Vision-Modell stoppt …")
@@ -621,6 +666,7 @@ def run_repair(job, d):
     groups = crop_groups(job["boxes"])
     seed = None
     for i, g in enumerate(groups):
+        check_cancel(jid)
         if len(groups) > 1:
             update_job(jid, phase=f"Stelle {i + 1} von {len(groups)} …")
         r = requests.post(f"{ARGS.api}/v1/images/edits", timeout=ARGS.timeout,
@@ -893,6 +939,7 @@ def actions():
                     "video": bool(a.get("video")), "second_label": a.get("second_label"),
                     "audio": bool(a.get("audio")), "styles": bool(a.get("styles")),
                     "keep": bool(a.get("keep")), "keep_available": avail(a["keep"][0]) if a.get("keep") else None,
+                    "variants": bool(a.get("variants")),
                     "group": next(g for g, ids in GROUPS for i in ids if i == key),
                     "second_available": avail(FIRST_LAST) if a.get("video") else True,
                     "available": avail(fast), "best_available": avail(best),
@@ -904,6 +951,7 @@ def actions():
 
     return jsonify({"actions": out, "edit_models": models(EDIT_MODELS), "gen_models": models(GEN_MODELS),
                     "aspects": list(ASPECTS), "clip_seconds": list(CLIP_SECONDS), "voice_max": VOICE_MAX,
+                    "variants_max": VARIANTS_MAX,
                     "groups": [g for g, _ in GROUPS], "styles": [[k, v[0]] for k, v in STYLES.items()]})
 
 
@@ -1064,7 +1112,9 @@ def create_job():
             files.append(("voice.wav", wav))
             seconds = max(1, math.ceil(length - 1e-6))
         sides = f.get("sides") if f.get("sides") in SIDES else "wide"
-        job = new_job({"action": action, "label": spec["label"], "text": text, "quality": quality,
+        # Varianten: the same edit again, each with a seed of its own and a card of its own
+        n = min(VARIANTS_MAX, max(1, int(f.get("n") or 1))) if spec.get("variants") else 1
+        jobs = [new_job({"action": action, "label": spec["label"], "text": text, "quality": quality,
                        "model": resolve(model, uncensored), "model_label": label,
                        "uncensored": uncensored and model in UNCENSORED,
                        "parent": parent, "parent2": parent2, "two": data2 is not None,
@@ -1072,8 +1122,8 @@ def create_job():
                        "input_size": list(size), "png": bool(spec.get("png")),
                        "style": style if spec.get("styles") else None,
                        **({"video": True, "seconds": seconds} if spec.get("video") else {})},
-                      files)
-        return jsonify([public(job)])
+                        files) for _ in range(n)]
+        return jsonify([public(j) for j in jobs])
     except Refused as e:
         return error(str(e))
     except ValueError:
@@ -1140,6 +1190,186 @@ def job_image(jid, which):
                          as_attachment=bool(request.args.get("download")), download_name=name + ".jpg")
     return send_file(src, max_age=86400, as_attachment=bool(request.args.get("download")),
                      download_name=name + src.suffix)
+
+
+@app.post("/fotos/api/jobs/<jid>/cancel")
+def cancel_job(jid):
+    """A waiting job is crossed out; a running one is asked to stop, and
+    ComfyUI's current workflow interrupted — the image API's call then fails,
+    and the job ends as Abgebrochen."""
+    try:
+        job_path(jid)
+    except Refused:
+        return error("no such job", 404)
+    with _jobs_lock:
+        job = read_job(jid)
+        if job is None:
+            return error("no such job", 404)
+        if job["state"] == "queued":
+            job.update(state="failed", finished=time.time(), error="Abgebrochen", cancelled=True)
+            write_job(job)
+            return jsonify(public(job))
+        if job["state"] != "running":
+            return error("läuft nicht mehr", 409)
+        _cancel.add(jid)
+        job.update(phase="Wird abgebrochen …")
+        write_job(job)
+    if job["action"] != "check":               # flash is not ComfyUI; its answer is dropped
+        try:
+            requests.post(f"{ARGS.comfy}/interrupt", json={}, timeout=10)
+        except requests.RequestException as e:
+            app.logger.warning("interrupt: %s", e)
+    return jsonify(public(job))
+
+
+# ── notifications ────────────────────────────────────────────
+
+def push_file():
+    return Path(ARGS.data) / "push.json"
+
+
+def push_key():
+    return webpush.load_key(Path(ARGS.data) / "vapid.pem")
+
+
+def subscriptions():
+    try:
+        return json.loads(push_file().read_text())
+    except (OSError, ValueError):
+        return []
+
+
+def write_subscriptions(items):
+    tmp = push_file().with_suffix(".tmp")
+    tmp.write_text(json.dumps(items))
+    tmp.replace(push_file())
+
+
+@app.before_request
+def seen():
+    """The page sends its push device's id while it is looked at: a job that
+    ends then needs no notification on that device."""
+    dev = request.headers.get("X-Fotos-Device")
+    if dev:
+        _seen[dev[:32]] = time.time()
+
+
+def message(job):
+    """What the notification says about a job that ended."""
+    took = ""
+    if job.get("started") and job.get("finished"):
+        t = round(job["finished"] - job["started"])
+        took = f" · {t} s" if t < 120 else f" · {t // 60}:{t % 60:02d} min"
+    what = job["label"] + (" · " + job["model_label"] if job.get("model_label") else "")
+    text = (job.get("text") or "").strip()
+    if job["state"] == "done":
+        if job["action"] == "check":
+            n = len(job.get("artifacts") or [])
+            body = f"{n} Stelle(n) gefunden" if n else "Keine Fehler gefunden"
+        else:
+            body = (text[:80] + ("…" if len(text) > 80 else "")) if text else "Zum Ansehen tippen"
+        return {"title": f"Fertig: {what}{took}", "body": body, "tag": job["id"], "url": f"/fotos#job={job['id']}"}
+    return {"title": f"Fehlgeschlagen: {what}", "body": (job.get("error") or "")[:160],
+            "tag": job["id"], "url": f"/fotos#job={job['id']}"}
+
+
+def notify(jid):
+    """Tell the subscribed browsers that a job ended — not for one cancelled,
+    nor a device whose page is looked at."""
+    if webpush is None:
+        return
+    job = read_job(jid)
+    if job is None or job.get("cancelled") or job["state"] not in ("done", "failed"):
+        return
+    subs = subscriptions()
+    if not subs:
+        return
+    payload = json.dumps(message(job), ensure_ascii=False).encode()
+
+    def go():
+        gone = []
+        try:
+            key = push_key()
+        except Exception as e:                                    # noqa: BLE001
+            app.logger.warning("push key: %s", e)
+            return
+        for sub in subs:
+            if time.time() - _seen.get(sub["id"], 0) < SEEN_FOR:
+                continue
+            try:
+                status = webpush.send(sub["subscription"], payload, key)
+            except Exception as e:                                # noqa: BLE001
+                app.logger.warning("push %s: %s", sub["id"], e)
+                continue
+            if status in (404, 410):
+                gone.append(sub["id"])
+            elif status >= 300:
+                app.logger.warning("push %s: HTTP %s", sub["id"], status)
+        if gone:
+            with _push_lock:
+                write_subscriptions([s for s in subscriptions() if s["id"] not in gone])
+    threading.Thread(target=go, daemon=True).start()
+
+
+@app.get("/fotos/api/push")
+def push_info():
+    if webpush is None:
+        return jsonify({"available": False})
+    return jsonify({"available": True, "key": webpush.public_key(push_key())})
+
+
+@app.post("/fotos/api/push")
+def push_subscribe():
+    if webpush is None:
+        return error("Benachrichtigungen gehen hier nicht (Python-Paket cryptography fehlt)", 501)
+    sub = (request.get_json(silent=True) or {}).get("subscription") or {}
+    endpoint, keys = sub.get("endpoint"), sub.get("keys") or {}
+    if not (isinstance(endpoint, str) and endpoint.startswith("https://") and keys.get("p256dh") and keys.get("auth")):
+        return error("ungültiges Abo")
+    sid = uuid.uuid5(uuid.NAMESPACE_URL, endpoint).hex[:16]
+    with _push_lock:
+        items = [s for s in subscriptions() if s["id"] != sid]
+        items.append({"id": sid, "subscription": {"endpoint": endpoint, "keys": {"p256dh": keys["p256dh"], "auth": keys["auth"]}},
+                      "created": time.time(), "agent": request.headers.get("User-Agent", "")[:200]})
+        write_subscriptions(items[-20:])
+    return jsonify({"id": sid}), 201
+
+
+@app.delete("/fotos/api/push/<sid>")
+def push_unsubscribe(sid):
+    with _push_lock:
+        items = subscriptions()
+        write_subscriptions([s for s in items if s["id"] != sid])
+    return jsonify({"deleted": sid})
+
+
+SW = """// Fotos: notifications when a job is done. No fetch handler: the page is not cached.
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
+self.addEventListener("push", (e) => {
+  let m = {};
+  try { m = e.data.json(); } catch (err) { m = { title: "Fotos", body: e.data ? e.data.text() : "" }; }
+  e.waitUntil(self.registration.showNotification(m.title || "Fotos", {
+    body: m.body || "", tag: m.tag, data: { url: m.url || "/fotos" }, icon: "/fotos/icon.svg" }));
+});
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const url = new URL((e.notification.data && e.notification.data.url) || "/fotos", self.location.origin).href;
+  e.waitUntil((async () => {
+    for (const c of await self.clients.matchAll({ type: "window", includeUncontrolled: true })) {
+      if (new URL(c.url).pathname.startsWith("/fotos") && "navigate" in c) { await c.focus(); return c.navigate(url); }
+    }
+    return self.clients.openWindow(url);
+  })());
+});
+"""
+
+
+@app.get("/fotos/sw.js")
+def service_worker():
+    # at /fotos/, but for the page at /fotos as well
+    return Response(SW, mimetype="text/javascript",
+                    headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/fotos"})
 
 
 @app.delete("/fotos/api/jobs/<jid>")
