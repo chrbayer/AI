@@ -210,6 +210,14 @@ STYLES = {
     "comic": ("Comic", "A comic book illustration, bold ink outlines, flat vivid colours"),
     "anime": ("Anime", "An anime illustration, clean line art, soft cel shading"),
 }
+# Fehler suchen and Reparieren: the image API's /repair machinery for a
+# generated picture. The vision model (flash) and Inpaint do not fit
+# together: it is started for the check and stopped after, if it was not
+# running before. Repaired on crops (Inpaint Crop): the box 2.5 times over,
+# grown by MARGIN; boxes whose crops meet go in one run, the others one after
+# the other, each on the last result.
+REPAIR_MODEL = ("qwen-image-21-inpaint-crop-turbo", "qwen-image-21-inpaint-crop")
+CROP_CONTEXT, MARGIN = 2.5, 16
 # Sprechen lassen: the longest voice, in seconds.
 VOICE_MAX = 10
 # Animieren with an end picture.
@@ -460,9 +468,13 @@ def run_job(jid):
         return
     d = job_path(jid)
     try:
-        model = job["model"]
+        model = job.get("model")
         if job.get("video"):
             return run_clip(job, d)
+        if job["action"] == "check":
+            return run_check(job, d)
+        if job["action"] == "repair":
+            return run_repair(job, d)
         if job["action"] == "generate":
             r = requests.post(f"{ARGS.api}/v1/images/generations", timeout=ARGS.timeout,
                               json={"model": model, "prompt": job["text"], "size": job["size"],
@@ -506,6 +518,120 @@ def run_clip(job, d):
     size = [int(v) for v in r.headers.get("X-Size", "0x0").split("x")]
     update_job(jid, state="done", finished=time.time(), result_size=size, seed=r.headers.get("X-Seed"))
     app.logger.info("job %s %s (%s): %.0f s", jid, job["action"], job["model"], time.time() - job["started"])
+
+
+def vision_state():
+    """The image API's vision slot: (state, controllable, message)."""
+    r = requests.get(f"{ARGS.api}/repair/status", timeout=10)
+    v = r.json()["vision"]
+    return v["state"], v["controllable"], v.get("message") or ""
+
+
+def vision(action, jid):
+    """Start or stop the vision slot through the image API and wait for it."""
+    r = requests.post(f"{ARGS.api}/repair/vision", json={"action": action}, timeout=30)
+    if r.status_code != 200:
+        raise RuntimeError(api_error(r))
+    want = "up" if action == "start" else "down"
+    deadline = time.time() + 900
+    while time.time() < deadline:
+        state, _, message = vision_state()
+        if state == want:
+            return
+        if state in ("up", "down") and message:
+            raise RuntimeError(message)
+        time.sleep(3)
+    raise RuntimeError(f"das Vision-Modell ist nach 15 min nicht {'da' if action == 'start' else 'weg'}")
+
+
+def run_check(job, d):
+    """Fehler suchen: the vision model's boxes for a generated picture."""
+    jid = job["id"]
+    state, controllable, _ = vision_state()
+    started = False
+    if state != "up":
+        if not controllable:
+            raise RuntimeError("ComfyUI läuft ohne Vision-Modell – über die Seite stoppen und neu starten, "
+                               "dann startet es mit --vision " + str(getattr(ARGS, "vision_slot", 0) or "?"))
+        update_job(jid, phase="Vision-Modell startet (ComfyUI gibt dafür seinen Speicher frei) …")
+        vision("start", jid)
+        started = True
+    try:
+        update_job(jid, phase="Vision-Modell sucht Fehler …")
+        src = input_file(d)
+        r = requests.post(f"{ARGS.api}/v1/images/check", timeout=ARGS.timeout,
+                          data={"prompt": job.get("text") or ""},
+                          files={"image": (src.name, src.read_bytes())})
+        if r.status_code != 200:
+            raise RuntimeError(api_error(r))
+        found = r.json()
+    finally:
+        if started:
+            update_job(jid, phase="Vision-Modell stoppt …")
+            try:
+                vision("stop", jid)
+            except Exception as e:                                # noqa: BLE001
+                app.logger.warning("vision stop: %s", e)
+    shutil.copyfile(src, d / "result.png")
+    update_job(jid, state="done", finished=time.time(), phase=None, result_size=found["size"],
+               artifacts=found["artifacts"], remarks=found.get("remarks") or [])
+    app.logger.info("job %s check: %d box(es) in %.0f s", jid, len(found["artifacts"]), time.time() - job["started"])
+
+
+def crop_groups(boxes, margin=MARGIN):
+    """Boxes whose crops (the box grown by margin, CROP_CONTEXT times over) meet,
+    together — as the repair page groups them."""
+    def reach(b):
+        cx, cy = (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
+        hw, hh = ((b[2] - b[0]) / 2 + margin) * CROP_CONTEXT, ((b[3] - b[1]) / 2 + margin) * CROP_CONTEXT
+        return [cx - hw, cy - hh, cx + hw, cy + hh]
+    groups = [([b], reach(b)) for b in boxes]
+    merged = True
+    while merged:
+        merged = False
+        for i in range(len(groups)):
+            for j in range(i + 1, len(groups)):
+                r, q = groups[i][1], groups[j][1]
+                if r[0] < q[2] and q[0] < r[2] and r[1] < q[3] and q[1] < r[3]:
+                    groups[i] = (groups[i][0] + groups[j][0],
+                                 [min(r[0], q[0]), min(r[1], q[1]), max(r[2], q[2]), max(r[3], q[3])])
+                    del groups[j]
+                    merged = True
+                    break
+            if merged:
+                break
+    return [g for g, _ in groups]
+
+
+def repair_prompt(base, boxes):
+    clean = lambda t: re.sub(r"[.\s]+$", "", (t or "").strip())    # noqa: E731
+    fixes = list(dict.fromkeys(clean(b[4]) for b in boxes if clean(b[4])))
+    return ". ".join(x for x in (clean(base), "; ".join(fixes)) if x)
+
+
+def run_repair(job, d):
+    """Reparieren: the chosen boxes repainted, a run per group of crops."""
+    jid = job["id"]
+    image = input_file(d).read_bytes()
+    groups = crop_groups(job["boxes"])
+    seed = None
+    for i, g in enumerate(groups):
+        if len(groups) > 1:
+            update_job(jid, phase=f"Stelle {i + 1} von {len(groups)} …")
+        r = requests.post(f"{ARGS.api}/v1/images/edits", timeout=ARGS.timeout,
+                          data={"model": job["model"], "prompt": repair_prompt(job.get("base"), g),
+                                "boxes": json.dumps([[round(v) for v in b[:4]] for b in g]),
+                                "margin": str(MARGIN), "n": "1", "response_format": "b64_json"},
+                          files={"image": ("input.png", image, "image/png")})
+        if r.status_code != 200:
+            raise RuntimeError(api_error(r))
+        image = base64.b64decode(r.json()["data"][0]["b64_json"])
+        seed = r.json().get("seed")
+    (d / "result.png").write_bytes(image)
+    update_job(jid, state="done", finished=time.time(), phase=None, seed=seed, runs=len(groups),
+               result_size=list(Image.open(io.BytesIO(image)).size))
+    app.logger.info("job %s repair: %d box(es), %d run(s), %.0f s", jid, len(job["boxes"]), len(groups),
+                    time.time() - job["started"])
 
 
 def clip_prompt(job):
@@ -573,6 +699,8 @@ def run_llmctl(action):
     try:
         if action == "start":
             cmd = [ARGS.llmctl, "start", ARGS.comfy_model, str(ARGS.comfy_slot), "--proxy"]
+            if getattr(ARGS, "vision_slot", 0):  # for Fehler suchen: the image API starts it on request
+                cmd += ["--vision", str(ARGS.vision_slot)]
         else:
             cmd = [ARGS.llmctl, "stop", str(ARGS.comfy_slot)]
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
@@ -721,6 +849,33 @@ def new_job(fields, files=()):
     return job
 
 
+def repair_job(action, f):
+    """Fehler suchen on a finished picture, or Reparieren from a check's boxes."""
+    parent = read_job(f.get("from") or "")
+    if parent is None or parent["state"] != "done" or parent.get("video"):
+        raise Refused("das Bild gibt es nicht (mehr)")
+    src = job_path(parent["id"]) / "result.png"
+    # what the picture was made from, for the check and the repair prompt
+    base = parent.get("base") if parent["action"] in ("check", "repair") else parent.get("text") or ""
+    if action == "check":
+        return new_job({"action": "check", "label": "Fehlersuche", "text": base, "base": base,
+                        "parent": parent["id"], "png": False}, [("input.png", src.read_bytes())])
+    if parent["action"] != "check":
+        raise Refused("reparieren geht nach einer Fehlersuche")
+    try:
+        chosen = json.loads(f.get("boxes") or "[]")
+    except ValueError:
+        raise Refused("ungültige Stellen") from None
+    if not chosen or not all(isinstance(b, list) and len(b) == 5 and all(isinstance(v, (int, float)) for v in b[:4])
+                             and isinstance(b[4], str) for b in chosen):
+        raise Refused("bitte mindestens eine Stelle wählen")
+    quality = "best" if f.get("quality") == "best" else "fast"
+    return new_job({"action": "repair", "label": "Repariert", "text": "; ".join(b[4] for b in chosen if b[4]),
+                    "base": base, "boxes": chosen, "parent": parent["id"], "quality": quality,
+                    "model": REPAIR_MODEL[1 if quality == "best" else 0], "png": False},
+                   [("input.png", src.read_bytes())])
+
+
 def voice(data):
     """The recording as WAV, cut to VOICE_MAX seconds to the sample, and its
     length. The phone records WebM/Opus or MP4/AAC; ffmpeg reads both."""
@@ -789,6 +944,8 @@ def create_job():
                               frame_model=resolve(frame, uncensored), uncensored=uncensored and frame in UNCENSORED)
             jobs = [new_job(fields) for _ in range(n)]       # one job per picture: each its own card
             return jsonify([public(j) for j in jobs])
+        if action in ("check", "repair"):
+            return jsonify([public(repair_job(action, f))])
         if action not in ACTIONS:
             raise Refused("unbekannte Aktion")
         spec = ACTIONS[action]
@@ -945,6 +1102,8 @@ def main():
     p.add_argument("--comfy-model", default="comfy")
     p.add_argument("--llmctl", required=True, help="llmctl itself, to start and stop ComfyUI")
     p.add_argument("--data", required=True, help="where the jobs are kept")
+    p.add_argument("--vision-slot", type=int, default=0,
+                   help="slot of the vision model ComfyUI's image API starts for Fehler suchen (0: none)")
     p.add_argument("--timeout", type=int, default=3700)
     p.add_argument("--free-after", type=int, default=900,
                    help="seconds without a job after which ComfyUI unloads its models (0: never)")

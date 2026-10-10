@@ -2102,6 +2102,24 @@ the chosen action. A tap puts the text in and switches to its action;
 a `[placeholder]` is selected to type over — left standing, its words
 count, the brackets are dropped.
 
+**Fehler suchen.** A picture made in *Erzeugen* (or a repaired one) has
+*Fehler suchen* in the viewer: the image API's check from `/repair`. The
+vision model (flash, `--mmproj`) and Inpaint do not fit together, so the job
+has ComfyUI let go of its models, starts flash on the vision slot, checks,
+and stops it again — unless it was running before. The page starts ComfyUI
+with `--vision $LLMCTL_FOTOS_VISION_SLOT` (2, as preset `comfy-remote`; 0
+for none); a ComfyUI started without it says so. The flaws come as numbered
+boxes over the picture and a list to tick, each with its fix to edit;
+*Reparieren* repaints the ticked ones with Inpaint Crop (Turbo or, *Gründlich*,
+14 steps), boxes whose crops meet in one run, the others one after the other,
+the prompt made from the picture's and the fixes — as `/repair` does. A
+check took 166 s (flash up 40 s, the check 116 s, down 8 s): on old hands
+knitting it found a missing little finger and a "garbled" temple of the
+folded glasses — the second healthy, which is why the list is there to
+untick. Turbo (53 s, two runs) left a white fleck at the finger; *Gründlich*
+(134 s) made two clean curled fingers. A spot of one's own goes through
+*Weiter bearbeiten* → *Übermalen*. `/repair` stays, for the desk.
+
 **Edits at 1 MP.** Qwen-Image Edit works at the picture's own size, and its
 time grows faster than the pixels: a rainy street made sunny took 151 s at
 1.6 MP, 62 s at 1.0 MP and 33 s at 0.7 MP (Turbo, warm). 1.0 MP was as sharp

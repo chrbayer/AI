@@ -468,6 +468,75 @@ class Fotos(unittest.TestCase):
         _, form, _ = self.sent(action="edit", text="Lass [die Person] lächeln.")
         self.assertEqual(form["prompt"], "Lass die Person lächeln.")
 
+    def done_picture(self, action="generate", text="a cat on a sofa"):
+        """A finished job with a picture, as Fehler suchen starts from."""
+        from PIL import Image
+        job = fotos.new_job({"action": action, "label": "Erzeugt", "text": text, "png": False})
+        while not fotos._queue.empty():
+            fotos._queue.get_nowait()
+        Image.new("RGB", (400, 300)).save(fotos.job_path(job["id"]) / "result.png")
+        fotos.update_job(job["id"], state="done", result_size=[400, 300])
+        return job["id"]
+
+    def test_boxes_whose_crops_meet_go_in_one_run(self):
+        boxes = [[10, 10, 30, 30, "a"], [40, 40, 60, 60, "b"], [500, 500, 520, 520, "c"]]
+        groups = fotos.crop_groups(boxes)
+        self.assertEqual(sorted(len(g) for g in groups), [1, 2])
+        self.assertEqual(fotos.repair_prompt("A cat on a sofa.", boxes[:2] + [[0, 0, 1, 1, "a."]]),
+                         "A cat on a sofa. a; b")
+
+    def test_a_check_asks_the_vision_model_and_stops_what_it_started(self):
+        from unittest import mock
+        jid = self.done_picture()
+        check = self.post(action="check", **{"from": jid}).get_json()[0]
+        self.assertEqual((check["action"], check["text"]), ("check", "a cat on a sofa"))
+        states = iter(["down", "up", "up", "down"])
+        def get(url, **kw):
+            r = mock.Mock(status_code=200)
+            r.json.return_value = {"vision": {"state": next(states), "controllable": True, "message": ""}}
+            return r
+        def post(url, **kw):
+            r = mock.Mock(status_code=200)
+            r.json.return_value = ({"size": [400, 300], "artifacts": [{"id": 1, "what": "hand", "fix": "a hand",
+                                                                       "box": [1, 2, 3, 4]}], "remarks": []}
+                                   if url.endswith("/check") else {"state": "starting"})
+            return r
+        with mock.patch.object(fotos.requests, "get", side_effect=get), \
+                mock.patch.object(fotos.requests, "post", side_effect=post) as p, mock.patch.object(fotos.time, "sleep"):
+            fotos.run_job(check["id"])
+        job = fotos.read_job(check["id"])
+        self.assertEqual(job["state"], "done", job.get("error"))
+        self.assertEqual(job["artifacts"][0]["what"], "hand")
+        sent = [(c.args[0].rsplit("/", 1)[1], (c.kwargs.get("json") or {}).get("action")) for c in p.call_args_list]
+        self.assertEqual(sent, [("vision", "start"), ("check", None), ("vision", "stop")])
+
+    def test_a_check_without_a_vision_slot_says_how_to_get_one(self):
+        from unittest import mock
+        check = self.post(action="check", **{"from": self.done_picture()}).get_json()[0]
+        r = mock.Mock(status_code=200)
+        r.json.return_value = {"vision": {"state": "down", "controllable": False, "message": ""}}
+        with mock.patch.object(fotos.requests, "get", return_value=r):
+            fotos.run_job(check["id"])
+        self.assertIn("neu starten", fotos.read_job(check["id"])["error"])
+
+    def test_repair_runs_each_group_on_the_last_result(self):
+        from unittest import mock
+        from PIL import Image
+        cid = self.done_picture("check")
+        fotos.update_job(cid, base="a cat on a sofa", artifacts=[])
+        self.assertEqual(self.post(action="repair", **{"from": self.done_picture()}, boxes="[[1,1,2,2,\"x\"]]").status_code, 400)
+        boxes = [[10, 10, 30, 30, "a paw"], [300, 200, 320, 220, "an ear"]]
+        job = self.post(action="repair", **{"from": cid}, boxes=json.dumps(boxes)).get_json()[0]
+        self.assertEqual((job["model"], job["base"]), ("qwen-image-21-inpaint-crop-turbo", "a cat on a sofa"))
+        buf = io.BytesIO(); Image.new("RGB", (400, 300)).save(buf, "PNG")
+        reply = mock.Mock(status_code=200)
+        reply.json.return_value = {"data": [{"b64_json": base64.b64encode(buf.getvalue()).decode()}], "seed": 1}
+        with mock.patch.object(fotos.requests, "post", return_value=reply) as p:
+            fotos.run_job(job["id"])
+        self.assertEqual(fotos.read_job(job["id"])["state"], "done")
+        prompts = sorted(c.kwargs["data"]["prompt"] for c in p.call_args_list)
+        self.assertEqual(prompts, ["a cat on a sofa. a paw", "a cat on a sofa. an ear"])
+
     def test_every_action_has_its_group(self):
         ids = [i for _, group in fotos.GROUPS for i in group]
         self.assertEqual(sorted(ids), sorted(fotos.ACTIONS))

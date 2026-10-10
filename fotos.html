@@ -155,12 +155,29 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
 .stage .tag.l { left: 8px; } .stage .tag.r { right: 8px; }
 .checker { background: repeating-conic-gradient(#bbb 0 25%, #ddd 0 50%) 0 0 / 18px 18px; }
 .layer .info { font-size: 13px; color: #bbb; padding: 6px 16px 0; text-align: center; min-height: 22px; }
-.layer .bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 10px 12px calc(12px + env(safe-area-inset-bottom)); }
+.layer .bar { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; padding: 10px 12px calc(12px + env(safe-area-inset-bottom)); }
 .layer .bar button { background: rgba(255,255,255,.14); border: none; color: #fff; border-radius: 12px; min-height: 52px;
                      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 13px; }
 .layer .bar button svg { width: 22px; height: 22px; }
 .layer .bar button.primary { background: var(--accent); color: #fff; }
 .layer .bar button:disabled { opacity: .4; }
+.stage .box { position: absolute; border: 2px solid #ffd60a; border-radius: 4px; box-shadow: 0 0 0 1px rgba(0,0,0,.5);
+              pointer-events: auto; cursor: pointer; }
+.stage .box.off { border-style: dashed; border-color: rgba(255,255,255,.55); }
+.stage .box i { position: absolute; left: -2px; top: -22px; background: #ffd60a; color: #000; font: 700 12px system-ui;
+                font-style: normal; border-radius: 6px; padding: 2px 6px; }
+.stage .box.off i { background: rgba(255,255,255,.55); }
+.layer.checking .stage img { max-height: 46dvh; }
+.found { max-height: 34dvh; overflow-y: auto; padding: 4px 12px 0; display: flex; flex-direction: column; gap: 8px; }
+.found label { display: flex; gap: 10px; align-items: flex-start; background: rgba(255,255,255,.08); border-radius: 12px; padding: 9px 10px; }
+.found input[type=checkbox] { width: 22px; height: 22px; margin: 1px 0 0; accent-color: #ffd60a; flex: none; }
+.found .t { flex: 1; min-width: 0; }
+.found .t b { display: block; font-size: 14px; }
+.found .t input { width: 100%; margin-top: 5px; font: 13px system-ui; color: #fff; background: rgba(255,255,255,.1);
+                  border: 1px solid rgba(255,255,255,.2); border-radius: 8px; padding: 6px 8px; }
+.found p { margin: 0; color: #bbb; font-size: 13px; }
+.found .seg { background: rgba(255,255,255,.1); border-color: transparent; }
+.found .seg button { color: #fff; }
 .spinner { width: 42px; height: 42px; border: 4px solid rgba(255,255,255,.25); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .waiting { display: flex; flex-direction: column; align-items: center; gap: 14px; color: #ddd; text-align: center; padding: 20px; }
@@ -337,8 +354,11 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
   <div class="top"><b id="vTitle"></b><button type="button" id="vClose">Schließen</button></div>
   <div class="stage" id="stage"></div>
   <div class="info" id="vInfo"></div>
+  <div class="found hidden" id="vFound"></div>
   <div class="bar" id="vBar">
     <button type="button" class="primary" id="vSave"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 19h14"/></svg>Sichern</button>
+    <button type="button" id="vCheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="6"/><path d="m20 20-4.5-4.5M9 11h4M11 9v4"/></svg>Fehler&nbsp;suchen</button>
+    <button type="button" class="primary hidden" id="vRepair"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>Reparieren</button>
     <button type="button" id="vMore"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>Weiter&nbsp;bearbeiten</button>
     <button type="button" id="vDelete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13"/></svg>Löschen</button>
   </div>
@@ -521,6 +541,8 @@ function secondsChips(box, onPick) {
 
 // How long a job takes: a clip by its length (the times are for 5 s).
 function typical(job) {
+  if (job.action === "check") return 150;                     // vision model up, check, down
+  if (job.action === "repair") return (job.quality === "best" ? 80 : 30) * Math.max(1, (job.boxes || []).length);
   if (job.action === "generate") {
     const m = S.genModels.find((x) => x.label === job.model_label);
     if (!m) return null;
@@ -1025,8 +1047,14 @@ function openViewer(id) {
   const done = job.state === "done";
   for (const b of $("vBar").children) b.style.visibility = done || b.id === "vDelete" ? "" : "hidden";
   if (job.video) $("vMore").style.visibility = "hidden";        // a clip is no picture to edit on
+  // Fehler suchen: for what a model made from nothing but words, and for a repair to check again
+  const checkable = done && !job.video && ["generate", "repair"].includes(job.action);
+  const checked = done && job.action === "check";
+  show("vCheck", checkable); show("vSave", !checked); show("vRepair", checked && job.artifacts && job.artifacts.length > 0);
+  $("viewer").classList.toggle("checking", checked); show("vFound", checked);
   $("vDelete").disabled = job.state === "running";
-  if (done && job.video) showVideo(job);
+  if (checked) showChecked(job);
+  else if (done && job.video) showVideo(job);
   else if (done && job.action === "generate") showSingle(job);
   else if (done) showCompare(job);
   else {
@@ -1048,6 +1076,7 @@ function info(job) {
   if (job.video || (!job.model_label && job.action !== "generate")) parts.push(job.quality === "best" ? "gründlich" : "schnell");
   if (job.uncensored) parts.push("unzensiert");
   if (job.started && job.finished) parts.push(elapsed(job));
+  if (job.action === "check") return (job.artifacts.length ? job.artifacts.length + " Stelle(n) gefunden – abwählen, was gesund ist" : "Keine Fehler gefunden") + " · " + elapsed(job);
   return parts.join(" · ") + (job.action === "generate" || job.video ? "" : " — Regler ziehen für vorher/nachher");
 }
 
@@ -1056,6 +1085,7 @@ function updateWaiting(job) {
   $("vState").textContent = stateText(job);
   const typ = typical(job);
   $("vHint").textContent = job.state === "queued" ? "Vorher ist noch etwas anderes dran."
+    : job.phase ? job.phase + " Du kannst die Seite schließen – das Ergebnis kommt in den Verlauf."
     : (typ ? "Üblich sind " + duration(typ) + ". " : "") + "Du kannst die Seite schließen – das Ergebnis kommt in den Verlauf.";
 }
 
@@ -1063,6 +1093,74 @@ function showSingle(job) {
   const frame = document.createElement("div"); frame.className = "frame";
   const img = document.createElement("img"); img.alt = "Ergebnis"; img.src = `${API}/jobs/${job.id}/result`;
   frame.appendChild(img); $("stage").appendChild(frame);
+}
+
+// Fehler suchen: the picture with the boxes, numbered, and the list to tick.
+const C = { boxes: [], quality: "fast" };
+function showChecked(job) {
+  C.boxes = job.artifacts.map((a) => ({ ...a, on: true }));
+  const frame = document.createElement("div"); frame.className = "frame";
+  const img = document.createElement("img"); img.alt = "Bild"; img.src = `${API}/jobs/${job.id}/result`;
+  frame.appendChild(img);
+  const [w, h] = job.result_size;
+  for (const b of C.boxes) {
+    const el = document.createElement("div"); el.className = "box";
+    const [x1, y1, x2, y2] = b.box;
+    Object.assign(el.style, { left: x1 / w * 100 + "%", top: y1 / h * 100 + "%", width: (x2 - x1) / w * 100 + "%", height: (y2 - y1) / h * 100 + "%" });
+    el.innerHTML = "<i></i>"; el.querySelector("i").textContent = b.id;
+    el.onclick = () => { b.on = !b.on; renderFound(); };
+    b.el = el; frame.appendChild(el);
+  }
+  $("stage").appendChild(frame);
+  const list = $("vFound"); list.innerHTML = "";
+  if (!C.boxes.length) {
+    const p = document.createElement("p");
+    p.textContent = "Das Vision-Modell hat nichts gefunden." + (job.remarks && job.remarks.length ? " Hinweise zum ganzen Bild: " + job.remarks.map((r) => r.what).join("; ") : "")
+      + " Eine Stelle selbst neu malen geht mit „Weiter bearbeiten“ → Übermalen.";
+    list.appendChild(p); return;
+  }
+  for (const b of C.boxes) {
+    const l = document.createElement("label");
+    l.innerHTML = '<input type="checkbox" checked><div class="t"><b></b><input type="text" enterkeyhint="done"></div>';
+    l.querySelector("b").textContent = b.id + " · " + b.what;
+    const fix = l.querySelector('input[type="text"]'); fix.value = b.fix; fix.placeholder = "Was soll dort hin?";
+    fix.oninput = () => { b.fix = fix.value; };
+    const cb = l.querySelector('input[type="checkbox"]'); cb.onchange = () => { b.on = cb.checked; renderFound(); };
+    b.cb = cb; list.appendChild(l);
+  }
+  const q = document.createElement("div"); q.className = "seg small";
+  q.innerHTML = '<button type="button" data-q="fast">Schnell · 30 s je Stelle</button><button type="button" data-q="best">Gründlich · 80 s</button>';
+  for (const b of q.children) b.onclick = () => { C.quality = b.dataset.q; renderFound(); };
+  C.seg = q; list.appendChild(q);
+  renderFound();
+}
+
+function renderFound() {
+  for (const b of C.boxes) { b.el.classList.toggle("off", !b.on); if (b.cb) b.cb.checked = b.on; }
+  if (C.seg) for (const b of C.seg.children) b.setAttribute("aria-pressed", String(b.dataset.q === C.quality));
+  const n = C.boxes.filter((b) => b.on).length;
+  $("vRepair").disabled = !n;
+  $("vRepair").lastChild.textContent = n ? n + " reparieren" : "Reparieren";
+}
+
+async function checkPicture() {
+  const id = S.viewing.id;
+  const fd = new FormData(); fd.append("action", "check"); fd.append("from", id);
+  try {
+    const jobs = await api("/jobs", { method: "POST", body: fd });
+    S.jobs = jobs.concat(S.jobs); renderJobs(); openViewer(jobs[0].id); schedule();
+  } catch (e) { toast(e.message, 4000); }
+}
+
+async function repairPicture() {
+  const chosen = C.boxes.filter((b) => b.on).map((b) => [...b.box, b.fix || ""]);
+  if (!chosen.length) return;
+  const fd = new FormData(); fd.append("action", "repair"); fd.append("from", S.viewing.id);
+  fd.append("boxes", JSON.stringify(chosen)); fd.append("quality", C.quality);
+  try {
+    const jobs = await api("/jobs", { method: "POST", body: fd });
+    S.jobs = jobs.concat(S.jobs); renderJobs(); openViewer(jobs[0].id); schedule();
+  } catch (e) { toast(e.message, 4000); }
 }
 
 function showVideo(job) {
@@ -1101,7 +1199,7 @@ function showCompare(job) {
 }
 
 function closeViewer() {
-  $("viewer").classList.remove("on"); document.body.style.overflow = ""; S.viewing = null;
+  $("viewer").classList.remove("on", "checking"); show("vFound", false); document.body.style.overflow = ""; S.viewing = null;
   if (location.hash) history.replaceState(null, "", location.pathname);
 }
 
@@ -1191,6 +1289,8 @@ $("sheetForce").onclick = () => comfy("start", true);
 $("vClose").onclick = closeViewer;
 $("vSave").onclick = save;
 $("vMore").onclick = continueWith;
+$("vCheck").onclick = checkPicture;
+$("vRepair").onclick = repairPicture;
 $("vDelete").onclick = removeJob;
 document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
 window.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeViewer(); closeSheet(); closePainter(); closeTemplates(); } });

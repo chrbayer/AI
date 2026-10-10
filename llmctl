@@ -4547,6 +4547,9 @@ FOTOS_SCRIPT="$LIB_DIR/fotos_server.py"
 FOTOS_PORT="${LLMCTL_FOTOS_PORT:-8190}"      # → the server's 127.0.0.1:18190 through the tunnel
 FOTOS_SLOT="${LLMCTL_FOTOS_SLOT:-9}"         # where it starts ComfyUI, as preset comfy-remote does
 FOTOS_MODEL="${LLMCTL_FOTOS_MODEL:-comfy}"
+# The vision slot ComfyUI's image API starts for Fehler suchen (--vision), as
+# preset comfy-remote has it; 0 for none.
+FOTOS_VISION_SLOT="${LLMCTL_FOTOS_VISION_SLOT:-2}"
 FOTOS_DIR="$DATA_DIR/fotos"
 FOTOS_KEY="$CONFIG_DIR/fotos_tunnel_key"
 FOTOS_UNIT="llmctl-fotos.service"
@@ -4621,7 +4624,7 @@ cmd_fotos() {
             python3 -u "$FOTOS_SCRIPT" --port "$FOTOS_PORT" \
                 --api "http://127.0.0.1:$(( PORT_BASE_PROXY + FOTOS_SLOT ))" \
                 --comfy "http://127.0.0.1:$(( PORT_BASE_SERVER + FOTOS_SLOT ))" \
-                --comfy-slot "$FOTOS_SLOT" --comfy-model "$FOTOS_MODEL" \
+                --comfy-slot "$FOTOS_SLOT" --comfy-model "$FOTOS_MODEL" --vision-slot "$FOTOS_VISION_SLOT" \
                 --llmctl "$(readlink -f "${BASH_SOURCE[0]}")" --data "$FOTOS_DIR"
             ;;
         key)
@@ -4642,7 +4645,8 @@ cmd_fotos() {
             local bin; bin=$(command -v "$PROG" 2>/dev/null || readlink -f "$0")
             local -a env=("PATH=$PATH") v
             for v in LLMCTL_CONFIG_DIR LLMCTL_DATA_DIR LLMCTL_STATE_DIR LLMCTL_MODELS_DIR LLMCTL_TUNNEL_HOST \
-                     LLMCTL_TUNNEL_PORT_OFFSET LLMCTL_FOTOS_PORT LLMCTL_FOTOS_SLOT LLMCTL_FOTOS_MODEL; do
+                     LLMCTL_TUNNEL_PORT_OFFSET LLMCTL_FOTOS_PORT LLMCTL_FOTOS_SLOT LLMCTL_FOTOS_MODEL \
+                     LLMCTL_FOTOS_VISION_SLOT; do
                 [[ -n "${!v:-}" ]] && env+=("$v=${!v}")
             done
             mkdir -p "$SERVICE_UNIT_DIR"
@@ -4691,6 +4695,9 @@ cmd_fotos() {
                 printf 'Tunnel:   down%s\n' "$([[ -f "$FOTOS_KEY" ]] || echo " (no key yet: $PROG fotos key)")"
             fi
             printf 'ComfyUI:  slot %s (%s), started and stopped from the page\n' "$FOTOS_SLOT" "$FOTOS_MODEL"
+            if [[ "$FOTOS_VISION_SLOT" != 0 ]]; then
+                printf 'Vision:   slot %s (%s), started for Fehler suchen and stopped after\n' "$FOTOS_VISION_SLOT" "$VISION_MODEL"
+            fi
             printf 'Jobs:     %s\n' "$(find "$FOTOS_DIR/jobs" -name job.json 2>/dev/null | wc -l) in $FOTOS_DIR/jobs"
             if [[ -f "$unit" ]]; then
                 echo "Last lines:"
