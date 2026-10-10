@@ -46,6 +46,8 @@ install:
 	install -Dm644 images_server.py $(LIBDIR)/images_server.py
 	install -Dm644 hf_parts.py $(LIBDIR)/hf_parts.py
 	install -Dm644 images_repair.html $(LIBDIR)/images_repair.html
+	install -Dm644 fotos_server.py $(LIBDIR)/fotos_server.py
+	install -Dm644 fotos.html $(LIBDIR)/fotos.html
 	install -Dm644 tts_voice_design.py $(LIBDIR)/tts_voice_design.py
 	install -Dm644 -t $(SHAREDIR)/templates templates/*
 	install -Dm644 -t $(SHAREDIR)/examples examples/*.conf examples/*.json examples/*.png

@@ -1997,6 +1997,63 @@ the server's Apache with this vhost: 401 with a Basic Auth prompt on every
 path without credentials, and with them ComfyUI and the repair page load in
 the browser.
 
+### Photos from the phone (`llmctl fotos`)
+
+ComfyUI's workflows are not made for a phone. `/fotos` is a page that is:
+pick a photo from the gallery or take one, tap what should happen, look at
+the result with a before/after slider, and save it to the phone's photos
+through its share sheet. Big buttons, one column, dark mode; it can sit on
+the home screen like an app.
+
+| Action | Workflow (fast / thorough) | Measured here |
+|---|---|---|
+| Kolorieren — black and white to colour; colours can be named | Qwen-Image 2.1 Colorize Turbo / Colorize | 29 s / 65 s |
+| Restaurieren — scratches, stains, noise | Qwen-Image 2.1 Edit Turbo / Edit, with a restoring prompt | 146 s (with loading) |
+| Gesichter — faces and hands redrawn | Qwen-Image 2.1 Detailer | 136 s |
+| Vergrößern — 4× | SeedVR2 7B (the picture brought to 1024 px first) | 103 s, 1024 → 4096 px |
+| Freistellen — background removed (PNG) | BiRefNet / BiRefNet Matting | 3 s |
+| Entfernen — "die Person", "den Mülleimer" | Qwen-Image 2.1 Edit Turbo / Edit: "Entferne … aus dem Foto" | 45 s |
+| Ändern — in one's own words | Qwen-Image 2.1 Edit Turbo / Edit | 43–158 s |
+
+"Entfernen" is an instruction edit, not Inpaint: a mask in the shape of a
+person, SAM 3's, had another person painted into it (both Inpaint Crop
+variants); told to remove her, Qwen-Image Edit filled in beach and waves —
+in German as well as in English. A result can be taken on ("Weiter
+bearbeiten"): coloured, then enlarged.
+
+**A service of its own.** The image API belongs to the ComfyUI slot and goes
+with it; the page must not, or it could not start ComfyUI. `llmctl fotos
+enable` makes it a user service (`llmctl-fotos.service`, port 8190, at every
+login) with a tunnel of its own to the tunnel host (→ its localhost:18190;
+`deploy/vps-comfy-vhost.conf` routes `/fotos` there, behind the same Basic
+Auth). The page shows whether ComfyUI runs, starts it (`llmctl start comfy 9
+--proxy`, `LLMCTL_FOTOS_SLOT`/`LLMCTL_FOTOS_MODEL`) and stops it to free the
+memory. With less than 40 GiB free — an LLM like `flash` beside it — it says
+so and starts only on "Trotzdem starten": Qwen-Image takes 25–30 GB while it
+works. After 15 minutes without a job it has ComfyUI unload its models.
+
+**Jobs run on the server.** The phone sends the picture once — scaled to
+2560 px in the browser, turned upright by its EXIF, iPhone HEIC as JPEG — and
+the server queues it, one at a time, sends it to the image API and keeps the
+result in `~/.local/share/llmctl/fotos/jobs/` (the last 100). A locked screen
+or a lost connection costs nothing: the page finds the result in its list
+when it comes back. Results come as JPEG (quality 92), cut-outs as PNG.
+
+**The tunnel's key.** A service has no ssh agent, so the tunnel logs in with
+a key of its own without a passphrase (`~/.config/llmctl/fotos_tunnel_key`),
+and the tunnel host restricts it to that one forward — `llmctl fotos key`
+prints the line for its `authorized_keys`:
+
+```
+restrict,port-forwarding,permitlisten="localhost:18190",command="/bin/false" ssh-ed25519 AAAA… llmctl-fotos@host
+```
+
+Setting it up: `llmctl fotos enable`, the line from `llmctl fotos key` into
+the tunnel host's `~/.ssh/authorized_keys`, the vhost's `/fotos` lines, and
+`loginctl enable-linger $USER` for it to run before anyone logs in.
+`llmctl fotos status` shows service, page, tunnel and jobs; `fotos disable`
+stops it.
+
 ### Which model for a picture
 
 The text-to-image models side by side, one session, the machine to itself,

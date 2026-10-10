@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#161618">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Fotos">
+<link rel="manifest" href="/fotos/manifest.webmanifest">
+<link rel="icon" href="/fotos/icon.svg">
+<link rel="apple-touch-icon" href="/fotos/icon.svg">
+<title>Fotos</title>
+<style>
+:root {
+  --bg: #f4f3f0; --panel: #ffffff; --text: #1c1c1e; --muted: #6c6c72; --line: #e0dfda;
+  --accent: #2f6fdb; --accent-text: #ffffff; --accent-soft: #e6eefc;
+  --ok: #1f8a4c; --warn: #b7791f; --bad: #c0392b; --shadow: 0 1px 3px rgba(0,0,0,.08);
+  --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111113; --panel: #1d1d20; --text: #ededf0; --muted: #9a9aa2; --line: #303035;
+    --accent: #5b8def; --accent-text: #0d0d0f; --accent-soft: #1f2a40;
+    --ok: #3cc47c; --warn: #e0a84a; --bad: #ef6b5b; --shadow: none;
+  }
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: var(--bg); color: var(--text); }
+body { font: 16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+       padding: env(safe-area-inset-top) 0 calc(96px + env(safe-area-inset-bottom)); }
+button { font: inherit; color: inherit; cursor: pointer; }
+header { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px;
+         padding: 12px 16px; background: color-mix(in srgb, var(--bg) 88%, transparent);
+         backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+header h1 { font-size: 22px; margin: 0; flex: 1; letter-spacing: -.01em; }
+.chip { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line);
+        background: var(--panel); border-radius: 999px; padding: 6px 12px; font-size: 14px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+.dot.up { background: var(--ok); } .dot.busy { background: var(--warn); animation: pulse 1s infinite; }
+.dot.down { background: var(--bad); }
+@keyframes pulse { 50% { opacity: .3; } }
+main { padding: 0 16px; max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+        box-shadow: var(--shadow); padding: 14px; }
+.card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 10px; }
+.banner { display: flex; align-items: center; gap: 12px; }
+.banner p { margin: 0; flex: 1; font-size: 15px; }
+.banner.hidden { display: none; }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 12px; padding: 12px 16px;
+       min-height: 48px; font-weight: 500; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 650; }
+.btn.danger { color: var(--bad); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.pick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pick label { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+              min-height: 110px; border: 1.5px dashed var(--line); border-radius: 12px; font-weight: 550; }
+.pick label svg { width: 30px; height: 30px; }
+.pick input { display: none; }
+.source { display: none; }
+.source.on { display: block; }
+.source img { display: block; width: 100%; max-height: 52vh; object-fit: contain; border-radius: 10px;
+              background: repeating-conic-gradient(#ccc 0 25%, #eee 0 50%) 0 0 / 16px 16px; }
+.source .row { display: flex; justify-content: space-between; align-items: center; margin-top: 8px;
+               font-size: 14px; color: var(--muted); }
+.link { background: none; border: none; color: var(--accent); padding: 8px 0; font-weight: 550; }
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.action { text-align: left; border: 1.5px solid var(--line); background: var(--panel); border-radius: 12px;
+          padding: 12px; min-height: 76px; display: flex; flex-direction: column; gap: 3px; }
+.action b { font-size: 16px; }
+.action span { font-size: 13px; color: var(--muted); line-height: 1.25; }
+.action[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.action:disabled { opacity: .4; }
+.options { display: none; flex-direction: column; gap: 10px; margin-top: 12px; }
+.options.on { display: flex; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--bg); border: 1px solid var(--line);
+       border-radius: 11px; padding: 3px; }
+.seg button { border: none; background: none; border-radius: 9px; padding: 9px; font-size: 15px; }
+.seg button[aria-pressed="true"] { background: var(--panel); box-shadow: var(--shadow); font-weight: 600; }
+.options label { font-size: 14px; color: var(--muted); }
+textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+           border-radius: 11px; padding: 10px 12px; resize: vertical; min-height: 52px; }
+.note { font-size: 13px; color: var(--muted); margin: 0; }
+.go { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+      background: color-mix(in srgb, var(--bg) 90%, transparent); backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px); border-top: 1px solid var(--line); }
+.go .btn { width: 100%; max-width: 608px; display: block; margin: 0 auto; font-size: 17px; }
+.jobs { display: flex; flex-direction: column; gap: 8px; }
+.job { display: flex; gap: 12px; align-items: center; border: 1px solid var(--line); border-radius: 12px;
+       padding: 8px; background: var(--panel); text-align: left; width: 100%; }
+.job img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; background: var(--bg); flex: none; }
+.job .meta { flex: 1; min-width: 0; }
+.job .meta b { display: block; }
+.job .meta span { display: block; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.job .state { font-size: 13px; font-weight: 600; white-space: nowrap; }
+.state.done { color: var(--ok); } .state.failed { color: var(--bad); } .state.running, .state.queued { color: var(--warn); }
+.empty { color: var(--muted); font-size: 14px; margin: 0; }
+.err { color: var(--bad); font-size: 14px; margin: 8px 0 0; white-space: pre-wrap; }
+/* viewer */
+.viewer { position: fixed; inset: 0; z-index: 20; background: #000; color: #fff; display: none; flex-direction: column; }
+.viewer.on { display: flex; }
+.viewer .top { display: flex; align-items: center; gap: 8px; padding: calc(10px + env(safe-area-inset-top)) 12px 10px; }
+.viewer .top b { flex: 1; font-size: 17px; }
+.viewer .top button { background: rgba(255,255,255,.14); border: none; color: #fff; border-radius: 999px;
+                      padding: 8px 14px; min-height: 40px; }
+.stage { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; touch-action: none; }
+.stage .frame { position: relative; max-width: 100%; max-height: 100%; }
+.stage img { display: block; max-width: 100vw; max-height: calc(100dvh - 210px); object-fit: contain; user-select: none; -webkit-user-drag: none; }
+.stage .before { position: absolute; inset: 0; width: 100%; height: 100%; }
+.stage .line { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; box-shadow: 0 0 6px rgba(0,0,0,.6); pointer-events: none; }
+.stage .line::after { content: "⟷"; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                      background: #fff; color: #000; border-radius: 999px; width: 34px; height: 34px;
+                      display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.stage .tag { position: absolute; top: 8px; font-size: 12px; background: rgba(0,0,0,.55); padding: 3px 8px; border-radius: 999px; pointer-events: none; }
+.stage .tag.l { left: 8px; } .stage .tag.r { right: 8px; }
+.checker { background: repeating-conic-gradient(#bbb 0 25%, #ddd 0 50%) 0 0 / 18px 18px; }
+.viewer .info { font-size: 13px; color: #bbb; padding: 6px 16px 0; text-align: center; min-height: 22px; }
+.viewer .bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 10px 12px calc(12px + env(safe-area-inset-bottom)); }
+.viewer .bar button { background: rgba(255,255,255,.14); border: none; color: #fff; border-radius: 12px; min-height: 52px;
+                      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 13px; }
+.viewer .bar button svg { width: 22px; height: 22px; }
+.viewer .bar button.primary { background: var(--accent); color: #fff; }
+.spinner { width: 42px; height: 42px; border: 4px solid rgba(255,255,255,.25); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.waiting { display: flex; flex-direction: column; align-items: center; gap: 14px; color: #ddd; text-align: center; padding: 20px; }
+.toast { position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+         background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-size: 14px;
+         z-index: 30; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100vw - 32px); }
+.toast.on { opacity: 1; }
+.sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 25; display: none; }
+.sheet-bg.on { display: block; }
+.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 26; background: var(--panel); border-radius: 18px 18px 0 0;
+         padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); transform: translateY(105%); transition: transform .2s; }
+.sheet.on { transform: none; }
+.sheet h3 { margin: 0 0 6px; font-size: 18px; }
+.sheet p { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
+.sheet .btn { width: 100%; margin-top: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Fotos</h1>
+  <button class="chip" id="chip" type="button"><span class="dot" id="dot"></span><span id="chipText">…</span></button>
+</header>
+
+<main>
+  <div class="card banner hidden" id="banner">
+    <p id="bannerText">ComfyUI ist aus.</p>
+    <button class="btn primary" id="bannerBtn" type="button">Starten</button>
+  </div>
+
+  <section class="card">
+    <h2>Bild</h2>
+    <div class="pick" id="pick">
+      <label><input type="file" accept="image/*" id="fileGallery">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg>
+        Aus der Galerie</label>
+      <label><input type="file" accept="image/*" capture="environment" id="fileCamera">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+        Foto aufnehmen</label>
+    </div>
+    <div class="source" id="source">
+      <img id="sourceImg" alt="Ausgangsbild">
+      <div class="row"><span id="sourceInfo"></span><button class="link" id="sourceClear" type="button">Anderes Bild</button></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Was soll passieren?</h2>
+    <div class="actions" id="actions"></div>
+    <div class="options" id="options">
+      <div class="seg" id="quality">
+        <button type="button" data-q="fast" aria-pressed="true">Schnell</button>
+        <button type="button" data-q="best" aria-pressed="false">Gründlich</button>
+      </div>
+      <div id="textWrap">
+        <label for="text" id="textLabel"></label>
+        <textarea id="text" rows="2"></textarea>
+      </div>
+      <p class="note" id="estimate"></p>
+    </div>
+    <p class="err" id="formErr"></p>
+  </section>
+
+  <section class="card">
+    <h2>Verlauf</h2>
+    <div class="jobs" id="jobs"><p class="empty">Noch nichts bearbeitet.</p></div>
+  </section>
+</main>
+
+<div class="go"><button class="btn primary" id="goBtn" type="button" disabled>Bild wählen</button></div>
+
+<div class="viewer" id="viewer" role="dialog" aria-modal="true">
+  <div class="top"><b id="vTitle"></b><button type="button" id="vClose">Schließen</button></div>
+  <div class="stage" id="stage"></div>
+  <div class="info" id="vInfo"></div>
+  <div class="bar" id="vBar">
+    <button type="button" class="primary" id="vSave"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 19h14"/></svg>Sichern</button>
+    <button type="button" id="vMore"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>Weiter&nbsp;bearbeiten</button>
+    <button type="button" id="vDelete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13"/></svg>Löschen</button>
+  </div>
+</div>
+
+<div class="sheet-bg" id="sheetBg"></div>
+<div class="sheet" id="sheet">
+  <h3>ComfyUI</h3>
+  <p id="sheetText"></p>
+  <button class="btn primary" id="sheetStart" type="button">Starten</button>
+  <button class="btn danger" id="sheetStop" type="button">Stoppen und Speicher freigeben</button>
+  <button class="btn danger" id="sheetForce" type="button" style="display:none">Trotzdem starten</button>
+  <button class="btn" id="sheetClose" type="button">Schließen</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const API = "/fotos/api";
+const S = {
+  comfy: "down", message: "", actions: [], action: null, quality: "fast",
+  source: null,          // {blob, url, w, h} | {from: jobId, url, w, h}
+  jobs: [], viewing: null, pollTimer: null,
+};
+const STATE_TEXT = { up: "Bereit", down: "Aus", starting: "Startet …", stopping: "Stoppt …" };
+
+function store(key, value) { try { localStorage.setItem("fotos." + key, value); } catch (e) {} }
+function recall(key) { try { return localStorage.getItem("fotos." + key); } catch (e) { return null; } }
+
+function toast(text, ms = 2600) {
+  const t = $("toast"); t.textContent = text; t.classList.add("on");
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove("on"), ms);
+}
+
+async function api(path, opts = {}) {
+  const r = await fetch(API + path, opts);
+  let body = null;
+  try { body = await r.json(); } catch (e) {}
+  if (!r.ok) {
+    const err = new Error((body && body.error) || ("Fehler " + r.status));
+    err.code = body && body.code;
+    throw err;
+  }
+  return body;
+}
+
+// ── status ───────────────────────────────────────────────
+async function refreshStatus() {
+  try {
+    const s = await api("/status");
+    const was = S.comfy;
+    S.comfy = s.comfy; S.message = s.message || "";
+    if (was !== "up" && S.comfy === "up") loadActions();
+  } catch (e) { S.comfy = "unknown"; S.message = "Der Fotos-Dienst antwortet nicht."; }
+  renderStatus();
+}
+
+function renderStatus() {
+  const busy = S.comfy === "starting" || S.comfy === "stopping";
+  $("dot").className = "dot " + (S.comfy === "up" ? "up" : busy ? "busy" : "down");
+  $("chipText").textContent = "ComfyUI: " + (STATE_TEXT[S.comfy] || "?");
+  const banner = $("banner");
+  if (S.comfy === "up") banner.classList.add("hidden");
+  else {
+    banner.classList.remove("hidden");
+    $("bannerText").textContent = S.message ? S.message
+      : busy ? (S.comfy === "starting" ? "ComfyUI startet – dauert etwa eine halbe Minute." : "ComfyUI stoppt …")
+      : "ComfyUI ist aus. Zum Bearbeiten erst starten.";
+    $("bannerBtn").style.display = busy ? "none" : "";
+  }
+  $("sheetText").textContent = S.comfy === "up"
+    ? "Läuft. Stoppen gibt den Speicher für andere Modelle frei; laufende Bearbeitungen müssen vorher fertig sein."
+    : busy ? "Wird gerade " + (S.comfy === "starting" ? "gestartet." : "gestoppt.") : "Ist aus.";
+  $("sheetStart").style.display = S.comfy === "up" || busy ? "none" : "";
+  $("sheetStop").style.display = S.comfy === "up" ? "" : "none";
+  renderGo();
+}
+
+async function comfy(action, force) {
+  closeSheet();
+  try {
+    const r = await api("/comfy", { method: "POST", headers: { "Content-Type": "application/json" },
+                                   body: JSON.stringify({ action, force: !!force }) });
+    S.comfy = r.comfy; S.message = ""; renderStatus(); schedule();
+  } catch (e) {
+    if (e.code === "memory") {           // ask: the sheet with the reason and "start anyway"
+      renderStatus();
+      $("sheetText").textContent = e.message;
+      $("sheetStart").style.display = "none"; $("sheetStop").style.display = "none";
+      $("sheetForce").style.display = "";
+      openSheet();
+    } else toast(e.message, 4000);
+  }
+}
+
+// ── actions ──────────────────────────────────────────────
+async function loadActions() {
+  try { S.actions = await api("/actions"); } catch (e) { return; }
+  const box = $("actions"); box.innerHTML = "";
+  for (const a of S.actions) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "action"; b.dataset.id = a.id;
+    b.setAttribute("aria-pressed", String(S.action === a.id));
+    b.disabled = a.available === false;
+    b.innerHTML = `<b></b><span></span>`;
+    b.querySelector("b").textContent = a.label;
+    b.querySelector("span").textContent = a.available === false ? "Modell fehlt in ComfyUI" : a.hint;
+    b.onclick = () => chooseAction(a.id);
+    box.appendChild(b);
+  }
+  if (!S.action) chooseAction(recall("action") || "colorize", true);
+  else chooseAction(S.action, true);
+}
+
+function chooseAction(id, quiet) {
+  const a = S.actions.find((x) => x.id === id && x.available !== false);
+  if (!a) return;
+  S.action = id; store("action", id);
+  for (const b of $("actions").children) b.setAttribute("aria-pressed", String(b.dataset.id === id));
+  $("options").classList.add("on");
+  $("quality").style.display = a.qualities ? "" : "none";
+  if (a.qualities && a.best_available === false) setQuality("fast");
+  $("quality").querySelector('[data-q="best"]').disabled = a.best_available === false;
+  $("textWrap").style.display = a.text ? "" : "none";
+  $("textLabel").textContent = a.text_label || "";
+  $("text").placeholder = a.text_placeholder || "";
+  if (!quiet) $("text").value = "";
+  renderEstimate(); renderGo();
+}
+
+function setQuality(q) {
+  S.quality = q; store("quality", q);
+  for (const b of $("quality").children) b.setAttribute("aria-pressed", String(b.dataset.q === q));
+  renderEstimate();
+}
+
+function renderEstimate() {
+  const a = S.actions.find((x) => x.id === S.action);
+  if (!a) { $("estimate").textContent = ""; return; }
+  const s = a.seconds[S.quality === "best" && a.qualities ? 1 : 0];
+  $("estimate").textContent = "Dauert etwa " + (s < 90 ? s + " Sekunden" : Math.round(s / 60) + " Minuten")
+    + " (beim ersten Mal länger, weil das Modell lädt). Du kannst den Bildschirm sperren – das Ergebnis wartet im Verlauf.";
+}
+
+// ── the picture ──────────────────────────────────────────
+async function loadFile(file) {
+  if (!file) return;
+  $("formErr").textContent = "";
+  try {
+    let bmp;
+    try { bmp = await createImageBitmap(file, { imageOrientation: "from-image" }); }
+    catch (e) {
+      const url = URL.createObjectURL(file);
+      bmp = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = url; });
+    }
+    const w0 = bmp.width, h0 = bmp.height, max = 2560;
+    const k = Math.min(1, max / Math.max(w0, h0));
+    const w = Math.round(w0 * k), h = Math.round(h0 * k);
+    const c = document.createElement("canvas"); c.width = w; c.height = h;
+    c.getContext("2d").drawImage(bmp, 0, 0, w, h);
+    const png = file.type === "image/png";
+    const blob = await new Promise((ok) => c.toBlob(ok, png ? "image/png" : "image/jpeg", 0.92));
+    setSource({ blob, url: URL.createObjectURL(blob), w, h, name: file.name });
+  } catch (e) {
+    $("formErr").textContent = "Das Bild lässt sich nicht öffnen.";
+  }
+}
+
+function setSource(src) {
+  if (S.source && S.source.blob) URL.revokeObjectURL(S.source.url);
+  S.source = src;
+  $("pick").style.display = src ? "none" : "";
+  $("source").classList.toggle("on", !!src);
+  if (src) {
+    $("sourceImg").src = src.url;
+    $("sourceInfo").textContent = (src.from ? "Ergebnis aus dem Verlauf · " : "") + (src.w && src.h ? src.w + " × " + src.h : "");
+  }
+  $("fileGallery").value = ""; $("fileCamera").value = "";
+  renderGo();
+}
+
+// ── go ───────────────────────────────────────────────────
+function renderGo() {
+  const b = $("goBtn");
+  if (!S.source) { b.textContent = "Bild wählen"; b.disabled = true; return; }
+  if (!S.action) { b.textContent = "Aktion wählen"; b.disabled = true; return; }
+  if (S.comfy !== "up") {
+    const busy = S.comfy === "starting" || S.comfy === "stopping";
+    b.textContent = busy ? "ComfyUI " + (S.comfy === "starting" ? "startet …" : "stoppt …") : "ComfyUI starten";
+    b.disabled = busy; return;
+  }
+  const a = S.actions.find((x) => x.id === S.action);
+  b.textContent = (a ? a.label : "Los") + " ›"; b.disabled = false;
+}
+
+async function go() {
+  if (S.comfy !== "up") { if (S.comfy === "down" || S.comfy === "unknown") comfy("start"); return; }
+  const a = S.actions.find((x) => x.id === S.action);
+  const text = $("text").value.trim();
+  if (a.text && a.text !== "optional" && !text) { $("formErr").textContent = a.text_label + " – bitte ausfüllen."; $("text").focus(); return; }
+  $("formErr").textContent = "";
+  const fd = new FormData();
+  fd.append("action", a.id); fd.append("quality", S.quality); fd.append("text", text);
+  if (S.source.from) fd.append("from", S.source.from);
+  else fd.append("image", S.source.blob, S.source.blob.type === "image/png" ? "bild.png" : "bild.jpg");
+  const b = $("goBtn"); b.disabled = true; b.textContent = "Wird hochgeladen …";
+  try {
+    const job = await api("/jobs", { method: "POST", body: fd });
+    S.jobs.unshift(job); renderJobs(); openViewer(job.id);
+  } catch (e) { $("formErr").textContent = e.message; }
+  renderGo(); schedule();
+}
+
+// ── jobs ─────────────────────────────────────────────────
+async function refreshJobs() {
+  try { S.jobs = await api("/jobs"); } catch (e) { return; }
+  renderJobs();
+  if (S.viewing) {
+    const j = S.jobs.find((x) => x.id === S.viewing.id);
+    if (j && j.state !== S.viewing.state) openViewer(j.id);
+    else if (j) updateWaiting(j);
+  }
+  const running = S.jobs.filter((j) => j.state === "running" || j.state === "queued").length;
+  document.title = running ? "Fotos (" + running + " läuft)" : "Fotos";
+}
+
+function elapsed(job) {
+  const from = job.started || job.created;
+  const end = job.finished || Date.now() / 1000;
+  const s = Math.max(0, Math.round(end - from));
+  return s < 60 ? s + " s" : Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0") + " min";
+}
+
+function stateText(job) {
+  if (job.state === "queued") return job.position > 1 ? "Wartet (#" + job.position + ")" : "Wartet";
+  if (job.state === "running") return "Läuft · " + elapsed(job);
+  if (job.state === "done") return "Fertig";
+  return "Fehler";
+}
+
+function renderJobs() {
+  const box = $("jobs");
+  if (!S.jobs.length) { box.innerHTML = '<p class="empty">Noch nichts bearbeitet.</p>'; return; }
+  box.innerHTML = "";
+  for (const j of S.jobs) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "job";
+    const img = document.createElement("img");
+    img.loading = "lazy"; img.alt = "";
+    img.src = `${API}/jobs/${j.id}/${j.state === "done" ? "result" : "input"}?thumb=1`;
+    const meta = document.createElement("div"); meta.className = "meta";
+    const t = document.createElement("b"); t.textContent = j.label;
+    const sub = document.createElement("span");
+    sub.textContent = (j.text ? "„" + j.text + "“ · " : "") + new Date(j.created * 1000).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    meta.append(t, sub);
+    const st = document.createElement("div"); st.className = "state " + j.state; st.textContent = stateText(j);
+    b.append(img, meta, st);
+    b.onclick = () => openViewer(j.id);
+    box.appendChild(b);
+  }
+}
+
+// ── viewer ───────────────────────────────────────────────
+function openViewer(id) {
+  const job = S.jobs.find((x) => x.id === id);
+  if (!job) return;
+  S.viewing = { id, state: job.state };
+  if (location.hash !== "#job=" + id) history.replaceState(null, "", "#job=" + id);
+  $("viewer").classList.add("on");
+  document.body.style.overflow = "hidden";
+  $("vTitle").textContent = job.label + (job.text ? " · " + job.text : "");
+  const stage = $("stage"); stage.innerHTML = "";
+  const done = job.state === "done";
+  for (const b of $("vBar").children) b.style.visibility = done || b.id === "vDelete" ? "" : "hidden";
+  $("vDelete").disabled = job.state === "running";
+  if (done) showCompare(job);
+  else {
+    const w = document.createElement("div"); w.className = "waiting";
+    if (job.state === "failed") w.innerHTML = '<b>Das hat nicht geklappt.</b><span id="vErr"></span>';
+    else w.innerHTML = '<div class="spinner"></div><b id="vState"></b><span id="vHint"></span>';
+    stage.appendChild(w);
+    if (job.state === "failed") $("vErr").textContent = job.error || "";
+    updateWaiting(job);
+  }
+  $("vInfo").textContent = done ? info(job) : "";
+}
+
+function info(job) {
+  const parts = [];
+  if (job.result_size) parts.push(job.result_size[0] + " × " + job.result_size[1]);
+  parts.push(job.quality === "best" ? "gründlich" : "schnell");
+  if (job.started && job.finished) parts.push(elapsed(job));
+  return parts.join(" · ") + " — Regler ziehen für vorher/nachher";
+}
+
+function updateWaiting(job) {
+  if (!$("vState")) return;
+  $("vState").textContent = stateText(job);
+  const a = S.actions.find((x) => x.id === job.action);
+  const typ = a ? a.seconds[job.quality === "best" && a.qualities ? 1 : 0] : null;
+  $("vHint").textContent = job.state === "queued" ? "Vorher ist noch eine andere Bearbeitung dran."
+    : (typ ? "Üblich sind etwa " + (typ < 90 ? typ + " s" : Math.round(typ / 60) + " min") + ". " : "")
+      + "Du kannst die Seite schließen – das Ergebnis kommt in den Verlauf.";
+}
+
+function showCompare(job) {
+  const stage = $("stage");
+  const frame = document.createElement("div"); frame.className = "frame" + (job.png ? " checker" : "");
+  const after = document.createElement("img"); after.alt = "nachher";
+  after.src = `${API}/jobs/${job.id}/result`;
+  const before = document.createElement("img"); before.alt = "vorher"; before.className = "before";
+  before.src = `${API}/jobs/${job.id}/input`;
+  before.style.objectFit = "fill";
+  const line = document.createElement("div"); line.className = "line";
+  const tl = document.createElement("div"); tl.className = "tag l"; tl.textContent = "vorher";
+  const tr = document.createElement("div"); tr.className = "tag r"; tr.textContent = "nachher";
+  frame.append(after, before, line, tl, tr);
+  stage.appendChild(frame);
+  let pos = 0.5;
+  const set = (p) => {
+    pos = Math.min(1, Math.max(0, p));
+    before.style.clipPath = `inset(0 ${100 - pos * 100}% 0 0)`;
+    line.style.left = `calc(${pos * 100}% - 1px)`;
+  };
+  set(0.5);
+  const move = (e) => {
+    const r = frame.getBoundingClientRect();
+    const x = (e.touches ? e.touches[0].clientX : e.clientX);
+    set((x - r.left) / r.width);
+  };
+  let dragging = false;
+  stage.onpointerdown = (e) => { dragging = true; stage.setPointerCapture(e.pointerId); move(e); };
+  stage.onpointermove = (e) => { if (dragging) move(e); };
+  stage.onpointerup = stage.onpointercancel = () => { dragging = false; };
+}
+
+function closeViewer() {
+  $("viewer").classList.remove("on"); document.body.style.overflow = ""; S.viewing = null;
+  if (location.hash) history.replaceState(null, "", location.pathname);
+}
+
+async function save() {
+  const job = S.jobs.find((x) => x.id === S.viewing.id);
+  const url = `${API}/jobs/${job.id}/result`;
+  try {
+    const r = await fetch(url); const blob = await r.blob();
+    const ext = blob.type === "image/png" ? "png" : "jpg";
+    const file = new File([blob], `${job.label.toLowerCase()}-${job.id}.${ext}`, { type: blob.type });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: job.label });
+      return;
+    }
+  } catch (e) { if (e && e.name === "AbortError") return; }
+  const a = document.createElement("a"); a.href = url + "?download=1"; a.download = ""; document.body.appendChild(a); a.click(); a.remove();
+}
+
+function continueWith() {
+  const job = S.jobs.find((x) => x.id === S.viewing.id);
+  setSource({ from: job.id, url: `${API}/jobs/${job.id}/result`, w: job.result_size && job.result_size[0], h: job.result_size && job.result_size[1] });
+  closeViewer(); window.scrollTo({ top: 0, behavior: "smooth" });
+  toast("Ergebnis ist jetzt das Ausgangsbild – nächste Aktion wählen.");
+}
+
+async function removeJob() {
+  const id = S.viewing.id;
+  if (!confirmDelete.armed || confirmDelete.armed !== id) {
+    confirmDelete.armed = id; toast("Nochmal tippen zum Löschen"); setTimeout(() => { confirmDelete.armed = null; }, 3000); return;
+  }
+  confirmDelete.armed = null;
+  try { await api("/jobs/" + id, { method: "DELETE" }); } catch (e) { toast(e.message); return; }
+  S.jobs = S.jobs.filter((j) => j.id !== id); renderJobs(); closeViewer();
+}
+const confirmDelete = {};
+
+// ── sheet ────────────────────────────────────────────────
+function openSheet() { $("sheet").classList.add("on"); $("sheetBg").classList.add("on"); }
+function closeSheet() { $("sheet").classList.remove("on"); $("sheetBg").classList.remove("on"); $("sheetForce").style.display = "none"; }
+
+// ── polling ──────────────────────────────────────────────
+function schedule() {
+  clearTimeout(S.pollTimer);
+  const active = S.comfy === "starting" || S.comfy === "stopping"
+    || S.jobs.some((j) => j.state === "queued" || j.state === "running");
+  S.pollTimer = setTimeout(tick, document.hidden ? 30000 : active ? 2000 : 15000);
+}
+async function tick() { await Promise.all([refreshStatus(), refreshJobs()]); schedule(); }
+// A link to one job (#job=<id>) opens it.
+async function openFromHash() {
+  const m = location.hash.match(/^#job=([0-9a-f-]+)$/);
+  if (!m) return;
+  if (!S.jobs.length) await refreshJobs();
+  openViewer(m[1]);
+}
+
+// ── wiring ───────────────────────────────────────────────
+$("fileGallery").onchange = (e) => loadFile(e.target.files[0]);
+$("fileCamera").onchange = (e) => loadFile(e.target.files[0]);
+$("sourceClear").onclick = () => setSource(null);
+for (const b of $("quality").children) b.onclick = () => { if (!b.disabled) setQuality(b.dataset.q); };
+$("goBtn").onclick = go;
+$("bannerBtn").onclick = () => comfy("start");
+$("chip").onclick = openSheet;
+$("sheetBg").onclick = closeSheet; $("sheetClose").onclick = closeSheet;
+$("sheetStart").onclick = () => comfy("start");
+$("sheetStop").onclick = () => comfy("stop");
+$("sheetForce").onclick = () => comfy("start", true);
+$("vClose").onclick = closeViewer;
+$("vSave").onclick = save;
+$("vMore").onclick = continueWith;
+$("vDelete").onclick = removeJob;
+document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
+window.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeViewer(); closeSheet(); } });
+
+setQuality(recall("quality") === "best" ? "best" : "fast");
+loadActions();
+tick().then(openFromHash);
+window.addEventListener("hashchange", openFromHash);
+</script>
+</body>
+</html>

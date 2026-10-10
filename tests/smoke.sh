@@ -205,6 +205,18 @@ check "the service repairs on reload"    "preset voice --repair" -- cat "$U/llmc
 check "the timer only reloads a running service" "is-active"     -- cat "$U/llmctl-repair.service"
 check "preset --repair leaves others alone" "nothing to repair"  -- "$L" preset voice --repair
 
+# ── fotos ────────────────────────────────────────────────────
+export LLMCTL_TUNNEL_HOST=user@tunnel.example
+check "fotos status before enable"       "not set up"            -- "$L" fotos status
+check "fotos key makes a key"            "restrict,port-forwarding" -- "$L" fotos key
+check "fotos key allows one forward"     'permitlisten="localhost:18190"' -- "$L" fotos key
+check "fotos key allows no command"      'command="/bin/false"'  -- "$L" fotos key
+check "fotos enable writes the unit"     "every login"           -- "$L" fotos enable
+check "the fotos unit runs the page"     "fotos run"             -- cat "$U/llmctl-fotos.service"
+check "the fotos unit knows the tunnel"  "LLMCTL_TUNNEL_HOST=user@tunnel.example" -- cat "$U/llmctl-fotos.service"
+check "fotos refuses a typo"             "Usage"                 -- "$L" fotos nosuch
+unset LLMCTL_TUNNEL_HOST
+
 # ── prune ────────────────────────────────────────────────────
 M="$LLMCTL_MODELS_DIR"
 mkdir -p "$M/gone-model" "$M/magnum-v4-72b-GGUF/magnum-v4-72b-Q6_K" "$M/split"

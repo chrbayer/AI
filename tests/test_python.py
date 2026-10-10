@@ -10,6 +10,7 @@ Nothing here touches a GPU, a model or the network. tts_server needs flask and
 numpy, proxy.py needs flask and requests; a helper whose imports are missing is
 skipped rather than failed, so the rest still runs.
 """
+import base64
 import io
 import contextlib
 import shutil
@@ -44,6 +45,11 @@ except ImportError:
     pass
 try:
     import proxy                                                   # flask, requests
+except ImportError:
+    pass
+fotos: Any = None
+try:
+    import fotos_server as fotos                                   # flask, requests, pillow
 except ImportError:
     pass
 
@@ -262,6 +268,113 @@ class TranslateImages(unittest.TestCase):
         self.assertFalse(proxy.translates("v1/chat/completions", self.body(self.IMAGE)))
         proxy.TRANSLATE_IMAGES = False
         self.assertFalse(proxy.translates("v1/messages", self.body(self.IMAGE)))
+
+
+@unittest.skipIf(fotos is None, "fotos_server.py needs flask, requests and pillow")
+class Fotos(unittest.TestCase):
+    """The phone page's server: what a picture becomes before the image API sees
+    it, and what each action asks the image API for."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        fotos.ARGS.data, fotos.ARGS.api, fotos.ARGS.timeout = self.tmp.name, "http://api", 10
+        fotos.jobs_dir().mkdir(parents=True)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def jpeg(self, w, h, orientation=None):
+        from PIL import Image
+        buf = io.BytesIO()
+        exif = Image.Exif()
+        if orientation:
+            exif[274] = orientation
+        Image.new("RGB", (w, h), (90, 90, 90)).save(buf, "JPEG", exif=exif)
+        return buf.getvalue()
+
+    def test_a_phone_photo_is_turned_upright_by_its_exif(self):
+        _, name, size = fotos.fit(self.jpeg(400, 300, orientation=6), "background")
+        self.assertEqual((name, size), ("input.jpg", (300, 400)))
+
+    def test_the_upscaler_gets_a_quarter_of_its_output(self):
+        self.assertEqual(fotos.fit(self.jpeg(4000, 3000), "upscale")[2], (1024, 768))
+
+    def test_an_edit_is_held_to_its_pixel_budget(self):
+        w, h = fotos.fit(self.jpeg(4000, 3000), "restore")[2]
+        self.assertLessEqual(w * h, 1_600_000)
+        self.assertGreater(w * h, 1_500_000)
+
+    def test_a_small_picture_is_not_enlarged(self):
+        self.assertEqual(fotos.fit(self.jpeg(640, 480), "colorize")[2], (640, 480))
+
+    def test_transparency_stays_png(self):
+        from PIL import Image
+        buf = io.BytesIO()
+        Image.new("RGBA", (50, 40), (0, 0, 0, 0)).save(buf, "PNG")
+        self.assertEqual(fotos.fit(buf.getvalue(), "edit")[1], "input.png")
+
+    def test_what_is_no_picture_is_refused(self):
+        with self.assertRaises(fotos.Refused):
+            fotos.fit(b"not a picture", "colorize")
+
+    def test_a_job_id_cannot_leave_the_jobs_directory(self):
+        for bad in ("../x", "", "a/b", "x.json"):
+            with self.assertRaises(fotos.Refused):
+                fotos.job_path(bad)
+
+    def sent(self, action, quality="fast", text=""):
+        """The form run_job posts to the image API for this job."""
+        from unittest import mock
+        jid = "20261010-000000-abcdef"
+        d = fotos.job_path(jid)
+        d.mkdir()
+        (d / "input.jpg").write_bytes(self.jpeg(64, 64))
+        fotos.write_job({"id": jid, "action": action, "quality": quality, "text": text,
+                         "state": "queued", "created": 0, "label": action})
+        buf = io.BytesIO()
+        from PIL import Image
+        Image.new("RGB", (64, 64)).save(buf, "PNG")
+        reply = mock.Mock(status_code=200)
+        reply.json.return_value = {"data": [{"b64_json": base64.b64encode(buf.getvalue()).decode()}]}
+        with mock.patch.object(fotos.requests, "post", return_value=reply) as post:
+            fotos.run_job(jid)
+        self.assertEqual(fotos.read_job(jid)["state"], "done")
+        return post.call_args.kwargs["data"]
+
+    def test_colorize_keeps_its_prompt_and_adds_the_colours(self):
+        form = self.sent("colorize", text="red dress")
+        self.assertEqual(form["model"], "qwen-image-21-colorize-turbo")
+        self.assertTrue(form["prompt"].startswith("The same photograph in natural colour"))
+        self.assertTrue(form["prompt"].endswith(", red dress"))
+
+    def test_best_takes_the_slower_workflow(self):
+        self.assertEqual(self.sent("restore", "best")["model"], "qwen-image-21")
+
+    def test_remove_tells_the_edit_model_what_goes(self):
+        form = self.sent("remove", text="den Mülleimer")
+        self.assertEqual(form["model"], "qwen-image-21-turbo")
+        self.assertTrue(form["prompt"].startswith("Entferne den Mülleimer aus dem Foto."))
+        self.assertNotIn("select", form)
+
+    def test_a_free_edit_sends_the_words_as_prompt(self):
+        self.assertEqual(self.sent("edit", text="Mach den Himmel rot")["prompt"], "Mach den Himmel rot")
+
+    def test_the_upscaler_gets_no_prompt(self):
+        self.assertNotIn("prompt", self.sent("upscale"))
+
+    def test_starting_comfyui_beside_a_big_model_asks_first(self):
+        from unittest import mock
+        client = fotos.app.test_client()
+        with mock.patch.object(fotos, "mem_available_gib", return_value=20.0), \
+             mock.patch.object(fotos.threading, "Thread") as thread:
+            r = client.post("/fotos/api/comfy", json={"action": "start"})
+            self.assertEqual((r.status_code, r.get_json()["code"]), (409, "memory"))
+            thread.assert_not_called()
+            r = client.post("/fotos/api/comfy", json={"action": "start", "force": True})
+            self.assertEqual(r.status_code, 200)
+            thread.assert_called_once()
+        fotos._comfy.update(state=None)
 
 
 class ThinkingOff(unittest.TestCase):
