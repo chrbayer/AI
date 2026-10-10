@@ -445,6 +445,78 @@ class Fotos(unittest.TestCase):
             thread.assert_called_once()
         fotos._comfy.update(state=None)
 
+    def clip(self, **form):
+        """A video job run against a mocked image API: (path, form, files, job)."""
+        from unittest import mock
+        form.setdefault("image", self.jpeg(64, 64))
+        if form.get("action") == "generate":
+            del form["image"]
+        r = self.post(**form)
+        self.assertEqual(r.status_code, 200, r.get_json())
+        jid = r.get_json()[0]["id"]
+        reply = mock.Mock(status_code=200, content=b"mp4", headers={"X-Size": "640x352", "X-Seed": "5"})
+        with mock.patch.object(fotos.requests, "post", return_value=reply) as post, \
+                mock.patch.object(fotos, "poster"):
+            fotos.run_job(jid)
+        job = fotos.read_job(jid)
+        self.assertEqual(job["state"], "done", job.get("error"))
+        kw = post.call_args.kwargs
+        return post.call_args.args[0], kw["data"], [n for n, _ in kw.get("files") or []], job
+
+    def test_animate_sends_the_picture_for_a_clip(self):
+        path, form, files, job = self.clip(action="animate", seconds="3")
+        self.assertEqual(path, "http://api/v1/video/clips")
+        self.assertEqual((form["model"], form["seconds"], form["quality"]), ("ltx-25-video", "3", "fast"))
+        self.assertTrue(form["prompt"].startswith("The scene comes to life"))
+        self.assertEqual(files, ["image[]"])
+        self.assertEqual((job["result_size"], job["video"]), ([640, 352], True))
+        self.assertEqual((fotos.job_path(job["id"]) / "result.mp4").read_bytes(), b"mp4")
+
+    def test_animate_with_an_end_picture_runs_first_to_last(self):
+        _, form, files, job = self.clip(action="animate", image2=self.jpeg(64, 64), quality="best", text="she waves")
+        self.assertEqual((form["model"], form["quality"], form["prompt"]), ("ltx-25-first-last-frame", "full", "she waves"))
+        self.assertEqual(files, ["image[]", "image[]"])
+        self.assertTrue(job["two"])
+
+    def test_a_clip_has_one_of_the_lengths(self):
+        r = self.post(action="animate", image=self.jpeg(64, 64), seconds="30")
+        self.assertEqual(r.status_code, 400)
+
+    def test_a_video_from_a_prompt_starts_from_a_picture(self):
+        from unittest import mock
+        from PIL import Image
+        r = self.post(action="generate", model="ltx-25-video", text="a tram in the rain", aspect="9:16",
+                      seconds="5", uncensored="1")
+        job = r.get_json()[0]
+        self.assertEqual((job["label"], job["frame_model"], job["uncensored"]), ("Video", "z-image-turbo-nsfw", True))
+        buf = io.BytesIO()
+        Image.new("RGB", (704, 1280)).save(buf, "PNG")
+        frame = mock.Mock(status_code=200)
+        frame.json.return_value = {"data": [{"b64_json": base64.b64encode(buf.getvalue()).decode()}]}
+        clip = mock.Mock(status_code=200, content=b"mp4", headers={"X-Size": "352x640"})
+        with mock.patch.object(fotos.requests, "post", side_effect=[frame, clip]) as post, \
+                mock.patch.object(fotos, "poster"):
+            fotos.run_job(job["id"])
+        self.assertEqual(fotos.read_job(job["id"])["state"], "done")
+        (first, kw1), (second, kw2) = [(c.args[0], c.kwargs) for c in post.call_args_list]
+        self.assertEqual((first, kw1["json"]["size"], kw1["json"]["model"]),
+                         ("http://api/v1/images/generations", "704x1280", "z-image-turbo-nsfw"))
+        self.assertEqual((second, kw2["data"]["prompt"]), ("http://api/v1/video/clips", "a tram in the rain"))
+        self.assertEqual([n for n, _ in kw2["files"]], ["image[]"])
+
+    def test_the_clip_is_served_and_its_still_as_thumbnail(self):
+        from PIL import Image
+        _, _, _, job = self.clip(action="animate")
+        d = fotos.job_path(job["id"])
+        Image.new("RGB", (64, 36)).save(d / "result.poster.jpg", "JPEG")
+        client = fotos.app.test_client()
+        r = client.get(f"/fotos/api/jobs/{job['id']}/result")
+        self.assertEqual((r.status_code, r.mimetype, r.data), (200, "video/mp4", b"mp4"))
+        r = client.get(f"/fotos/api/jobs/{job['id']}/result", headers={"Range": "bytes=1-2"})
+        self.assertEqual((r.status_code, r.data), (206, b"p4"))
+        self.assertEqual(client.get(f"/fotos/api/jobs/{job['id']}/result?thumb=1").mimetype, "image/jpeg")
+        self.assertEqual(client.get(f"/fotos/api/jobs/{job['id']}/poster").mimetype, "image/jpeg")
+
 
 class ThinkingOff(unittest.TestCase):
     BODY = {"model": "m", "max_tokens": 100, "thinking": {"type": "disabled"},
@@ -1150,6 +1222,88 @@ class RepairPage(unittest.TestCase):
         for name in ("../secret.png", "a/b.png", ".hidden.png", ""):
             with self.subTest(name):
                 self.assertEqual(self.client.get("/repair/image", query_string={"name": name}).status_code, 400)
+
+
+@unittest.skipIf(images is None or images.Image is None, "images_server needs flask, requests and pillow")
+class ImageClips(unittest.TestCase):
+    """/v1/video/clips: the request into the LTX-2.5 workflows, without ComfyUI."""
+    VIDEO = "LTX-2.5 Video (int8, distilled).json"
+    FLF = "LTX-2.5 First-Last Frame (int8, distilled).json"
+
+    def setUp(self):
+        self.upload = images.upload
+        images.upload = lambda data: "llmctl-api/x.png"
+
+    def tearDown(self):
+        images.upload = self.upload
+
+    def graph(self, name):
+        return json.loads((ROOT / "comfyui" / "api" / "video" / name).read_text())
+
+    def png(self, w, h):
+        from PIL import Image
+        buf = io.BytesIO()
+        Image.new("RGB", (w, h)).save(buf, "PNG")
+        return buf.getvalue()
+
+    def node(self, g, cls, title):
+        return next(n for n in g.values() if n["class_type"] == cls and images.title(n).lower() == title.lower())
+
+    def test_every_clip_workflow_is_bundled(self):
+        for stem in images.CLIP_WORKFLOWS.values():
+            self.assertTrue((ROOT / "comfyui" / "api" / "video" / f"{stem}.json").is_file(), stem)
+
+    def test_the_clip_takes_the_pictures_shape(self):
+        self.assertEqual(images.clip_size(None, self.png(1280, 720)), (1280, 704))
+        self.assertEqual(images.clip_size(None, self.png(3000, 4000)), (832, 1088))
+        self.assertEqual(images.clip_size(None), (1280, 704))
+        self.assertEqual(images.clip_size("704x1280"), (704, 1280))
+
+    def test_a_picture_comes_to_life_in_both_stages(self):
+        g = self.graph(self.VIDEO)
+        size = images.set_clip(g, "ltx-25-video", "she waves", [self.png(800, 600)], 3, None, False, 11)
+        self.assertEqual(size, (1088, 832))
+        self.assertEqual(self.node(g, "PrimitiveInt", "Width")["inputs"]["value"], 1088)
+        self.assertEqual(self.node(g, "PrimitiveInt", "Duration")["inputs"]["value"], 3)
+        self.assertEqual(self.node(g, "PrimitiveStringMultiline", "Prompt")["inputs"]["value"], "she waves")
+        self.assertFalse(self.node(g, "PrimitiveBoolean", "Switch to Text to Video?")["inputs"]["value"])
+        self.assertTrue(all(n["class_type"] not in images.UI_ONLY for n in g.values()))
+        decoders = [n for n in g.values() if n["class_type"] in ("VAEDecodeTiled", "LTXVAudioVAEDecode")
+                    and n["inputs"]["samples"][0] in g and g[n["inputs"]["samples"][0]]["class_type"] == "LTXVSeparateAVLatent"]
+        self.assertEqual(len({n["inputs"]["samples"][0] for n in decoders}), 1)
+
+    def test_fast_decodes_the_first_stage(self):
+        full, fast = self.graph(self.VIDEO), self.graph(self.VIDEO)
+        images.set_clip(full, "ltx-25-video", "p", [self.png(1280, 720)], 5, None, False, 1)
+        self.assertEqual(images.set_clip(fast, "ltx-25-video", "p", [self.png(1280, 720)], 5, None, True, 1), (640, 352))
+        src = lambda g: {n["inputs"]["samples"][0] for n in g.values() if n["class_type"] == "LTXVAudioVAEDecode"}  # noqa: E731
+        self.assertNotEqual(src(full), src(fast))
+        # the first stage samples at half of what Width and Height say
+        self.assertEqual(self.node(fast, "PrimitiveInt", "Width")["inputs"]["value"], 1280)
+
+    def test_from_a_prompt_alone(self):
+        g = self.graph(self.VIDEO)
+        self.assertEqual(images.set_clip(g, "ltx-25-video", "a tram", [], 5, "704x1280", False, 1), (704, 1280))
+        self.assertTrue(self.node(g, "PrimitiveBoolean", "Switch to Text to Video?")["inputs"]["value"])
+        self.assertEqual(self.node(g, "LoadImage", "Load First Frame")["inputs"]["image"], "llmctl-api/x.png")
+
+    def test_first_last_needs_two_pictures_and_is_made_smaller_when_fast(self):
+        with self.assertRaises(images.Refused):
+            images.set_clip(self.graph(self.FLF), "ltx-25-first-last-frame", "p", [self.png(64, 36)], 5, None, False, 1)
+        g = self.graph(self.FLF)
+        w, h = images.set_clip(g, "ltx-25-first-last-frame", "p", [self.png(1280, 720)] * 2, 5, None, True, 1)
+        self.assertLess(w * h, 1280 * 704 * 0.5)
+        self.assertEqual(self.node(g, "PrimitiveInt", "height")["inputs"]["value"], h)
+
+    def test_lengths_outside_the_range_are_refused(self):
+        for bad in (0, 11, "x"):
+            with self.subTest(bad), self.assertRaises(images.Refused):
+                images.set_clip(self.graph(self.VIDEO), "ltx-25-video", "p", [self.png(64, 36)], bad, None, False, 1)
+
+    def test_the_endpoint_wants_a_prompt(self):
+        images.ARGS.api = str(ROOT / "comfyui" / "api")
+        r = images.app.test_client().post("/v1/video/clips", json={"prompt": " "})
+        self.assertEqual(r.status_code, 400)
 
 
 NODES = ROOT / "comfyui" / "nodes"

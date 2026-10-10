@@ -1550,7 +1550,11 @@ llmctl update comfy --master          # master instead of the releases (download
   movement of all. For a quick look, 1024×576 with the second stage left out
   (its output decoded straight away; sampling at 512×288) gives 2 s in 55 s.
   A portrait picture is cut to the template's 16:9 unless the size is set.
-  Not served through the image API.
+  The image API serves both as `/v1/video/clips` (`ltx-25-video`,
+  `ltx-25-first-last-frame`): a prompt, none, one or two pictures, `seconds`
+  1–10, `size` (else the picture's shape at ~0.9 MP), `quality` `fast` (the
+  first stage alone, half the size) or `full`; back comes the MP4. ComfyUI
+  has no temp node for video, so the clip stays in `output/llmctl-api/`.
 - **Talking and singing pictures** (#43). `LTX-2.5 Talking (int8, distilled)`
   makes a picture speak or sing along to an audio file: the voice is encoded
   with LTX's audio VAE and held fixed by a noise mask while the video is made
@@ -2003,7 +2007,7 @@ ComfyUI's workflows are not made for a phone. `/fotos` is a page that is:
 pick a photo from the gallery or take one, tap what should happen, look at
 the result with a before/after slider, and save it to the phone's photos
 through its share sheet — or switch to *Erzeugen* and make a picture from a
-prompt. Big buttons, one column, dark mode; it can sit on the home screen
+prompt. *Animieren* turns a photo into a short clip with sound. Big buttons, one column, dark mode; it can sit on the home screen
 like an app.
 
 | Action | Workflow (fast / thorough) | Measured here |
@@ -2017,6 +2021,7 @@ like an app.
 | Ändern — in one's own words, with a second photo as "Bild 2" | Qwen-Image Edit Turbo, Edit, FLUX.2 klein (one photo), FLUX.2 dev Turbo | 43–158 s |
 | Erweitern — more picture left and right, above and below, or all round | Qwen-Image 2.1 Outpaint Turbo / Outpaint | 26 s |
 | Übermalen — a place marked with a finger, and what goes there | Qwen-Image 2.1 Inpaint Crop Turbo / Inpaint Crop | 22 s |
+| Animieren — a clip of 3, 5 or 8 s with sound; with an end picture the clip runs to it | LTX-2.5 Video (first stage only / both) / First-Last Frame | 83 s / 375 s for 5 s |
 
 *Erzeugen* takes a prompt, a model, a shape (1:1, 4:3, 3:4, 16:9, 9:16, about
 1 MP each) and a count (1–4, one job per picture): Z-Image Turbo 20 s,
@@ -2029,6 +2034,26 @@ out the models without (Z-Image base, FLUX.2 dev Turbo); colouring or
 enlarging has nothing to refuse and stays as it is. With two photos, Qwen-Image
 Edit Turbo took the whole woman from picture 2 into picture 1's beach where it
 was asked for her outfit only — say plainly what comes from which.
+*Erzeugen* also offers LTX-2.5 Video, in the same shapes at ~0.9 MP
+(1280×704, 704×1280, 960×960, 1088×832, 832×1088): Z-Image Turbo makes the
+first frame from the prompt (with *Unzensiert* its NSFW finetune), and LTX
+animates it — 133 s for 5 s fast. LTX from text alone drifts with a short
+prompt: of three seeds for "a tram in a rainy street", two made a film still
+of a man's face; the template's prompt enhancement (Gemma-4 E2B) answered
+with an essay on the instructions instead of a caption.
+
+*Animieren* goes through the image API's `/v1/video/clips`. Without a text the
+clip gets a prompt of gentle, natural movement with a still camera; what
+should happen ("sie winkt in die Kamera") can be written in German. The clip
+takes the photo's shape at ~0.9 MP (the template would cut a portrait to
+16:9). *Schnell* decodes LTX's first stage straight away: half the size
+(640×352 from a 16:9 photo), 83 s for 5 s (112 s with loading), where both
+stages take 375 s at 1280×704. Sampling the first stage at 960×544 instead
+took 248 s: not worth it beside the full two stages.
+A second photo makes it First-Last Frame, the clip running from the first
+to the second; that workflow has one stage only, so *Schnell* there makes it
+at a third of the pixels (768×448, 159 s for 5 s). The player starts muted, as phones
+want; *Sichern* hands the MP4 to the share sheet.
 
 "Entfernen" is an instruction edit, not Inpaint: a mask in the shape of a
 person, SAM 3's, had another person painted into it (both Inpaint Crop
@@ -2045,7 +2070,7 @@ Auth). The page shows whether ComfyUI runs, starts it (`llmctl start comfy 9
 --proxy`, `LLMCTL_FOTOS_SLOT`/`LLMCTL_FOTOS_MODEL`) and stops it to free the
 memory. With less than 40 GiB free — an LLM like `flash` beside it — it says
 so and starts only on "Trotzdem starten": Qwen-Image takes 25–30 GB while it
-works. After 15 minutes without a job it has ComfyUI unload its models.
+works, LTX-2.5 over 40. After 15 minutes without a job it has ComfyUI unload its models.
 
 **Open files.** ROCm holds a dmabuf file descriptor for every block of GPU
 memory. After a few models in one ComfyUI session — this test series went

@@ -14,6 +14,11 @@
     POST /v1/audio/music          {"model", "prompt" (style), "lyrics", "duration", "seed", "bpm",
                                   "key", "language", "response_format": mp3|flac}: a song or an
                                   instrumental from the music workflows (comfyui/api/audio/)
+    POST /v1/video/clips          multipart or JSON: "prompt", "image" (or two in image[]: first
+                                  and last), "model", "seconds" (1-10), "size", "quality":
+                                  fast|full, "seed": an MP4 with sound (LTX-2.5, api/video/);
+                                  without an image from the prompt alone. It stays in
+                                  ComfyUI's output/llmctl-api/: there is no temp node for video
     POST /v1/images/check         image (+ prompt, max_area): the artifacts a vision model sees,
                                   with boxes to repaint and a prompt for each (needs --vision)
     GET  /v1/models               the workflows whose models ComfyUI has, and the
@@ -1071,6 +1076,157 @@ def music():
     return handle(go)
 
 
+# ── video clips ──────────────────────────────────────────────
+
+# The clip workflows (api/video/) this API serves: a picture comes to life, or
+# a prompt alone; or the clip between a first and a last picture. The chains and
+# Talking are `llmctl musicvideo`'s.
+CLIP_WORKFLOWS = {"ltx-25-video": "LTX-2.5 Video (int8, distilled)",
+                  "ltx-25-first-last-frame": "LTX-2.5 First-Last Frame (int8, distilled)"}
+CLIP_SECONDS_MIN, CLIP_SECONDS_MAX, CLIP_SECONDS_DEFAULT = 1, 10, 5
+# The templates' 1280×704: ~0.9 MP, in steps of 64 — the first stage samples at
+# half the size, and LTX's VAE wants multiples of 32 there.
+CLIP_PIXELS, CLIP_STEP = 1280 * 704, 64
+# Fast without a first stage to stop at (First-Last Frame): this share of the pixels.
+FAST_SHARE = 0.36
+
+
+def clip_workflows():
+    """{name: path} of the clip workflows ComfyUI's bundle has."""
+    folder = Path(ARGS.api) / "video"
+    return {name: folder / f"{stem}.json" for name, stem in CLIP_WORKFLOWS.items()
+            if (folder / f"{stem}.json").is_file()}
+
+
+def clip_size(size, image=None, pixels=None):
+    """(width, height) of the clip: the size asked for, else the picture's shape
+    at ~0.9 MP (the template would cut a portrait to 16:9), else 16:9 — at
+    `pixels` if given, in steps of 64."""
+    if size and size != "auto":
+        m = re.fullmatch(r"(\d+)x(\d+)", size)
+        if not m:
+            raise Refused(f"size is WIDTHxHEIGHT or auto, not '{size}'")
+        w, h = int(m[1]), int(m[2])
+        pixels = pixels or w * h
+    elif image is not None:
+        w, h = image_size(image)
+    else:
+        w, h = 16, 9
+    k = ((pixels or CLIP_PIXELS) / (w * h)) ** 0.5
+    w, h = (min(1920, max(256, round(v * k / CLIP_STEP) * CLIP_STEP)) for v in (w, h))
+    return w, h
+
+
+def clip_node(graph, cls, name):
+    for node in graph.values():
+        if node["class_type"] == cls and title(node).lower() == name.lower():
+            return node
+    raise Refused(f"the workflow has no {cls} '{name}'")
+
+
+def first_stage(graph):
+    """Fast: the clip straight from the first stage, at half the size — the
+    decoders take its latent and the second stage is never run. Only the
+    two-stage workflows (Video); the others are made smaller instead."""
+    seps = [k for k, n in graph.items() if n["class_type"] == "LTXVSeparateAVLatent"]
+    decoders = [n for n in graph.values() if n["class_type"] in ("VAEDecodeTiled", "LTXVAudioVAEDecode")
+                and refers(n["inputs"].get("samples"), set(seps))]
+    used = {n["inputs"]["samples"][0] for n in decoders}
+    if len(seps) != 2 or len(used) != 1:
+        return False
+    other = next(k for k in seps if k not in used)
+    for n in decoders:
+        n["inputs"]["samples"] = [other, n["inputs"]["samples"][1]]
+    return True
+
+
+def set_clip(graph, name, prompt, images, seconds, size, fast, seed):
+    """The request into a clip workflow; returns the clip's (width, height)."""
+    for key in [k for k, n in graph.items() if n["class_type"] in UI_ONLY]:
+        del graph[key]
+    try:
+        seconds = CLIP_SECONDS_DEFAULT if seconds in (None, "") else int(seconds)
+    except (TypeError, ValueError):
+        raise Refused(f"seconds is a whole number, not '{seconds}'") from None
+    if not CLIP_SECONDS_MIN <= seconds <= CLIP_SECONDS_MAX:
+        raise Refused(f"seconds is {CLIP_SECONDS_MIN} to {CLIP_SECONDS_MAX}")
+    slots = image_nodes(graph)
+    if name == "ltx-25-first-last-frame" and len(images) != 2:
+        raise Refused("the first-last-frame clip takes two images: the first and the last")
+    if len(images) > len(slots):
+        raise Refused(f"this workflow takes at most {len(slots)} image(s), got {len(images)}")
+    if images:
+        for key, data in zip(slots, images):
+            graph[key]["inputs"]["image"] = upload(data)
+    else:
+        # From the prompt alone: the loader still has to name a file ComfyUI has,
+        # even where the switch passes it by.
+        clip_node(graph, "PrimitiveBoolean", "Switch to Text to Video?")["inputs"]["value"] = True
+        pillow()
+        buf = io.BytesIO()
+        Image.new("RGB", (64, 64)).save(buf, "PNG")
+        graph[slots[0]]["inputs"]["image"] = upload(buf.getvalue())
+    clip_node(graph, "PrimitiveStringMultiline", "Prompt")["inputs"]["value"] = prompt
+    clip_node(graph, "PrimitiveInt", "Duration")["inputs"]["value"] = seconds
+    w, h = clip_size(size, images[0] if images else None)
+    out = (w, h)
+    if fast and first_stage(graph):
+        out = (w // 2, h // 2)                    # what the first stage samples at
+    elif fast:                                    # one stage only: fewer pixels instead
+        w, h = out = clip_size(f"{w}x{h}", pixels=CLIP_PIXELS * FAST_SHARE)
+    clip_node(graph, "PrimitiveInt", "Width")["inputs"]["value"] = w
+    clip_node(graph, "PrimitiveInt", "Height")["inputs"]["value"] = h
+    set_seed(graph, seed)
+    for node in graph.values():
+        if node["class_type"] == "SaveVideo":     # no temp node for videos: output/llmctl-api/
+            node["inputs"]["filename_prefix"] = "llmctl-api/clip"
+    return out
+
+
+@app.post("/v1/video/clips")
+def clips():
+    def go():
+        if request.files or request.form:
+            f = request.form
+            images = [x.read() for key in ("image", "image[]") for x in request.files.getlist(key)]
+            prompt, model, size, seconds = f.get("prompt", ""), f.get("model"), f.get("size"), f.get("seconds")
+            quality, seed = f.get("quality"), f.get("seed")
+        else:
+            j = request.get_json(silent=True) or {}
+            raw = j.get("images") or j.get("image") or []
+            images = [data_url(x) for x in (raw if isinstance(raw, list) else [raw])]
+            prompt, model, size, seconds = j.get("prompt", ""), j.get("model"), j.get("size"), j.get("seconds")
+            quality, seed = j.get("quality"), j.get("seed")
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise Refused("prompt is required: what happens in the clip")
+        if quality not in (None, "", "fast", "full"):
+            raise Refused("quality is fast or full")
+        known = clip_workflows()
+        name = model or ("ltx-25-first-last-frame" if len(images) == 2 else "ltx-25-video")
+        if name not in known:
+            raise Refused(f"no video model '{name}' — there are: {', '.join(known) or 'none'}")
+        graph = json.loads(known[name].read_text())
+        lacking = missing_models(graph)
+        if lacking:
+            raise Refused(f"'{name}' needs models ComfyUI does not have: {', '.join(lacking)} "
+                          f"— llmctl download comfy \"{known[name].stem}\"")
+        seed = random.randrange(2**48) if seed in (None, "") else int(seed)
+        t0 = time.time()
+        w, h = set_clip(graph, name, prompt.strip(), images, seconds, size, quality == "fast", seed)
+        made = [v for out in execute(graph).values() for v in out.get("images", []) + out.get("videos", [])
+                if str(v.get("filename", "")).endswith((".mp4", ".webm", ".mkv"))]
+        if not made:
+            raise RuntimeError("the workflow gave no video")
+        q = {"filename": made[0]["filename"], "subfolder": made[0].get("subfolder", ""), "type": made[0].get("type", "output")}
+        v = requests.get(f"{ARGS.comfy}/view", params=q, timeout=300)
+        v.raise_for_status()
+        app.logger.info("clip %s: %dx%d, %s s in %.1f s, seed %d", name, w, h, seconds or CLIP_SECONDS_DEFAULT,
+                        time.time() - t0, seed)
+        return Response(v.content, mimetype="video/mp4",
+                        headers={"X-Seed": str(seed), "X-Model": name, "X-Size": f"{w}x{h}"})
+    return handle(go)
+
+
 @app.get("/v1/models")
 def models():
     def go():
@@ -1087,6 +1243,10 @@ def models():
             if not missing_models(json.loads(path.read_text())):
                 data[name] = {"id": name, "object": "model", "owned_by": "comfyui",
                               "endpoints": ["/v1/audio/music"], "parameters": []}
+        for name, path in clip_workflows().items():
+            if not missing_models(json.loads(path.read_text())):
+                data[name] = {"id": name, "object": "model", "owned_by": "comfyui",
+                              "endpoints": ["/v1/video/clips"], "parameters": ["seconds", "quality"]}
         return jsonify({"object": "list", "data": list(data.values())})
     return handle(go)
 

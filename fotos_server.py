@@ -117,7 +117,24 @@ ACTIONS = {
         "text_placeholder": "z. B. eine Vase mit Sonnenblumen",
         "max_side": 2048, "seconds": (35, 90), "mask": True,
     },
+    # LTX-2.5: the picture comes to life as a clip with sound; with a second
+    # picture the clip runs from the first to it (First-Last Frame). Fast takes
+    # the first stage alone, at half the size. seconds: for 5 s of clip.
+    "animate": {
+        "label": "Animieren", "hint": "Kurzes Video mit Ton",
+        "model": ("ltx-25-video", "ltx-25-video"), "video": True,
+        "prompt": ("The scene comes to life with natural, gentle movement; the people move naturally "
+                   "and keep their faces. The camera holds still."),
+        "text": "replace", "text_label": "Was soll passieren? (optional)",
+        "text_placeholder": "z. B. Sie lacht und winkt in die Kamera, die Wellen rollen heran",
+        "max_side": 1536, "seconds": (90, 380), "end_seconds": (160, 900), "second": True,
+        "second_label": "Endbild (optional) – das Video läuft dorthin",
+    },
 }
+# Animieren with an end picture.
+FIRST_LAST = "ltx-25-first-last-frame"
+# Animieren and the video model of Erzeugen: how long a clip may be.
+CLIP_SECONDS = (3, 5, 8)
 # Ändern: which model. images: how many pictures its workflow takes.
 EDIT_MODELS = {
     "qwen-image-21-turbo": {"label": "Qwen-Image Turbo", "hint": "schnell, 2 Fotos", "images": 2, "seconds": 45},
@@ -133,6 +150,11 @@ GEN_MODELS = {
     "z-image": {"label": "Z-Image", "hint": "mehr Abwechslung, Stile", "seconds": 110},
     "flux2-dev-turbo": {"label": "FLUX.2 dev Turbo", "hint": "fast wie dev", "seconds": 150},
     "flux2-dev": {"label": "FLUX.2 dev", "hint": "beste Qualität", "seconds": 300},
+    # A clip from a prompt: Z-Image Turbo makes the first frame, LTX-2.5 animates
+    # it. LTX from text alone drifts with a short prompt — two seeds of three made
+    # a film still of a man instead of the tram asked for.
+    "ltx-25-video": {"label": "LTX-2.5 Video", "hint": "Startbild, dann Clip mit Ton", "seconds": 430, "fast_seconds": 130,
+                     "video": True, "frame_model": "z-image-turbo"},
 }
 # Unzensiert: the same workflow with the uncensored encoder or NSFW finetune.
 # What has none (Z-Image base, FLUX.2 dev Turbo) is not offered then.
@@ -145,6 +167,8 @@ UNCENSORED = {
 }
 # About 1 MP in the usual shapes, in steps of 16.
 ASPECTS = {"1:1": "1024x1024", "4:3": "1152x864", "3:4": "864x1152", "16:9": "1344x768", "9:16": "768x1344"}
+# A clip: ~0.9 MP in steps of 64, as the image API makes them.
+VIDEO_ASPECTS = {"1:1": "960x960", "4:3": "1088x832", "3:4": "832x1088", "16:9": "1280x704", "9:16": "704x1280"}
 # Erweitern: pixels added to each side (of the ~0.8 MP picture), steps of 8.
 SIDES = {
     "wide": {"left": 256, "right": 256, "top": 0, "bottom": 0},
@@ -349,6 +373,8 @@ def run_job(jid):
     d = job_path(jid)
     try:
         model = job["model"]
+        if job.get("video"):
+            return run_clip(job, d)
         if job["action"] == "generate":
             r = requests.post(f"{ARGS.api}/v1/images/generations", timeout=ARGS.timeout,
                               json={"model": model, "prompt": job["text"], "size": job["size"],
@@ -370,6 +396,43 @@ def run_job(jid):
         update_job(jid, state="failed", finished=time.time(), error=str(e))
     finally:
         _last_done.update(at=time.time(), freed=False)
+
+
+def run_clip(job, d):
+    """A video job: the clip from the image API, and a still of it for the list."""
+    jid = job["id"]
+    form = {"model": job["model"], "prompt": clip_prompt(job), "seconds": str(job["seconds"]),
+            "quality": "full" if job.get("quality") == "best" else "fast"}
+    if job["action"] == "generate" and input_file(d) is None:
+        r = requests.post(f"{ARGS.api}/v1/images/generations", timeout=ARGS.timeout,
+                          json={"model": job["frame_model"], "prompt": job["text"], "size": job["size"],
+                                "n": 1, "response_format": "b64_json"})
+        if r.status_code != 200:
+            raise RuntimeError("Startbild: " + api_error(r))
+        (d / "input.png").write_bytes(base64.b64decode(r.json()["data"][0]["b64_json"]))
+    r = requests.post(f"{ARGS.api}/v1/video/clips", timeout=ARGS.timeout, data=form, files=edit_files(d))
+    if r.status_code != 200:
+        raise RuntimeError(api_error(r))
+    (d / "result.mp4").write_bytes(r.content)
+    poster(d)
+    size = [int(v) for v in r.headers.get("X-Size", "0x0").split("x")]
+    update_job(jid, state="done", finished=time.time(), result_size=size, seed=r.headers.get("X-Seed"))
+    app.logger.info("job %s %s (%s): %.0f s", jid, job["action"], job["model"], time.time() - job["started"])
+
+
+def clip_prompt(job):
+    spec = ACTIONS.get(job["action"])
+    text = (job.get("text") or "").strip()
+    return text or (spec["prompt"] if spec else "")
+
+
+def poster(d):
+    """A still from the clip's first second, for the list and before it plays."""
+    r = subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", "0.5", "-i", str(d / "result.mp4"),
+                        "-frames:v", "1", "-q:v", "3", str(d / "result.poster.jpg")],
+                       capture_output=True, timeout=60)
+    if r.returncode != 0:
+        app.logger.warning("poster: %s", r.stderr.decode(errors="replace")[-200:])
 
 
 def worker():
@@ -490,7 +553,7 @@ def comfy():
     free = mem_available_gib()
     if action == "start" and not body.get("force") and free is not None and free < FREE_NEEDED_GIB:
         return jsonify({"error": f"Nur {free:.0f} GiB Speicher frei, ComfyUI braucht beim Bearbeiten "
-                                 f"25–30 GB. Läuft ein großes Sprachmodell? Erst das stoppen – "
+                                 f"25–30 GB, für Videos über 40 GB. Läuft ein großes Sprachmodell? Erst das stoppen – "
                                  f"oder trotzdem starten.", "code": "memory"}), 409
     with _comfy_lock:
         if _comfy["state"]:
@@ -524,14 +587,21 @@ def actions():
         fast, best = a["model"]
         out.append({"id": key, "label": a["label"], "hint": a["hint"], "text": a["text"],
                     "text_label": a.get("text_label"), "text_placeholder": a.get("text_placeholder"),
-                    "qualities": fast != best and not a.get("models"), "seconds": a["seconds"],
+                    "qualities": (fast != best or bool(a.get("video"))) and not a.get("models"),
+                    "seconds": a["seconds"], "end_seconds": a.get("end_seconds"),
                     "models": bool(a.get("models")), "second": bool(a.get("second")),
                     "sides": bool(a.get("sides")), "mask": bool(a.get("mask")),
+                    "video": bool(a.get("video")), "second_label": a.get("second_label"),
+                    "second_available": avail(FIRST_LAST) if a.get("video") else True,
                     "available": avail(fast), "best_available": avail(best),
                     "uncensored": [unc(fast), unc(best)]})
-    models = lambda table: [dict(v, id=k, available=avail(k), uncensored=unc(k)) for k, v in table.items()]  # noqa: E731
+    def models(table):
+        # a clip from a prompt needs its first frame's model too, and is as uncensored as that
+        return [dict(v, id=k, available=avail(k) if avail(k) is False else avail(v.get("frame_model", k)),
+                     uncensored=unc(v.get("frame_model", k))) for k, v in table.items()]
+
     return jsonify({"actions": out, "edit_models": models(EDIT_MODELS), "gen_models": models(GEN_MODELS),
-                    "aspects": list(ASPECTS)})
+                    "aspects": list(ASPECTS), "clip_seconds": list(CLIP_SECONDS)})
 
 
 def new_job(fields, files=()):
@@ -546,6 +616,16 @@ def new_job(fields, files=()):
         write_job(job)
     _queue.put(jid)
     return job
+
+
+def clip_seconds(value):
+    try:
+        n = int(value or 5)
+    except ValueError:
+        raise Refused("ungültige Länge") from None
+    if n not in CLIP_SECONDS:
+        raise Refused("ein Video ist " + ", ".join(map(str, CLIP_SECONDS)) + " Sekunden lang")
+    return n
 
 
 def picture(field, from_field):
@@ -578,10 +658,16 @@ def create_job():
                 raise Refused("Was soll auf dem Bild sein? – bitte beschreiben")
             aspect = f.get("aspect") if f.get("aspect") in ASPECTS else "1:1"
             n = min(4, max(1, int(f.get("n") or 1)))
+            video = bool(GEN_MODELS[model].get("video"))
             fields = {"action": "generate", "label": "Erzeugt", "text": text, "aspect": aspect,
-                      "size": ASPECTS[aspect], "model": resolve(model, uncensored),
+                      "size": (VIDEO_ASPECTS if video else ASPECTS)[aspect], "model": resolve(model, uncensored),
                       "model_label": GEN_MODELS[model]["label"],
                       "uncensored": uncensored and model in UNCENSORED, "png": False}
+            if video:
+                frame = GEN_MODELS[model]["frame_model"]
+                fields.update(video=True, label="Video", seconds=clip_seconds(f.get("seconds")),
+                              quality="best" if f.get("quality") == "best" else "fast",
+                              frame_model=resolve(frame, uncensored), uncensored=uncensored and frame in UNCENSORED)
             jobs = [new_job(fields) for _ in range(n)]       # one job per picture: each its own card
             return jsonify([public(j) for j in jobs])
         if action not in ACTIONS:
@@ -604,7 +690,11 @@ def create_job():
         body, name, size = fit(data, action)
         files = [(name, body)]
         data2, parent2 = picture("image2", "from2") if spec.get("second") else (None, None)
-        if data2 is not None:
+        if data2 is not None and spec.get("video"):
+            model, label = FIRST_LAST, "mit Endbild"
+            body2, name2, _ = fit(data2, action, "input2")
+            files.append((name2, body2))
+        elif data2 is not None:
             if EDIT_MODELS[model]["images"] < 2:
                 raise Refused(f"{label} nimmt nur ein Foto – für zwei Qwen-Image oder FLUX.2 dev wählen")
             body2, name2, _ = fit(data2, action, "input2")
@@ -619,7 +709,9 @@ def create_job():
                        "uncensored": uncensored and model in UNCENSORED,
                        "parent": parent, "parent2": parent2, "two": data2 is not None,
                        "sides": sides if spec.get("sides") else None,
-                       "input_size": list(size), "png": bool(spec.get("png"))}, files)
+                       "input_size": list(size), "png": bool(spec.get("png")),
+                       **({"video": True, "seconds": clip_seconds(f.get("seconds"))} if spec.get("video") else {})},
+                      files)
         return jsonify([public(job)])
     except Refused as e:
         return error(str(e))
@@ -649,9 +741,19 @@ def job_image(jid, which):
     except Refused:
         return error("no such job", 404)
     job = read_job(jid)
-    if job is None or which not in ("input", "input2", "result"):
+    if job is None or which not in ("input", "input2", "result", "poster"):
         return error("no such job", 404)
-    src = d / "result.png" if which == "result" else input_file(d, which)
+    name = f"{job['label'].lower()}-{jid}"
+    if job.get("video") and which in ("result", "poster"):
+        # The clip as it came (Range requests for the phone's player), and its still.
+        if which == "result" and not request.args.get("thumb"):
+            return send_file(d / "result.mp4", mimetype="video/mp4", max_age=86400, conditional=True,
+                             as_attachment=bool(request.args.get("download")), download_name=name + ".mp4")
+        which = "result.poster"
+    if which == "poster":
+        return error("not there", 404)
+    src = d / "result.png" if which == "result" else d / "result.poster.jpg" if which == "result.poster" \
+        else input_file(d, which)
     if src is None or not src.is_file():
         return error("not there", 404)
     if request.args.get("thumb"):
@@ -666,7 +768,8 @@ def job_image(jid, which):
                 im = bg
             im.save(cache, "JPEG", quality=82)
         return send_file(cache, mimetype="image/jpeg", max_age=86400)
-    name = f"{job['label'].lower()}-{jid}"
+    if which == "result.poster":
+        return send_file(src, mimetype="image/jpeg", max_age=86400)
     if which == "result" and not job.get("png"):
         # A photo as JPEG: a quarter of the PNG, and what the phone's gallery expects.
         cache = d / "result.jpg"

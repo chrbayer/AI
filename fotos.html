@@ -113,6 +113,10 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
 .job { display: flex; gap: 12px; align-items: center; border: 1px solid var(--line); border-radius: 12px;
        padding: 8px; background: var(--panel); text-align: left; width: 100%; }
 .job img, .job .ph { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; background: var(--bg); flex: none; }
+.job .thumb { position: relative; flex: none; }
+.job .thumb::after { content: "▶"; position: absolute; right: 4px; bottom: 4px; font-size: 11px; color: #fff;
+                     background: rgba(0,0,0,.6); border-radius: 999px; width: 20px; height: 20px;
+                     display: flex; align-items: center; justify-content: center; }
 .job .ph { display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 24px; }
 .job .meta { flex: 1; min-width: 0; }
 .job .meta b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -131,6 +135,7 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
                      padding: 8px 14px; min-height: 40px; }
 .stage { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; touch-action: none; }
 .stage .frame { position: relative; max-width: 100%; max-height: 100%; }
+.stage video { display: block; max-width: 100vw; max-height: calc(100dvh - 210px); background: #000; }
 .stage img { display: block; max-width: 100vw; max-height: calc(100dvh - 210px); object-fit: contain; user-select: none; -webkit-user-drag: none; }
 .stage .before { position: absolute; inset: 0; width: 100%; height: 100%; }
 .stage .line { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; box-shadow: 0 0 6px rgba(0,0,0,.6); pointer-events: none; }
@@ -214,7 +219,7 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
       </div>
       <div class="field" id="editModelWrap"><label>Modell</label><div class="models" id="editModels"></div></div>
       <div class="field" id="secondWrap">
-        <label>Zweites Foto (optional) – im Text „Bild 2“</label>
+        <label id="secondLabel">Zweites Foto (optional) – im Text „Bild 2“</label>
         <div class="pick small" id="pick2">
           <label><input type="file" accept="image/*" data-slot="2">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>Foto hinzufügen</label>
@@ -224,6 +229,7 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
           <div class="row"><span id="source2Info"></span><button class="link" id="source2Clear" type="button">Entfernen</button></div>
         </div>
       </div>
+      <div class="field" id="secondsWrap"><label>Länge</label><div class="chips" id="seconds"></div></div>
       <div class="field" id="sidesWrap"><label>Wo soll mehr Bild hin?</label>
         <div class="chips" id="sides">
           <button type="button" data-v="wide" aria-pressed="true">Links und rechts</button>
@@ -253,6 +259,12 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
         <textarea id="genText" rows="3" placeholder="z. B. Ein roter Fuchs im Schnee bei Morgenlicht"></textarea></div>
       <div class="field"><label>Modell</label><div class="models" id="genModels"></div></div>
       <div class="field"><label>Format</label><div class="chips" id="aspects"></div></div>
+      <div class="field" id="genSecondsWrap"><label>Länge</label><div class="chips" id="genSeconds"></div></div>
+      <div class="field" id="genQualityWrap"><label>Qualität</label>
+        <div class="seg small" id="genQuality">
+          <button type="button" data-q="fast" aria-pressed="true">Schnell</button>
+          <button type="button" data-q="best" aria-pressed="false">Gründlich</button>
+        </div></div>
       <div class="field"><label>Anzahl</label>
         <div class="seg small" id="count">
           <button type="button" data-n="1" aria-pressed="true">1</button><button type="button" data-n="2" aria-pressed="false">2</button>
@@ -320,7 +332,7 @@ const S = {
   comfy: "down", message: "", mode: "edit", unc: false,
   actions: [], editModels: [], genModels: [], aspects: [],
   action: null, quality: "fast", editModel: "qwen-image-21-turbo", sides: "wide",
-  genModel: "z-image-turbo", aspect: "1:1", count: 1,
+  genModel: "z-image-turbo", aspect: "1:1", count: 1, clipSeconds: [], seconds: 5, genSeconds: 5, genQuality: "fast",
   source: null, source2: null,   // {blob, url, w, h} | {from: jobId, url, w, h}
   mask: null,                    // {blob, preview} — transparent where to redraw
   jobs: [], viewing: null, pollTimer: null,
@@ -402,6 +414,9 @@ async function loadActions() {
   let r;
   try { r = await api("/actions"); } catch (e) { return; }
   S.actions = r.actions; S.editModels = r.edit_models; S.genModels = r.gen_models; S.aspects = r.aspects;
+  S.clipSeconds = r.clip_seconds || [];
+  secondsChips("seconds", (n) => { S.seconds = n; renderEdit(); });
+  secondsChips("genSeconds", (n) => { S.genSeconds = n; renderGen(); });
   const box = $("actions"); box.innerHTML = "";
   for (const a of S.actions) {
     const b = document.createElement("button");
@@ -423,6 +438,29 @@ async function loadActions() {
   }
   chooseAction(S.action || recall("action") || "colorize", true);
   renderGen();
+}
+
+function secondsChips(box, onPick) {
+  const el = $(box); el.innerHTML = "";
+  for (const n of S.clipSeconds) {
+    const b = document.createElement("button"); b.type = "button"; b.dataset.v = n; b.textContent = n + " s";
+    b.onclick = () => onPick(n);
+    el.appendChild(b);
+  }
+}
+
+// How long a job takes: a clip by its length (the times are for 5 s).
+function typical(job) {
+  if (job.action === "generate") {
+    const m = S.genModels.find((x) => x.label === job.model_label);
+    if (!m) return null;
+    return m.video ? Math.round((job.quality === "best" ? m.seconds : m.fast_seconds) * job.seconds / 5) : m.seconds;
+  }
+  const a = S.actions.find((x) => x.id === job.action);
+  if (!a) return null;
+  if (a.video) return Math.round((job.two ? a.end_seconds : a.seconds)[job.quality === "best" ? 1 : 0] * job.seconds / 5);
+  const m = S.editModels.find((x) => x.label === job.model_label);
+  return m ? m.seconds : a.seconds[job.quality === "best" && a.qualities ? 1 : 0];
 }
 
 function modelCards(box, list, onPick) {
@@ -451,7 +489,8 @@ function renderModels(box, list, current) {
     const [ok, why] = usable(m);
     b.disabled = !ok;
     b.setAttribute("aria-pressed", String(m.id === current));
-    b.querySelector("span").textContent = why || m.hint + " · " + short(m.seconds);
+    const time = m.fast_seconds ? Math.round(m.fast_seconds / 60) + "–" + short(m.seconds) : short(m.seconds);
+    b.querySelector("span").textContent = why || m.hint + " · " + time;
   }
 }
 
@@ -486,7 +525,9 @@ function renderEdit() {
     renderModels("editModels", S.editModels, S.editModel);
   }
   const m = S.editModels.find((x) => x.id === S.editModel);
-  show("secondWrap", a.second && (!m || m.images > 1));
+  show("secondWrap", a.second && (a.video ? a.second_available !== false : !m || m.images > 1));
+  $("secondLabel").textContent = a.second_label || "Zweites Foto (optional) – im Text „Bild 2“";
+  show("secondsWrap", a.video); press("seconds", "v", S.seconds);
   show("pick2", !S.source2); show("source2", !!S.source2);
   show("sidesWrap", a.sides); press("sides", "v", S.sides);
   show("maskWrap", a.mask);
@@ -497,7 +538,8 @@ function renderEdit() {
   show("textWrap", !!a.text);
   $("textLabel").textContent = a.text_label || "";
   $("text").placeholder = a.text_placeholder || "";
-  const secs = a.models && m ? m.seconds : a.seconds[S.quality === "best" && a.qualities ? 1 : 0];
+  const secs = typical({ action: a.id, model_label: a.models && m ? m.label : null, quality: S.quality,
+                         seconds: S.seconds, two: a.video && !!S.source2 });
   $("estimate").textContent = "Dauert " + duration(secs)
     + " (beim ersten Mal länger, weil das Modell lädt). Du kannst den Bildschirm sperren – das Ergebnis wartet im Verlauf.";
   renderGo();
@@ -511,8 +553,13 @@ function renderGen() {
   press("aspects", "v", S.aspect);
   press("count", "n", S.count);
   const m = S.genModels.find((x) => x.id === S.genModel);
-  if (m) $("genEstimate").textContent = (S.count > 1 ? S.count + " Bilder nacheinander, je " : "Dauert ") + duration(m.seconds)
-    + ". Jedes Bild kommt einzeln in den Verlauf.";
+  const video = !!(m && m.video);
+  show("genSecondsWrap", video); press("genSeconds", "v", S.genSeconds);
+  show("genQualityWrap", video); press("genQuality", "q", S.genQuality);
+  const what = video ? ["Video", "Videos"] : ["Bild", "Bilder"];
+  if (m) $("genEstimate").textContent = (S.count > 1 ? S.count + " " + what[1] + " nacheinander, je " : "Dauert ")
+    + duration(typical({ action: "generate", model_label: m.label, quality: S.genQuality, seconds: S.genSeconds }))
+    + ". Jedes " + what[0] + " kommt einzeln in den Verlauf.";
   renderGo();
 }
 
@@ -655,7 +702,10 @@ function renderGo() {
     b.disabled = busy; return;
   }
   if (S.mode === "generate") {
-    b.textContent = S.count > 1 ? S.count + " Bilder erzeugen ›" : "Erzeugen ›"; b.disabled = !S.genModels.length; return;
+    const m = S.genModels.find((x) => x.id === S.genModel);
+    const what = m && m.video ? ["Video", "Videos"] : ["", "Bilder"];
+    b.textContent = S.count > 1 ? S.count + " " + what[1] + " erzeugen ›" : (what[0] ? what[0] + " erzeugen ›" : "Erzeugen ›");
+    b.disabled = !S.genModels.length; return;
   }
   if (!S.source) { b.textContent = "Bild wählen"; b.disabled = true; return; }
   const a = S.actions.find((x) => x.id === S.action);
@@ -677,6 +727,8 @@ async function go() {
     if (!text) { $("formErr").textContent = "Was soll auf dem Bild sein? – bitte beschreiben."; $("genText").focus(); return; }
     fd.append("action", "generate"); fd.append("text", text); fd.append("model", S.genModel);
     fd.append("aspect", S.aspect); fd.append("n", String(S.count));
+    const m = S.genModels.find((x) => x.id === S.genModel);
+    if (m && m.video) { fd.append("seconds", String(S.genSeconds)); fd.append("quality", S.genQuality); }
   } else {
     const a = S.actions.find((x) => x.id === S.action);
     const text = $("text").value.trim();
@@ -685,9 +737,10 @@ async function go() {
     fd.append("action", a.id); fd.append("quality", S.quality); fd.append("text", text);
     if (a.models) fd.append("model", S.editModel);
     if (a.sides) fd.append("sides", S.sides);
+    if (a.video) fd.append("seconds", String(S.seconds));
     appendPicture(fd, S.source, "image", "from");
     const m = S.editModels.find((x) => x.id === S.editModel);
-    if (a.second && S.source2 && (!m || m.images > 1)) appendPicture(fd, S.source2, "image2", "from2");
+    if (a.second && S.source2 && (a.video || !m || m.images > 1)) appendPicture(fd, S.source2, "image2", "from2");
     if (a.mask) fd.append("mask", S.mask.blob, "mask.png");
   }
   const b = $("goBtn"); b.disabled = true; b.textContent = "Wird hochgeladen …";
@@ -736,7 +789,8 @@ function renderJobs() {
     if (j.state === "done" || j.action !== "generate") {
       thumb = document.createElement("img"); thumb.loading = "lazy"; thumb.alt = "";
       thumb.src = `${API}/jobs/${j.id}/${j.state === "done" ? "result" : "input"}?thumb=1`;
-    } else { thumb = document.createElement("div"); thumb.className = "ph"; thumb.textContent = "✦"; }
+      if (j.video) { const w = document.createElement("div"); w.className = "thumb"; w.appendChild(thumb); thumb = w; }
+    } else { thumb = document.createElement("div"); thumb.className = "ph"; thumb.textContent = j.video ? "▶" : "✦"; }
     const meta = document.createElement("div"); meta.className = "meta";
     const t = document.createElement("b"); t.textContent = j.label + (j.model_label ? " · " + j.model_label : "");
     if (j.uncensored) { const u = document.createElement("span"); u.className = "badge"; u.textContent = "U"; t.appendChild(u); }
@@ -762,8 +816,10 @@ function openViewer(id) {
   const stage = $("stage"); stage.innerHTML = ""; stage.onpointerdown = stage.onpointermove = stage.onpointerup = null;
   const done = job.state === "done";
   for (const b of $("vBar").children) b.style.visibility = done || b.id === "vDelete" ? "" : "hidden";
+  if (job.video) $("vMore").style.visibility = "hidden";        // a clip is no picture to edit on
   $("vDelete").disabled = job.state === "running";
-  if (done && job.action === "generate") showSingle(job);
+  if (done && job.video) showVideo(job);
+  else if (done && job.action === "generate") showSingle(job);
   else if (done) showCompare(job);
   else {
     const w = document.createElement("div"); w.className = "waiting";
@@ -779,23 +835,18 @@ function openViewer(id) {
 function info(job) {
   const parts = [];
   if (job.result_size) parts.push(job.result_size[0] + " × " + job.result_size[1]);
+  if (job.video) parts.push(job.seconds + " s");
   if (job.model_label) parts.push(job.model_label);
-  else if (job.action !== "generate") parts.push(job.quality === "best" ? "gründlich" : "schnell");
+  if (job.video || (!job.model_label && job.action !== "generate")) parts.push(job.quality === "best" ? "gründlich" : "schnell");
   if (job.uncensored) parts.push("unzensiert");
   if (job.started && job.finished) parts.push(elapsed(job));
-  return parts.join(" · ") + (job.action === "generate" ? "" : " — Regler ziehen für vorher/nachher");
+  return parts.join(" · ") + (job.action === "generate" || job.video ? "" : " — Regler ziehen für vorher/nachher");
 }
 
 function updateWaiting(job) {
   if (!$("vState")) return;
   $("vState").textContent = stateText(job);
-  let typ = null;
-  if (job.action === "generate") { const m = S.genModels.find((x) => x.label === job.model_label); typ = m && m.seconds; }
-  else {
-    const a = S.actions.find((x) => x.id === job.action);
-    const m = S.editModels.find((x) => x.label === job.model_label);
-    typ = m ? m.seconds : a ? a.seconds[job.quality === "best" && a.qualities ? 1 : 0] : null;
-  }
+  const typ = typical(job);
   $("vHint").textContent = job.state === "queued" ? "Vorher ist noch etwas anderes dran."
     : (typ ? "Üblich sind " + duration(typ) + ". " : "") + "Du kannst die Seite schließen – das Ergebnis kommt in den Verlauf.";
 }
@@ -804,6 +855,14 @@ function showSingle(job) {
   const frame = document.createElement("div"); frame.className = "frame";
   const img = document.createElement("img"); img.alt = "Ergebnis"; img.src = `${API}/jobs/${job.id}/result`;
   frame.appendChild(img); $("stage").appendChild(frame);
+}
+
+function showVideo(job) {
+  const frame = document.createElement("div"); frame.className = "frame";
+  const v = document.createElement("video");
+  v.src = `${API}/jobs/${job.id}/result`; v.poster = `${API}/jobs/${job.id}/poster`;
+  v.controls = true; v.loop = true; v.playsInline = true; v.autoplay = true; v.muted = true;   // autoplay: muted
+  frame.appendChild(v); $("stage").appendChild(frame);
 }
 
 function showCompare(job) {
@@ -843,7 +902,7 @@ async function save() {
   const url = `${API}/jobs/${job.id}/result`;
   try {
     const r = await fetch(url); const blob = await r.blob();
-    const ext = blob.type === "image/png" ? "png" : "jpg";
+    const ext = blob.type === "image/png" ? "png" : blob.type === "video/mp4" ? "mp4" : "jpg";
     const file = new File([blob], `${job.label.toLowerCase()}-${job.id}.${ext}`, { type: blob.type });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({ files: [file], title: job.label });
@@ -900,6 +959,7 @@ for (const b of $("mode").children) b.onclick = () => setMode(b.dataset.mode);
 for (const b of $("quality").children) b.onclick = () => { if (!b.disabled) { S.quality = b.dataset.q; store("quality", S.quality); renderEdit(); } };
 for (const b of $("sides").children) b.onclick = () => { S.sides = b.dataset.v; renderEdit(); };
 for (const b of $("count").children) b.onclick = () => { S.count = Number(b.dataset.n); renderGen(); };
+for (const b of $("genQuality").children) b.onclick = () => { S.genQuality = b.dataset.q; store("genQuality", S.genQuality); renderGen(); };
 $("unc").onchange = (e) => setUnc(e.target.checked);
 $("maskBtn").onclick = openPainter;
 $("pCancel").onclick = closePainter;
@@ -925,6 +985,7 @@ S.quality = recall("quality") === "best" ? "best" : "fast";
 S.editModel = recall("editModel") || S.editModel;
 S.genModel = recall("genModel") || S.genModel;
 S.aspect = recall("aspect") || S.aspect;
+S.genQuality = recall("genQuality") === "best" ? "best" : "fast";
 $("unc").checked = S.unc = recall("unc") === "1";
 setMode(recall("mode") === "generate" ? "generate" : "edit");
 loadActions();
