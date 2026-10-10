@@ -62,10 +62,12 @@ ACTIONS = {
                    "exactly as they are."),
         "text": None, "max_pixels": 1_600_000, "seconds": (40, 120),
     },
+    # Thorough: FLUX.2 klein's detailer, which redraws small faces (a group
+    # photo) where Qwen-Image's repaints a smear.
     "detail": {
         "label": "Gesichter", "hint": "Gesichter und Hände nachzeichnen",
-        "model": ("qwen-image-21-detailer", "qwen-image-21-detailer"),
-        "prompt": "", "text": None, "max_pixels": 2_400_000, "seconds": (60, 60),
+        "model": ("qwen-image-21-detailer", "flux2-klein-9b-detailer"),
+        "prompt": "", "text": None, "max_pixels": 2_400_000, "seconds": (60, 90),
     },
     "upscale": {
         "label": "Vergrößern", "hint": "4× größer und schärfer",
@@ -88,13 +90,66 @@ ACTIONS = {
         "text_placeholder": "z. B. die Person, den Mülleimer, die Stromleitungen",
         "max_pixels": 1_600_000, "seconds": (45, 120),
     },
+    # The model is the user's (EDIT_MODELS), and a second picture may come along.
     "edit": {
-        "label": "Ändern", "hint": "In eigenen Worten",
+        "label": "Ändern", "hint": "In eigenen Worten, auch mit 2 Fotos",
         "model": ("qwen-image-21-turbo", "qwen-image-21"),
         "prompt": "", "text": "prompt", "text_label": "Was soll sich ändern?",
-        "text_placeholder": "z. B. Mach den Himmel abendrot",
-        "max_pixels": 1_600_000, "seconds": (40, 120),
+        "text_placeholder": "z. B. Mach den Himmel abendrot – oder mit 2 Fotos: "
+                            "Setze die Person aus Bild 1 in die Szene aus Bild 2",
+        "max_pixels": 1_600_000, "seconds": (45, 150), "models": True, "second": True,
     },
+    # Outpaint: the picture is scaled to ~0.8 MP and padded; the prompt describes
+    # the whole wider scene (its own, unless the user writes one).
+    "expand": {
+        "label": "Erweitern", "hint": "Mehr Rand ums Bild",
+        "model": ("qwen-image-21-outpaint-turbo", "qwen-image-21-outpaint"),
+        "prompt": "A wide panoramic photograph of the whole scene, continuing naturally beyond the frame",
+        "text": "replace", "text_label": "Die ganze Szene beschreiben (optional)",
+        "text_placeholder": "z. B. Ein Strand bei Sonnenuntergang mit Dünen",
+        "max_side": 2048, "seconds": (30, 80), "sides": True,
+    },
+    # Inpaint inside a mask painted with a finger: transparent where to redraw.
+    "paint": {
+        "label": "Übermalen", "hint": "Stelle markieren, neu malen",
+        "model": ("qwen-image-21-inpaint-crop-turbo", "qwen-image-21-inpaint-crop"),
+        "prompt": "", "text": "prompt", "text_label": "Was soll an die markierte Stelle?",
+        "text_placeholder": "z. B. eine Vase mit Sonnenblumen",
+        "max_side": 2048, "seconds": (35, 90), "mask": True,
+    },
+}
+# Ändern: which model. images: how many pictures its workflow takes.
+EDIT_MODELS = {
+    "qwen-image-21-turbo": {"label": "Qwen-Image Turbo", "hint": "schnell, 2 Fotos", "images": 2, "seconds": 45},
+    "qwen-image-21": {"label": "Qwen-Image", "hint": "gründlicher, 2 Fotos", "images": 2, "seconds": 150},
+    "flux2-klein-9b": {"label": "FLUX.2 klein", "hint": "lebendig, 1 Foto", "images": 1, "seconds": 65},
+    "flux2-dev-turbo": {"label": "FLUX.2 dev Turbo", "hint": "beste Qualität, langsam", "images": 2, "seconds": 300},
+}
+# Erzeugen: the text-to-image workflows, as the README compares them.
+GEN_MODELS = {
+    "z-image-turbo": {"label": "Z-Image Turbo", "hint": "natürliche Fotos", "seconds": 30},
+    "flux2-klein-9b": {"label": "FLUX.2 klein", "hint": "lebendig, warmes Licht", "seconds": 40},
+    "qwen-image-21": {"label": "Qwen-Image", "hint": "Schrift im Bild", "seconds": 55},
+    "z-image": {"label": "Z-Image", "hint": "mehr Abwechslung, Stile", "seconds": 110},
+    "flux2-dev-turbo": {"label": "FLUX.2 dev Turbo", "hint": "fast wie dev", "seconds": 150},
+    "flux2-dev": {"label": "FLUX.2 dev", "hint": "beste Qualität", "seconds": 300},
+}
+# Unzensiert: the same workflow with the uncensored encoder or NSFW finetune.
+# What has none (Z-Image base, FLUX.2 dev Turbo) is not offered then.
+UNCENSORED = {
+    "z-image-turbo": "z-image-turbo-nsfw",
+    "flux2-klein-9b": "flux2-klein-9b-nsfw",
+    "flux2-dev": "flux2-dev-nsfw",
+    "qwen-image-21": "qwen-image-21-heretic",
+    "qwen-image-21-turbo": "qwen-image-21-heretic-turbo",
+}
+# About 1 MP in the usual shapes, in steps of 16.
+ASPECTS = {"1:1": "1024x1024", "4:3": "1152x864", "3:4": "864x1152", "16:9": "1344x768", "9:16": "768x1344"}
+# Erweitern: pixels added to each side (of the ~0.8 MP picture), steps of 8.
+SIDES = {
+    "wide": {"left": 256, "right": 256, "top": 0, "bottom": 0},
+    "tall": {"left": 0, "right": 0, "top": 256, "bottom": 256},
+    "all": {"left": 192, "right": 192, "top": 192, "bottom": 192},
 }
 KEEP_JOBS = 100
 # What ComfyUI should find free: Qwen-Image 2.1 with its text encoder takes
@@ -181,7 +236,7 @@ def public(job):
 
 # ── the picture ──────────────────────────────────────────────
 
-def fit(data, action):
+def fit(data, action, name="input"):
     """The upload as the workflow should get it: turned upright by its EXIF,
     brought down to the action's size, as PNG (or JPEG for a photo without
     transparency, to keep the upload to the image API small)."""
@@ -205,16 +260,41 @@ def fit(data, action):
     buf = io.BytesIO()
     if alpha:
         im.save(buf, "PNG")
-        return buf.getvalue(), "input.png", im.size
+        return buf.getvalue(), f"{name}.png", im.size
     im.save(buf, "JPEG", quality=95)
-    return buf.getvalue(), "input.jpg", im.size
+    return buf.getvalue(), f"{name}.jpg", im.size
 
 
-def input_file(d):
-    for name in ("input.jpg", "input.png"):
-        if (d / name).is_file():
-            return d / name
+def fit_mask(data, size):
+    """The painted mask at the picture's size: transparent where to redraw.
+    The page sends it at its own scale of the picture."""
+    try:
+        m = Image.open(io.BytesIO(data))
+        m.load()
+    except Exception:                                             # noqa: BLE001
+        raise Refused("die Markierung ist kein Bild") from None
+    alpha = m.convert("RGBA").split()[3].resize(tuple(size), Image.Resampling.NEAREST)
+    if alpha.getextrema()[0] > 127:
+        raise Refused("es ist keine Stelle markiert")
+    out = Image.new("RGBA", tuple(size), (0, 0, 0, 255))
+    out.putalpha(alpha.point(lambda v: 0 if v < 128 else 255))
+    buf = io.BytesIO()
+    out.save(buf, "PNG")
+    return buf.getvalue()
+
+
+def input_file(d, name="input"):
+    for f in (f"{name}.jpg", f"{name}.png"):
+        if (d / f).is_file():
+            return d / f
     return None
+
+
+def resolve(model, uncensored):
+    """The image API's name for a model, its uncensored one when asked and there
+    is one — colouring or enlarging has nothing to refuse. The page offers no
+    model to generate or edit with that has none."""
+    return UNCENSORED.get(model, model) if uncensored else model
 
 
 # ── the worker ───────────────────────────────────────────────
@@ -227,18 +307,10 @@ def api_error(r):
         return r.text[:300] or f"HTTP {r.status_code}"
 
 
-def run_job(jid):
-    job = update_job(jid, state="running", started=time.time())
-    if job is None:
-        return
-    d = job_path(jid)
+def edit_form(job):
+    """The form fields an edit job sends: model, prompt, and pad where it pads."""
     spec = ACTIONS[job["action"]]
-    src = input_file(d)
-    if src is None:
-        update_job(jid, state="failed", finished=time.time(), error="das Ausgangsbild fehlt")
-        return
-    model = spec["model"][1 if job.get("quality") == "best" else 0]
-    form = {"model": model, "response_format": "b64_json", "n": "1"}
+    form = {"model": job["model"], "response_format": "b64_json", "n": "1"}
     text = (job.get("text") or "").strip()
     if spec["text"] == "prompt":
         form["prompt"] = text
@@ -246,21 +318,52 @@ def run_job(jid):
         form["prompt"] = spec["prompt"] + (", " + text if text else "")
     elif spec["text"] == "fill":
         form["prompt"] = spec["prompt"].format(text)
+    elif spec["text"] == "replace":
+        form["prompt"] = text or spec["prompt"]
     elif spec["prompt"]:
         form["prompt"] = spec["prompt"]
+    if spec.get("sides"):
+        form["pad"] = json.dumps(SIDES[job.get("sides") or "wide"])
+    return form
+
+
+def edit_files(d):
+    """The pictures (image[] in order) and the mask, as requests wants them."""
+    files = []
+    for name in ("input", "input2"):
+        src = input_file(d, name)
+        if src is not None:
+            files.append(("image[]", (src.name, src.read_bytes(),
+                                      "image/png" if src.suffix == ".png" else "image/jpeg")))
+    if not files:
+        raise RuntimeError("das Ausgangsbild fehlt")
+    if (d / "mask.png").is_file():
+        files.append(("mask", ("mask.png", (d / "mask.png").read_bytes(), "image/png")))
+    return files
+
+
+def run_job(jid):
+    job = update_job(jid, state="running", started=time.time())
+    if job is None:
+        return
+    d = job_path(jid)
     try:
-        with open(src, "rb") as f:
-            r = requests.post(f"{ARGS.api}/v1/images/edits", data=form,
-                              files={"image": (src.name, f, "image/png" if src.suffix == ".png" else "image/jpeg")},
-                              timeout=ARGS.timeout)
+        model = job["model"]
+        if job["action"] == "generate":
+            r = requests.post(f"{ARGS.api}/v1/images/generations", timeout=ARGS.timeout,
+                              json={"model": model, "prompt": job["text"], "size": job["size"],
+                                    "n": 1, "response_format": "b64_json"})
+        else:
+            r = requests.post(f"{ARGS.api}/v1/images/edits", timeout=ARGS.timeout,
+                              data=edit_form(job), files=edit_files(d))
         if r.status_code != 200:
             raise RuntimeError(api_error(r))
         png = base64.b64decode(r.json()["data"][0]["b64_json"])
         (d / "result.png").write_bytes(png)
         size = Image.open(io.BytesIO(png)).size
-        update_job(jid, state="done", finished=time.time(), model=model,
-                   result_size=list(size))
-        app.logger.info("job %s %s (%s): %.0f s", jid, job["action"], model, time.time() - job["started"])
+        update_job(jid, state="done", finished=time.time(), result_size=list(size),
+                   seed=r.json().get("seed"))
+        app.logger.info("job %s %s (%s): %.0f s", jid, job["action"], job["model"], time.time() - job["started"])
     except requests.ConnectionError:
         update_job(jid, state="failed", finished=time.time(), error="ComfyUI läuft nicht (mehr)")
     except Exception as e:                                        # noqa: BLE001
@@ -410,55 +513,118 @@ def actions():
         have = {m["id"] for m in r.json()["data"]}
     except (requests.RequestException, ValueError, KeyError):
         pass
+    def avail(model):
+        return None if have is None else model in have
+
+    def unc(model):
+        return None if model not in UNCENSORED else avail(UNCENSORED[model])
+
     out = []
     for key, a in ACTIONS.items():
         fast, best = a["model"]
         out.append({"id": key, "label": a["label"], "hint": a["hint"], "text": a["text"],
                     "text_label": a.get("text_label"), "text_placeholder": a.get("text_placeholder"),
-                    "qualities": fast != best, "seconds": a["seconds"],
-                    "available": None if have is None else fast in have,
-                    "best_available": None if have is None else best in have})
-    return jsonify(out)
+                    "qualities": fast != best and not a.get("models"), "seconds": a["seconds"],
+                    "models": bool(a.get("models")), "second": bool(a.get("second")),
+                    "sides": bool(a.get("sides")), "mask": bool(a.get("mask")),
+                    "available": avail(fast), "best_available": avail(best),
+                    "uncensored": [unc(fast), unc(best)]})
+    models = lambda table: [dict(v, id=k, available=avail(k), uncensored=unc(k)) for k, v in table.items()]  # noqa: E731
+    return jsonify({"actions": out, "edit_models": models(EDIT_MODELS), "gen_models": models(GEN_MODELS),
+                    "aspects": list(ASPECTS)})
+
+
+def new_job(fields, files=()):
+    """A job directory with its files and job.json, queued."""
+    jid = time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6]
+    d = job_path(jid)
+    d.mkdir(parents=True)
+    for name, body in files:
+        (d / name).write_bytes(body)
+    job = dict(fields, id=jid, state="queued", created=time.time())
+    with _jobs_lock:
+        write_job(job)
+    _queue.put(jid)
+    return job
+
+
+def picture(field, from_field):
+    """(bytes, parent job) of an uploaded picture or of an earlier result."""
+    if field in request.files:
+        return request.files[field].read(), None
+    parent = request.form.get(from_field)
+    if parent:
+        src = job_path(parent) / "result.png"
+        if not src.is_file():
+            raise Refused("dieses Ergebnis gibt es nicht mehr")
+        return src.read_bytes(), parent
+    return None, None
 
 
 @app.post("/fotos/api/jobs")
 def create_job():
     try:
-        action = request.form.get("action", "")
+        f = request.form
+        action = f.get("action", "")
+        text = (f.get("text") or "").strip()
+        if len(text) > 2000:
+            raise Refused("der Text ist zu lang")
+        uncensored = f.get("uncensored") in ("1", "true", "on")
+        if action == "generate":
+            model = f.get("model") or "z-image-turbo"
+            if model not in GEN_MODELS:
+                raise Refused("unbekanntes Modell")
+            if not text:
+                raise Refused("Was soll auf dem Bild sein? – bitte beschreiben")
+            aspect = f.get("aspect") if f.get("aspect") in ASPECTS else "1:1"
+            n = min(4, max(1, int(f.get("n") or 1)))
+            fields = {"action": "generate", "label": "Erzeugt", "text": text, "aspect": aspect,
+                      "size": ASPECTS[aspect], "model": resolve(model, uncensored),
+                      "model_label": GEN_MODELS[model]["label"],
+                      "uncensored": uncensored and model in UNCENSORED, "png": False}
+            jobs = [new_job(fields) for _ in range(n)]       # one job per picture: each its own card
+            return jsonify([public(j) for j in jobs])
         if action not in ACTIONS:
             raise Refused("unbekannte Aktion")
         spec = ACTIONS[action]
-        text = (request.form.get("text") or "").strip()
         if spec["text"] in ("prompt", "fill") and not text:
-            raise Refused(f"{spec['text_label']} — bitte ausfüllen")
-        if len(text) > 2000:
-            raise Refused("der Text ist zu lang")
-        if "image" in request.files:
-            data = request.files["image"].read()
-            parent = None
-        elif request.form.get("from"):
-            parent = request.form["from"]
-            src = job_path(parent) / "result.png"
-            if not src.is_file():
-                raise Refused("dieses Ergebnis gibt es nicht mehr")
-            data = src.read_bytes()
+            raise Refused(f"{spec['text_label']} – bitte ausfüllen")
+        quality = "best" if f.get("quality") == "best" else "fast"
+        if spec.get("models"):
+            model = f.get("model") or spec["model"][0]
+            if model not in EDIT_MODELS:
+                raise Refused("unbekanntes Modell")
+            label = EDIT_MODELS[model]["label"]
         else:
+            model = spec["model"][1 if quality == "best" else 0]
+            label = None
+        data, parent = picture("image", "from")
+        if data is None:
             raise Refused("kein Bild")
         body, name, size = fit(data, action)
-        jid = time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6]
-        d = job_path(jid)
-        d.mkdir(parents=True)
-        (d / name).write_bytes(body)
-        job = {"id": jid, "action": action, "label": spec["label"], "text": text,
-               "quality": "best" if request.form.get("quality") == "best" else "fast",
-               "state": "queued", "created": time.time(), "parent": parent,
-               "input_size": list(size), "png": bool(spec.get("png"))}
-        with _jobs_lock:
-            write_job(job)
-        _queue.put(jid)
-        return jsonify(public(job))
+        files = [(name, body)]
+        data2, parent2 = picture("image2", "from2") if spec.get("second") else (None, None)
+        if data2 is not None:
+            if EDIT_MODELS[model]["images"] < 2:
+                raise Refused(f"{label} nimmt nur ein Foto – für zwei Qwen-Image oder FLUX.2 dev wählen")
+            body2, name2, _ = fit(data2, action, "input2")
+            files.append((name2, body2))
+        if spec.get("mask"):
+            if "mask" not in request.files:
+                raise Refused("bitte erst die Stelle markieren")
+            files.append(("mask.png", fit_mask(request.files["mask"].read(), size)))
+        sides = f.get("sides") if f.get("sides") in SIDES else "wide"
+        job = new_job({"action": action, "label": spec["label"], "text": text, "quality": quality,
+                       "model": resolve(model, uncensored), "model_label": label,
+                       "uncensored": uncensored and model in UNCENSORED,
+                       "parent": parent, "parent2": parent2, "two": data2 is not None,
+                       "sides": sides if spec.get("sides") else None,
+                       "input_size": list(size), "png": bool(spec.get("png"))}, files)
+        return jsonify([public(job)])
     except Refused as e:
         return error(str(e))
+    except ValueError:
+        return error("ungültige Angabe")
 
 
 @app.get("/fotos/api/jobs")
@@ -483,9 +649,9 @@ def job_image(jid, which):
     except Refused:
         return error("no such job", 404)
     job = read_job(jid)
-    if job is None or which not in ("input", "result"):
+    if job is None or which not in ("input", "input2", "result"):
         return error("no such job", 404)
-    src = input_file(d) if which == "input" else d / "result.png"
+    src = d / "result.png" if which == "result" else input_file(d, which)
     if src is None or not src.is_file():
         return error("not there", 404)
     if request.args.get("thumb"):

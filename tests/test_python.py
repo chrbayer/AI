@@ -323,45 +323,114 @@ class Fotos(unittest.TestCase):
             with self.assertRaises(fotos.Refused):
                 fotos.job_path(bad)
 
-    def sent(self, action, quality="fast", text=""):
-        """The form run_job posts to the image API for this job."""
+    def post(self, **form):
+        """A job made through the endpoint, as the page makes it; its id(s)."""
+        client = fotos.app.test_client()
+        data = {k: v for k, v in form.items() if not k.startswith("_")}
+        for key in ("image", "image2", "mask"):
+            if key in data:
+                data[key] = (io.BytesIO(data[key]), key + (".png" if key == "mask" else ".jpg"))
+        r = client.post("/fotos/api/jobs", data=data, content_type="multipart/form-data")
+        while not fotos._queue.empty():
+            fotos._queue.get_nowait()
+        return r
+
+    def sent(self, **form):
+        """What run_job sends to the image API for a job made from this form:
+        (path, form fields or JSON, the files' field names)."""
         from unittest import mock
-        jid = "20261010-000000-abcdef"
-        d = fotos.job_path(jid)
-        d.mkdir()
-        (d / "input.jpg").write_bytes(self.jpeg(64, 64))
-        fotos.write_job({"id": jid, "action": action, "quality": quality, "text": text,
-                         "state": "queued", "created": 0, "label": action})
-        buf = io.BytesIO()
         from PIL import Image
+        form.setdefault("image", self.jpeg(64, 64))
+        if form.get("action") == "generate":
+            del form["image"]
+        r = self.post(**form)
+        self.assertEqual(r.status_code, 200, r.get_json())
+        jid = r.get_json()[0]["id"]
+        buf = io.BytesIO()
         Image.new("RGB", (64, 64)).save(buf, "PNG")
         reply = mock.Mock(status_code=200)
-        reply.json.return_value = {"data": [{"b64_json": base64.b64encode(buf.getvalue()).decode()}]}
+        reply.json.return_value = {"data": [{"b64_json": base64.b64encode(buf.getvalue()).decode()}], "seed": 7}
         with mock.patch.object(fotos.requests, "post", return_value=reply) as post:
             fotos.run_job(jid)
-        self.assertEqual(fotos.read_job(jid)["state"], "done")
-        return post.call_args.kwargs["data"]
+        self.assertEqual(fotos.read_job(jid)["state"], "done", fotos.read_job(jid).get("error"))
+        kw = post.call_args.kwargs
+        files = [name for name, _ in kw.get("files") or []]
+        return post.call_args.args[0], kw.get("data") or kw.get("json"), files
 
     def test_colorize_keeps_its_prompt_and_adds_the_colours(self):
-        form = self.sent("colorize", text="red dress")
+        _, form, _ = self.sent(action="colorize", text="red dress")
         self.assertEqual(form["model"], "qwen-image-21-colorize-turbo")
         self.assertTrue(form["prompt"].startswith("The same photograph in natural colour"))
         self.assertTrue(form["prompt"].endswith(", red dress"))
 
     def test_best_takes_the_slower_workflow(self):
-        self.assertEqual(self.sent("restore", "best")["model"], "qwen-image-21")
+        self.assertEqual(self.sent(action="restore", quality="best")[1]["model"], "qwen-image-21")
+        self.assertEqual(self.sent(action="detail", quality="best")[1]["model"], "flux2-klein-9b-detailer")
 
     def test_remove_tells_the_edit_model_what_goes(self):
-        form = self.sent("remove", text="den Mülleimer")
+        _, form, _ = self.sent(action="remove", text="den Mülleimer")
         self.assertEqual(form["model"], "qwen-image-21-turbo")
         self.assertTrue(form["prompt"].startswith("Entferne den Mülleimer aus dem Foto."))
-        self.assertNotIn("select", form)
 
-    def test_a_free_edit_sends_the_words_as_prompt(self):
-        self.assertEqual(self.sent("edit", text="Mach den Himmel rot")["prompt"], "Mach den Himmel rot")
+    def test_a_free_edit_sends_the_words_and_the_chosen_model(self):
+        _, form, _ = self.sent(action="edit", text="Mach den Himmel rot", model="flux2-klein-9b")
+        self.assertEqual((form["prompt"], form["model"]), ("Mach den Himmel rot", "flux2-klein-9b"))
 
     def test_the_upscaler_gets_no_prompt(self):
-        self.assertNotIn("prompt", self.sent("upscale"))
+        self.assertNotIn("prompt", self.sent(action="upscale")[1])
+
+    def test_two_pictures_go_as_image_list(self):
+        _, _, files = self.sent(action="edit", text="Bild 1 in Bild 2", image2=self.jpeg(80, 60))
+        self.assertEqual(files, ["image[]", "image[]"])
+
+    def test_a_one_picture_model_refuses_a_second(self):
+        r = self.post(action="edit", text="x", model="flux2-klein-9b", image=self.jpeg(64, 64), image2=self.jpeg(64, 64))
+        self.assertEqual(r.status_code, 400)
+
+    def test_expand_pads_the_chosen_sides_with_its_own_prompt(self):
+        _, form, _ = self.sent(action="expand", sides="tall")
+        self.assertEqual(json.loads(form["pad"]), {"left": 0, "right": 0, "top": 256, "bottom": 256})
+        self.assertIn("panoramic", form["prompt"])
+
+    def mask(self, w, h, box):
+        from PIL import Image, ImageDraw
+        m = Image.new("RGBA", (w, h), (0, 0, 0, 255))
+        if box:
+            ImageDraw.Draw(m).rectangle(box, fill=(0, 0, 0, 0))
+        buf = io.BytesIO()
+        m.save(buf, "PNG")
+        return buf.getvalue()
+
+    def test_a_painted_mask_goes_along_at_the_pictures_size(self):
+        from PIL import Image
+        r = self.post(action="paint", text="eine Vase", image=self.jpeg(4000, 3000),
+                      mask=self.mask(400, 300, (100, 100, 200, 200)))
+        jid = r.get_json()[0]["id"]
+        m = Image.open(fotos.job_path(jid) / "mask.png")
+        self.assertEqual(m.size, (2048, 1536))
+        self.assertEqual(m.getpixel((768, 768))[3], 0)       # inside the marked place: redrawn
+        self.assertEqual(m.getpixel((10, 10))[3], 255)       # outside: kept
+        self.assertIn("mask", self.sent(action="paint", text="x", mask=self.mask(64, 64, (0, 0, 20, 20)))[2])
+
+    def test_paint_needs_a_marked_place(self):
+        self.assertEqual(self.post(action="paint", text="x", image=self.jpeg(64, 64)).status_code, 400)
+        r = self.post(action="paint", text="x", image=self.jpeg(64, 64), mask=self.mask(64, 64, None))
+        self.assertEqual(r.status_code, 400)
+
+    def test_generate_makes_one_job_per_picture(self):
+        r = self.post(action="generate", text="ein Fuchs", model="flux2-dev", aspect="16:9", n="3")
+        jobs = r.get_json()
+        self.assertEqual(len(jobs), 3)
+        self.assertEqual({j["size"] for j in jobs}, {"1344x768"})
+        path, body, _ = self.sent(action="generate", text="ein Fuchs", model="z-image-turbo")
+        self.assertTrue(path.endswith("/v1/images/generations"))
+        self.assertEqual((body["model"], body["prompt"]), ("z-image-turbo", "ein Fuchs"))
+
+    def test_uncensored_swaps_where_there_is_a_variant(self):
+        self.assertEqual(self.sent(action="generate", text="x", model="z-image-turbo", uncensored="1")[1]["model"],
+                         "z-image-turbo-nsfw")
+        self.assertEqual(self.sent(action="edit", text="x", uncensored="1")[1]["model"], "qwen-image-21-heretic-turbo")
+        self.assertEqual(self.sent(action="upscale", uncensored="1")[1]["model"], "seedvr2-7b-upscale")
 
     def test_starting_comfyui_beside_a_big_model_asks_first(self):
         from unittest import mock

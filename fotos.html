@@ -44,43 +44,67 @@ main { padding: 0 16px; max-width: 640px; margin: 0 auto; display: flex; flex-di
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
         box-shadow: var(--shadow); padding: 14px; }
 .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 10px; }
+.hidden { display: none !important; }
 .banner { display: flex; align-items: center; gap: 12px; }
 .banner p { margin: 0; flex: 1; font-size: 15px; }
-.banner.hidden { display: none; }
 .btn { border: 1px solid var(--line); background: var(--panel); border-radius: 12px; padding: 12px 16px;
        min-height: 48px; font-weight: 500; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 650; }
 .btn.danger { color: var(--bad); }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--panel); border: 1px solid var(--line);
+       border-radius: 12px; padding: 3px; }
+.seg button { border: none; background: none; border-radius: 9px; padding: 10px; font-size: 15px; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); font-weight: 650; }
+.seg.small { background: var(--bg); }
+.seg.small button[aria-pressed="true"] { background: var(--panel); color: var(--text); box-shadow: var(--shadow); font-weight: 600; }
+.seg button:disabled { opacity: .35; }
+.toggle { display: flex; align-items: center; gap: 12px; padding: 4px 2px; }
+.toggle span { flex: 1; font-size: 15px; }
+.toggle small { display: block; color: var(--muted); font-size: 13px; }
+.switch { position: relative; width: 52px; height: 32px; flex: none; }
+.switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+.switch i { position: absolute; inset: 0; background: var(--line); border-radius: 999px; transition: background .15s; }
+.switch i::after { content: ""; position: absolute; left: 3px; top: 3px; width: 26px; height: 26px; border-radius: 50%;
+                   background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .15s; }
+.switch input:checked + i { background: var(--bad); }
+.switch input:checked + i::after { transform: translateX(20px); }
 .pick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .pick label { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
-              min-height: 110px; border: 1.5px dashed var(--line); border-radius: 12px; font-weight: 550; }
-.pick label svg { width: 30px; height: 30px; }
+              min-height: 100px; border: 1.5px dashed var(--line); border-radius: 12px; font-weight: 550; text-align: center; }
+.pick.small { grid-template-columns: 1fr; }
+.pick.small label { min-height: 56px; flex-direction: row; font-size: 15px; }
+.pick label svg { width: 28px; height: 28px; }
+.pick.small label svg { width: 22px; height: 22px; }
 .pick input { display: none; }
-.source { display: none; }
-.source.on { display: block; }
-.source img { display: block; width: 100%; max-height: 52vh; object-fit: contain; border-radius: 10px;
+.source img { display: block; width: 100%; max-height: 46vh; object-fit: contain; border-radius: 10px;
               background: repeating-conic-gradient(#ccc 0 25%, #eee 0 50%) 0 0 / 16px 16px; }
-.source .row { display: flex; justify-content: space-between; align-items: center; margin-top: 8px;
-               font-size: 14px; color: var(--muted); }
+.source.small img { max-height: 22vh; }
+.row { display: flex; justify-content: space-between; align-items: center; margin-top: 6px;
+       font-size: 14px; color: var(--muted); gap: 8px; }
 .link { background: none; border: none; color: var(--accent); padding: 8px 0; font-weight: 550; }
 .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.action { text-align: left; border: 1.5px solid var(--line); background: var(--panel); border-radius: 12px;
-          padding: 12px; min-height: 76px; display: flex; flex-direction: column; gap: 3px; }
-.action b { font-size: 16px; }
-.action span { font-size: 13px; color: var(--muted); line-height: 1.25; }
-.action[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
-.action:disabled { opacity: .4; }
-.options { display: none; flex-direction: column; gap: 10px; margin-top: 12px; }
-.options.on { display: flex; }
-.seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--bg); border: 1px solid var(--line);
-       border-radius: 11px; padding: 3px; }
-.seg button { border: none; background: none; border-radius: 9px; padding: 9px; font-size: 15px; }
-.seg button[aria-pressed="true"] { background: var(--panel); box-shadow: var(--shadow); font-weight: 600; }
-.options label { font-size: 14px; color: var(--muted); }
+.action, .model { text-align: left; border: 1.5px solid var(--line); background: var(--panel); border-radius: 12px;
+                  padding: 11px 12px; display: flex; flex-direction: column; gap: 2px; }
+.action { min-height: 72px; }
+.action b, .model b { font-size: 16px; }
+.action span, .model span { font-size: 13px; color: var(--muted); line-height: 1.25; }
+.action[aria-pressed="true"], .model[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.action:disabled, .model:disabled { opacity: .38; }
+.models { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips button { border: 1.5px solid var(--line); background: var(--panel); border-radius: 999px; padding: 8px 14px; min-height: 40px; }
+.chips button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.options { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
+.field > label { display: block; font-size: 14px; color: var(--muted); margin-bottom: 6px; }
 textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
            border-radius: 11px; padding: 10px 12px; resize: vertical; min-height: 52px; }
 .note { font-size: 13px; color: var(--muted); margin: 0; }
+.err { color: var(--bad); font-size: 14px; margin: 0; white-space: pre-wrap; }
+.err:empty { display: none; }
+.marked { display: flex; align-items: center; gap: 10px; }
+.marked img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; }
+.marked .btn { flex: 1; }
 .go { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
       background: color-mix(in srgb, var(--bg) 90%, transparent); backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px); border-top: 1px solid var(--line); }
@@ -88,21 +112,23 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
 .jobs { display: flex; flex-direction: column; gap: 8px; }
 .job { display: flex; gap: 12px; align-items: center; border: 1px solid var(--line); border-radius: 12px;
        padding: 8px; background: var(--panel); text-align: left; width: 100%; }
-.job img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; background: var(--bg); flex: none; }
+.job img, .job .ph { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; background: var(--bg); flex: none; }
+.job .ph { display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 24px; }
 .job .meta { flex: 1; min-width: 0; }
-.job .meta b { display: block; }
-.job .meta span { display: block; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.job .meta b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.job .meta > span { display: block; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .job .state { font-size: 13px; font-weight: 600; white-space: nowrap; }
 .state.done { color: var(--ok); } .state.failed { color: var(--bad); } .state.running, .state.queued { color: var(--warn); }
+.badge { display: inline-block; font-size: 11px; font-weight: 700; color: var(--bad); border: 1px solid currentColor;
+         border-radius: 5px; padding: 0 4px; margin-left: 6px; vertical-align: 2px; }
 .empty { color: var(--muted); font-size: 14px; margin: 0; }
-.err { color: var(--bad); font-size: 14px; margin: 8px 0 0; white-space: pre-wrap; }
-/* viewer */
-.viewer { position: fixed; inset: 0; z-index: 20; background: #000; color: #fff; display: none; flex-direction: column; }
-.viewer.on { display: flex; }
-.viewer .top { display: flex; align-items: center; gap: 8px; padding: calc(10px + env(safe-area-inset-top)) 12px 10px; }
-.viewer .top b { flex: 1; font-size: 17px; }
-.viewer .top button { background: rgba(255,255,255,.14); border: none; color: #fff; border-radius: 999px;
-                      padding: 8px 14px; min-height: 40px; }
+/* full-screen layers: viewer and painter */
+.layer { position: fixed; inset: 0; z-index: 20; background: #000; color: #fff; display: none; flex-direction: column; }
+.layer.on { display: flex; }
+.layer .top { display: flex; align-items: center; gap: 8px; padding: calc(10px + env(safe-area-inset-top)) 12px 10px; }
+.layer .top b { flex: 1; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.layer .top button { background: rgba(255,255,255,.14); border: none; color: #fff; border-radius: 999px;
+                     padding: 8px 14px; min-height: 40px; }
 .stage { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; touch-action: none; }
 .stage .frame { position: relative; max-width: 100%; max-height: 100%; }
 .stage img { display: block; max-width: 100vw; max-height: calc(100dvh - 210px); object-fit: contain; user-select: none; -webkit-user-drag: none; }
@@ -114,15 +140,21 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
 .stage .tag { position: absolute; top: 8px; font-size: 12px; background: rgba(0,0,0,.55); padding: 3px 8px; border-radius: 999px; pointer-events: none; }
 .stage .tag.l { left: 8px; } .stage .tag.r { right: 8px; }
 .checker { background: repeating-conic-gradient(#bbb 0 25%, #ddd 0 50%) 0 0 / 18px 18px; }
-.viewer .info { font-size: 13px; color: #bbb; padding: 6px 16px 0; text-align: center; min-height: 22px; }
-.viewer .bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 10px 12px calc(12px + env(safe-area-inset-bottom)); }
-.viewer .bar button { background: rgba(255,255,255,.14); border: none; color: #fff; border-radius: 12px; min-height: 52px;
-                      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 13px; }
-.viewer .bar button svg { width: 22px; height: 22px; }
-.viewer .bar button.primary { background: var(--accent); color: #fff; }
+.layer .info { font-size: 13px; color: #bbb; padding: 6px 16px 0; text-align: center; min-height: 22px; }
+.layer .bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 10px 12px calc(12px + env(safe-area-inset-bottom)); }
+.layer .bar button { background: rgba(255,255,255,.14); border: none; color: #fff; border-radius: 12px; min-height: 52px;
+                     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 13px; }
+.layer .bar button svg { width: 22px; height: 22px; }
+.layer .bar button.primary { background: var(--accent); color: #fff; }
+.layer .bar button:disabled { opacity: .4; }
 .spinner { width: 42px; height: 42px; border: 4px solid rgba(255,255,255,.25); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .waiting { display: flex; flex-direction: column; align-items: center; gap: 14px; color: #ddd; text-align: center; padding: 20px; }
+.paint { position: relative; }
+.paint img { max-height: calc(100dvh - 230px); }
+.paint canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+.brush { display: flex; align-items: center; gap: 12px; padding: 4px 16px 0; color: #ddd; font-size: 14px; }
+.brush input { flex: 1; accent-color: #fff; }
 .toast { position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom)); transform: translateX(-50%);
          background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-size: 14px;
          z-index: 30; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100vw - 32px); }
@@ -132,6 +164,7 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
 .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 26; background: var(--panel); border-radius: 18px 18px 0 0;
          padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); transform: translateY(105%); transition: transform .2s; }
 .sheet.on { transform: none; }
+.sheet:not(.on) { visibility: hidden; transition: transform .2s, visibility 0s .2s; }
 .sheet h3 { margin: 0 0 6px; font-size: 18px; }
 .sheet p { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
 .sheet .btn { width: 100%; margin-top: 8px; }
@@ -149,38 +182,93 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
     <button class="btn primary" id="bannerBtn" type="button">Starten</button>
   </div>
 
-  <section class="card">
+  <div class="seg" id="mode">
+    <button type="button" data-mode="edit" aria-pressed="true">Bearbeiten</button>
+    <button type="button" data-mode="generate" aria-pressed="false">Erzeugen</button>
+  </div>
+
+  <!-- ── Bearbeiten ── -->
+  <section class="card" id="editPicture">
     <h2>Bild</h2>
     <div class="pick" id="pick">
-      <label><input type="file" accept="image/*" id="fileGallery">
+      <label><input type="file" accept="image/*" data-slot="1">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg>
         Aus der Galerie</label>
-      <label><input type="file" accept="image/*" capture="environment" id="fileCamera">
+      <label><input type="file" accept="image/*" capture="environment" data-slot="1">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
         Foto aufnehmen</label>
     </div>
-    <div class="source" id="source">
+    <div class="source hidden" id="source">
       <img id="sourceImg" alt="Ausgangsbild">
       <div class="row"><span id="sourceInfo"></span><button class="link" id="sourceClear" type="button">Anderes Bild</button></div>
     </div>
   </section>
 
-  <section class="card">
+  <section class="card" id="editAction">
     <h2>Was soll passieren?</h2>
     <div class="actions" id="actions"></div>
-    <div class="options" id="options">
-      <div class="seg" id="quality">
+    <div class="options">
+      <div class="seg small" id="quality">
         <button type="button" data-q="fast" aria-pressed="true">Schnell</button>
         <button type="button" data-q="best" aria-pressed="false">Gründlich</button>
       </div>
-      <div id="textWrap">
+      <div class="field" id="editModelWrap"><label>Modell</label><div class="models" id="editModels"></div></div>
+      <div class="field" id="secondWrap">
+        <label>Zweites Foto (optional) – im Text „Bild 2“</label>
+        <div class="pick small" id="pick2">
+          <label><input type="file" accept="image/*" data-slot="2">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>Foto hinzufügen</label>
+        </div>
+        <div class="source small hidden" id="source2">
+          <img id="source2Img" alt="Zweites Bild">
+          <div class="row"><span id="source2Info"></span><button class="link" id="source2Clear" type="button">Entfernen</button></div>
+        </div>
+      </div>
+      <div class="field" id="sidesWrap"><label>Wo soll mehr Bild hin?</label>
+        <div class="chips" id="sides">
+          <button type="button" data-v="wide" aria-pressed="true">Links und rechts</button>
+          <button type="button" data-v="tall" aria-pressed="false">Oben und unten</button>
+          <button type="button" data-v="all" aria-pressed="false">Rundum</button>
+        </div>
+      </div>
+      <div class="field" id="maskWrap"><label>Stelle</label>
+        <div class="marked">
+          <img id="maskThumb" class="hidden" alt="">
+          <button class="btn" id="maskBtn" type="button">Mit dem Finger markieren</button>
+        </div>
+      </div>
+      <div class="field" id="textWrap">
         <label for="text" id="textLabel"></label>
         <textarea id="text" rows="2"></textarea>
       </div>
       <p class="note" id="estimate"></p>
     </div>
-    <p class="err" id="formErr"></p>
   </section>
+
+  <!-- ── Erzeugen ── -->
+  <section class="card hidden" id="genCard">
+    <h2>Bild erzeugen</h2>
+    <div class="options" style="margin-top:0">
+      <div class="field"><label for="genText">Was soll auf dem Bild sein?</label>
+        <textarea id="genText" rows="3" placeholder="z. B. Ein roter Fuchs im Schnee bei Morgenlicht"></textarea></div>
+      <div class="field"><label>Modell</label><div class="models" id="genModels"></div></div>
+      <div class="field"><label>Format</label><div class="chips" id="aspects"></div></div>
+      <div class="field"><label>Anzahl</label>
+        <div class="seg small" id="count">
+          <button type="button" data-n="1" aria-pressed="true">1</button><button type="button" data-n="2" aria-pressed="false">2</button>
+          <button type="button" data-n="3" aria-pressed="false">3</button><button type="button" data-n="4" aria-pressed="false">4</button>
+        </div></div>
+      <p class="note" id="genEstimate"></p>
+    </div>
+  </section>
+
+  <div class="card">
+    <label class="toggle">
+      <span>Unzensiert<small>Modelle ohne Inhaltsfilter, wo es sie gibt</small></span>
+      <span class="switch"><input type="checkbox" id="unc"><i></i></span>
+    </label>
+  </div>
+  <p class="err" id="formErr"></p>
 
   <section class="card">
     <h2>Verlauf</h2>
@@ -190,7 +278,7 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
 
 <div class="go"><button class="btn primary" id="goBtn" type="button" disabled>Bild wählen</button></div>
 
-<div class="viewer" id="viewer" role="dialog" aria-modal="true">
+<div class="layer" id="viewer" role="dialog" aria-modal="true">
   <div class="top"><b id="vTitle"></b><button type="button" id="vClose">Schließen</button></div>
   <div class="stage" id="stage"></div>
   <div class="info" id="vInfo"></div>
@@ -201,13 +289,24 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
   </div>
 </div>
 
+<div class="layer" id="painter" role="dialog" aria-modal="true">
+  <div class="top"><b>Stelle markieren</b><button type="button" id="pCancel">Abbrechen</button></div>
+  <div class="stage" id="pStage"><div class="paint"><img id="pImg" alt=""><canvas id="pCanvas"></canvas></div></div>
+  <div class="brush">Pinsel <input type="range" id="pSize" min="8" max="160" value="48"></div>
+  <div class="bar">
+    <button type="button" id="pUndo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3"/></svg>Rückgängig</button>
+    <button type="button" id="pClear"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>Alles weg</button>
+    <button type="button" class="primary" id="pDone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 5 5L20 7"/></svg>Fertig</button>
+  </div>
+</div>
+
 <div class="sheet-bg" id="sheetBg"></div>
 <div class="sheet" id="sheet">
   <h3>ComfyUI</h3>
   <p id="sheetText"></p>
   <button class="btn primary" id="sheetStart" type="button">Starten</button>
   <button class="btn danger" id="sheetStop" type="button">Stoppen und Speicher freigeben</button>
-  <button class="btn danger" id="sheetForce" type="button" style="display:none">Trotzdem starten</button>
+  <button class="btn danger hidden" id="sheetForce" type="button">Trotzdem starten</button>
   <button class="btn" id="sheetClose" type="button">Schließen</button>
 </div>
 
@@ -218,8 +317,12 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
 const $ = (id) => document.getElementById(id);
 const API = "/fotos/api";
 const S = {
-  comfy: "down", message: "", actions: [], action: null, quality: "fast",
-  source: null,          // {blob, url, w, h} | {from: jobId, url, w, h}
+  comfy: "down", message: "", mode: "edit", unc: false,
+  actions: [], editModels: [], genModels: [], aspects: [],
+  action: null, quality: "fast", editModel: "qwen-image-21-turbo", sides: "wide",
+  genModel: "z-image-turbo", aspect: "1:1", count: 1,
+  source: null, source2: null,   // {blob, url, w, h} | {from: jobId, url, w, h}
+  mask: null,                    // {blob, preview} — transparent where to redraw
   jobs: [], viewing: null, pollTimer: null,
 };
 const STATE_TEXT = { up: "Bereit", down: "Aus", starting: "Startet …", stopping: "Stoppt …" };
@@ -231,6 +334,10 @@ function toast(text, ms = 2600) {
   const t = $("toast"); t.textContent = text; t.classList.add("on");
   clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove("on"), ms);
 }
+function show(id, on) { $(id).classList.toggle("hidden", !on); }
+function press(box, attr, value) { for (const b of $(box).children) b.setAttribute("aria-pressed", String(b.dataset[attr] === String(value))); }
+function duration(s) { return s < 90 ? "etwa " + s + " Sekunden" : "etwa " + Math.round(s / 60) + " Minuten"; }
+function short(s) { return s < 90 ? s + " s" : Math.round(s / 60) + " min"; }
 
 async function api(path, opts = {}) {
   const r = await fetch(API + path, opts);
@@ -259,10 +366,8 @@ function renderStatus() {
   const busy = S.comfy === "starting" || S.comfy === "stopping";
   $("dot").className = "dot " + (S.comfy === "up" ? "up" : busy ? "busy" : "down");
   $("chipText").textContent = "ComfyUI: " + (STATE_TEXT[S.comfy] || "?");
-  const banner = $("banner");
-  if (S.comfy === "up") banner.classList.add("hidden");
-  else {
-    banner.classList.remove("hidden");
+  show("banner", S.comfy !== "up");
+  if (S.comfy !== "up") {
     $("bannerText").textContent = S.message ? S.message
       : busy ? (S.comfy === "starting" ? "ComfyUI startet – dauert etwa eine halbe Minute." : "ComfyUI stoppt …")
       : "ComfyUI ist aus. Zum Bearbeiten erst starten.";
@@ -271,8 +376,8 @@ function renderStatus() {
   $("sheetText").textContent = S.comfy === "up"
     ? "Läuft. Stoppen gibt den Speicher für andere Modelle frei; laufende Bearbeitungen müssen vorher fertig sein."
     : busy ? "Wird gerade " + (S.comfy === "starting" ? "gestartet." : "gestoppt.") : "Ist aus.";
-  $("sheetStart").style.display = S.comfy === "up" || busy ? "none" : "";
-  $("sheetStop").style.display = S.comfy === "up" ? "" : "none";
+  show("sheetStart", !(S.comfy === "up" || busy));
+  show("sheetStop", S.comfy === "up");
   renderGo();
 }
 
@@ -286,127 +391,309 @@ async function comfy(action, force) {
     if (e.code === "memory") {           // ask: the sheet with the reason and "start anyway"
       renderStatus();
       $("sheetText").textContent = e.message;
-      $("sheetStart").style.display = "none"; $("sheetStop").style.display = "none";
-      $("sheetForce").style.display = "";
+      show("sheetStart", false); show("sheetStop", false); show("sheetForce", true);
       openSheet();
     } else toast(e.message, 4000);
   }
 }
 
-// ── actions ──────────────────────────────────────────────
+// ── what there is ────────────────────────────────────────
 async function loadActions() {
-  try { S.actions = await api("/actions"); } catch (e) { return; }
+  let r;
+  try { r = await api("/actions"); } catch (e) { return; }
+  S.actions = r.actions; S.editModels = r.edit_models; S.genModels = r.gen_models; S.aspects = r.aspects;
   const box = $("actions"); box.innerHTML = "";
   for (const a of S.actions) {
     const b = document.createElement("button");
     b.type = "button"; b.className = "action"; b.dataset.id = a.id;
-    b.setAttribute("aria-pressed", String(S.action === a.id));
-    b.disabled = a.available === false;
-    b.innerHTML = `<b></b><span></span>`;
+    b.innerHTML = "<b></b><span></span>";
     b.querySelector("b").textContent = a.label;
     b.querySelector("span").textContent = a.available === false ? "Modell fehlt in ComfyUI" : a.hint;
+    b.disabled = a.available === false;
     b.onclick = () => chooseAction(a.id);
     box.appendChild(b);
   }
-  if (!S.action) chooseAction(recall("action") || "colorize", true);
-  else chooseAction(S.action, true);
+  modelCards("editModels", S.editModels, (m) => { S.editModel = m.id; store("editModel", m.id); renderEdit(); });
+  modelCards("genModels", S.genModels, (m) => { S.genModel = m.id; store("genModel", m.id); renderGen(); });
+  const as = $("aspects"); as.innerHTML = "";
+  for (const a of S.aspects) {
+    const b = document.createElement("button"); b.type = "button"; b.dataset.v = a; b.textContent = a;
+    b.onclick = () => { S.aspect = a; store("aspect", a); renderGen(); };
+    as.appendChild(b);
+  }
+  chooseAction(S.action || recall("action") || "colorize", true);
+  renderGen();
 }
 
-function chooseAction(id, quiet) {
-  const a = S.actions.find((x) => x.id === id && x.available !== false);
-  if (!a) return;
-  S.action = id; store("action", id);
-  for (const b of $("actions").children) b.setAttribute("aria-pressed", String(b.dataset.id === id));
-  $("options").classList.add("on");
-  $("quality").style.display = a.qualities ? "" : "none";
-  if (a.qualities && a.best_available === false) setQuality("fast");
-  $("quality").querySelector('[data-q="best"]').disabled = a.best_available === false;
-  $("textWrap").style.display = a.text ? "" : "none";
-  $("textLabel").textContent = a.text_label || "";
-  $("text").placeholder = a.text_placeholder || "";
-  if (!quiet) $("text").value = "";
-  renderEstimate(); renderGo();
-}
-
-function setQuality(q) {
-  S.quality = q; store("quality", q);
-  for (const b of $("quality").children) b.setAttribute("aria-pressed", String(b.dataset.q === q));
-  renderEstimate();
-}
-
-function renderEstimate() {
-  const a = S.actions.find((x) => x.id === S.action);
-  if (!a) { $("estimate").textContent = ""; return; }
-  const s = a.seconds[S.quality === "best" && a.qualities ? 1 : 0];
-  $("estimate").textContent = "Dauert etwa " + (s < 90 ? s + " Sekunden" : Math.round(s / 60) + " Minuten")
-    + " (beim ersten Mal länger, weil das Modell lädt). Du kannst den Bildschirm sperren – das Ergebnis wartet im Verlauf.";
-}
-
-// ── the picture ──────────────────────────────────────────
-async function loadFile(file) {
-  if (!file) return;
-  $("formErr").textContent = "";
-  try {
-    let bmp;
-    try { bmp = await createImageBitmap(file, { imageOrientation: "from-image" }); }
-    catch (e) {
-      const url = URL.createObjectURL(file);
-      bmp = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = url; });
-    }
-    const w0 = bmp.width, h0 = bmp.height, max = 2560;
-    const k = Math.min(1, max / Math.max(w0, h0));
-    const w = Math.round(w0 * k), h = Math.round(h0 * k);
-    const c = document.createElement("canvas"); c.width = w; c.height = h;
-    c.getContext("2d").drawImage(bmp, 0, 0, w, h);
-    const png = file.type === "image/png";
-    const blob = await new Promise((ok) => c.toBlob(ok, png ? "image/png" : "image/jpeg", 0.92));
-    setSource({ blob, url: URL.createObjectURL(blob), w, h, name: file.name });
-  } catch (e) {
-    $("formErr").textContent = "Das Bild lässt sich nicht öffnen.";
+function modelCards(box, list, onPick) {
+  const el = $(box); el.innerHTML = "";
+  for (const m of list) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "model"; b.dataset.id = m.id;
+    b.innerHTML = "<b></b><span></span>";
+    b.querySelector("b").textContent = m.label;
+    b.onclick = () => onPick(m);
+    el.appendChild(b);
   }
 }
 
+// Whether a model can be used now: ComfyUI has it, and an uncensored one when asked.
+function usable(m) {
+  if (m.available === false) return [false, "fehlt in ComfyUI"];
+  if (S.unc && m.uncensored === null) return [false, "nicht unzensiert"];
+  if (S.unc && m.uncensored === false) return [false, "unzensiert fehlt"];
+  return [true, null];
+}
+
+function renderModels(box, list, current) {
+  for (const b of $(box).children) {
+    const m = list.find((x) => x.id === b.dataset.id);
+    const [ok, why] = usable(m);
+    b.disabled = !ok;
+    b.setAttribute("aria-pressed", String(m.id === current));
+    b.querySelector("span").textContent = why || m.hint + " · " + short(m.seconds);
+  }
+}
+
+// The chosen model if it can be used, else the first that can.
+function settle(list, current) {
+  const m = list.find((x) => x.id === current);
+  if (m && usable(m)[0]) return current;
+  const other = list.find((x) => usable(x)[0]);
+  return other ? other.id : current;
+}
+
+// ── Bearbeiten ───────────────────────────────────────────
+function chooseAction(id, quiet) {
+  const a = S.actions.find((x) => x.id === id && x.available !== false) || S.actions.find((x) => x.available !== false);
+  if (!a) return;
+  if (S.action !== a.id && !quiet) $("text").value = "";
+  S.action = a.id; store("action", a.id);
+  renderEdit();
+}
+
+function renderEdit() {
+  const a = S.actions.find((x) => x.id === S.action);
+  if (!a) { renderGo(); return; }
+  press("actions", "id", a.id);
+  show("quality", a.qualities);
+  if (a.best_available === false && S.quality === "best") S.quality = "fast";
+  press("quality", "q", S.quality);
+  $("quality").querySelector('[data-q="best"]').disabled = a.best_available === false;
+  show("editModelWrap", a.models);
+  if (a.models) {
+    S.editModel = settle(S.editModels, S.editModel);
+    renderModels("editModels", S.editModels, S.editModel);
+  }
+  const m = S.editModels.find((x) => x.id === S.editModel);
+  show("secondWrap", a.second && (!m || m.images > 1));
+  show("pick2", !S.source2); show("source2", !!S.source2);
+  show("sidesWrap", a.sides); press("sides", "v", S.sides);
+  show("maskWrap", a.mask);
+  $("maskBtn").textContent = S.mask ? "Markierung ändern" : "Mit dem Finger markieren";
+  $("maskBtn").disabled = !S.source;
+  show("maskThumb", !!S.mask);
+  if (S.mask) $("maskThumb").src = S.mask.preview;
+  show("textWrap", !!a.text);
+  $("textLabel").textContent = a.text_label || "";
+  $("text").placeholder = a.text_placeholder || "";
+  const secs = a.models && m ? m.seconds : a.seconds[S.quality === "best" && a.qualities ? 1 : 0];
+  $("estimate").textContent = "Dauert " + duration(secs)
+    + " (beim ersten Mal länger, weil das Modell lädt). Du kannst den Bildschirm sperren – das Ergebnis wartet im Verlauf.";
+  renderGo();
+}
+
+// ── Erzeugen ─────────────────────────────────────────────
+function renderGen() {
+  if (!S.genModels.length) return;
+  S.genModel = settle(S.genModels, S.genModel);
+  renderModels("genModels", S.genModels, S.genModel);
+  press("aspects", "v", S.aspect);
+  press("count", "n", S.count);
+  const m = S.genModels.find((x) => x.id === S.genModel);
+  if (m) $("genEstimate").textContent = (S.count > 1 ? S.count + " Bilder nacheinander, je " : "Dauert ") + duration(m.seconds)
+    + ". Jedes Bild kommt einzeln in den Verlauf.";
+  renderGo();
+}
+
+function setMode(mode) {
+  S.mode = mode; store("mode", mode);
+  press("mode", "mode", mode);
+  for (const id of ["editPicture", "editAction"]) show(id, mode === "edit");
+  show("genCard", mode === "generate");
+  $("formErr").textContent = "";
+  renderGo();
+}
+
+function setUnc(on) {
+  S.unc = on; store("unc", on ? "1" : "0"); $("unc").checked = on;
+  renderEdit(); renderGen();
+}
+
+// ── pictures ─────────────────────────────────────────────
+async function readPicture(file) {
+  let bmp;
+  try { bmp = await createImageBitmap(file, { imageOrientation: "from-image" }); }
+  catch (e) {
+    const url = URL.createObjectURL(file);
+    bmp = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = url; });
+  }
+  const w0 = bmp.width, h0 = bmp.height, max = 2560;
+  const k = Math.min(1, max / Math.max(w0, h0));
+  const w = Math.round(w0 * k), h = Math.round(h0 * k);
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  c.getContext("2d").drawImage(bmp, 0, 0, w, h);
+  const png = file.type === "image/png";
+  const blob = await new Promise((ok) => c.toBlob(ok, png ? "image/png" : "image/jpeg", 0.92));
+  return { blob, url: URL.createObjectURL(blob), w, h };
+}
+
+async function loadFile(file, slot) {
+  if (!file) return;
+  $("formErr").textContent = "";
+  try {
+    const p = await readPicture(file);
+    if (slot === 2) setSource2(p); else setSource(p);
+  } catch (e) { $("formErr").textContent = "Das Bild lässt sich nicht öffnen."; }
+}
+
+function clearInputs() { for (const i of document.querySelectorAll("input[type=file]")) i.value = ""; }
+
 function setSource(src) {
   if (S.source && S.source.blob) URL.revokeObjectURL(S.source.url);
-  S.source = src;
-  $("pick").style.display = src ? "none" : "";
-  $("source").classList.toggle("on", !!src);
+  S.source = src; S.mask = null; P.strokes = [];
+  show("pick", !src); show("source", !!src);
   if (src) {
     $("sourceImg").src = src.url;
     $("sourceInfo").textContent = (src.from ? "Ergebnis aus dem Verlauf · " : "") + (src.w && src.h ? src.w + " × " + src.h : "");
   }
-  $("fileGallery").value = ""; $("fileCamera").value = "";
-  renderGo();
+  clearInputs(); renderEdit();
+}
+
+function setSource2(src) {
+  if (S.source2 && S.source2.blob) URL.revokeObjectURL(S.source2.url);
+  S.source2 = src;
+  if (src) { $("source2Img").src = src.url; $("source2Info").textContent = "Bild 2" + (src.w ? " · " + src.w + " × " + src.h : ""); }
+  clearInputs(); renderEdit();
+}
+
+// ── painting the mask ────────────────────────────────────
+const P = { strokes: [], drawing: null, w: 0, h: 0 };
+
+function openPainter() {
+  if (!S.source) return;
+  const img = $("pImg");
+  img.onload = () => {
+    P.w = img.naturalWidth; P.h = img.naturalHeight;
+    const c = $("pCanvas"); c.width = P.w; c.height = P.h;
+    redraw();
+  };
+  img.src = S.source.url;
+  $("painter").classList.add("on"); document.body.style.overflow = "hidden";
+}
+
+function closePainter() { $("painter").classList.remove("on"); if (!S.viewing) document.body.style.overflow = ""; }
+
+function brushPx() {           // the slider in screen pixels, as picture pixels
+  const r = $("pCanvas").getBoundingClientRect();
+  return Number($("pSize").value) * (P.w / Math.max(1, r.width));
+}
+
+function at(e) {
+  const r = $("pCanvas").getBoundingClientRect();
+  return [(e.clientX - r.left) * P.w / r.width, (e.clientY - r.top) * P.h / r.height];
+}
+
+function paintStrokes(ctx, color) {
+  ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = color; ctx.fillStyle = color;
+  for (const s of P.strokes) {
+    ctx.lineWidth = s.size;
+    ctx.beginPath();
+    if (s.pts.length === 1) { ctx.arc(s.pts[0][0], s.pts[0][1], s.size / 2, 0, 2 * Math.PI); ctx.fill(); continue; }
+    ctx.moveTo(s.pts[0][0], s.pts[0][1]);
+    for (const p of s.pts.slice(1)) ctx.lineTo(p[0], p[1]);
+    ctx.stroke();
+  }
+}
+
+function redraw() {
+  const c = $("pCanvas"), ctx = c.getContext("2d");
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.globalAlpha = 0.5; paintStrokes(ctx, "#ff2d55"); ctx.globalAlpha = 1;
+}
+
+async function finishPainter() {
+  if (!P.strokes.length) { S.mask = null; closePainter(); renderEdit(); return; }
+  // OpenAI's mask: opaque where it stays, transparent where it is redrawn.
+  const m = document.createElement("canvas"); m.width = P.w; m.height = P.h;
+  const ctx = m.getContext("2d");
+  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, P.w, P.h);
+  ctx.globalCompositeOperation = "destination-out"; paintStrokes(ctx, "#000");
+  const blob = await new Promise((ok) => m.toBlob(ok, "image/png"));
+  // A small preview: the picture with the marked place in red.
+  const pv = document.createElement("canvas"); const k = 112 / Math.max(P.w, P.h);
+  pv.width = Math.round(P.w * k); pv.height = Math.round(P.h * k);
+  const pc = pv.getContext("2d"); pc.drawImage($("pImg"), 0, 0, pv.width, pv.height);
+  pc.drawImage($("pCanvas"), 0, 0, pv.width, pv.height);
+  S.mask = { blob, preview: pv.toDataURL("image/jpeg", 0.8) };
+  closePainter(); renderEdit();
+}
+
+{
+  const c = $("pCanvas");
+  c.onpointerdown = (e) => { c.setPointerCapture(e.pointerId); P.drawing = { size: brushPx(), pts: [at(e)] }; P.strokes.push(P.drawing); redraw(); };
+  c.onpointermove = (e) => { if (P.drawing) { P.drawing.pts.push(at(e)); redraw(); } };
+  c.onpointerup = c.onpointercancel = () => { P.drawing = null; };
 }
 
 // ── go ───────────────────────────────────────────────────
 function renderGo() {
   const b = $("goBtn");
-  if (!S.source) { b.textContent = "Bild wählen"; b.disabled = true; return; }
-  if (!S.action) { b.textContent = "Aktion wählen"; b.disabled = true; return; }
   if (S.comfy !== "up") {
     const busy = S.comfy === "starting" || S.comfy === "stopping";
     b.textContent = busy ? "ComfyUI " + (S.comfy === "starting" ? "startet …" : "stoppt …") : "ComfyUI starten";
     b.disabled = busy; return;
   }
+  if (S.mode === "generate") {
+    b.textContent = S.count > 1 ? S.count + " Bilder erzeugen ›" : "Erzeugen ›"; b.disabled = !S.genModels.length; return;
+  }
+  if (!S.source) { b.textContent = "Bild wählen"; b.disabled = true; return; }
   const a = S.actions.find((x) => x.id === S.action);
-  b.textContent = (a ? a.label : "Los") + " ›"; b.disabled = false;
+  b.textContent = (a ? a.label : "Los") + " ›"; b.disabled = !a;
+}
+
+function appendPicture(fd, src, field, fromField) {
+  if (src.from) fd.append(fromField, src.from);
+  else fd.append(field, src.blob, src.blob.type === "image/png" ? "bild.png" : "bild.jpg");
 }
 
 async function go() {
   if (S.comfy !== "up") { if (S.comfy === "down" || S.comfy === "unknown") comfy("start"); return; }
-  const a = S.actions.find((x) => x.id === S.action);
-  const text = $("text").value.trim();
-  if (a.text && a.text !== "optional" && !text) { $("formErr").textContent = a.text_label + " – bitte ausfüllen."; $("text").focus(); return; }
   $("formErr").textContent = "";
   const fd = new FormData();
-  fd.append("action", a.id); fd.append("quality", S.quality); fd.append("text", text);
-  if (S.source.from) fd.append("from", S.source.from);
-  else fd.append("image", S.source.blob, S.source.blob.type === "image/png" ? "bild.png" : "bild.jpg");
+  fd.append("uncensored", S.unc ? "1" : "0");
+  if (S.mode === "generate") {
+    const text = $("genText").value.trim();
+    if (!text) { $("formErr").textContent = "Was soll auf dem Bild sein? – bitte beschreiben."; $("genText").focus(); return; }
+    fd.append("action", "generate"); fd.append("text", text); fd.append("model", S.genModel);
+    fd.append("aspect", S.aspect); fd.append("n", String(S.count));
+  } else {
+    const a = S.actions.find((x) => x.id === S.action);
+    const text = $("text").value.trim();
+    if (a.text && !["optional", "replace"].includes(a.text) && !text) { $("formErr").textContent = a.text_label + " – bitte ausfüllen."; $("text").focus(); return; }
+    if (a.mask && !S.mask) { $("formErr").textContent = "Bitte erst die Stelle mit dem Finger markieren."; return; }
+    fd.append("action", a.id); fd.append("quality", S.quality); fd.append("text", text);
+    if (a.models) fd.append("model", S.editModel);
+    if (a.sides) fd.append("sides", S.sides);
+    appendPicture(fd, S.source, "image", "from");
+    const m = S.editModels.find((x) => x.id === S.editModel);
+    if (a.second && S.source2 && (!m || m.images > 1)) appendPicture(fd, S.source2, "image2", "from2");
+    if (a.mask) fd.append("mask", S.mask.blob, "mask.png");
+  }
   const b = $("goBtn"); b.disabled = true; b.textContent = "Wird hochgeladen …";
   try {
-    const job = await api("/jobs", { method: "POST", body: fd });
-    S.jobs.unshift(job); renderJobs(); openViewer(job.id);
+    const jobs = await api("/jobs", { method: "POST", body: fd });
+    S.jobs = jobs.concat(S.jobs); renderJobs(); openViewer(jobs[0].id);
   } catch (e) { $("formErr").textContent = e.message; }
   renderGo(); schedule();
 }
@@ -445,16 +732,19 @@ function renderJobs() {
   for (const j of S.jobs) {
     const b = document.createElement("button");
     b.type = "button"; b.className = "job";
-    const img = document.createElement("img");
-    img.loading = "lazy"; img.alt = "";
-    img.src = `${API}/jobs/${j.id}/${j.state === "done" ? "result" : "input"}?thumb=1`;
+    let thumb;
+    if (j.state === "done" || j.action !== "generate") {
+      thumb = document.createElement("img"); thumb.loading = "lazy"; thumb.alt = "";
+      thumb.src = `${API}/jobs/${j.id}/${j.state === "done" ? "result" : "input"}?thumb=1`;
+    } else { thumb = document.createElement("div"); thumb.className = "ph"; thumb.textContent = "✦"; }
     const meta = document.createElement("div"); meta.className = "meta";
-    const t = document.createElement("b"); t.textContent = j.label;
+    const t = document.createElement("b"); t.textContent = j.label + (j.model_label ? " · " + j.model_label : "");
+    if (j.uncensored) { const u = document.createElement("span"); u.className = "badge"; u.textContent = "U"; t.appendChild(u); }
     const sub = document.createElement("span");
     sub.textContent = (j.text ? "„" + j.text + "“ · " : "") + new Date(j.created * 1000).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
     meta.append(t, sub);
     const st = document.createElement("div"); st.className = "state " + j.state; st.textContent = stateText(j);
-    b.append(img, meta, st);
+    b.append(thumb, meta, st);
     b.onclick = () => openViewer(j.id);
     box.appendChild(b);
   }
@@ -469,11 +759,12 @@ function openViewer(id) {
   $("viewer").classList.add("on");
   document.body.style.overflow = "hidden";
   $("vTitle").textContent = job.label + (job.text ? " · " + job.text : "");
-  const stage = $("stage"); stage.innerHTML = "";
+  const stage = $("stage"); stage.innerHTML = ""; stage.onpointerdown = stage.onpointermove = stage.onpointerup = null;
   const done = job.state === "done";
   for (const b of $("vBar").children) b.style.visibility = done || b.id === "vDelete" ? "" : "hidden";
   $("vDelete").disabled = job.state === "running";
-  if (done) showCompare(job);
+  if (done && job.action === "generate") showSingle(job);
+  else if (done) showCompare(job);
   else {
     const w = document.createElement("div"); w.className = "waiting";
     if (job.state === "failed") w.innerHTML = '<b>Das hat nicht geklappt.</b><span id="vErr"></span>';
@@ -488,19 +779,31 @@ function openViewer(id) {
 function info(job) {
   const parts = [];
   if (job.result_size) parts.push(job.result_size[0] + " × " + job.result_size[1]);
-  parts.push(job.quality === "best" ? "gründlich" : "schnell");
+  if (job.model_label) parts.push(job.model_label);
+  else if (job.action !== "generate") parts.push(job.quality === "best" ? "gründlich" : "schnell");
+  if (job.uncensored) parts.push("unzensiert");
   if (job.started && job.finished) parts.push(elapsed(job));
-  return parts.join(" · ") + " — Regler ziehen für vorher/nachher";
+  return parts.join(" · ") + (job.action === "generate" ? "" : " — Regler ziehen für vorher/nachher");
 }
 
 function updateWaiting(job) {
   if (!$("vState")) return;
   $("vState").textContent = stateText(job);
-  const a = S.actions.find((x) => x.id === job.action);
-  const typ = a ? a.seconds[job.quality === "best" && a.qualities ? 1 : 0] : null;
-  $("vHint").textContent = job.state === "queued" ? "Vorher ist noch eine andere Bearbeitung dran."
-    : (typ ? "Üblich sind etwa " + (typ < 90 ? typ + " s" : Math.round(typ / 60) + " min") + ". " : "")
-      + "Du kannst die Seite schließen – das Ergebnis kommt in den Verlauf.";
+  let typ = null;
+  if (job.action === "generate") { const m = S.genModels.find((x) => x.label === job.model_label); typ = m && m.seconds; }
+  else {
+    const a = S.actions.find((x) => x.id === job.action);
+    const m = S.editModels.find((x) => x.label === job.model_label);
+    typ = m ? m.seconds : a ? a.seconds[job.quality === "best" && a.qualities ? 1 : 0] : null;
+  }
+  $("vHint").textContent = job.state === "queued" ? "Vorher ist noch etwas anderes dran."
+    : (typ ? "Üblich sind " + duration(typ) + ". " : "") + "Du kannst die Seite schließen – das Ergebnis kommt in den Verlauf.";
+}
+
+function showSingle(job) {
+  const frame = document.createElement("div"); frame.className = "frame";
+  const img = document.createElement("img"); img.alt = "Ergebnis"; img.src = `${API}/jobs/${job.id}/result`;
+  frame.appendChild(img); $("stage").appendChild(frame);
 }
 
 function showCompare(job) {
@@ -510,24 +813,20 @@ function showCompare(job) {
   after.src = `${API}/jobs/${job.id}/result`;
   const before = document.createElement("img"); before.alt = "vorher"; before.className = "before";
   before.src = `${API}/jobs/${job.id}/input`;
-  before.style.objectFit = "fill";
+  // An extended picture: the original sits smaller in the middle of the new one.
+  before.style.objectFit = job.action === "expand" ? "contain" : "fill";
   const line = document.createElement("div"); line.className = "line";
   const tl = document.createElement("div"); tl.className = "tag l"; tl.textContent = "vorher";
   const tr = document.createElement("div"); tr.className = "tag r"; tr.textContent = "nachher";
   frame.append(after, before, line, tl, tr);
   stage.appendChild(frame);
-  let pos = 0.5;
   const set = (p) => {
-    pos = Math.min(1, Math.max(0, p));
-    before.style.clipPath = `inset(0 ${100 - pos * 100}% 0 0)`;
-    line.style.left = `calc(${pos * 100}% - 1px)`;
+    p = Math.min(1, Math.max(0, p));
+    before.style.clipPath = `inset(0 ${100 - p * 100}% 0 0)`;
+    line.style.left = `calc(${p * 100}% - 1px)`;
   };
   set(0.5);
-  const move = (e) => {
-    const r = frame.getBoundingClientRect();
-    const x = (e.touches ? e.touches[0].clientX : e.clientX);
-    set((x - r.left) / r.width);
-  };
+  const move = (e) => { const r = frame.getBoundingClientRect(); set((e.clientX - r.left) / r.width); };
   let dragging = false;
   stage.onpointerdown = (e) => { dragging = true; stage.setPointerCapture(e.pointerId); move(e); };
   stage.onpointermove = (e) => { if (dragging) move(e); };
@@ -557,24 +856,25 @@ async function save() {
 function continueWith() {
   const job = S.jobs.find((x) => x.id === S.viewing.id);
   setSource({ from: job.id, url: `${API}/jobs/${job.id}/result`, w: job.result_size && job.result_size[0], h: job.result_size && job.result_size[1] });
+  setMode("edit");
   closeViewer(); window.scrollTo({ top: 0, behavior: "smooth" });
   toast("Ergebnis ist jetzt das Ausgangsbild – nächste Aktion wählen.");
 }
 
+const confirmDelete = {};
 async function removeJob() {
   const id = S.viewing.id;
-  if (!confirmDelete.armed || confirmDelete.armed !== id) {
+  if (confirmDelete.armed !== id) {
     confirmDelete.armed = id; toast("Nochmal tippen zum Löschen"); setTimeout(() => { confirmDelete.armed = null; }, 3000); return;
   }
   confirmDelete.armed = null;
   try { await api("/jobs/" + id, { method: "DELETE" }); } catch (e) { toast(e.message); return; }
   S.jobs = S.jobs.filter((j) => j.id !== id); renderJobs(); closeViewer();
 }
-const confirmDelete = {};
 
 // ── sheet ────────────────────────────────────────────────
 function openSheet() { $("sheet").classList.add("on"); $("sheetBg").classList.add("on"); }
-function closeSheet() { $("sheet").classList.remove("on"); $("sheetBg").classList.remove("on"); $("sheetForce").style.display = "none"; }
+function closeSheet() { $("sheet").classList.remove("on"); $("sheetBg").classList.remove("on"); show("sheetForce", false); }
 
 // ── polling ──────────────────────────────────────────────
 function schedule() {
@@ -593,13 +893,22 @@ async function openFromHash() {
 }
 
 // ── wiring ───────────────────────────────────────────────
-$("fileGallery").onchange = (e) => loadFile(e.target.files[0]);
-$("fileCamera").onchange = (e) => loadFile(e.target.files[0]);
+for (const i of document.querySelectorAll("input[type=file]")) i.onchange = (e) => loadFile(e.target.files[0], Number(i.dataset.slot));
 $("sourceClear").onclick = () => setSource(null);
-for (const b of $("quality").children) b.onclick = () => { if (!b.disabled) setQuality(b.dataset.q); };
+$("source2Clear").onclick = () => setSource2(null);
+for (const b of $("mode").children) b.onclick = () => setMode(b.dataset.mode);
+for (const b of $("quality").children) b.onclick = () => { if (!b.disabled) { S.quality = b.dataset.q; store("quality", S.quality); renderEdit(); } };
+for (const b of $("sides").children) b.onclick = () => { S.sides = b.dataset.v; renderEdit(); };
+for (const b of $("count").children) b.onclick = () => { S.count = Number(b.dataset.n); renderGen(); };
+$("unc").onchange = (e) => setUnc(e.target.checked);
+$("maskBtn").onclick = openPainter;
+$("pCancel").onclick = closePainter;
+$("pDone").onclick = finishPainter;
+$("pUndo").onclick = () => { P.strokes.pop(); redraw(); };
+$("pClear").onclick = () => { P.strokes = []; redraw(); };
 $("goBtn").onclick = go;
 $("bannerBtn").onclick = () => comfy("start");
-$("chip").onclick = openSheet;
+$("chip").onclick = () => { renderStatus(); openSheet(); };
 $("sheetBg").onclick = closeSheet; $("sheetClose").onclick = closeSheet;
 $("sheetStart").onclick = () => comfy("start");
 $("sheetStop").onclick = () => comfy("stop");
@@ -609,12 +918,17 @@ $("vSave").onclick = save;
 $("vMore").onclick = continueWith;
 $("vDelete").onclick = removeJob;
 document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
-window.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeViewer(); closeSheet(); } });
+window.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeViewer(); closeSheet(); closePainter(); } });
+window.addEventListener("hashchange", openFromHash);
 
-setQuality(recall("quality") === "best" ? "best" : "fast");
+S.quality = recall("quality") === "best" ? "best" : "fast";
+S.editModel = recall("editModel") || S.editModel;
+S.genModel = recall("genModel") || S.genModel;
+S.aspect = recall("aspect") || S.aspect;
+$("unc").checked = S.unc = recall("unc") === "1";
+setMode(recall("mode") === "generate" ? "generate" : "edit");
 loadActions();
 tick().then(openFromHash);
-window.addEventListener("hashchange", openFromHash);
 </script>
 </body>
 </html>

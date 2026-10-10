@@ -2002,18 +2002,33 @@ the browser.
 ComfyUI's workflows are not made for a phone. `/fotos` is a page that is:
 pick a photo from the gallery or take one, tap what should happen, look at
 the result with a before/after slider, and save it to the phone's photos
-through its share sheet. Big buttons, one column, dark mode; it can sit on
-the home screen like an app.
+through its share sheet — or switch to *Erzeugen* and make a picture from a
+prompt. Big buttons, one column, dark mode; it can sit on the home screen
+like an app.
 
 | Action | Workflow (fast / thorough) | Measured here |
 |---|---|---|
 | Kolorieren — black and white to colour; colours can be named | Qwen-Image 2.1 Colorize Turbo / Colorize | 29 s / 65 s |
 | Restaurieren — scratches, stains, noise | Qwen-Image 2.1 Edit Turbo / Edit, with a restoring prompt | 146 s (with loading) |
-| Gesichter — faces and hands redrawn | Qwen-Image 2.1 Detailer | 136 s |
+| Gesichter — faces and hands redrawn | Qwen-Image 2.1 Detailer / FLUX.2 klein Detailer (small faces) | 136 s / 235 s |
 | Vergrößern — 4× | SeedVR2 7B (the picture brought to 1024 px first) | 103 s, 1024 → 4096 px |
 | Freistellen — background removed (PNG) | BiRefNet / BiRefNet Matting | 3 s |
 | Entfernen — "die Person", "den Mülleimer" | Qwen-Image 2.1 Edit Turbo / Edit: "Entferne … aus dem Foto" | 45 s |
-| Ändern — in one's own words | Qwen-Image 2.1 Edit Turbo / Edit | 43–158 s |
+| Ändern — in one's own words, with a second photo as "Bild 2" | Qwen-Image Edit Turbo, Edit, FLUX.2 klein (one photo), FLUX.2 dev Turbo | 43–158 s |
+| Erweitern — more picture left and right, above and below, or all round | Qwen-Image 2.1 Outpaint Turbo / Outpaint | 26 s |
+| Übermalen — a place marked with a finger, and what goes there | Qwen-Image 2.1 Inpaint Crop Turbo / Inpaint Crop | 22 s |
+
+*Erzeugen* takes a prompt, a model, a shape (1:1, 4:3, 3:4, 16:9, 9:16, about
+1 MP each) and a count (1–4, one job per picture): Z-Image Turbo 20 s,
+FLUX.2 klein 30 s, Qwen-Image 2.1 46 s (lettering with umlauts right), Z-Image
+~110 s, FLUX.2 dev Turbo 130 s, FLUX.2 dev ~5 min — as compared under
+[Which model for a picture](#which-model-for-a-picture). *Unzensiert*, a switch
+for both, takes the uncensored variant where there is one (Z-Image Turbo's
+NSFW finetune, klein's and dev's NSFW workflows, Qwen-Image Heretic) and greys
+out the models without (Z-Image base, FLUX.2 dev Turbo); colouring or
+enlarging has nothing to refuse and stays as it is. With two photos, Qwen-Image
+Edit Turbo took the whole woman from picture 2 into picture 1's beach where it
+was asked for her outfit only — say plainly what comes from which.
 
 "Entfernen" is an instruction edit, not Inpaint: a mask in the shape of a
 person, SAM 3's, had another person painted into it (both Inpaint Crop
@@ -2031,6 +2046,13 @@ Auth). The page shows whether ComfyUI runs, starts it (`llmctl start comfy 9
 memory. With less than 40 GiB free — an LLM like `flash` beside it — it says
 so and starts only on "Trotzdem starten": Qwen-Image takes 25–30 GB while it
 works. After 15 minutes without a job it has ComfyUI unload its models.
+
+**Open files.** ROCm holds a dmabuf file descriptor for every block of GPU
+memory. After a few models in one ComfyUI session — this test series went
+through seven — it held 1622, and with the default limit of 1024 it failed:
+"HIP kernel launch failed: out of memory" with 82 GiB free, then "Too many
+open files" on every request. llmctl now starts ComfyUI with the soft limit
+raised to the hard one.
 
 **Jobs run on the server.** The phone sends the picture once — scaled to
 2560 px in the browser, turned upright by its EXIF, iPhone HEIC as JPEG — and

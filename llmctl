@@ -4605,6 +4605,11 @@ cmd_fotos() {
         run)
             # The service's ExecStart: the page in the foreground, the tunnel beside it.
             _check_deps python3 || return 1
+            if ss -tlnp 2>/dev/null | grep -q ":${FOTOS_PORT} "; then
+                echo "Error: something already listens on :$FOTOS_PORT — the fotos service, most likely"
+                echo "       ($PROG fotos status). 'fotos run' is what that service runs; to start it: $PROG fotos enable."
+                return 1
+            fi
             local tun=""
             if [[ -n "$TUNNEL_HOST" && -f "$FOTOS_KEY" ]]; then
                 _fotos_tunnel_loop & tun=$!
