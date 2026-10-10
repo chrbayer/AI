@@ -683,7 +683,8 @@ function renderEdit() {
                          seconds: a.audio ? (S.voice ? Math.max(1, Math.ceil(S.voice.seconds)) : 5) : S.seconds,
                          two: a.video && !a.audio && !!S.source2 });
   const many = a.variants && S.variants > 1;
-  $("estimate").textContent = (many ? S.variants + " Varianten nacheinander, je " : "Dauert ") + duration(secs)
+  $("estimate").textContent = (many ? S.variants + " Varianten nacheinander, je " + short(secs) + " – zusammen "
+                                      + duration(secs * S.variants) : "Dauert " + duration(secs))
     + " (beim ersten Mal länger, weil das Modell lädt). Du kannst den Bildschirm sperren – das Ergebnis wartet im Verlauf.";
   renderGo();
 }
