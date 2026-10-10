@@ -5,6 +5,7 @@
     GET  /fotos/api/status         ComfyUI and the image API: up, down, starting, stopping
     POST /fotos/api/comfy          {"action": "start"|"stop"}: llmctl starts or stops ComfyUI
     GET  /fotos/api/actions        what the page offers, and which of it ComfyUI can do now
+    GET  /fotos/api/prompts        the library of prompts (fotos_prompts.json), searched on the page
     POST /fotos/api/jobs           multipart: image (or from=<job id>), action, quality, text
     GET  /fotos/api/jobs           the jobs, newest first
     GET  /fotos/api/jobs/<id>      one job
@@ -26,6 +27,7 @@ import json
 import math
 import os
 import queue
+import re
 import shutil
 import subprocess
 import threading
@@ -42,6 +44,7 @@ from PIL import Image, ImageOps
 app = Flask(__name__)
 ARGS = argparse.Namespace()
 PAGE = Path(__file__).with_name("fotos.html")
+PROMPTS = Path(__file__).with_name("fotos_prompts.json")
 
 # Qwen-Image Edit works at the picture's own size, and its time grows faster
 # than the pixels: a weather change took 151 s at 1.6 MP, 62 s at 1.0 MP and
@@ -149,13 +152,16 @@ ACTIONS = {
         "text_placeholder": "z. B. eine Tänzerin im roten Kleid auf einer Bühne",
         "max_pixels": EDIT_PIXELS, "seconds": (45, 75),
     },
+    # Depth on Qwen-Image Turbo: Z-Image's made an untidy garden neon-green
+    # mush and a living room's windows black panels, Qwen-Image's a tended
+    # garden and the bright windows kept (27 s).
     "restyle": {
         "label": "Neu gestalten", "hint": "Gleicher Raum, anderer Stil",
-        "model": ("z-image-turbo-depth-control", "qwen-image-21-depth-control"),
+        "model": ("qwen-image-21-depth-control-turbo", "qwen-image-21-depth-control"),
         "prompt": "", "text": "prompt", "text_label": "Wie soll es jetzt aussehen?",
         "text_placeholder": "z. B. dasselbe Wohnzimmer als gemütliche Almhütte aus altem Holz, "
                             "Kamin, rote Teppiche – je genauer, desto besser",
-        "max_pixels": EDIT_PIXELS, "seconds": (35, 75),
+        "max_pixels": EDIT_PIXELS, "seconds": (30, 75),
     },
     # Canny on Qwen-Image: Z-Image's (strength 0.65) lost the layout without a
     # description — a beach as watercolour came back an empty landscape.
@@ -249,6 +255,7 @@ SIDES = {
     "wide": {"left": 256, "right": 256, "top": 0, "bottom": 0},
     "tall": {"left": 0, "right": 0, "top": 256, "bottom": 256},
     "all": {"left": 192, "right": 192, "top": 192, "bottom": 192},
+    "top": {"left": 0, "right": 0, "top": 384, "bottom": 0},
 }
 KEEP_JOBS = 100
 # What ComfyUI should find free: Qwen-Image 2.1 with its text encoder takes
@@ -649,6 +656,17 @@ def comfy():
     return jsonify({"comfy": _comfy["state"]})
 
 
+@app.get("/fotos/api/prompts")
+def prompts():
+    """The library of prompts the page searches (fotos_prompts.json)."""
+    try:
+        data = json.loads(PROMPTS.read_text())
+    except (OSError, ValueError):
+        data = {"topics": [], "prompts": []}
+    data.pop("_comment", None)
+    return jsonify(data)
+
+
 @app.get("/fotos/api/actions")
 def actions():
     have = None
@@ -746,7 +764,8 @@ def create_job():
     try:
         f = request.form
         action = f.get("action", "")
-        text = (f.get("text") or "").strip()
+        # A template's [placeholder] left as it is counts with its words.
+        text = re.sub(r"\[([^\]]*)\]", r"\1", (f.get("text") or "")).strip()
         if len(text) > 2000:
             raise Refused("der Text ist zu lang")
         uncensored = f.get("uncensored") in ("1", "true", "on")

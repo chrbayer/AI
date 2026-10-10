@@ -445,6 +445,29 @@ class Fotos(unittest.TestCase):
             thread.assert_called_once()
         fotos._comfy.update(state=None)
 
+    def test_the_prompt_library_fits_the_actions(self):
+        data = fotos.app.test_client().get("/fotos/api/prompts").get_json()
+        self.assertGreater(len(data["prompts"]), 40)
+        titles = [p["title"] for p in data["prompts"]]
+        self.assertEqual(len(titles), len(set(titles)))
+        for p in data["prompts"]:
+            with self.subTest(p["title"]):
+                self.assertIn(p["action"], set(fotos.ACTIONS) | {"generate"})
+                self.assertIn(p["topic"], data["topics"])
+                self.assertEqual(p["text"].count("["), p["text"].count("]"))
+                self.assertTrue(p["tags"] and all(t == t.lower() for t in p["tags"]))
+                opts = p.get("options", {})
+                self.assertLessEqual(set(opts), {"sides", "style", "keep"})
+                self.assertIn(opts.get("sides", "wide"), fotos.SIDES)
+                self.assertIn(opts.get("style", "watercolour"), fotos.STYLES)
+                # a template for an action with a fixed prompt would never be used
+                if p["action"] != "generate":
+                    self.assertIsNotNone(fotos.ACTIONS[p["action"]]["text"])
+
+    def test_a_placeholder_left_standing_counts_with_its_words(self):
+        _, form, _ = self.sent(action="edit", text="Lass [die Person] lächeln.")
+        self.assertEqual(form["prompt"], "Lass die Person lächeln.")
+
     def test_every_action_has_its_group(self):
         ids = [i for _, group in fotos.GROUPS for i in group]
         self.assertEqual(sorted(ids), sorted(fotos.ACTIONS))

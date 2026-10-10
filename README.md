@@ -2026,7 +2026,7 @@ like an app.
 | Übermalen — a place marked with a finger, and what goes there; *Form behalten* keeps cut and folds | Qwen-Image 2.1 Inpaint Crop Turbo / Inpaint Crop; Canny Inpaint Turbo / Canny Inpaint | 22 s; 29 s |
 | Ausschneiden — one named thing, alone on transparency (PNG) | Qwen-Image Layered Control (640 px, the first of two layers) | 119 s |
 | Pose übernehmen — someone else, standing the same way | Z-Image Turbo Pose Control / Qwen-Image 2.1 Pose Control | 45 s / 72 s |
-| Neu gestalten — the same room or landscape in another style | Z-Image Turbo Depth Control / Qwen-Image 2.1 Depth Control | 36 s / 72 s |
+| Neu gestalten — the same room or landscape in another style | Qwen-Image 2.1 Depth Control Turbo / Depth Control | 27 s / 72 s |
 | Als Kunstwerk — watercolour, pencil, oil, comic, anime | Qwen-Image 2.1 Canny Control Turbo / Canny Control | 23 s / 72 s |
 | Animieren — a clip of 3, 5 or 8 s with sound; with an end picture the clip runs to it | LTX-2.5 Video (first stage only / both) / First-Last Frame | 83 s / 375 s for 5 s |
 | Sprechen lassen — the photo speaks or sings a recording of up to 10 s | LTX-2.5 Talking (first stage only / both) | 124 s for 6 s fast |
@@ -2071,6 +2071,9 @@ exactly his; a living room became an alpine cabin and a spaceship cabin,
 sofa, table, lamp and shelves where they were. **Describe the new scene in
 full**: "als futuristisches Raumschiff-Quartier" alone left the living room
 as it was, with "Metallwände, blaue Leuchtstreifen" it was a spaceship.
+*Neu gestalten* runs on Qwen-Image's Depth Turbo: Z-Image's turned an
+untidy garden into neon-green mush and a living room's windows into black
+panels, where Qwen-Image laid out lawn, beds and path and kept the windows.
 *Als Kunstwerk* runs on Qwen-Image's Canny: Z-Image's (strength 0.65), given
 only "a watercolour painting", lost the layout — the beach with a woman and
 her dog came back an empty landscape, a comic a different scene altogether;
@@ -2088,6 +2091,16 @@ iPhone MP4/AAC) or takes an audio file; the server makes it WAV, cut to
 as it is. *Schnell* is the first stage alone, as for *Animieren*. A face
 that fills the picture works best: from a full-length photo the mouth
 moves with the words, but small and soft.
+
+**Vorlagen.** Next to each text field, *Vorlagen* opens a library of
+prompts (`fotos_prompts.json`, ~65): weather and light, seasons, tidying
+up, people, backgrounds, rooms, new scenes, video, and pictures to make
+(product photo, postcard, birthday card, logo). The search goes through
+title, keywords and text, with umlauts folded ("sonne", "regen" and
+"himmel" all find *Sonniger Tag*); without a search it shows the ones for
+the chosen action. A tap puts the text in and switches to its action;
+a `[placeholder]` is selected to type over — left standing, its words
+count, the brackets are dropped.
 
 **Edits at 1 MP.** Qwen-Image Edit works at the picture's own size, and its
 time grows faster than the pixels: a rainy street made sunny took 151 s at

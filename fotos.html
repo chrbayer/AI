@@ -182,6 +182,21 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
 .sheet h3 { margin: 0 0 6px; font-size: 18px; }
 .sheet p { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
 .sheet .btn { width: 100%; margin-top: 8px; }
+.labelrow { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.labelrow label { margin-bottom: 6px; }
+.labelrow .link { padding: 0 0 6px; white-space: nowrap; font-size: 15px; }
+.sheet.tall { display: flex; flex-direction: column; max-height: 86dvh; padding-bottom: 0; }
+.tplhead { display: flex; flex-direction: column; gap: 10px; padding-bottom: 10px; }
+.tplhead input { width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+                 border-radius: 11px; padding: 11px 12px; }
+.tpllist { overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
+.tpllist h4 { font-size: 13px; color: var(--muted); margin: 14px 2px 6px; font-weight: 650; }
+.tpl { display: block; width: 100%; text-align: left; border: 1px solid var(--line); background: var(--panel);
+       border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; }
+.tpl b { display: block; font-size: 15px; }
+.tpl span { display: block; font-size: 13px; color: var(--muted); line-height: 1.3; margin-top: 2px;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tpl em { font-style: normal; font-size: 11px; font-weight: 650; color: var(--accent); }
 </style>
 </head>
 <body>
@@ -259,6 +274,7 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
         <div class="chips" id="sides">
           <button type="button" data-v="wide" aria-pressed="true">Links und rechts</button>
           <button type="button" data-v="tall" aria-pressed="false">Oben und unten</button>
+          <button type="button" data-v="top" aria-pressed="false">Nur oben</button>
           <button type="button" data-v="all" aria-pressed="false">Rundum</button>
         </div>
       </div>
@@ -269,7 +285,8 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
         </div>
       </div>
       <div class="field" id="textWrap">
-        <label for="text" id="textLabel"></label>
+        <div class="labelrow"><label for="text" id="textLabel"></label>
+          <button class="link" type="button" data-tpl="edit">Vorlagen</button></div>
         <textarea id="text" rows="2"></textarea>
       </div>
       <p class="note" id="estimate"></p>
@@ -280,7 +297,8 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
   <section class="card hidden" id="genCard">
     <h2>Bild erzeugen</h2>
     <div class="options" style="margin-top:0">
-      <div class="field"><label for="genText">Was soll auf dem Bild sein?</label>
+      <div class="field"><div class="labelrow"><label for="genText">Was soll auf dem Bild sein?</label>
+          <button class="link" type="button" data-tpl="generate">Vorlagen</button></div>
         <textarea id="genText" rows="3" placeholder="z. B. Ein roter Fuchs im Schnee bei Morgenlicht"></textarea></div>
       <div class="field"><label>Modell</label><div class="models" id="genModels"></div></div>
       <div class="field"><label>Format</label><div class="chips" id="aspects"></div></div>
@@ -345,6 +363,19 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
   <button class="btn danger" id="sheetStop" type="button">Stoppen und Speicher freigeben</button>
   <button class="btn danger hidden" id="sheetForce" type="button">Trotzdem starten</button>
   <button class="btn" id="sheetClose" type="button">Schließen</button>
+</div>
+
+<div class="sheet-bg" id="tplBg"></div>
+<div class="sheet tall" id="tplSheet" role="dialog" aria-modal="true">
+  <div class="tplhead">
+    <div class="labelrow"><h3 style="margin:0">Vorlagen</h3><button class="link" id="tplClose" type="button">Schließen</button></div>
+    <input type="search" id="tplSearch" placeholder="Suchen: z. B. Sonne, Schnee, Kabel, Lächeln" autocomplete="off" enterkeyhint="search">
+    <div class="seg small" id="tplScope">
+      <button type="button" data-v="here" aria-pressed="true" id="tplHere">Für diese Aktion</button>
+      <button type="button" data-v="all" aria-pressed="false">Alle</button>
+    </div>
+  </div>
+  <div class="tpllist" id="tplList"></div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -713,6 +744,88 @@ async function toggleRecording() {
   tick(); R.timer = setInterval(tick, 250);
 }
 
+// ── templates ────────────────────────────────────────────
+const T = { data: null, scope: "here", from: "edit" };
+
+// For the search: lower case, umlauts and ß spelled out, accents dropped —
+// "uber" and "über", "strasse" and "Straße" find the same.
+function fold(s) {
+  return s.toLowerCase().replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+function hay(p) { return p._hay || (p._hay = fold([p.title, p.topic, p.text, ...(p.tags || [])].join(" "))); }
+
+function actionLabel(id) {
+  if (id === "generate") return "Erzeugen";
+  const a = S.actions.find((x) => x.id === id); return a ? a.label : id;
+}
+
+async function openTemplates(from) {
+  T.from = from;
+  if (!T.data) { try { T.data = await api("/prompts"); } catch (e) { toast(e.message); return; } }
+  const here = from === "generate" ? "generate" : S.action;
+  $("tplHere").textContent = "Für " + actionLabel(here);
+  const has = T.data.prompts.some((p) => p.action === here);
+  T.scope = has ? "here" : "all";
+  $("tplHere").disabled = !has;
+  $("tplSearch").value = "";
+  renderTemplates();
+  $("tplSheet").classList.add("on"); $("tplBg").classList.add("on");
+}
+
+function closeTemplates() { $("tplSheet").classList.remove("on"); $("tplBg").classList.remove("on"); }
+
+function renderTemplates() {
+  const here = T.from === "generate" ? "generate" : S.action;
+  const words = fold($("tplSearch").value).split(/\s+/).filter(Boolean);
+  press("tplScope", "v", words.length ? "all" : T.scope);
+  // A search looks through all of them; without one, the scope decides.
+  const list = T.data.prompts.filter((p) => (words.length || T.scope === "all" ? true : p.action === here)
+    && words.every((w) => hay(p).includes(w)));
+  const box = $("tplList"); box.innerHTML = "";
+  if (!list.length) { box.innerHTML = '<p class="empty">Nichts gefunden – andere Wörter probieren.</p>'; return; }
+  for (const topic of T.data.topics) {
+    const items = list.filter((p) => p.topic === topic);
+    if (!items.length) continue;
+    const h = document.createElement("h4"); h.textContent = topic; box.appendChild(h);
+    for (const p of items) {
+      const b = document.createElement("button"); b.type = "button"; b.className = "tpl";
+      b.innerHTML = "<b></b><span></span>";
+      b.querySelector("b").textContent = p.title;
+      if (p.action !== here) { const e = document.createElement("em"); e.textContent = " · " + actionLabel(p.action); b.querySelector("b").appendChild(e); }
+      b.querySelector("span").textContent = p.text;
+      b.onclick = () => useTemplate(p);
+      box.appendChild(b);
+    }
+  }
+}
+
+// Into the right text field, the action switched to the template's, the first
+// [placeholder] selected to type over.
+function useTemplate(p) {
+  closeTemplates();
+  let field;
+  if (p.action === "generate") { setMode("generate"); field = $("genText"); }
+  else {
+    const a = S.actions.find((x) => x.id === p.action);
+    if (!a || a.available === false) { toast("Diese Aktion ist gerade nicht verfügbar."); return; }
+    setMode("edit"); chooseAction(p.action); field = $("text");
+  }
+  // what the template sets besides the text: Erweitern's sides, a style, Form behalten
+  const o = p.options || {};
+  if (o.sides) S.sides = o.sides;
+  if (o.style) S.style = o.style;
+  if (o.keep) S.keep = o.keep;
+  if (p.action !== "generate") renderEdit();
+  field.value = p.text;
+  const at = p.text.indexOf("[");
+  field.focus();
+  if (at >= 0) field.setSelectionRange(at, p.text.indexOf("]", at) + 1);
+  else field.setSelectionRange(p.text.length, p.text.length);
+  field.scrollIntoView({ block: "center", behavior: "smooth" });
+  if (at >= 0) toast("Markierten Platzhalter überschreiben");
+}
+
 // ── painting the mask ────────────────────────────────────
 const P = { strokes: [], drawing: null, w: 0, h: 0 };
 
@@ -1055,6 +1168,10 @@ for (const b of $("quality").children) b.onclick = () => { if (!b.disabled) { S.
 for (const b of $("sides").children) b.onclick = () => { S.sides = b.dataset.v; renderEdit(); };
 for (const b of $("keep").children) b.onclick = () => { S.keep = b.dataset.v; renderEdit(); };
 $("recBtn").onclick = toggleRecording;
+for (const b of document.querySelectorAll("[data-tpl]")) b.onclick = () => openTemplates(b.dataset.tpl);
+$("tplClose").onclick = closeTemplates; $("tplBg").onclick = closeTemplates;
+$("tplSearch").oninput = renderTemplates;
+for (const b of $("tplScope").children) b.onclick = () => { if (!b.disabled) { T.scope = b.dataset.v; renderTemplates(); } };
 $("audioFile").onchange = (e) => { const f = e.target.files[0]; if (f) setVoice(f, f.name); e.target.value = ""; };
 for (const b of $("count").children) b.onclick = () => { S.count = Number(b.dataset.n); renderGen(); };
 for (const b of $("genQuality").children) b.onclick = () => { S.genQuality = b.dataset.q; store("genQuality", S.genQuality); renderGen(); };
@@ -1076,7 +1193,7 @@ $("vSave").onclick = save;
 $("vMore").onclick = continueWith;
 $("vDelete").onclick = removeJob;
 document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
-window.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeViewer(); closeSheet(); closePainter(); } });
+window.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeViewer(); closeSheet(); closePainter(); closeTemplates(); } });
 window.addEventListener("hashchange", openFromHash);
 
 S.quality = recall("quality") === "best" ? "best" : "fast";
