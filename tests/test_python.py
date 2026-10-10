@@ -701,6 +701,14 @@ class Fotos(unittest.TestCase):
         self.assertEqual(self.sent(action="restyle", text="x", quality="best")[1]["model"], "qwen-image-21-depth-control")
         self.assertEqual(self.post(action="pose", image=self.jpeg(64, 64)).status_code, 400)
 
+    def test_actions_carry_the_short_text_hint(self):
+        from unittest import mock
+        with mock.patch.object(fotos.requests, "get", side_effect=fotos.requests.ConnectionError):
+            got = {a["id"]: a for a in fotos.app.test_client().get("/fotos/api/actions").get_json()["actions"]}
+        self.assertEqual(got["paint"]["short_hint"][0], 2)
+        self.assertIn("Materialien", got["restyle"]["short_hint"][1])
+        self.assertIsNone(got["edit"]["short_hint"])
+
     def test_art_makes_the_prompt_from_the_style(self):
         _, form, _ = self.sent(action="art", style="pencil", text="Wie in einem Skizzenbuch.")
         self.assertEqual(form["model"], "qwen-image-21-turbo")

@@ -2072,7 +2072,12 @@ dancer on a stage and a knight in a misty forest, arm and hand on the hip
 exactly his; a living room became an alpine cabin and a spaceship cabin,
 sofa, table, lamp and shelves where they were. **Describe the new scene in
 full**: "als futuristisches Raumschiff-Quartier" alone left the living room
-as it was, with "Metallwände, blaue Leuchtstreifen" it was a spaceship.
+as it was, with "Metallwände, blaue Leuchtstreifen" it was a spaceship; "Als
+Almhütte" only made a living room darker, and wrapping it ("the same room,
+completely redesigned: …", German or English) did not help — the page says so
+under the text while it is shorter than five words. *Übermalen* the same: "rot"
+left a grey hat grey, with *Form behalten* as well, "ein roter Hut" made it
+red; one word gets the hint there.
 *Neu gestalten* runs on Qwen-Image's Depth Turbo: Z-Image's turned an
 untidy garden into neon-green mush and a living room's windows into black
 panels, where Qwen-Image laid out lawn, beds and path and kept the windows.

@@ -333,6 +333,7 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
           <span class="links"><button class="link hidden" type="button" data-save="edit" id="saveEdit">Speichern</button>
           <button class="link" type="button" data-tpl="edit">Vorlagen</button></span></div>
         <textarea id="text" rows="2"></textarea>
+        <p class="note hidden" id="textHint"></p>
       </div>
       <p class="note" id="estimate"></p>
     </div>
@@ -931,6 +932,11 @@ function updateSave() {
   const a = S.actions.find((x) => x.id === S.action);
   show("saveEdit", !!$("text").value.trim() && !!a && a.text !== null);
   show("saveGen", !!$("genText").value.trim());
+  // A word or two is too little for some actions: they need the thing or the look in full.
+  const words = $("text").value.trim().split(/\s+/).filter(Boolean).length;
+  const [below, hint] = (a && a.short_hint) || [0, ""];
+  $("textHint").textContent = hint;
+  show("textHint", words > 0 && words < below);
 }
 
 const V = { from: "edit" };

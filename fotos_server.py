@@ -136,7 +136,9 @@ ACTIONS = {
         "label": "Übermalen", "hint": "Stelle markieren, neu malen",
         "model": ("qwen-image-21-inpaint-crop-turbo", "qwen-image-21-inpaint-crop"),
         "prompt": "", "variants": True, "text": "prompt", "text_label": "Was soll an die markierte Stelle?",
-        "text_placeholder": "z. B. eine Vase mit Sonnenblumen",
+        "text_placeholder": "z. B. ein roter Strohhut, eine Vase mit Sonnenblumen",
+        # One word ("rot") left a grey hat grey, with Form behalten as well.
+        "short_hint": (2, "Nenne das Ding ganz – „ein roter Hut“ statt nur „rot“."),
         "max_side": 2048, "seconds": (35, 90), "mask": True,
         # Form behalten: the photo's edges steer the repaint — a coat masked to be
         # red leather stays the same coat, buttons and folds, in red leather. Only
@@ -172,6 +174,8 @@ ACTIONS = {
         "prompt": "", "variants": True, "text": "prompt", "text_label": "Wie soll es jetzt aussehen?",
         "text_placeholder": "z. B. dasselbe Wohnzimmer als gemütliche Almhütte aus altem Holz, "
                             "Kamin, rote Teppiche – je genauer, desto besser",
+        "short_hint": (5, "Kurze Angaben wirken oft kaum: „Als Almhütte“ machte ein Wohnzimmer nur dunkler. "
+                          "Nenne Materialien, Farben und Licht."),
         "max_pixels": EDIT_PIXELS, "seconds": (30, 75),
     },
     # Qwen-Image Edit, which sees the photo: the ControlNet (Canny) saw only its
@@ -937,6 +941,8 @@ def actions():
         fast, best = a["model"]
         out.append({"id": key, "label": a["label"], "hint": a["hint"], "text": a["text"],
                     "text_label": a.get("text_label"), "text_placeholder": a.get("text_placeholder"),
+                    # (fewer words than this, the hint shown under the text)
+                    "short_hint": list(a["short_hint"]) if a.get("short_hint") else None,
                     "qualities": (fast != best or bool(a.get("video"))) and not a.get("models"),
                     "seconds": a["seconds"], "end_seconds": a.get("end_seconds"),
                     "models": bool(a.get("models")), "second": bool(a.get("second")),
