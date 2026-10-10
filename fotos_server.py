@@ -174,14 +174,15 @@ ACTIONS = {
                             "Kamin, rote Teppiche – je genauer, desto besser",
         "max_pixels": EDIT_PIXELS, "seconds": (30, 75),
     },
-    # Canny on Qwen-Image: Z-Image's (strength 0.65) lost the layout without a
-    # description — a beach as watercolour came back an empty landscape.
+    # Qwen-Image Edit, which sees the photo: the ControlNet (Canny) saw only its
+    # edges, so a blonde child in a grey hat came back red-haired in a yellow
+    # one, the face a stranger's, and without colour words a pale line drawing.
     "art": {
         "label": "Als Kunstwerk", "hint": "Aquarell, Zeichnung, Comic …",
-        "model": ("qwen-image-21-canny-control-turbo", "qwen-image-21-canny-control"),
-        "prompt": "", "variants": True, "text": "optional", "text_label": "Was ist zu sehen? (optional, hilft dem Modell)",
-        "text_placeholder": "z. B. zwei Kinder am Strand mit einem Hund",
-        "max_pixels": EDIT_PIXELS, "seconds": (25, 75), "styles": True,
+        "model": ("qwen-image-21-turbo", "qwen-image-21"),
+        "prompt": "", "variants": True, "text": "optional", "text_label": "Sonst noch etwas? (optional)",
+        "text_placeholder": "z. B. wie in einem Kinderbuch, der Hintergrund als Sommerwiese",
+        "max_pixels": EDIT_PIXELS, "seconds": (65, 150), "styles": True,
     },
     # LTX-2.5: the picture comes to life as a clip with sound; with a second
     # picture the clip runs from the first to it (First-Last Frame). Fast takes
@@ -213,13 +214,16 @@ GROUPS = [("Verbessern", ["colorize", "restore", "detail", "upscale"]),
           ("Verändern", ["background", "cutout", "remove", "paint", "edit", "expand"]),
           ("Neu erschaffen", ["pose", "restyle", "art"]),
           ("Video", ["animate", "talk"])]
-# Als Kunstwerk: the style, and the prompt it makes (the photo's edges keep the layout).
+# Als Kunstwerk: the style, and the instruction it makes for Qwen-Image Edit.
+# Colour styles keep the photo's colours; the pencil drawing is grey.
+KEEP_ALL = "Keep the composition, the people and their features, the hair colour and the colours of the clothes."
+KEEP_LINES = "Keep the composition and the people and their features."
 STYLES = {
-    "watercolour": ("Aquarell", "A delicate watercolour painting, soft washes of colour on textured paper"),
-    "pencil": ("Bleistift", "A detailed pencil drawing, graphite on white paper, fine hatching"),
-    "oil": ("Ölgemälde", "An impressionist oil painting, visible brush strokes, rich colours"),
-    "comic": ("Comic", "A comic book illustration, bold ink outlines, flat vivid colours"),
-    "anime": ("Anime", "An anime illustration, clean line art, soft cel shading"),
+    "watercolour": ("Aquarell", "a delicate watercolour painting, soft washes of colour on textured paper", KEEP_ALL),
+    "pencil": ("Bleistift", "a detailed pencil drawing, graphite on white paper, fine hatching", KEEP_LINES),
+    "oil": ("Ölgemälde", "an impressionist oil painting, visible brush strokes, rich colours", KEEP_ALL),
+    "comic": ("Comic", "a colourful comic book illustration, bold ink outlines, flat vivid colours", KEEP_ALL),
+    "anime": ("Anime", "a colourful anime illustration: cel shading, clean line art, anime key visual style", KEEP_ALL),
 }
 # Fehler suchen and Reparieren: the image API's /repair machinery for a
 # generated picture. The vision model (flash) and Inpaint do not fit
@@ -446,7 +450,8 @@ def edit_form(job):
     form = {"model": job["model"], "response_format": "b64_json", "n": "1"}
     text = (job.get("text") or "").strip()
     if spec.get("styles"):
-        form["prompt"] = STYLES[job.get("style") or "watercolour"][1] + (" of " + text if text else "")
+        _, look, keep = STYLES[job.get("style") or "watercolour"]
+        form["prompt"] = f"Turn this photo into {look}. {keep}" + (" " + text if text else "")
     elif spec["text"] == "prompt":
         form["prompt"] = text
     elif spec["text"] == "optional":

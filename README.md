@@ -2030,7 +2030,7 @@ like an app.
 | Ausschneiden — one named thing, alone on transparency (PNG) | Qwen-Image Layered Control (640 px, the first of two layers) | 119 s |
 | Pose übernehmen — someone else, standing the same way | Z-Image Turbo Pose Control / Qwen-Image 2.1 Pose Control | 45 s / 72 s |
 | Neu gestalten — the same room or landscape in another style | Qwen-Image 2.1 Depth Control Turbo / Depth Control | 27 s / 72 s |
-| Als Kunstwerk — watercolour, pencil, oil, comic, anime | Qwen-Image 2.1 Canny Control Turbo / Canny Control | 23 s / 72 s |
+| Als Kunstwerk — watercolour, pencil, oil, comic, anime | Qwen-Image 2.1 Edit Turbo / Edit: "Turn this photo into …" | 45–75 s |
 | Animieren — a clip of 3, 5 or 8 s with sound; with an end picture the clip runs to it | LTX-2.5 Video (first stage only / both) / First-Last Frame | 83 s / 375 s for 5 s |
 | Sprechen lassen — the photo speaks or sings a recording of up to 10 s | LTX-2.5 Talking (first stage only / both) | 124 s for 6 s fast |
 
@@ -2066,9 +2066,8 @@ to the second; that workflow has one stage only, so *Schnell* there makes it
 at a third of the pixels (768×448, 159 s for 5 s). The player starts muted, as phones
 want; *Sichern* hands the MP4 to the share sheet.
 
-*Pose übernehmen*, *Neu gestalten* and *Als Kunstwerk* are the ControlNet
-workflows: the photo's pose (DWPose), depth (Depth Anything V2) or edges
-(Canny) and a new scene on it. Tried: a man waving in a park became a
+*Pose übernehmen* and *Neu gestalten* are the ControlNet workflows: the
+photo's pose (DWPose) or depth (Depth Anything V2) and a new scene on it. Tried: a man waving in a park became a
 dancer on a stage and a knight in a misty forest, arm and hand on the hip
 exactly his; a living room became an alpine cabin and a spaceship cabin,
 sofa, table, lamp and shelves where they were. **Describe the new scene in
@@ -2077,11 +2076,14 @@ as it was, with "Metallwände, blaue Leuchtstreifen" it was a spaceship.
 *Neu gestalten* runs on Qwen-Image's Depth Turbo: Z-Image's turned an
 untidy garden into neon-green mush and a living room's windows into black
 panels, where Qwen-Image laid out lawn, beds and path and kept the windows.
-*Als Kunstwerk* runs on Qwen-Image's Canny: Z-Image's (strength 0.65), given
-only "a watercolour painting", lost the layout — the beach with a woman and
-her dog came back an empty landscape, a comic a different scene altogether;
-Qwen-Image kept woman, phone and dog. A few words on what is in the photo
-help either way. *Form behalten* (Canny Inpaint) changes the material and
+*Als Kunstwerk* runs on Qwen-Image Edit, told "Turn this photo into a … ;
+keep the composition, the people and their features, the hair colour and
+the colours of the clothes" (the pencil drawing keeps no colours). It used
+to run on Canny, which sees only the photo's edges: a blonde girl in a grey
+hat came back red- or purple-haired in a yellow one with a stranger's face,
+and the old prompt without colour words ("clean line art") a pale line
+drawing. Tried on a girl, a beach with a woman and her dog and a man in a
+park, all five styles: faces, hair, clothes and the scene kept, 45–75 s. *Form behalten* (Canny Inpaint) changes the material and
 keeps the thing: a black wool coat asked to be red leather stayed the same
 coat, collar and buttons, where plain Inpaint made another coat with
 zips — but only with all of the coat marked; half of it marked, it stayed

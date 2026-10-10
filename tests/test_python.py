@@ -702,11 +702,14 @@ class Fotos(unittest.TestCase):
         self.assertEqual(self.post(action="pose", image=self.jpeg(64, 64)).status_code, 400)
 
     def test_art_makes_the_prompt_from_the_style(self):
-        _, form, _ = self.sent(action="art", style="pencil", text="two children on a beach")
-        self.assertEqual(form["model"], "qwen-image-21-canny-control-turbo")
-        self.assertEqual(form["prompt"], "A detailed pencil drawing, graphite on white paper, fine hatching"
-                                         " of two children on a beach")
-        self.assertTrue(self.sent(action="art", style="nonsense")[1]["prompt"].startswith("A delicate watercolour"))
+        _, form, _ = self.sent(action="art", style="pencil", text="Wie in einem Skizzenbuch.")
+        self.assertEqual(form["model"], "qwen-image-21-turbo")
+        self.assertEqual(form["prompt"], "Turn this photo into a detailed pencil drawing, graphite on white paper,"
+                                         " fine hatching. Keep the composition and the people and their features."
+                                         " Wie in einem Skizzenbuch.")
+        form = self.sent(action="art", style="nonsense")[1]
+        self.assertTrue(form["prompt"].startswith("Turn this photo into a delicate watercolour"))
+        self.assertTrue(form["prompt"].endswith("the colours of the clothes."))
 
     def test_paint_can_keep_the_shape(self):
         from PIL import Image
