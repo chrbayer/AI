@@ -608,7 +608,9 @@ if __name__ == '__main__':
         log.info("Open mode: no authentication (LLM_TOKEN_FILE unset)")
     try:
         from waitress import serve
-        serve(app, host=PROXY_HOST, port=PROXY_PORT)
+        # More threads than generations may run: with all of them streaming,
+        # /health, /v1/models and a refusal (429) still get an answer.
+        serve(app, host=PROXY_HOST, port=PROXY_PORT, threads=MAX_CONCURRENCY + 4)
     except ImportError:
         log.warning("waitress not installed, falling back to Flask dev server")
         app.run(port=PROXY_PORT, host=PROXY_HOST)
