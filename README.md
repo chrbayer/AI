@@ -929,7 +929,9 @@ stays under the 104 GiB limit. Against `flash` (halogen 0.17.3) the same
 morning: prefill 1084–1164 / 1340–1403 / 1302–1332 t/s (1092 / 1528 / 1494),
 decode 31–32 prose and 49–50 code (50.5 / 72.4). halogen stays the one for
 daily use; the entry is there to see gufo catch up. gufo 0.10.0 brought the
-prefill up a little (1149 / 1444 / 1404), the answers byte for byte the same.
+prefill up a little (1149 / 1444 / 1404), the answers byte for byte the same;
+0.11.0 the decode (38.1 prose, 55.3 code, one run each against 33.7 / 50.8 on
+0.10.0 the same evening).
 
 `flash-gufo-unc` is the uncensored Flash-Next on gufo: vmlinux's Q4 Mix of
 orcarouter's Qwen3.8-Flash-Next-Uncensored (one file, 110 GB), with the MTP
