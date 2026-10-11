@@ -21,7 +21,7 @@
 #         Slots are not a fixed set — any N the ports have room for works.
 
 PROG=llmctl
-LLMCTL_VERSION=1.87.2
+LLMCTL_VERSION=1.88.0
 LLMCTL_REPO="chrbayer/AI"          # its releases (vX.Y.Z) are what self-update and outdated follow
 
 # ── Where things live ───────────────────────────────────────
@@ -4551,6 +4551,10 @@ DARKROOM_MODEL="${LLMCTL_DARKROOM_MODEL:-${LLMCTL_FOTOS_MODEL:-comfy}}"
 # The vision slot ComfyUI's image API starts for Find flaws (--vision), as
 # preset comfy-remote has it; 0 for none.
 DARKROOM_VISION_SLOT="${LLMCTL_DARKROOM_VISION_SLOT:-${LLMCTL_FOTOS_VISION_SLOT:-2}}"
+# Ausbauen: the model that spells out a short wish, started on this slot on the
+# first request and stopped after 10 idle minutes; 0 for none.
+DARKROOM_EXPAND_SLOT="${LLMCTL_DARKROOM_EXPAND_SLOT:-4}"
+DARKROOM_EXPAND_MODEL="${LLMCTL_DARKROOM_EXPAND_MODEL:-gemma-moe}"
 DARKROOM_DIR="$DATA_DIR/darkroom"
 DARKROOM_KEY="$CONFIG_DIR/darkroom_tunnel_key"
 DARKROOM_UNIT="llmctl-darkroom.service"
@@ -4650,7 +4654,8 @@ cmd_darkroom() {
                 --comfy "http://127.0.0.1:$(( PORT_BASE_SERVER + DARKROOM_SLOT ))" \
                 --comfy-slot "$DARKROOM_SLOT" --comfy-model "$DARKROOM_MODEL" --vision-slot "$DARKROOM_VISION_SLOT" \
                 --llmctl "$(readlink -f "${BASH_SOURCE[0]}")" --data "$DARKROOM_DIR" --docs "$SHARE_DIR/docs" \
-                --version "$LLMCTL_VERSION"
+                --version "$LLMCTL_VERSION" --expand-slot "$DARKROOM_EXPAND_SLOT" \
+                --expand-port "$(( PORT_BASE_SERVER + DARKROOM_EXPAND_SLOT ))" --expand-model "$DARKROOM_EXPAND_MODEL"
             ;;
         key)
             _darkroom_migrate
@@ -4673,7 +4678,7 @@ cmd_darkroom() {
             local -a env=("PATH=$PATH") v
             for v in LLMCTL_CONFIG_DIR LLMCTL_DATA_DIR LLMCTL_STATE_DIR LLMCTL_MODELS_DIR LLMCTL_TUNNEL_HOST \
                      LLMCTL_TUNNEL_PORT_OFFSET LLMCTL_DARKROOM_PORT LLMCTL_DARKROOM_SLOT LLMCTL_DARKROOM_MODEL \
-                     LLMCTL_DARKROOM_VISION_SLOT; do
+                     LLMCTL_DARKROOM_VISION_SLOT LLMCTL_DARKROOM_EXPAND_SLOT LLMCTL_DARKROOM_EXPAND_MODEL; do
                 [[ -n "${!v:-}" ]] && env+=("$v=${!v}")
             done
             mkdir -p "$SERVICE_UNIT_DIR"
@@ -4726,6 +4731,10 @@ cmd_darkroom() {
             printf 'ComfyUI:  slot %s (%s), started and stopped from the page\n' "$DARKROOM_SLOT" "$DARKROOM_MODEL"
             if [[ "$DARKROOM_VISION_SLOT" != 0 ]]; then
                 printf 'Vision:   slot %s (%s), started for Find flaws and stopped after\n' "$DARKROOM_VISION_SLOT" "$VISION_MODEL"
+            fi
+            if [[ "$DARKROOM_EXPAND_SLOT" != 0 ]]; then
+                printf 'Expand:   slot %s (%s), started for Expand and stopped after 10 idle minutes\n' \
+                    "$DARKROOM_EXPAND_SLOT" "$DARKROOM_EXPAND_MODEL"
             fi
             printf 'Jobs:     %s\n' "$(find "$DARKROOM_DIR/jobs" -name job.json 2>/dev/null | wc -l) in $DARKROOM_DIR/jobs"
             if [[ -f "$unit" ]]; then
