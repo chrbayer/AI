@@ -205,16 +205,26 @@ check "the service repairs on reload"    "preset voice --repair" -- cat "$U/llmc
 check "the timer only reloads a running service" "is-active"     -- cat "$U/llmctl-repair.service"
 check "preset --repair leaves others alone" "nothing to repair"  -- "$L" preset voice --repair
 
-# ── fotos ────────────────────────────────────────────────────
+# ── darkroom ─────────────────────────────────────────────────
 export LLMCTL_TUNNEL_HOST=user@tunnel.example
-check "fotos status before enable"       "not set up"            -- "$L" fotos status
-check "fotos key makes a key"            "restrict,port-forwarding" -- "$L" fotos key
-check "fotos key allows one forward"     'permitlisten="localhost:18190"' -- "$L" fotos key
-check "fotos key allows no command"      'command="/bin/false"'  -- "$L" fotos key
-check "fotos enable writes the unit"     "every login"           -- "$L" fotos enable
-check "the fotos unit runs the page"     "fotos run"             -- cat "$U/llmctl-fotos.service"
-check "the fotos unit knows the tunnel"  "LLMCTL_TUNNEL_HOST=user@tunnel.example" -- cat "$U/llmctl-fotos.service"
-check "fotos refuses a typo"             "Usage"                 -- "$L" fotos nosuch
+check "darkroom status before enable"    "not set up"            -- "$L" darkroom status
+# what the old name ("fotos", until 1.86) left behind
+mkdir -p "$LLMCTL_DATA_DIR/fotos/jobs/j1" "$U"
+echo '{}' > "$LLMCTL_DATA_DIR/fotos/jobs/j1/job.json"
+echo old-key > "$LLMCTL_CONFIG_DIR/fotos_tunnel_key"
+echo "ssh-ed25519 AAAA old" > "$LLMCTL_CONFIG_DIR/fotos_tunnel_key.pub"
+echo "[Service]" > "$U/llmctl-fotos.service"
+check "darkroom status sees the old unit" "darkroom enable replaces it" -- "$L" darkroom status
+check "darkroom key takes the old key"   "ssh-ed25519 AAAA old"  -- "$L" darkroom key
+check "darkroom key allows one forward"  'permitlisten="localhost:18190"' -- "$L" darkroom key
+check "darkroom key allows no command"   'command="/bin/false"'  -- "$L" darkroom key
+check "darkroom enable writes the unit"  "every login"           -- "$L" darkroom enable
+check "darkroom enable drops the old unit" "absent"              -- sh -c "[ -e '$U/llmctl-fotos.service' ] || echo absent"
+check "darkroom keeps the old jobs"      "j1"                    -- ls "$LLMCTL_DATA_DIR/darkroom/jobs"
+check "the darkroom unit runs the page"  "darkroom run"          -- cat "$U/llmctl-darkroom.service"
+check "the darkroom unit knows the tunnel" "LLMCTL_TUNNEL_HOST=user@tunnel.example" -- cat "$U/llmctl-darkroom.service"
+check "darkroom refuses a typo"          "Usage"                 -- "$L" darkroom nosuch
+check "fotos is the old name"            "now '"                 -- "$L" fotos nosuch
 unset LLMCTL_TUNNEL_HOST
 
 # ── prune ────────────────────────────────────────────────────

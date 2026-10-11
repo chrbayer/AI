@@ -47,9 +47,9 @@ try:
     import proxy                                                   # flask, requests
 except ImportError:
     pass
-fotos: Any = None
+darkroom: Any = None
 try:
-    import fotos_server as fotos                                   # flask, requests, pillow
+    import darkroom_server as darkroom                               # flask, requests, pillow
 except ImportError:
     pass
 
@@ -270,17 +270,17 @@ class TranslateImages(unittest.TestCase):
         self.assertFalse(proxy.translates("v1/messages", self.body(self.IMAGE)))
 
 
-@unittest.skipIf(fotos is None, "fotos_server.py needs flask, requests and pillow")
-class Fotos(unittest.TestCase):
+@unittest.skipIf(darkroom is None, "darkroom_server.py needs flask, requests and pillow")
+class Darkroom(unittest.TestCase):
     """The phone page's server: what a picture becomes before the image API sees
     it, and what each action asks the image API for."""
 
     def setUp(self):
         import tempfile
         self.tmp = tempfile.TemporaryDirectory()
-        fotos.ARGS.data, fotos.ARGS.api, fotos.ARGS.timeout = self.tmp.name, "http://api", 10
-        fotos.ARGS.comfy = "http://comfy"
-        fotos.jobs_dir().mkdir(parents=True)
+        darkroom.ARGS.data, darkroom.ARGS.api, darkroom.ARGS.timeout = self.tmp.name, "http://api", 10
+        darkroom.ARGS.comfy = "http://comfy"
+        darkroom.jobs_dir().mkdir(parents=True)
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -295,45 +295,45 @@ class Fotos(unittest.TestCase):
         return buf.getvalue()
 
     def test_a_phone_photo_is_turned_upright_by_its_exif(self):
-        _, name, size = fotos.fit(self.jpeg(400, 300, orientation=6), "background")
+        _, name, size = darkroom.fit(self.jpeg(400, 300, orientation=6), "background")
         self.assertEqual((name, size), ("input.jpg", (300, 400)))
 
     def test_the_upscaler_gets_a_quarter_of_its_output(self):
-        self.assertEqual(fotos.fit(self.jpeg(4000, 3000), "upscale")[2], (1024, 768))
+        self.assertEqual(darkroom.fit(self.jpeg(4000, 3000), "upscale")[2], (1024, 768))
 
     def test_an_edit_is_held_to_its_pixel_budget(self):
-        w, h = fotos.fit(self.jpeg(4000, 3000), "restore")[2]
-        self.assertLessEqual(w * h, fotos.EDIT_PIXELS)
-        self.assertGreater(w * h, fotos.EDIT_PIXELS * 0.98)
+        w, h = darkroom.fit(self.jpeg(4000, 3000), "restore")[2]
+        self.assertLessEqual(w * h, darkroom.EDIT_PIXELS)
+        self.assertGreater(w * h, darkroom.EDIT_PIXELS * 0.98)
 
     def test_a_small_picture_is_not_enlarged(self):
-        self.assertEqual(fotos.fit(self.jpeg(640, 480), "colorize")[2], (640, 480))
+        self.assertEqual(darkroom.fit(self.jpeg(640, 480), "colorize")[2], (640, 480))
 
     def test_transparency_stays_png(self):
         from PIL import Image
         buf = io.BytesIO()
         Image.new("RGBA", (50, 40), (0, 0, 0, 0)).save(buf, "PNG")
-        self.assertEqual(fotos.fit(buf.getvalue(), "edit")[1], "input.png")
+        self.assertEqual(darkroom.fit(buf.getvalue(), "edit")[1], "input.png")
 
     def test_what_is_no_picture_is_refused(self):
-        with self.assertRaises(fotos.Refused):
-            fotos.fit(b"not a picture", "colorize")
+        with self.assertRaises(darkroom.Refused):
+            darkroom.fit(b"not a picture", "colorize")
 
     def test_a_job_id_cannot_leave_the_jobs_directory(self):
         for bad in ("../x", "", "a/b", "x.json"):
-            with self.assertRaises(fotos.Refused):
-                fotos.job_path(bad)
+            with self.assertRaises(darkroom.Refused):
+                darkroom.job_path(bad)
 
     def post(self, **form):
         """A job made through the endpoint, as the page makes it; its id(s)."""
-        client = fotos.app.test_client()
+        client = darkroom.app.test_client()
         data = {k: v for k, v in form.items() if not k.startswith("_")}
         for key in ("image", "image2", "mask", "audio"):
             if key in data:
                 data[key] = (io.BytesIO(data[key]), key + {"mask": ".png", "audio": ".wav"}.get(key, ".jpg"))
-        r = client.post("/fotos/api/jobs", data=data, content_type="multipart/form-data")
-        while not fotos._queue.empty():
-            fotos._queue.get_nowait()
+        r = client.post("/darkroom/api/jobs", data=data, content_type="multipart/form-data")
+        while not darkroom._queue.empty():
+            darkroom._queue.get_nowait()
         return r
 
     def sent(self, **form):
@@ -351,9 +351,9 @@ class Fotos(unittest.TestCase):
         Image.new("RGB", (64, 64)).save(buf, "PNG")
         reply = mock.Mock(status_code=200)
         reply.json.return_value = {"data": [{"b64_json": base64.b64encode(buf.getvalue()).decode()}], "seed": 7}
-        with mock.patch.object(fotos.requests, "post", return_value=reply) as post:
-            fotos.run_job(jid)
-        self.assertEqual(fotos.read_job(jid)["state"], "done", fotos.read_job(jid).get("error"))
+        with mock.patch.object(darkroom.requests, "post", return_value=reply) as post:
+            darkroom.run_job(jid)
+        self.assertEqual(darkroom.read_job(jid)["state"], "done", darkroom.read_job(jid).get("error"))
         kw = post.call_args.kwargs
         files = [name for name, _ in kw.get("files") or []]
         return post.call_args.args[0], kw.get("data") or kw.get("json"), files
@@ -407,7 +407,7 @@ class Fotos(unittest.TestCase):
         r = self.post(action="paint", text="eine Vase", image=self.jpeg(4000, 3000),
                       mask=self.mask(400, 300, (100, 100, 200, 200)))
         jid = r.get_json()[0]["id"]
-        m = Image.open(fotos.job_path(jid) / "mask.png")
+        m = Image.open(darkroom.job_path(jid) / "mask.png")
         self.assertEqual(m.size, (2048, 1536))
         self.assertEqual(m.getpixel((768, 768))[3], 0)       # inside the marked place: redrawn
         self.assertEqual(m.getpixel((10, 10))[3], 255)       # outside: kept
@@ -435,130 +435,130 @@ class Fotos(unittest.TestCase):
 
     def test_starting_comfyui_beside_a_big_model_asks_first(self):
         from unittest import mock
-        client = fotos.app.test_client()
-        with mock.patch.object(fotos, "mem_available_gib", return_value=20.0), \
-             mock.patch.object(fotos.threading, "Thread") as thread:
-            r = client.post("/fotos/api/comfy", json={"action": "start"})
+        client = darkroom.app.test_client()
+        with mock.patch.object(darkroom, "mem_available_gib", return_value=20.0), \
+             mock.patch.object(darkroom.threading, "Thread") as thread:
+            r = client.post("/darkroom/api/comfy", json={"action": "start"})
             self.assertEqual((r.status_code, r.get_json()["code"]), (409, "memory"))
             thread.assert_not_called()
-            r = client.post("/fotos/api/comfy", json={"action": "start", "force": True})
+            r = client.post("/darkroom/api/comfy", json={"action": "start", "force": True})
             self.assertEqual(r.status_code, 200)
             thread.assert_called_once()
-        fotos._comfy.update(state=None)
+        darkroom._comfy.update(state=None)
 
     def test_the_prompt_library_fits_the_actions(self):
-        data = fotos.app.test_client().get("/fotos/api/prompts").get_json()
+        data = darkroom.app.test_client().get("/darkroom/api/prompts").get_json()
         self.assertGreater(len(data["prompts"]), 40)
         titles = [p["title"] for p in data["prompts"]]
         self.assertEqual(len(titles), len(set(titles)))
         for p in data["prompts"]:
             with self.subTest(p["title"]):
-                self.assertIn(p["action"], set(fotos.ACTIONS) | {"generate"})
+                self.assertIn(p["action"], set(darkroom.ACTIONS) | {"generate"})
                 self.assertIn(p["topic"], data["topics"])
                 self.assertEqual(p["text"].count("["), p["text"].count("]"))
                 self.assertTrue(p["tags"] and all(t == t.lower() for t in p["tags"]))
                 opts = p.get("options", {})
                 self.assertLessEqual(set(opts), {"sides", "style", "keep"})
-                self.assertIn(opts.get("sides", "wide"), fotos.SIDES)
-                self.assertIn(opts.get("style", "watercolour"), fotos.STYLES)
+                self.assertIn(opts.get("sides", "wide"), darkroom.SIDES)
+                self.assertIn(opts.get("style", "watercolour"), darkroom.STYLES)
                 # a template for an action with a fixed prompt would never be used
                 if p["action"] != "generate":
-                    self.assertIsNotNone(fotos.ACTIONS[p["action"]]["text"])
+                    self.assertIsNotNone(darkroom.ACTIONS[p["action"]]["text"])
 
     def test_own_templates_are_kept_listed_first_and_deleted(self):
-        client = fotos.app.test_client()
-        r = client.post("/fotos/api/prompts", json={
+        client = darkroom.app.test_client()
+        r = client.post("/darkroom/api/prompts", json={
             "title": "  Mehr   Himmel bitte ", "action": "expand", "text": "Weiter Himmel",
             "options": {"sides": "top", "style": "oil", "keep": "1"}})
         self.assertEqual(r.status_code, 201)
         own = r.get_json()
         # only what Erweitern has is kept
         self.assertEqual((own["title"], own["options"]), ("Mehr Himmel bitte", {"sides": "top"}))
-        client.post("/fotos/api/prompts", json={"title": "Fuchs", "action": "generate", "text": "Ein Fuchs"})
-        data = client.get("/fotos/api/prompts").get_json()
-        self.assertEqual(data["topics"][0], fotos.OWN_TOPIC)
+        client.post("/darkroom/api/prompts", json={"title": "Fuchs", "action": "generate", "text": "Ein Fuchs"})
+        data = client.get("/darkroom/api/prompts").get_json()
+        self.assertEqual(data["topics"][0], darkroom.OWN_TOPIC)
         self.assertEqual([p["title"] for p in data["prompts"][:2]], ["Fuchs", "Mehr Himmel bitte"])
-        self.assertTrue(all(p["own"] and p["topic"] == fotos.OWN_TOPIC for p in data["prompts"][:2]))
+        self.assertTrue(all(p["own"] and p["topic"] == darkroom.OWN_TOPIC for p in data["prompts"][:2]))
         self.assertFalse(data["prompts"][2].get("own"))
-        self.assertEqual(client.delete(f"/fotos/api/prompts/{own['id']}").status_code, 200)
-        self.assertEqual(client.delete(f"/fotos/api/prompts/{own['id']}").status_code, 404)
-        self.assertEqual([p["title"] for p in fotos.own_prompts()], ["Fuchs"])
+        self.assertEqual(client.delete(f"/darkroom/api/prompts/{own['id']}").status_code, 200)
+        self.assertEqual(client.delete(f"/darkroom/api/prompts/{own['id']}").status_code, 404)
+        self.assertEqual([p["title"] for p in darkroom.own_prompts()], ["Fuchs"])
 
     def test_an_own_template_needs_a_title_and_an_action_with_text(self):
         from unittest import mock
-        client = fotos.app.test_client()
+        client = darkroom.app.test_client()
         for body in ({"title": "", "action": "edit", "text": "x"},
                      {"title": "t", "action": "edit", "text": " "},
                      {"title": "t", "action": "upscale", "text": "x"},
                      {"title": "t", "action": "nope", "text": "x"},
                      {"title": "t", "action": "edit", "text": "x" * 2001}):
             with self.subTest(body=body):
-                self.assertEqual(client.post("/fotos/api/prompts", json=body).status_code, 400)
-        with mock.patch.object(fotos, "OWN_MAX", 1):
-            self.assertEqual(client.post("/fotos/api/prompts", json={"title": "a", "action": "edit", "text": "x"}).status_code, 201)
-            self.assertEqual(client.post("/fotos/api/prompts", json={"title": "b", "action": "edit", "text": "x"}).status_code, 409)
+                self.assertEqual(client.post("/darkroom/api/prompts", json=body).status_code, 400)
+        with mock.patch.object(darkroom, "OWN_MAX", 1):
+            self.assertEqual(client.post("/darkroom/api/prompts", json={"title": "a", "action": "edit", "text": "x"}).status_code, 201)
+            self.assertEqual(client.post("/darkroom/api/prompts", json={"title": "b", "action": "edit", "text": "x"}).status_code, 409)
 
     def test_varianten_make_a_job_each_and_only_where_words_steer(self):
         r = self.post(action="edit", text="Lass ihn lächeln", n="3", image=self.jpeg(64, 64))
         ids = [j["id"] for j in r.get_json()]
         self.assertEqual(len(set(ids)), 3)
         for jid in ids:
-            self.assertTrue((fotos.job_path(jid) / "input.jpg").is_file())
+            self.assertTrue((darkroom.job_path(jid) / "input.jpg").is_file())
         self.assertEqual(len(self.post(action="edit", text="x", n="9", image=self.jpeg(64, 64)).get_json()),
-                         fotos.VARIANTS_MAX)
+                         darkroom.VARIANTS_MAX)
         self.assertEqual(len(self.post(action="colorize", n="3", image=self.jpeg(64, 64)).get_json()), 1)
         self.assertEqual(len(self.post(action="animate", n="3", image=self.jpeg(64, 64)).get_json()), 1)
 
     def test_a_waiting_job_is_crossed_out_and_not_run(self):
         from unittest import mock
         jid = self.post(action="edit", text="x", image=self.jpeg(64, 64)).get_json()[0]["id"]
-        r = fotos.app.test_client().post(f"/fotos/api/jobs/{jid}/cancel")
+        r = darkroom.app.test_client().post(f"/darkroom/api/jobs/{jid}/cancel")
         self.assertEqual(r.status_code, 200)
-        with mock.patch.object(fotos.requests, "post") as post:
-            fotos.run_job(jid)
+        with mock.patch.object(darkroom.requests, "post") as post:
+            darkroom.run_job(jid)
         post.assert_not_called()
-        job = fotos.read_job(jid)
+        job = darkroom.read_job(jid)
         self.assertEqual((job["state"], job["error"], job["cancelled"]), ("failed", "Abgebrochen", True))
-        self.assertEqual(fotos.app.test_client().post(f"/fotos/api/jobs/{jid}/cancel").status_code, 409)
+        self.assertEqual(darkroom.app.test_client().post(f"/darkroom/api/jobs/{jid}/cancel").status_code, 409)
 
     def test_a_running_job_interrupts_comfyui_and_ends_as_cancelled(self):
         from unittest import mock
         jid = self.post(action="edit", text="x", image=self.jpeg(64, 64)).get_json()[0]["id"]
-        client = fotos.app.test_client()
+        client = darkroom.app.test_client()
         calls = []
 
         def post(url, **kw):
             calls.append(url)
             if url.endswith("/v1/images/edits"):
                 # the user cancels while ComfyUI works; the interrupted workflow fails
-                self.assertEqual(client.post(f"/fotos/api/jobs/{jid}/cancel").status_code, 200)
+                self.assertEqual(client.post(f"/darkroom/api/jobs/{jid}/cancel").status_code, 200)
                 return mock.Mock(status_code=500, json=lambda: {"error": {"message": "ComfyUI failed: see its log"}})
             return mock.Mock(status_code=200)
-        with mock.patch.object(fotos.requests, "post", side_effect=post), \
-                mock.patch.object(fotos, "notify") as notify:
-            fotos.run_job(jid)
+        with mock.patch.object(darkroom.requests, "post", side_effect=post), \
+                mock.patch.object(darkroom, "notify") as notify:
+            darkroom.run_job(jid)
         self.assertEqual(calls[1], "http://comfy/interrupt")
-        job = fotos.read_job(jid)
+        job = darkroom.read_job(jid)
         self.assertEqual((job["state"], job["error"], job.get("cancelled")), ("failed", "Abgebrochen", True))
-        self.assertNotIn(jid, fotos._cancel)
+        self.assertNotIn(jid, darkroom._cancel)
         notify.assert_called_once_with(jid)
 
     def test_a_repair_stops_between_its_runs_when_cancelled(self):
         from unittest import mock
-        job = fotos.new_job({"action": "repair", "label": "Repariert", "model": "m", "base": "",
+        job = darkroom.new_job({"action": "repair", "label": "Repariert", "model": "m", "base": "",
                              "boxes": [[0, 0, 4, 4, "a"], [200, 200, 204, 204, "b"]]},
                             [("input.png", self.png(256, 256))])
-        while not fotos._queue.empty():
-            fotos._queue.get_nowait()
+        while not darkroom._queue.empty():
+            darkroom._queue.get_nowait()
         png = base64.b64encode(self.png(256, 256)).decode()
 
         def post(url, **kw):
-            fotos._cancel.add(job["id"])            # cancelled during the first run, which still ends
+            darkroom._cancel.add(job["id"])            # cancelled during the first run, which still ends
             return mock.Mock(status_code=200, json=lambda: {"data": [{"b64_json": png}], "seed": 1})
-        with mock.patch.object(fotos.requests, "post", side_effect=post) as p, mock.patch.object(fotos, "notify"):
-            fotos.run_job(job["id"])
+        with mock.patch.object(darkroom.requests, "post", side_effect=post) as p, mock.patch.object(darkroom, "notify"):
+            darkroom.run_job(job["id"])
         self.assertEqual(p.call_count, 1)
-        self.assertTrue(fotos.read_job(job["id"])["cancelled"])
+        self.assertTrue(darkroom.read_job(job["id"])["cancelled"])
 
     def png(self, w, h):
         from PIL import Image
@@ -567,34 +567,34 @@ class Fotos(unittest.TestCase):
         return buf.getvalue()
 
     def test_a_push_subscription_is_kept_once_and_removed(self):
-        if fotos.webpush is None:
+        if darkroom.webpush is None:
             self.skipTest("no cryptography")
-        client = fotos.app.test_client()
-        info = client.get("/fotos/api/push").get_json()
+        client = darkroom.app.test_client()
+        info = client.get("/darkroom/api/push").get_json()
         self.assertTrue(info["available"])
-        self.assertEqual(len(fotos.webpush.unb64u(info["key"])), 65)
-        self.assertEqual(info["key"], client.get("/fotos/api/push").get_json()["key"])    # kept, not made anew
+        self.assertEqual(len(darkroom.webpush.unb64u(info["key"])), 65)
+        self.assertEqual(info["key"], client.get("/darkroom/api/push").get_json()["key"])    # kept, not made anew
         sub = {"endpoint": "https://push.example/abc", "keys": {"p256dh": "x", "auth": "y"}}
-        sid = client.post("/fotos/api/push", json={"subscription": sub}).get_json()["id"]
-        self.assertEqual(client.post("/fotos/api/push", json={"subscription": sub}).get_json()["id"], sid)
-        self.assertEqual(len(fotos.subscriptions()), 1)
+        sid = client.post("/darkroom/api/push", json={"subscription": sub}).get_json()["id"]
+        self.assertEqual(client.post("/darkroom/api/push", json={"subscription": sub}).get_json()["id"], sid)
+        self.assertEqual(len(darkroom.subscriptions()), 1)
         bad = dict(sub, endpoint="http://push.example/abc")
-        self.assertEqual(client.post("/fotos/api/push", json={"subscription": bad}).status_code, 400)
-        client.delete(f"/fotos/api/push/{sid}")
-        self.assertEqual(fotos.subscriptions(), [])
-        sw = client.get("/fotos/sw.js")
-        self.assertEqual(sw.headers["Service-Worker-Allowed"], "/fotos")
+        self.assertEqual(client.post("/darkroom/api/push", json={"subscription": bad}).status_code, 400)
+        client.delete(f"/darkroom/api/push/{sid}")
+        self.assertEqual(darkroom.subscriptions(), [])
+        sw = client.get("/darkroom/sw.js")
+        self.assertEqual(sw.headers["Service-Worker-Allowed"], "/darkroom")
 
     def test_a_finished_job_is_pushed_but_not_to_a_page_being_looked_at(self):
-        if fotos.webpush is None:
+        if darkroom.webpush is None:
             self.skipTest("no cryptography")
         from unittest import mock
-        fotos.write_subscriptions([{"id": "a", "subscription": {"endpoint": "https://p/a"}},
+        darkroom.write_subscriptions([{"id": "a", "subscription": {"endpoint": "https://p/a"}},
                                    {"id": "b", "subscription": {"endpoint": "https://p/b"}},
                                    {"id": "c", "subscription": {"endpoint": "https://p/c"}}])
-        job = fotos.new_job({"action": "edit", "label": "Ändern", "text": "Lass ihn lächeln"})
-        fotos.update_job(job["id"], state="done", started=100.0, finished=162.0)
-        fotos.app.test_client().get("/fotos/api/prompts", headers={"X-Fotos-Device": "b"})
+        job = darkroom.new_job({"action": "edit", "label": "Ändern", "text": "Lass ihn lächeln"})
+        darkroom.update_job(job["id"], state="done", started=100.0, finished=162.0)
+        darkroom.app.test_client().get("/darkroom/api/prompts", headers={"X-Darkroom-Device": "b"})
         sent = []
 
         class Now:                              # run the sender's thread at once
@@ -603,19 +603,19 @@ class Fotos(unittest.TestCase):
 
             def start(self):
                 self.target()
-        with mock.patch.object(fotos.webpush, "send",
+        with mock.patch.object(darkroom.webpush, "send",
                                side_effect=lambda sub, payload, key: sent.append((sub["endpoint"], json.loads(payload)))
                                or (410 if sub["endpoint"].endswith("c") else 201)), \
-                mock.patch.object(fotos.threading, "Thread", Now):
-            fotos.notify(job["id"])
+                mock.patch.object(darkroom.threading, "Thread", Now):
+            darkroom.notify(job["id"])
         self.assertEqual([e for e, _ in sent], ["https://p/a", "https://p/c"])
         self.assertEqual(sent[0][1]["title"], "Fertig: Ändern · 62 s")
-        self.assertEqual(sent[0][1]["url"], f"/fotos#job={job['id']}")
-        self.assertEqual([s["id"] for s in fotos.subscriptions()], ["a", "b"])    # c is gone: 410
-        fotos._seen.clear()
-        fotos.update_job(job["id"], cancelled=True)
-        with mock.patch.object(fotos.webpush, "send") as send:
-            fotos.notify(job["id"])
+        self.assertEqual(sent[0][1]["url"], f"/darkroom#job={job['id']}")
+        self.assertEqual([s["id"] for s in darkroom.subscriptions()], ["a", "b"])    # c is gone: 410
+        darkroom._seen.clear()
+        darkroom.update_job(job["id"], cancelled=True)
+        with mock.patch.object(darkroom.webpush, "send") as send:
+            darkroom.notify(job["id"])
         send.assert_not_called()
 
     def test_a_placeholder_left_standing_counts_with_its_words(self):
@@ -625,18 +625,18 @@ class Fotos(unittest.TestCase):
     def done_picture(self, action="generate", text="a cat on a sofa"):
         """A finished job with a picture, as Fehler suchen starts from."""
         from PIL import Image
-        job = fotos.new_job({"action": action, "label": "Erzeugt", "text": text, "png": False})
-        while not fotos._queue.empty():
-            fotos._queue.get_nowait()
-        Image.new("RGB", (400, 300)).save(fotos.job_path(job["id"]) / "result.png")
-        fotos.update_job(job["id"], state="done", result_size=[400, 300])
+        job = darkroom.new_job({"action": action, "label": "Erzeugt", "text": text, "png": False})
+        while not darkroom._queue.empty():
+            darkroom._queue.get_nowait()
+        Image.new("RGB", (400, 300)).save(darkroom.job_path(job["id"]) / "result.png")
+        darkroom.update_job(job["id"], state="done", result_size=[400, 300])
         return job["id"]
 
     def test_boxes_whose_crops_meet_go_in_one_run(self):
         boxes = [[10, 10, 30, 30, "a"], [40, 40, 60, 60, "b"], [500, 500, 520, 520, "c"]]
-        groups = fotos.crop_groups(boxes)
+        groups = darkroom.crop_groups(boxes)
         self.assertEqual(sorted(len(g) for g in groups), [1, 2])
-        self.assertEqual(fotos.repair_prompt("A cat on a sofa.", boxes[:2] + [[0, 0, 1, 1, "a."]]),
+        self.assertEqual(darkroom.repair_prompt("A cat on a sofa.", boxes[:2] + [[0, 0, 1, 1, "a."]]),
                          "A cat on a sofa. a; b")
 
     def test_a_check_asks_the_vision_model_and_stops_what_it_started(self):
@@ -655,10 +655,10 @@ class Fotos(unittest.TestCase):
                                                                        "box": [1, 2, 3, 4]}], "remarks": []}
                                    if url.endswith("/check") else {"state": "starting"})
             return r
-        with mock.patch.object(fotos.requests, "get", side_effect=get), \
-                mock.patch.object(fotos.requests, "post", side_effect=post) as p, mock.patch.object(fotos.time, "sleep"):
-            fotos.run_job(check["id"])
-        job = fotos.read_job(check["id"])
+        with mock.patch.object(darkroom.requests, "get", side_effect=get), \
+                mock.patch.object(darkroom.requests, "post", side_effect=post) as p, mock.patch.object(darkroom.time, "sleep"):
+            darkroom.run_job(check["id"])
+        job = darkroom.read_job(check["id"])
         self.assertEqual(job["state"], "done", job.get("error"))
         self.assertEqual(job["artifacts"][0]["what"], "hand")
         sent = [(c.args[0].rsplit("/", 1)[1], (c.kwargs.get("json") or {}).get("action")) for c in p.call_args_list]
@@ -669,15 +669,15 @@ class Fotos(unittest.TestCase):
         check = self.post(action="check", **{"from": self.done_picture()}).get_json()[0]
         r = mock.Mock(status_code=200)
         r.json.return_value = {"vision": {"state": "down", "controllable": False, "message": ""}}
-        with mock.patch.object(fotos.requests, "get", return_value=r):
-            fotos.run_job(check["id"])
-        self.assertIn("neu starten", fotos.read_job(check["id"])["error"])
+        with mock.patch.object(darkroom.requests, "get", return_value=r):
+            darkroom.run_job(check["id"])
+        self.assertIn("neu starten", darkroom.read_job(check["id"])["error"])
 
     def test_repair_runs_each_group_on_the_last_result(self):
         from unittest import mock
         from PIL import Image
         cid = self.done_picture("check")
-        fotos.update_job(cid, base="a cat on a sofa", artifacts=[])
+        darkroom.update_job(cid, base="a cat on a sofa", artifacts=[])
         self.assertEqual(self.post(action="repair", **{"from": self.done_picture()}, boxes="[[1,1,2,2,\"x\"]]").status_code, 400)
         boxes = [[10, 10, 30, 30, "a paw"], [300, 200, 320, 220, "an ear"]]
         job = self.post(action="repair", **{"from": cid}, boxes=json.dumps(boxes)).get_json()[0]
@@ -685,15 +685,15 @@ class Fotos(unittest.TestCase):
         buf = io.BytesIO(); Image.new("RGB", (400, 300)).save(buf, "PNG")
         reply = mock.Mock(status_code=200)
         reply.json.return_value = {"data": [{"b64_json": base64.b64encode(buf.getvalue()).decode()}], "seed": 1}
-        with mock.patch.object(fotos.requests, "post", return_value=reply) as p:
-            fotos.run_job(job["id"])
-        self.assertEqual(fotos.read_job(job["id"])["state"], "done")
+        with mock.patch.object(darkroom.requests, "post", return_value=reply) as p:
+            darkroom.run_job(job["id"])
+        self.assertEqual(darkroom.read_job(job["id"])["state"], "done")
         prompts = sorted(c.kwargs["data"]["prompt"] for c in p.call_args_list)
         self.assertEqual(prompts, ["a cat on a sofa. a paw", "a cat on a sofa. an ear"])
 
     def test_every_action_has_its_group(self):
-        ids = [i for _, group in fotos.GROUPS for i in group]
-        self.assertEqual(sorted(ids), sorted(fotos.ACTIONS))
+        ids = [i for _, group in darkroom.GROUPS for i in group]
+        self.assertEqual(sorted(ids), sorted(darkroom.ACTIONS))
 
     def test_pose_and_restyle_take_the_users_words(self):
         _, form, _ = self.sent(action="pose", text="a dancer on a stage")
@@ -701,10 +701,17 @@ class Fotos(unittest.TestCase):
         self.assertEqual(self.sent(action="restyle", text="x", quality="best")[1]["model"], "qwen-image-21-depth-control")
         self.assertEqual(self.post(action="pose", image=self.jpeg(64, 64)).status_code, 400)
 
+    def test_the_old_address_leads_to_the_new_one(self):
+        client = darkroom.app.test_client()
+        for path in ("/fotos", "/fotos/"):
+            r = client.get(path)
+            self.assertEqual((r.status_code, r.headers["Location"]), (301, "/darkroom"))
+        self.assertIn("<title>Darkroom</title>", client.get("/darkroom").get_data(as_text=True))
+
     def test_actions_carry_the_short_text_hint(self):
         from unittest import mock
-        with mock.patch.object(fotos.requests, "get", side_effect=fotos.requests.ConnectionError):
-            got = {a["id"]: a for a in fotos.app.test_client().get("/fotos/api/actions").get_json()["actions"]}
+        with mock.patch.object(darkroom.requests, "get", side_effect=darkroom.requests.ConnectionError):
+            got = {a["id"]: a for a in darkroom.app.test_client().get("/darkroom/api/actions").get_json()["actions"]}
         self.assertEqual(got["paint"]["short_hint"][0], 2)
         self.assertIn("Materialien", got["restyle"]["short_hint"][1])
         self.assertIsNone(got["edit"]["short_hint"])
@@ -755,10 +762,10 @@ class Fotos(unittest.TestCase):
         self.assertEqual(r.status_code, 200, r.get_json())
         jid = r.get_json()[0]["id"]
         reply = mock.Mock(status_code=200, content=b"mp4", headers={"X-Size": "640x352", "X-Seed": "5"})
-        with mock.patch.object(fotos.requests, "post", return_value=reply) as post, \
-                mock.patch.object(fotos, "poster"):
-            fotos.run_job(jid)
-        job = fotos.read_job(jid)
+        with mock.patch.object(darkroom.requests, "post", return_value=reply) as post, \
+                mock.patch.object(darkroom, "poster"):
+            darkroom.run_job(jid)
+        job = darkroom.read_job(jid)
         self.assertEqual(job["state"], "done", job.get("error"))
         kw = post.call_args.kwargs
         return post.call_args.args[0], kw["data"], [n for n, _ in kw.get("files") or []], job
@@ -770,7 +777,7 @@ class Fotos(unittest.TestCase):
         self.assertTrue(form["prompt"].startswith("The scene comes to life"))
         self.assertEqual(files, ["image[]"])
         self.assertEqual((job["result_size"], job["video"]), ([640, 352], True))
-        self.assertEqual((fotos.job_path(job["id"]) / "result.mp4").read_bytes(), b"mp4")
+        self.assertEqual((darkroom.job_path(job["id"]) / "result.mp4").read_bytes(), b"mp4")
 
     def test_animate_with_an_end_picture_runs_first_to_last(self):
         _, form, files, job = self.clip(action="animate", image2=self.jpeg(64, 64), quality="best", text="she waves")
@@ -794,10 +801,10 @@ class Fotos(unittest.TestCase):
         frame = mock.Mock(status_code=200)
         frame.json.return_value = {"data": [{"b64_json": base64.b64encode(buf.getvalue()).decode()}]}
         clip = mock.Mock(status_code=200, content=b"mp4", headers={"X-Size": "352x640"})
-        with mock.patch.object(fotos.requests, "post", side_effect=[frame, clip]) as post, \
-                mock.patch.object(fotos, "poster"):
-            fotos.run_job(job["id"])
-        self.assertEqual(fotos.read_job(job["id"])["state"], "done")
+        with mock.patch.object(darkroom.requests, "post", side_effect=[frame, clip]) as post, \
+                mock.patch.object(darkroom, "poster"):
+            darkroom.run_job(job["id"])
+        self.assertEqual(darkroom.read_job(job["id"])["state"], "done")
         (first, kw1), (second, kw2) = [(c.args[0], c.kwargs) for c in post.call_args_list]
         self.assertEqual((first, kw1["json"]["size"], kw1["json"]["model"]),
                          ("http://api/v1/images/generations", "704x1280", "z-image-turbo-nsfw"))
@@ -807,15 +814,15 @@ class Fotos(unittest.TestCase):
     def test_the_clip_is_served_and_its_still_as_thumbnail(self):
         from PIL import Image
         _, _, _, job = self.clip(action="animate")
-        d = fotos.job_path(job["id"])
+        d = darkroom.job_path(job["id"])
         Image.new("RGB", (64, 36)).save(d / "result.poster.jpg", "JPEG")
-        client = fotos.app.test_client()
-        r = client.get(f"/fotos/api/jobs/{job['id']}/result")
+        client = darkroom.app.test_client()
+        r = client.get(f"/darkroom/api/jobs/{job['id']}/result")
         self.assertEqual((r.status_code, r.mimetype, r.data), (200, "video/mp4", b"mp4"))
-        r = client.get(f"/fotos/api/jobs/{job['id']}/result", headers={"Range": "bytes=1-2"})
+        r = client.get(f"/darkroom/api/jobs/{job['id']}/result", headers={"Range": "bytes=1-2"})
         self.assertEqual((r.status_code, r.data), (206, b"p4"))
-        self.assertEqual(client.get(f"/fotos/api/jobs/{job['id']}/result?thumb=1").mimetype, "image/jpeg")
-        self.assertEqual(client.get(f"/fotos/api/jobs/{job['id']}/poster").mimetype, "image/jpeg")
+        self.assertEqual(client.get(f"/darkroom/api/jobs/{job['id']}/result?thumb=1").mimetype, "image/jpeg")
+        self.assertEqual(client.get(f"/darkroom/api/jobs/{job['id']}/poster").mimetype, "image/jpeg")
 
 
 class ThinkingOff(unittest.TestCase):

@@ -12,7 +12,7 @@
 #   llmctl download <name|all> [PATTERN] [--from DIR|--check]  fetch models; for ComfyUI set it up and fetch what its workflows name
 #   llmctl update <comfyui-model> [--torch] [--master]  ComfyUI to its newest release (or master, node packs too) and its deps
 #   llmctl voice list|add|design|rm            voices for speech (tts) slots
-#   llmctl fotos enable|disable|status|key       photo editing from the phone, a service with its own tunnel
+#   llmctl darkroom enable|disable|status|key    photo editing from the phone, a service with its own tunnel
 #   llmctl probe-reasoning [model]             show what each model's chat template supports
 #   eval "$(llmctl env <name> [slot] [--proxy|--direct])"   export Claude Code env vars in this shell
 #   eval "$(llmctl shell-init)"                (in ~/.zshrc) makes `llmctl env|clear` do that eval itself
@@ -4353,7 +4353,7 @@ cmd__complete() {
     (( n >= 2 )) && prev="${w[n-2]}"
     if (( n == 1 )); then
         printf '%s\n' start preset preset-save presets stop status logs cache-stats clear-kv \
-            probe-reasoning bench list env clear shell-init download update voice service fotos prune outdated help version
+            probe-reasoning bench list env clear shell-init download update voice service darkroom prune outdated help version
         return 0
     fi
     # Positional words before the one completed, options and their values left out.
@@ -4397,7 +4397,7 @@ cmd__complete() {
                 0) printf '%s\n' enable disable start stop status ;;
                 1) [[ "${pos[0]}" == enable ]] && { local e; for e in "${_PRESETS[@]}"; do echo "${e%%|*}"; done; } ;;
             esac ;;
-        fotos) (( k == 0 )) && printf '%s\n' enable disable status key ;;
+        darkroom) (( k == 0 )) && printf '%s\n' enable disable status key ;;
         stop|clear-kv) (( k == 0 )) && _active_slots ;;
         cache-stats)   (( k == 0 )) && _log_slots ;;
         logs) (( k == 0 )) && _log_slots; printf '%s\n' --proxy -f -n ;;
@@ -4536,130 +4536,156 @@ cmd_service() {
     esac
 }
 
-# ── Fotos: photo editing from the phone ─────────────────────
-# A page (fotos_server.py, fotos.html) in front of the image API that does not
+# ── Darkroom: photo editing from the phone ──────────────────
+# Called "fotos" (llmctl fotos, /fotos) until 1.86; _darkroom_migrate takes over
+# what that left. A page (darkroom_server.py, darkroom.html) in front of the image API that does not
 # belong to the ComfyUI slot: a user service of its own, with its own tunnel, so
-# it is there with ComfyUI stopped and can start it ("comfy" on FOTOS_SLOT, with
+# it is there with ComfyUI stopped and can start it ("comfy" on DARKROOM_SLOT, with
 # the image API). The tunnel logs in with a key of its own, without a
 # passphrase — a service has no agent — which the server's authorized_keys
-# restricts to this one forward (`llmctl fotos key` prints the line).
-FOTOS_SCRIPT="$LIB_DIR/fotos_server.py"
-FOTOS_PORT="${LLMCTL_FOTOS_PORT:-8190}"      # → the server's 127.0.0.1:18190 through the tunnel
-FOTOS_SLOT="${LLMCTL_FOTOS_SLOT:-9}"         # where it starts ComfyUI, as preset comfy-remote does
-FOTOS_MODEL="${LLMCTL_FOTOS_MODEL:-comfy}"
-# The vision slot ComfyUI's image API starts for Fehler suchen (--vision), as
+# restricts to this one forward (`llmctl darkroom key` prints the line).
+DARKROOM_SCRIPT="$LIB_DIR/darkroom_server.py"
+DARKROOM_PORT="${LLMCTL_DARKROOM_PORT:-${LLMCTL_FOTOS_PORT:-8190}}"   # → the server's 127.0.0.1:18190 through the tunnel
+DARKROOM_SLOT="${LLMCTL_DARKROOM_SLOT:-${LLMCTL_FOTOS_SLOT:-9}}"      # where it starts ComfyUI, as preset comfy-remote does
+DARKROOM_MODEL="${LLMCTL_DARKROOM_MODEL:-${LLMCTL_FOTOS_MODEL:-comfy}}"
+# The vision slot ComfyUI's image API starts for Find flaws (--vision), as
 # preset comfy-remote has it; 0 for none.
-FOTOS_VISION_SLOT="${LLMCTL_FOTOS_VISION_SLOT:-2}"
-FOTOS_DIR="$DATA_DIR/fotos"
-FOTOS_KEY="$CONFIG_DIR/fotos_tunnel_key"
-FOTOS_UNIT="llmctl-fotos.service"
+DARKROOM_VISION_SLOT="${LLMCTL_DARKROOM_VISION_SLOT:-${LLMCTL_FOTOS_VISION_SLOT:-2}}"
+DARKROOM_DIR="$DATA_DIR/darkroom"
+DARKROOM_KEY="$CONFIG_DIR/darkroom_tunnel_key"
+DARKROOM_UNIT="llmctl-darkroom.service"
+FOTOS_UNIT="llmctl-fotos.service"           # the old name's service
 
-_fotos_remote_port() { echo $(( FOTOS_PORT + TUNNEL_PORT_OFFSET )); }
+# What "fotos" left: its service gone (stopped first, so nothing writes while
+# its jobs move), its jobs, templates, subscriptions and key under the new name.
+_darkroom_migrate() {
+    local old="$SERVICE_UNIT_DIR/$FOTOS_UNIT" f
+    if [[ -f "$old" ]]; then
+        systemctl --user disable --now "$FOTOS_UNIT" 2>&1 | grep -v '^Removed' || true
+        rm -f "$old"
+        systemctl --user daemon-reload 2>/dev/null || true
+        echo "Removed the old $FOTOS_UNIT."
+    fi
+    if [[ -d "$DATA_DIR/fotos" && ! -e "$DARKROOM_DIR" ]]; then
+        mv "$DATA_DIR/fotos" "$DARKROOM_DIR" && echo "Moved $DATA_DIR/fotos to $DARKROOM_DIR."
+    fi
+    for f in "" .pub; do
+        if [[ -f "$CONFIG_DIR/fotos_tunnel_key$f" && ! -e "$DARKROOM_KEY$f" ]]; then
+            mv "$CONFIG_DIR/fotos_tunnel_key$f" "$DARKROOM_KEY$f"
+        fi
+    done
+}
+
+_darkroom_remote_port() { echo $(( DARKROOM_PORT + TUNNEL_PORT_OFFSET )); }
 
 # The line for ~/.ssh/authorized_keys on the tunnel host: this key may open the
 # one remote forward and nothing else — no shell, no command, no other port.
-_fotos_authorized_line() {
+_darkroom_authorized_line() {
     printf 'restrict,port-forwarding,permitlisten="localhost:%s",command="/bin/false" %s\n' \
-        "$(_fotos_remote_port)" "$(cat "$FOTOS_KEY.pub")"
+        "$(_darkroom_remote_port)" "$(cat "$DARKROOM_KEY.pub")"
 }
 
-_fotos_ensure_key() {
-    [[ -f "$FOTOS_KEY" ]] && return 0
+_darkroom_ensure_key() {
+    [[ -f "$DARKROOM_KEY" ]] && return 0
     mkdir -p "$CONFIG_DIR"
-    ssh-keygen -q -t ed25519 -N "" -C "llmctl-fotos@$(hostname -s)" -f "$FOTOS_KEY" ||
-        { echo "Error: could not make $FOTOS_KEY"; return 1; }
-    chmod 600 "$FOTOS_KEY"
-    echo "Made $FOTOS_KEY for the tunnel."
+    ssh-keygen -q -t ed25519 -N "" -C "llmctl-darkroom@$(hostname -s)" -f "$DARKROOM_KEY" ||
+        { echo "Error: could not make $DARKROOM_KEY"; return 1; }
+    chmod 600 "$DARKROOM_KEY"
+    echo "Made $DARKROOM_KEY for the tunnel."
 }
 
-_fotos_ssh_opts() {
-    printf '%s\n' -i "$FOTOS_KEY" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 \
+_darkroom_ssh_opts() {
+    printf '%s\n' -i "$DARKROOM_KEY" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 \
         -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes
 }
 
 # The tunnel, kept up: plain ssh in a loop rather than autossh, so a host that
 # refuses is asked again only every five minutes (fail2ban, sshguard).
-_fotos_tunnel_loop() {
-    local -a opts; mapfile -t opts < <(_fotos_ssh_opts)
+_darkroom_tunnel_loop() {
+    local -a opts; mapfile -t opts < <(_darkroom_ssh_opts)
     local forward
-    forward="$(_fotos_remote_port):127.0.0.1:$FOTOS_PORT"
+    forward="$(_darkroom_remote_port):127.0.0.1:$DARKROOM_PORT"
     while true; do
         pkill -f -- "-R $forward" 2>/dev/null
         if ssh "${opts[@]}" "$TUNNEL_HOST" true 2>/dev/null ||
            # command="/bin/false" answers a login with exit 1, and that is a login too
            [[ $? -eq 1 ]]; then
-            echo "tunnel: $TUNNEL_HOST, forwarding :$FOTOS_PORT → its localhost:$(_fotos_remote_port)"
+            echo "tunnel: $TUNNEL_HOST, forwarding :$DARKROOM_PORT → its localhost:$(_darkroom_remote_port)"
             ssh "${opts[@]}" -N -R "$forward" "$TUNNEL_HOST"
             echo "tunnel: ended ($?), again in 15 s"
             sleep 15
         else
-            echo "tunnel: cannot log in to $TUNNEL_HOST with $FOTOS_KEY — is its line in authorized_keys"
-            echo "        there ($PROG fotos key)? Again in 5 min."
+            echo "tunnel: cannot log in to $TUNNEL_HOST with $DARKROOM_KEY — is its line in authorized_keys"
+            echo "        there ($PROG darkroom key)? Again in 5 min."
             sleep 300
         fi
     done
 }
 
-# Usage: fotos enable | disable | status | key | run
-cmd_fotos() {
+# Usage: darkroom enable | disable | status | key | run
+cmd_darkroom() {
     local action="${1:-status}"; shift || true
-    local unit="$SERVICE_UNIT_DIR/$FOTOS_UNIT"
+    local unit="$SERVICE_UNIT_DIR/$DARKROOM_UNIT"
     case "$action" in
         run)
             # The service's ExecStart: the page in the foreground, the tunnel beside it.
             _check_deps python3 || return 1
-            if ss -tlnp 2>/dev/null | grep -q ":${FOTOS_PORT} "; then
-                echo "Error: something already listens on :$FOTOS_PORT — the fotos service, most likely"
-                echo "       ($PROG fotos status). 'fotos run' is what that service runs; to start it: $PROG fotos enable."
+            if ss -tlnp 2>/dev/null | grep -q ":${DARKROOM_PORT} "; then
+                echo "Error: something already listens on :$DARKROOM_PORT — the darkroom service, most likely"
+                echo "       ($PROG darkroom status). 'darkroom run' is what that service runs; to start it: $PROG darkroom enable."
                 return 1
             fi
+            # Not the old unit, which may be what runs this ("llmctl fotos run").
+            [[ -d "$DATA_DIR/fotos" && ! -e "$DARKROOM_DIR" ]] && mv "$DATA_DIR/fotos" "$DARKROOM_DIR"
             local tun=""
-            if [[ -n "$TUNNEL_HOST" && -f "$FOTOS_KEY" ]]; then
-                _fotos_tunnel_loop & tun=$!
+            if [[ -n "$TUNNEL_HOST" && -f "$DARKROOM_KEY" ]]; then
+                _darkroom_tunnel_loop & tun=$!
             else
-                echo "No tunnel: $([[ -z "$TUNNEL_HOST" ]] && echo "no tunnel host (~/.config/llmctl/tunnel-host)" || echo "no key ($PROG fotos key)")."
+                echo "No tunnel: $([[ -z "$TUNNEL_HOST" ]] && echo "no tunnel host (~/.config/llmctl/tunnel-host)" || echo "no key ($PROG darkroom key)")."
             fi
             # shellcheck disable=SC2064  # the pid is meant to be fixed now
-            trap "[[ -n '$tun' ]] && { kill $tun 2>/dev/null; pkill -f -- '-R $(_fotos_remote_port):127.0.0.1:$FOTOS_PORT'; }" EXIT
-            python3 -u "$FOTOS_SCRIPT" --port "$FOTOS_PORT" \
-                --api "http://127.0.0.1:$(( PORT_BASE_PROXY + FOTOS_SLOT ))" \
-                --comfy "http://127.0.0.1:$(( PORT_BASE_SERVER + FOTOS_SLOT ))" \
-                --comfy-slot "$FOTOS_SLOT" --comfy-model "$FOTOS_MODEL" --vision-slot "$FOTOS_VISION_SLOT" \
-                --llmctl "$(readlink -f "${BASH_SOURCE[0]}")" --data "$FOTOS_DIR"
+            trap "[[ -n '$tun' ]] && { kill $tun 2>/dev/null; pkill -f -- '-R $(_darkroom_remote_port):127.0.0.1:$DARKROOM_PORT'; }" EXIT
+            python3 -u "$DARKROOM_SCRIPT" --port "$DARKROOM_PORT" \
+                --api "http://127.0.0.1:$(( PORT_BASE_PROXY + DARKROOM_SLOT ))" \
+                --comfy "http://127.0.0.1:$(( PORT_BASE_SERVER + DARKROOM_SLOT ))" \
+                --comfy-slot "$DARKROOM_SLOT" --comfy-model "$DARKROOM_MODEL" --vision-slot "$DARKROOM_VISION_SLOT" \
+                --llmctl "$(readlink -f "${BASH_SOURCE[0]}")" --data "$DARKROOM_DIR"
             ;;
         key)
-            _fotos_ensure_key || return 1
+            _darkroom_migrate
+            _darkroom_ensure_key || return 1
             echo "Add this line to ~/.ssh/authorized_keys on ${TUNNEL_HOST:-the tunnel host} — it lets the key"
-            echo "open the one forward to localhost:$(_fotos_remote_port), and nothing else:"
+            echo "open the one forward to localhost:$(_darkroom_remote_port), and nothing else:"
             echo ""
-            _fotos_authorized_line
+            _darkroom_authorized_line
             if [[ -n "$TUNNEL_HOST" ]]; then
                 echo ""
                 echo "Or, with a key that logs in there now:"
-                echo "  $PROG fotos key | grep '^restrict' | ssh $TUNNEL_HOST 'cat >> ~/.ssh/authorized_keys'"
+                echo "  $PROG darkroom key | grep '^restrict' | ssh $TUNNEL_HOST 'cat >> ~/.ssh/authorized_keys'"
             fi
             ;;
         enable)
             _check_deps systemctl python3 || return 1
-            _fotos_ensure_key || return 1
+            _darkroom_migrate
+            _darkroom_ensure_key || return 1
             local bin; bin=$(command -v "$PROG" 2>/dev/null || readlink -f "$0")
             local -a env=("PATH=$PATH") v
             for v in LLMCTL_CONFIG_DIR LLMCTL_DATA_DIR LLMCTL_STATE_DIR LLMCTL_MODELS_DIR LLMCTL_TUNNEL_HOST \
-                     LLMCTL_TUNNEL_PORT_OFFSET LLMCTL_FOTOS_PORT LLMCTL_FOTOS_SLOT LLMCTL_FOTOS_MODEL \
-                     LLMCTL_FOTOS_VISION_SLOT; do
+                     LLMCTL_TUNNEL_PORT_OFFSET LLMCTL_DARKROOM_PORT LLMCTL_DARKROOM_SLOT LLMCTL_DARKROOM_MODEL \
+                     LLMCTL_DARKROOM_VISION_SLOT; do
                 [[ -n "${!v:-}" ]] && env+=("$v=${!v}")
             done
             mkdir -p "$SERVICE_UNIT_DIR"
             {
-                echo "# Written by llmctl fotos enable — rewritten by the next enable."
+                echo "# Written by llmctl darkroom enable — rewritten by the next enable."
                 echo "[Unit]"
-                echo "Description=llmctl fotos: photo editing from the phone"
+                echo "Description=llmctl darkroom: photo editing from the phone"
                 echo "After=network-online.target"
                 echo ""
                 echo "[Service]"
                 echo "Type=simple"
                 for v in "${env[@]}"; do printf 'Environment="%s"\n' "$v"; done
-                echo "ExecStart=$bin fotos run"
+                echo "ExecStart=$bin darkroom run"
                 echo "Restart=on-failure"
                 echo "RestartSec=10"
                 echo ""
@@ -4667,44 +4693,46 @@ cmd_fotos() {
                 echo "WantedBy=default.target"
             } > "$unit"
             systemctl --user daemon-reload
-            systemctl --user enable "$FOTOS_UNIT" 2>&1 | grep -v '^Created symlink' || true
-            systemctl --user restart "$FOTOS_UNIT"
-            echo "Fotos runs on http://127.0.0.1:$FOTOS_PORT/fotos, and from now on at every login."
-            [[ -n "$TUNNEL_HOST" ]] && echo "  From outside: https://<your ComfyUI vhost>/fotos (the vhost needs its /fotos lines,"
-            [[ -n "$TUNNEL_HOST" ]] && echo "  deploy/vps-comfy-vhost.conf), once $TUNNEL_HOST takes the key: $PROG fotos key"
+            systemctl --user enable "$DARKROOM_UNIT" 2>&1 | grep -v '^Created symlink' || true
+            systemctl --user restart "$DARKROOM_UNIT"
+            echo "Darkroom runs on http://127.0.0.1:$DARKROOM_PORT/darkroom, and from now on at every login."
+            [[ -n "$TUNNEL_HOST" ]] && echo "  From outside: https://<your ComfyUI vhost>/darkroom (the vhost needs its /darkroom lines,"
+            [[ -n "$TUNNEL_HOST" ]] && echo "  deploy/vps-comfy-vhost.conf), once $TUNNEL_HOST takes the key: $PROG darkroom key"
             if [[ "$(loginctl show-user "$USER" -p Linger --value 2>/dev/null)" != yes ]]; then
                 echo "  At boot, before anyone logs in: loginctl enable-linger $USER"
             fi
             ;;
         disable)
-            systemctl --user disable --now "$FOTOS_UNIT" 2>&1 | grep -v '^Removed' || true
-            echo "Fotos stopped, and not at login any more. ComfyUI, if it runs, keeps running."
+            systemctl --user disable --now "$DARKROOM_UNIT" 2>&1 | grep -v '^Removed' || true
+            echo "Darkroom stopped, and not at login any more. ComfyUI, if it runs, keeps running."
             ;;
         status)
             local active="not set up"
-            [[ -f "$unit" ]] && active=$(systemctl --user is-active "$FOTOS_UNIT" 2>/dev/null)
-            printf 'Service:  %s (%s)\n' "$active" "$FOTOS_UNIT"
-            if ss -tlnp 2>/dev/null | grep -q ":${FOTOS_PORT} "; then
-                printf 'Page:     http://127.0.0.1:%s/fotos\n' "$FOTOS_PORT"
+            [[ -f "$unit" ]] && active=$(systemctl --user is-active "$DARKROOM_UNIT" 2>/dev/null)
+            printf 'Service:  %s (%s)\n' "$active" "$DARKROOM_UNIT"
+            [[ -f "$SERVICE_UNIT_DIR/$FOTOS_UNIT" ]] &&
+                echo "          the old $FOTOS_UNIT is still there: $PROG darkroom enable replaces it"
+            if ss -tlnp 2>/dev/null | grep -q ":${DARKROOM_PORT} "; then
+                printf 'Page:     http://127.0.0.1:%s/darkroom\n' "$DARKROOM_PORT"
             else
-                printf 'Page:     nothing listens on :%s\n' "$FOTOS_PORT"
+                printf 'Page:     nothing listens on :%s\n' "$DARKROOM_PORT"
             fi
-            if pgrep -f -- "-R $(_fotos_remote_port):127.0.0.1:$FOTOS_PORT" >/dev/null; then
-                printf 'Tunnel:   up — %s localhost:%s\n' "$TUNNEL_HOST" "$(_fotos_remote_port)"
+            if pgrep -f -- "-R $(_darkroom_remote_port):127.0.0.1:$DARKROOM_PORT" >/dev/null; then
+                printf 'Tunnel:   up — %s localhost:%s\n' "$TUNNEL_HOST" "$(_darkroom_remote_port)"
             else
-                printf 'Tunnel:   down%s\n' "$([[ -f "$FOTOS_KEY" ]] || echo " (no key yet: $PROG fotos key)")"
+                printf 'Tunnel:   down%s\n' "$([[ -f "$DARKROOM_KEY" ]] || echo " (no key yet: $PROG darkroom key)")"
             fi
-            printf 'ComfyUI:  slot %s (%s), started and stopped from the page\n' "$FOTOS_SLOT" "$FOTOS_MODEL"
-            if [[ "$FOTOS_VISION_SLOT" != 0 ]]; then
-                printf 'Vision:   slot %s (%s), started for Fehler suchen and stopped after\n' "$FOTOS_VISION_SLOT" "$VISION_MODEL"
+            printf 'ComfyUI:  slot %s (%s), started and stopped from the page\n' "$DARKROOM_SLOT" "$DARKROOM_MODEL"
+            if [[ "$DARKROOM_VISION_SLOT" != 0 ]]; then
+                printf 'Vision:   slot %s (%s), started for Find flaws and stopped after\n' "$DARKROOM_VISION_SLOT" "$VISION_MODEL"
             fi
-            printf 'Jobs:     %s\n' "$(find "$FOTOS_DIR/jobs" -name job.json 2>/dev/null | wc -l) in $FOTOS_DIR/jobs"
+            printf 'Jobs:     %s\n' "$(find "$DARKROOM_DIR/jobs" -name job.json 2>/dev/null | wc -l) in $DARKROOM_DIR/jobs"
             if [[ -f "$unit" ]]; then
                 echo "Last lines:"
-                journalctl --user -u "$FOTOS_UNIT" -n 6 --no-pager -o cat 2>/dev/null | sed 's/^/  /'
+                journalctl --user -u "$DARKROOM_UNIT" -n 6 --no-pager -o cat 2>/dev/null | sed 's/^/  /'
             fi
             ;;
-        *) echo "Usage: $PROG fotos enable | disable | status | key | run"; return 1 ;;
+        *) echo "Usage: $PROG darkroom enable | disable | status | key | run"; return 1 ;;
     esac
 }
 
@@ -6077,8 +6105,8 @@ cmd_help() {
     printf "  %-20s %s\n" "status"                 "show running state, model and key parameters per slot"
     printf "  %-20s %s\n" "service enable <p>"     "run preset p as a systemd user service: at login, dead slots restarted"
     printf "  %-20s %s\n" ""                      "  service start / stop (now) / disable / status"
-    printf "  %-20s %s\n" "fotos enable"           "photo editing from the phone (/fotos): a user service with its own tunnel that"
-    printf "  %-20s %s\n" ""                      "  starts and stops ComfyUI on slot \$LLMCTL_FOTOS_SLOT (9); fotos key / status / disable"
+    printf "  %-20s %s\n" "darkroom enable"        "photo editing from the phone (/darkroom): a user service with its own tunnel that"
+    printf "  %-20s %s\n" ""                      "  starts and stops ComfyUI on slot \$LLMCTL_DARKROOM_SLOT (9); darkroom key / status / disable"
     printf "  %-20s %s\n" "outdated [--quick]"     "what has a newer version: halogen image, llama.cpp builds, the speech PR, ComfyUI,"
     printf "  %-20s %s\n" ""                      "  custom nodes, installed models (by SHA-256; --quick: size and date); changes nothing"
     printf "  %-20s %s\n" ""                      "  --master: llmctl, llama.cpp, audio.cpp, ComfyUI and its node packs against master, not their releases"
@@ -7314,7 +7342,10 @@ case "${1:-}" in
     cache-stats) shift; cmd_cache_stats "$@" ;;
     logs)        shift; cmd_logs "$@" ;;
     service)     shift; cmd_service "$@" ;;
-    fotos)       shift; cmd_fotos "$@" ;;
+    darkroom)    shift; cmd_darkroom "$@" ;;
+    fotos)       shift   # the old name, until 1.86; its service still runs "fotos run"
+                 [[ "${1:-}" == run ]] || echo "Note: 'fotos' is now '$PROG darkroom'." >&2
+                 cmd_darkroom "$@" ;;
     prune)       shift; cmd_prune "$@" ;;
     outdated)    shift; cmd_outdated "$@" ;;
     self-update) shift; cmd_self_update "$@" ;;

@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
 """Photo editing for the phone — a page in front of llmctl's image API.
 
-    GET  /fotos                    the page (fotos.html), made for a phone
-    GET  /fotos/api/status         ComfyUI and the image API: up, down, starting, stopping
-    POST /fotos/api/comfy          {"action": "start"|"stop"}: llmctl starts or stops ComfyUI
-    GET  /fotos/api/actions        what the page offers, and which of it ComfyUI can do now
-    GET  /fotos/api/prompts        the library of prompts (fotos_prompts.json) and the user's own, searched on the page
-    POST /fotos/api/prompts        {"title", "action", "text", "options"}: keep one of the user's own
-    DELETE /fotos/api/prompts/<id>
-    POST /fotos/api/jobs           multipart: image (or from=<job id>), action, quality, text, n
-    GET  /fotos/api/jobs           the jobs, newest first
-    GET  /fotos/api/jobs/<id>      one job
-    GET  /fotos/api/jobs/<id>/<input|result>[?thumb=1][&download=1]
-    POST /fotos/api/jobs/<id>/cancel   stop a job that waits or runs
-    DELETE /fotos/api/jobs/<id>
-    GET  /fotos/api/push           the server's key for pushManager.subscribe
-    POST /fotos/api/push           a browser's subscription: told when a job is done
-    DELETE /fotos/api/push/<id>
+    GET  /darkroom                the page (darkroom.html), made for a phone
+    GET  /darkroom/api/status     ComfyUI and the image API: up, down, starting, stopping
+    POST /darkroom/api/comfy      {"action": "start"|"stop"}: llmctl starts or stops ComfyUI
+    GET  /darkroom/api/actions    what the page offers, and which of it ComfyUI can do now
+    GET  /darkroom/api/prompts    the library of prompts (darkroom_prompts.json) and the user's own, searched on the page
+    POST /darkroom/api/prompts    {"title", "action", "text", "options"}: keep one of the user's own
+    DELETE /darkroom/api/prompts/<id>
+    POST /darkroom/api/jobs       multipart: image (or from=<job id>), action, quality, text, n
+    GET  /darkroom/api/jobs       the jobs, newest first
+    GET  /darkroom/api/jobs/<id>  one job
+    GET  /darkroom/api/jobs/<id>/<input|result>[?thumb=1][&download=1]
+    POST /darkroom/api/jobs/<id>/cancel   stop a job that waits or runs
+    DELETE /darkroom/api/jobs/<id>
+    GET  /darkroom/api/push       the server's key for pushManager.subscribe
+    POST /darkroom/api/push       a browser's subscription: told when a job is done
+    DELETE /darkroom/api/push/<id>
 
 Unlike the image API it does not belong to the ComfyUI slot: it runs on its own
-(`llmctl fotos enable`, a user service with its own tunnel), so the page is
+(`llmctl darkroom enable`, a user service with its own tunnel), so the page is
 there with ComfyUI stopped and can start it. A job runs here, not in the
 browser: the picture goes up once, the server sends it to the image API and
 keeps the result, so a phone that locks its screen or loses the network finds
@@ -54,8 +54,8 @@ except ImportError:
 
 app = Flask(__name__)
 ARGS = argparse.Namespace()
-PAGE = Path(__file__).with_name("fotos.html")
-PROMPTS = Path(__file__).with_name("fotos_prompts.json")
+PAGE = Path(__file__).with_name("darkroom.html")
+PROMPTS = Path(__file__).with_name("darkroom_prompts.json")
 
 # Qwen-Image Edit works at the picture's own size, and its time grows faster
 # than the pixels: a weather change took 151 s at 1.6 MP, 62 s at 1.0 MP and
@@ -782,21 +782,28 @@ def run_llmctl(action):
 
 # ── endpoints ────────────────────────────────────────────────
 
-@app.get("/fotos")
+@app.get("/darkroom")
 def page():
     return Response(PAGE.read_text(), mimetype="text/html", headers={"Cache-Control": "no-cache"})
 
 
-@app.get("/fotos/")
+@app.get("/darkroom/")
 def page_slash():
     return page()
 
 
-@app.get("/fotos/manifest.webmanifest")
+# The page was "Fotos" at /fotos until 1.86; bookmarks and home screens still go there.
+@app.get("/fotos")
+@app.get("/fotos/")
+def old_page():
+    return Response(status=301, headers={"Location": "/darkroom"})
+
+
+@app.get("/darkroom/manifest.webmanifest")
 def manifest():
-    return jsonify({"name": "Fotos", "short_name": "Fotos", "start_url": "/fotos", "scope": "/fotos",
+    return jsonify({"name": "Darkroom", "short_name": "Darkroom", "start_url": "/darkroom", "scope": "/darkroom",
                     "display": "standalone", "background_color": "#161618", "theme_color": "#161618",
-                    "icons": [{"src": "/fotos/icon.svg", "sizes": "any", "type": "image/svg+xml"}]})
+                    "icons": [{"src": "/darkroom/icon.svg", "sizes": "any", "type": "image/svg+xml"}]})
 
 
 ICON = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
@@ -806,12 +813,12 @@ ICON = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
 <rect x="24" y="12" width="16" height="8" rx="3" fill="#fff"/></svg>"""
 
 
-@app.get("/fotos/icon.svg")
+@app.get("/darkroom/icon.svg")
 def icon():
     return Response(ICON, mimetype="image/svg+xml", headers={"Cache-Control": "max-age=86400"})
 
 
-@app.get("/fotos/api/status")
+@app.get("/darkroom/api/status")
 def status():
     api, comfy = api_status()
     state = _comfy["state"] or ("up" if api and comfy else "starting" if api else "down")
@@ -820,7 +827,7 @@ def status():
                     "slot": ARGS.comfy_slot})
 
 
-@app.post("/fotos/api/comfy")
+@app.post("/darkroom/api/comfy")
 def comfy():
     body = request.get_json(silent=True) or {}
     action = body.get("action")
@@ -863,9 +870,9 @@ def write_own(items):
     tmp.replace(path)
 
 
-@app.get("/fotos/api/prompts")
+@app.get("/darkroom/api/prompts")
 def prompts():
-    """The library of prompts the page searches (fotos_prompts.json), the
+    """The library of prompts the page searches (darkroom_prompts.json), the
     user's own first under their own topic."""
     try:
         data = json.loads(PROMPTS.read_text())
@@ -879,7 +886,7 @@ def prompts():
     return jsonify(data)
 
 
-@app.post("/fotos/api/prompts")
+@app.post("/darkroom/api/prompts")
 def save_prompt():
     f = request.get_json(silent=True) or {}
     title = " ".join(str(f.get("title") or "").split())[:60]
@@ -911,7 +918,7 @@ def save_prompt():
     return jsonify(item), 201
 
 
-@app.delete("/fotos/api/prompts/<pid>")
+@app.delete("/darkroom/api/prompts/<pid>")
 def delete_prompt(pid):
     with _own_lock:
         items = own_prompts()
@@ -922,7 +929,7 @@ def delete_prompt(pid):
     return jsonify({"deleted": pid})
 
 
-@app.get("/fotos/api/actions")
+@app.get("/darkroom/api/actions")
 def actions():
     have = None
     try:
@@ -1045,7 +1052,7 @@ def picture(field, from_field):
     return None, None
 
 
-@app.post("/fotos/api/jobs")
+@app.post("/darkroom/api/jobs")
 def create_job():
     try:
         f = request.form
@@ -1141,12 +1148,12 @@ def create_job():
         return error("ungültige Angabe")
 
 
-@app.get("/fotos/api/jobs")
+@app.get("/darkroom/api/jobs")
 def list_jobs():
     return jsonify([public(j) for j in all_jobs()[:60]])
 
 
-@app.get("/fotos/api/jobs/<jid>")
+@app.get("/darkroom/api/jobs/<jid>")
 def get_job(jid):
     try:
         job_path(jid)
@@ -1156,7 +1163,7 @@ def get_job(jid):
     return jsonify(public(job)) if job else error("no such job", 404)
 
 
-@app.get("/fotos/api/jobs/<jid>/<which>")
+@app.get("/darkroom/api/jobs/<jid>/<which>")
 def job_image(jid, which):
     try:
         d = job_path(jid)
@@ -1203,7 +1210,7 @@ def job_image(jid, which):
                      download_name=name + src.suffix)
 
 
-@app.post("/fotos/api/jobs/<jid>/cancel")
+@app.post("/darkroom/api/jobs/<jid>/cancel")
 def cancel_job(jid):
     """A waiting job is crossed out; a running one is asked to stop, and
     ComfyUI's current workflow interrupted — the image API's call then fails,
@@ -1260,7 +1267,7 @@ def write_subscriptions(items):
 def seen():
     """The page sends its push device's id while it is looked at: a job that
     ends then needs no notification on that device."""
-    dev = request.headers.get("X-Fotos-Device")
+    dev = request.headers.get("X-Darkroom-Device")
     if dev:
         _seen[dev[:32]] = time.time()
 
@@ -1279,9 +1286,9 @@ def message(job):
             body = f"{n} Stelle(n) gefunden" if n else "Keine Fehler gefunden"
         else:
             body = (text[:80] + ("…" if len(text) > 80 else "")) if text else "Zum Ansehen tippen"
-        return {"title": f"Fertig: {what}{took}", "body": body, "tag": job["id"], "url": f"/fotos#job={job['id']}"}
+        return {"title": f"Fertig: {what}{took}", "body": body, "tag": job["id"], "url": f"/darkroom#job={job['id']}"}
     return {"title": f"Fehlgeschlagen: {what}", "body": (job.get("error") or "")[:160],
-            "tag": job["id"], "url": f"/fotos#job={job['id']}"}
+            "tag": job["id"], "url": f"/darkroom#job={job['id']}"}
 
 
 def notify(jid):
@@ -1322,14 +1329,14 @@ def notify(jid):
     threading.Thread(target=go, daemon=True).start()
 
 
-@app.get("/fotos/api/push")
+@app.get("/darkroom/api/push")
 def push_info():
     if webpush is None:
         return jsonify({"available": False})
     return jsonify({"available": True, "key": webpush.public_key(push_key())})
 
 
-@app.post("/fotos/api/push")
+@app.post("/darkroom/api/push")
 def push_subscribe():
     if webpush is None:
         return error("Benachrichtigungen gehen hier nicht (Python-Paket cryptography fehlt)", 501)
@@ -1346,7 +1353,7 @@ def push_subscribe():
     return jsonify({"id": sid}), 201
 
 
-@app.delete("/fotos/api/push/<sid>")
+@app.delete("/darkroom/api/push/<sid>")
 def push_unsubscribe(sid):
     with _push_lock:
         items = subscriptions()
@@ -1354,21 +1361,21 @@ def push_unsubscribe(sid):
     return jsonify({"deleted": sid})
 
 
-SW = """// Fotos: notifications when a job is done. No fetch handler: the page is not cached.
+SW = """// Darkroom: notifications when a job is done. No fetch handler: the page is not cached.
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 self.addEventListener("push", (e) => {
   let m = {};
-  try { m = e.data.json(); } catch (err) { m = { title: "Fotos", body: e.data ? e.data.text() : "" }; }
-  e.waitUntil(self.registration.showNotification(m.title || "Fotos", {
-    body: m.body || "", tag: m.tag, data: { url: m.url || "/fotos" }, icon: "/fotos/icon.svg" }));
+  try { m = e.data.json(); } catch (err) { m = { title: "Darkroom", body: e.data ? e.data.text() : "" }; }
+  e.waitUntil(self.registration.showNotification(m.title || "Darkroom", {
+    body: m.body || "", tag: m.tag, data: { url: m.url || "/darkroom" }, icon: "/darkroom/icon.svg" }));
 });
 self.addEventListener("notificationclick", (e) => {
   e.notification.close();
-  const url = new URL((e.notification.data && e.notification.data.url) || "/fotos", self.location.origin).href;
+  const url = new URL((e.notification.data && e.notification.data.url) || "/darkroom", self.location.origin).href;
   e.waitUntil((async () => {
     for (const c of await self.clients.matchAll({ type: "window", includeUncontrolled: true })) {
-      if (new URL(c.url).pathname.startsWith("/fotos") && "navigate" in c) { await c.focus(); return c.navigate(url); }
+      if (new URL(c.url).pathname.startsWith("/darkroom") && "navigate" in c) { await c.focus(); return c.navigate(url); }
     }
     return self.clients.openWindow(url);
   })());
@@ -1376,14 +1383,14 @@ self.addEventListener("notificationclick", (e) => {
 """
 
 
-@app.get("/fotos/sw.js")
+@app.get("/darkroom/sw.js")
 def service_worker():
-    # at /fotos/, but for the page at /fotos as well
+    # at /darkroom/, but for the page at /darkroom as well
     return Response(SW, mimetype="text/javascript",
-                    headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/fotos"})
+                    headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/darkroom"})
 
 
-@app.delete("/fotos/api/jobs/<jid>")
+@app.delete("/darkroom/api/jobs/<jid>")
 def delete_job(jid):
     try:
         d = job_path(jid)
@@ -1429,7 +1436,7 @@ def main():
             update_job(job["id"], state="failed", error="vom Neustart des Servers unterbrochen")
     threading.Thread(target=worker, daemon=True).start()
     threading.Thread(target=janitor, daemon=True).start()
-    print(f"Fotos on http://{ARGS.host}:{ARGS.port}/fotos — image API {ARGS.api}, "
+    print(f"Darkroom on http://{ARGS.host}:{ARGS.port}/darkroom — image API {ARGS.api}, "
           f"ComfyUI on slot {ARGS.comfy_slot}, jobs in {jobs_dir()}", flush=True)
     os.environ.setdefault("PYTHONUNBUFFERED", "1")
     try:

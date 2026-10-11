@@ -6,11 +6,11 @@
 <meta name="theme-color" content="#161618">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Fotos">
-<link rel="manifest" href="/fotos/manifest.webmanifest">
-<link rel="icon" href="/fotos/icon.svg">
-<link rel="apple-touch-icon" href="/fotos/icon.svg">
-<title>Fotos</title>
+<meta name="apple-mobile-web-app-title" content="Darkroom">
+<link rel="manifest" href="/darkroom/manifest.webmanifest">
+<link rel="icon" href="/darkroom/icon.svg">
+<link rel="apple-touch-icon" href="/darkroom/icon.svg">
+<title>Darkroom</title>
 <style>
 :root {
   --bg: #f4f3f0; --panel: #ffffff; --text: #1c1c1e; --muted: #6c6c72; --line: #e0dfda;
@@ -238,7 +238,7 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
 </head>
 <body>
 <header>
-  <h1>Fotos</h1>
+  <h1>Darkroom</h1>
   <button class="chip" id="chip" type="button"><span class="dot" id="dot"></span><span id="chipText">…</span></button>
 </header>
 
@@ -447,7 +447,7 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
-const API = "/fotos/api";
+const API = "/darkroom/api";
 const S = {
   comfy: "down", message: "", mode: "edit", unc: false,
   actions: [], editModels: [], genModels: [], aspects: [],
@@ -459,8 +459,11 @@ const S = {
 };
 const STATE_TEXT = { up: "Bereit", down: "Aus", starting: "Startet …", stopping: "Stoppt …" };
 
-function store(key, value) { try { localStorage.setItem("fotos." + key, value); } catch (e) {} }
-function recall(key) { try { return localStorage.getItem("fotos." + key); } catch (e) { return null; } }
+function store(key, value) { try { localStorage.setItem("darkroom." + key, value); } catch (e) {} }
+// The page was "Fotos" at /fotos until 1.86: what it kept then still counts.
+function recall(key) {
+  try { return localStorage.getItem("darkroom." + key) ?? localStorage.getItem("fotos." + key); } catch (e) { return null; }
+}
 
 function toast(text, ms = 2600) {
   const t = $("toast"); t.textContent = text; t.classList.add("on");
@@ -473,7 +476,7 @@ function short(s) { return s < 90 ? s + " s" : Math.round(s / 60) + " min"; }
 
 async function api(path, opts = {}) {
   const dev = recall("pushId");
-  if (dev && !document.hidden) opts.headers = Object.assign({ "X-Fotos-Device": dev }, opts.headers || {});
+  if (dev && !document.hidden) opts.headers = Object.assign({ "X-Darkroom-Device": dev }, opts.headers || {});
   const r = await fetch(API + path, opts);
   let body = null;
   try { body = await r.json(); } catch (e) {}
@@ -492,7 +495,7 @@ async function refreshStatus() {
     const was = S.comfy;
     S.comfy = s.comfy; S.message = s.message || "";
     if (was !== "up" && S.comfy === "up") loadActions();
-  } catch (e) { S.comfy = "unknown"; S.message = "Der Fotos-Dienst antwortet nicht."; }
+  } catch (e) { S.comfy = "unknown"; S.message = "Der Darkroom-Dienst antwortet nicht."; }
   renderStatus();
 }
 
@@ -1112,7 +1115,7 @@ async function refreshJobs() {
     else if (j) updateWaiting(j);
   }
   const running = S.jobs.filter((j) => j.state === "running" || j.state === "queued").length;
-  document.title = running ? "Fotos (" + running + " läuft)" : "Fotos";
+  document.title = running ? "Darkroom (" + running + " läuft)" : "Darkroom";
 }
 
 function elapsed(job) {
@@ -1448,7 +1451,7 @@ async function removeJob() {
 
 // ── notifications ────────────────────────────────────────
 // Web Push: the service worker shows what the server sends when a job ends.
-// The server leaves out a device whose page is being looked at (X-Fotos-Device).
+// The server leaves out a device whose page is being looked at (X-Darkroom-Device).
 const PUSH = { key: null };
 function pushSupported() { return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window; }
 function isIOS() { return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1); }
@@ -1471,11 +1474,27 @@ async function initPush() {
       : "Dieser Browser kann keine Benachrichtigungen.";
     return;
   }
-  const reg = await navigator.serviceWorker.getRegistration("/fotos");
+  await dropOldPush();
+  const reg = await navigator.serviceWorker.getRegistration("/darkroom");
   const sub = reg && await reg.pushManager.getSubscription();
   $("push").checked = !!(sub && recall("pushId") && Notification.permission === "granted");
   if (!$("push").checked && recall("pushId")) store("pushId", "");
   if (Notification.permission === "denied") $("pushNote").textContent = "Im Browser blockiert – in den Website-Einstellungen erlauben.";
+}
+
+// Notifications switched on at /fotos (before 1.86) belong to a worker there:
+// gone, and the switch off, until they are switched on here.
+async function dropOldPush() {
+  try {
+    const old = await navigator.serviceWorker.getRegistration("/fotos/");
+    if (!old || !old.scope.endsWith("/fotos")) return;
+    const sub = await old.pushManager.getSubscription();
+    if (sub) await sub.unsubscribe();
+    await old.unregister();
+    const id = recall("pushId");
+    if (id) await api("/push/" + encodeURIComponent(id), { method: "DELETE" }).catch(() => {});
+    store("pushId", "");
+  } catch (e) {}
 }
 
 async function setPush(on) {
@@ -1483,7 +1502,7 @@ async function setPush(on) {
   try {
     if (on) {
       if (await Notification.requestPermission() !== "granted") throw new Error("Benachrichtigungen sind nicht erlaubt.");
-      const reg = await navigator.serviceWorker.register("/fotos/sw.js", { scope: "/fotos" });
+      const reg = await navigator.serviceWorker.register("/darkroom/sw.js", { scope: "/darkroom" });
       await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription()
         || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64bytes(PUSH.key) });
@@ -1491,7 +1510,7 @@ async function setPush(on) {
       store("pushId", r.id); toast("Benachrichtigungen an");
     } else {
       const id = recall("pushId"); store("pushId", "");
-      const reg = await navigator.serviceWorker.getRegistration("/fotos");
+      const reg = await navigator.serviceWorker.getRegistration("/darkroom");
       const sub = reg && await reg.pushManager.getSubscription();
       if (sub) await sub.unsubscribe();
       if (id) await api("/push/" + encodeURIComponent(id), { method: "DELETE" });

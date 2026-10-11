@@ -46,9 +46,11 @@ install:
 	install -Dm644 images_server.py $(LIBDIR)/images_server.py
 	install -Dm644 hf_parts.py $(LIBDIR)/hf_parts.py
 	install -Dm644 images_repair.html $(LIBDIR)/images_repair.html
-	install -Dm644 fotos_server.py $(LIBDIR)/fotos_server.py
-	install -Dm644 fotos.html $(LIBDIR)/fotos.html
-	install -Dm644 fotos_prompts.json $(LIBDIR)/fotos_prompts.json
+	install -Dm644 darkroom_server.py $(LIBDIR)/darkroom_server.py
+	install -Dm644 darkroom.html $(LIBDIR)/darkroom.html
+	install -Dm644 darkroom_prompts.json $(LIBDIR)/darkroom_prompts.json
+	# the page was called fotos until 1.86
+	rm -f $(LIBDIR)/fotos_server.py $(LIBDIR)/fotos.html $(LIBDIR)/fotos_prompts.json
 	install -Dm644 webpush.py $(LIBDIR)/webpush.py
 	install -Dm644 tts_voice_design.py $(LIBDIR)/tts_voice_design.py
 	install -Dm644 -t $(SHAREDIR)/templates templates/*
