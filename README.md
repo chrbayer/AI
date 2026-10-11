@@ -2160,6 +2160,15 @@ the desk see the same, and stand first under *Mine* (*Eigene*), as written,
 in either language; × and a second tap deletes one. The second photo
 (*picture 2*, *Animate*'s end frame) can be taken with the camera, too.
 
+**A history per login.** Behind the server's Basic Auth, the vhost passes the
+login on (`RequestHeader set X-Remote-User "%{REMOTE_USER}s"` in
+`<Location /darkroom>`, see `deploy/vps-comfy-vhost.conf`; it overwrites a
+header the browser sent). Then each login sees its own jobs, own templates and
+notifications — another's job is not there (404), nor can it be taken as a
+source picture. The page at 127.0.0.1 (no login) sees everything, and jobs
+and templates from before have no owner and stay shared. Without the vhost
+line all logins share one history, as before.
+
 **Recipes.** A fifth group, *Recipes* (*Rezepte*), runs several actions one
 after the other, each on the result of the one before: *Do up an old photo*
 (restore → colorize → upscale), *Bring an old photo to life* (restore →

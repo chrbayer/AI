@@ -645,6 +645,47 @@ class Darkroom(unittest.TestCase):
         self.assertEqual(acts["recipe-alive"]["steps"], ["restore", "colorize", "animate"])
         self.assertTrue(acts["recipe-alive"]["video"])
 
+    def test_each_login_has_its_own_history_templates_and_pushes(self):
+        from unittest import mock
+        client = darkroom.app.test_client()
+        A, B = {"X-Remote-User": "anna"}, {"X-Remote-User": "ben"}
+        r = client.post("/darkroom/api/jobs", data={"action": "edit", "text": "x", "image": (io.BytesIO(self.jpeg(64, 64)), "a.jpg")},
+                        headers=A, content_type="multipart/form-data")
+        jid = r.get_json()[0]["id"]
+        while not darkroom._queue.empty():
+            darkroom._queue.get_nowait()
+        old = darkroom.new_job({"action": "edit", "label": "x", "text": "from before"})            # no user: shared
+        self.assertEqual(darkroom.read_job(jid)["user"], "anna")
+        ids = lambda h: {j["id"] for j in client.get("/darkroom/api/jobs", headers=h).get_json()}
+        self.assertEqual(ids(A), {jid, old["id"]})
+        self.assertEqual(ids(B), {old["id"]})
+        self.assertEqual(ids({}), {jid, old["id"]})                        # the page without a login sees all
+        for path in (f"/darkroom/api/jobs/{jid}", f"/darkroom/api/jobs/{jid}/input"):
+            self.assertEqual(client.get(path, headers=B).status_code, 404)
+            self.assertEqual(client.get(path, headers=A).status_code, 200)
+        self.assertEqual(client.delete(f"/darkroom/api/jobs/{jid}", headers=B).status_code, 404)
+        self.assertEqual(client.post(f"/darkroom/api/jobs/{jid}/star", headers=B, json={"on": True}).status_code, 404)
+        (darkroom.job_path(jid) / "result.png").write_bytes(self.jpeg(64, 64)); darkroom.update_job(jid, state="done")
+        r = client.post("/darkroom/api/jobs", data={"action": "upscale", "from": jid}, headers=B)
+        self.assertEqual(r.status_code, 400)                              # not another login's picture either
+        # templates
+        client.post("/darkroom/api/prompts", json={"title": "Annas", "action": "edit", "text": "x"}, headers=A)
+        own = lambda h: [p["title"] for p in client.get("/darkroom/api/prompts", headers=h).get_json()["prompts"] if p.get("own")]
+        self.assertEqual((own(A), own(B), own({})), (["Annas"], [], ["Annas"]))
+        pid = next(p["id"] for p in darkroom.own_prompts())
+        self.assertEqual(client.delete(f"/darkroom/api/prompts/{pid}", headers=B).status_code, 404)
+        # pushes: anna's job to anna's devices and the shared ones, not to ben's
+        subs = [{"id": "a", "user": "anna", "subscription": {}}, {"id": "b", "user": "ben", "subscription": {}},
+                {"id": "c", "subscription": {}}]
+        sent = []
+        darkroom.update_job(jid, state="done", started=1, finished=2)
+        with mock.patch.object(darkroom, "webpush", mock.Mock(send=lambda sub, payload, key: sent.append(sub) or 201)), \
+             mock.patch.object(darkroom, "subscriptions", return_value=subs), \
+             mock.patch.object(darkroom, "push_key", return_value="k"), \
+             mock.patch.object(darkroom.threading, "Thread", side_effect=lambda target, daemon: mock.Mock(start=target)):
+            darkroom.notify(jid)
+        self.assertEqual(len(sent), 2)
+
     def test_the_marked_spot_is_shown_to_the_model_in_red(self):
         from PIL import Image
         photo = io.BytesIO(); Image.new("RGB", (100, 100), (128, 128, 128)).save(photo, "PNG")

@@ -476,6 +476,27 @@ class Refused(Exception):
     pass
 
 
+# ── who asks ─────────────────────────────────────────────────
+# Behind the server's Basic Auth, Apache passes the login on
+# (RequestHeader set X-Remote-User "%{REMOTE_USER}s", which also overwrites
+# one the browser sent). With it each login has its own history, templates and
+# notifications; without it — the page at 127.0.0.1, or a vhost without the
+# line — everything is everyone's, as before. Jobs and templates from before
+# have no user and stay shared.
+def current_user():
+    try:
+        u = (request.headers.get("X-Remote-User") or "").strip()
+    except RuntimeError:                      # no request: the worker
+        return None
+    return u[:64] if u and u != "(null)" else None
+
+
+def visible(item):
+    """Whether the one asking may see a job, a template or a subscription."""
+    u = current_user()
+    return u is None or item.get("user") in (None, u)
+
+
 def error(message, status=400):
     return jsonify({"error": tr(message)}), status
 
@@ -1199,7 +1220,7 @@ def prompts():
                            for p in data["prompts"]]
     for p in data["prompts"]:
         p.pop("en", None)
-    own = own_prompts()
+    own = [p for p in own_prompts() if visible(p)]
     if own:
         data["topics"] = [tr(OWN_TOPIC)] + data["topics"]
         data["prompts"] = [dict(p, topic=tr(OWN_TOPIC), own=True, tags=[]) for p in own] + data["prompts"]
@@ -1229,9 +1250,11 @@ def save_prompt():
         options["keep"] = o["keep"]
     with _own_lock:
         items = own_prompts()
-        if len(items) >= OWN_MAX:
+        if len([p for p in items if p.get("user") == current_user()]) >= OWN_MAX:
             return error(f"Schon {OWN_MAX} eigene Vorlagen – bitte erst welche löschen", 409)
         item = {"id": uuid.uuid4().hex[:8], "title": title, "action": action, "text": text}
+        if current_user():
+            item["user"] = current_user()
         if options:
             item["options"] = options
         write_own([item] + items)
@@ -1242,7 +1265,7 @@ def save_prompt():
 def delete_prompt(pid):
     with _own_lock:
         items = own_prompts()
-        rest = [p for p in items if p.get("id") != pid]
+        rest = [p for p in items if p.get("id") != pid or not visible(p)]
         if len(rest) == len(items):
             return error("Diese Vorlage gibt es nicht", 404)
         write_own(rest)
@@ -1313,6 +1336,8 @@ def new_job(fields, files=()):
     for name, body in files:
         (d / name).write_bytes(body)
     job = dict(fields, id=jid, state="queued", created=time.time())
+    if current_user():
+        job["user"] = current_user()
     with _jobs_lock:
         write_job(job)
     _queue.put(jid)
@@ -1322,7 +1347,7 @@ def new_job(fields, files=()):
 def repair_job(action, f):
     """Fehler suchen on a finished picture, or Reparieren from a check's boxes."""
     parent = read_job(f.get("from") or "")
-    if parent is None or parent["state"] != "done" or parent.get("video"):
+    if parent is None or not visible(parent) or parent["state"] != "done" or parent.get("video"):
         raise Refused("das Bild gibt es nicht (mehr)")
     if action == "check" and parent.get("png"):
         raise Refused("ein freigestelltes Bild lässt sich nicht prüfen")   # Inpaint has no background there
@@ -1414,7 +1439,7 @@ def picture(field, from_field):
     parent = request.form.get(from_field)
     if parent:
         src = job_path(parent) / "result.png"
-        if not src.is_file():
+        if not src.is_file() or not visible(read_job(parent) or {}):
             raise Refused("dieses Ergebnis gibt es nicht mehr")
         return src.read_bytes(), parent
     return None, None
@@ -1524,7 +1549,7 @@ def create_job():
 @app.get("/darkroom/api/jobs")
 def list_jobs():
     """The newest 60, and the starred ones older than that."""
-    jobs = all_jobs()
+    jobs = [j for j in all_jobs() if visible(j)]
     return jsonify([public(j) for j in jobs[:60] + [j for j in jobs[60:] if j.get("star")]])
 
 
@@ -1651,6 +1676,20 @@ def write_subscriptions(items):
 
 
 @app.before_request
+def only_ones_own():
+    """A job of another login is not there for this one (every route with <jid>)."""
+    jid = (request.view_args or {}).get("jid")
+    if jid and current_user():
+        try:
+            job = read_job(jid)
+        except Refused:
+            return None
+        if job is not None and not visible(job):
+            return error("no such job", 404)
+    return None
+
+
+@app.before_request
 def seen():
     """The page sends its push device's id while it is looked at: a job that
     ends then needs no notification on that device."""
@@ -1705,6 +1744,8 @@ def notify(jid):
         for sub in subs:
             if time.time() - _seen.get(sub["id"], 0) < SEEN_FOR:
                 continue
+            if job.get("user") and sub.get("user") not in (None, job["user"]):
+                continue                        # another login's job
             try:
                 status = webpush.send(sub["subscription"], payloads[sub.get("lang", "de")], key)
             except Exception as e:                                # noqa: BLE001
@@ -1739,7 +1780,8 @@ def push_subscribe():
     with _push_lock:
         items = [s for s in subscriptions() if s["id"] != sid]
         items.append({"id": sid, "subscription": {"endpoint": endpoint, "keys": {"p256dh": keys["p256dh"], "auth": keys["auth"]}},
-                      "created": time.time(), "agent": request.headers.get("User-Agent", "")[:200], "lang": lang()})
+                      "created": time.time(), "agent": request.headers.get("User-Agent", "")[:200], "lang": lang(),
+                      **({"user": current_user()} if current_user() else {})})
         write_subscriptions(items[-20:])
     return jsonify({"id": sid}), 201
 
