@@ -217,6 +217,8 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
 .crop .kbox i[data-h="sw"] { left: -6px; bottom: -6px; border-width: 0 0 4px 4px; }
 .crop .kbox i[data-h="se"] { right: -6px; bottom: -6px; border-width: 0 4px 4px 0; }
 .crop .kbox i::after { content: ""; position: absolute; inset: -14px; }
+.batch { display: flex; gap: 6px; overflow-x: auto; margin-top: 8px; }
+.batch img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; flex: none; }
 .ratios { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; padding: 4px 12px 0; }
 .ratios button { background: rgba(255,255,255,.14); border: none; color: #fff; border-radius: 999px; padding: 7px 13px; font-size: 14px; }
 .ratios button[aria-pressed="true"] { background: #fff; color: #000; }
@@ -283,7 +285,7 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
   <section class="card" id="editPicture">
     <h2>Bild</h2>
     <div class="pick" id="pick">
-      <label><input type="file" accept="image/*" data-slot="1">
+      <label><input type="file" accept="image/*" data-slot="1" multiple>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg>
         Aus der Galerie</label>
       <label><input type="file" accept="image/*" capture="environment" data-slot="1">
@@ -292,6 +294,7 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
     </div>
     <div class="source hidden" id="source">
       <img id="sourceImg" alt="Ausgangsbild">
+      <div class="batch hidden" id="batchThumbs"></div>
       <div class="row"><span id="sourceInfo"></span><span><button class="link" id="sourceCrop" type="button">Zuschneiden</button>
         <button class="link" id="sourceClear" type="button" style="margin-left:14px">Anderes Bild</button></span></div>
     </div>
@@ -545,7 +548,11 @@ const EN = {
   "✨ Ausbauen": "✨ Expand", "Jetzt ausbauen": "Expand it now",
   "Das Sprachmodell startet – beim ersten Mal etwa 15 Sekunden …": "The language model is starting – about 15 seconds the first time …",
   "Ausgebaut – lesen, anpassen, dann los": "Expanded – read it, change it, then go",
-  "{n} von {m}": "{n} of {m}", "Zuschneiden": "Crop", "Zuschneiden und drehen": "Crop and turn", "Frei": "Free",
+  "{n} von {m}": "{n} of {m}", "{n} Fotos": "{n} photos",
+  "{n} Fotos – die Aktion läuft für jedes": "{n} photos – the action runs for each",
+  "Höchstens {n} Fotos auf einmal – die ersten {n} sind gewählt.": "At most {n} photos at once – the first {n} are chosen.",
+  "Übermalen geht nur mit einem Foto – erst eins wählen.": "Paint over takes one photo only – choose one first.",
+  "Wird hochgeladen … {i} von {n}": "Uploading … {i} of {n}", "{n} Aufträge in der Warteschlange": "{n} jobs in the queue", "Zuschneiden": "Crop", "Zuschneiden und drehen": "Crop and turn", "Frei": "Free",
   "Links drehen": "Turn left", "Rechts drehen": "Turn right", "Favoriten": "Favourites", "Favorit": "Favourite",
   "Noch keine Favoriten – im Ergebnis ☆ antippen.": "No favourites yet – tap ☆ on a result.",
   "Favorit – wird nie automatisch gelöscht": "Favourite – never deleted by itself", "Kein Favorit mehr": "No longer a favourite", "Behalten": "Keep", "Vorige Variante": "Previous variant", "Nächste Variante": "Next variant",
@@ -843,7 +850,7 @@ function renderEdit() {
     renderModels("editModels", S.editModels, S.editModel);
   }
   const m = S.editModels.find((x) => x.id === S.editModel);
-  show("secondWrap", a.second && (a.video ? a.second_available !== false : !m || m.images > 1));
+  show("secondWrap", !S.batch && a.second && (a.video ? a.second_available !== false : !m || m.images > 1));
   $("secondLabel").textContent = a.second_label || t("Zweites Foto (optional) – im Text „Bild 2“");
   show("secondsWrap", a.video && !a.audio); press("seconds", "v", S.seconds);
   show("variantsWrap", a.variants); press("variants", "n", S.variants);
@@ -931,8 +938,30 @@ async function loadFile(file, slot) {
 
 function clearInputs() { for (const i of document.querySelectorAll("input[type=file]")) i.value = ""; }
 
+// Several photos from the gallery: the same action for each, one job each.
+const BATCH_MAX = 20;
+async function loadFiles(files, slot) {
+  if (!files || !files.length) return;
+  if (slot !== 1 || files.length === 1) return loadFile(files[0], slot);
+  $("formErr").textContent = "";
+  const list = [];
+  for (const f of [...files].slice(0, BATCH_MAX)) {
+    try { list.push(await readPicture(f)); } catch (e) {}
+  }
+  if (!list.length) { $("formErr").textContent = t("Das Bild lässt sich nicht öffnen."); return; }
+  if (files.length > BATCH_MAX) toast(t("Höchstens {n} Fotos auf einmal – die ersten {n} sind gewählt.", { n: BATCH_MAX }), 4000);
+  setSource(list[0]); S.batch = list;
+  const box = $("batchThumbs"); box.innerHTML = "";
+  for (const p of list) { const im = document.createElement("img"); im.src = p.url; im.alt = ""; box.appendChild(im); }
+  show("batchThumbs", true); show("sourceImg", false); show("sourceCrop", false);
+  $("sourceInfo").textContent = t("{n} Fotos – die Aktion läuft für jedes", { n: list.length });
+  renderEdit();
+}
+
 function setSource(src) {
   if (S.source && S.source.blob) URL.revokeObjectURL(S.source.url);
+  for (const p of S.batch || []) if (p !== S.source && p.blob) URL.revokeObjectURL(p.url);
+  S.batch = null; show("batchThumbs", false); show("sourceImg", true); show("sourceCrop", true);
   S.source = src; S.mask = null; P.strokes = [];
   show("pick", !src); show("source", !!src);
   if (src) {
@@ -1348,7 +1377,9 @@ function renderGo() {
   }
   if (!S.source) { b.textContent = t("Bild wählen"); b.disabled = true; return; }
   const a = S.actions.find((x) => x.id === S.action);
-  b.textContent = (a ? a.label + (a.variants && S.variants > 1 ? " · " + t("{n} Varianten", { n: S.variants }) : "") : t("Los")) + " ›"; b.disabled = !a;
+  b.textContent = (a ? a.label + (a.variants && S.variants > 1 ? " · " + t("{n} Varianten", { n: S.variants }) : "")
+                     + (S.batch ? " · " + t("{n} Fotos", { n: S.batch.length }) : "") : t("Los")) + " ›";
+  b.disabled = !a;
 }
 
 function appendPicture(fd, src, field, fromField) {
@@ -1372,6 +1403,7 @@ async function go() {
     const a = S.actions.find((x) => x.id === S.action);
     const text = $("text").value.trim();
     if (a.text && !["optional", "replace"].includes(a.text) && !text) { $("formErr").textContent = t("{what} – bitte ausfüllen.", { what: a.text_label }); $("text").focus(); return; }
+    if (a.mask && S.batch) { $("formErr").textContent = t("Übermalen geht nur mit einem Foto – erst eins wählen."); return; }
     if (a.mask && !S.mask) { $("formErr").textContent = t("Bitte erst die Stelle mit dem Finger markieren."); return; }
     fd.append("action", a.id); fd.append("quality", S.quality); fd.append("text", text);
     if (a.models) fd.append("model", S.editModel);
@@ -1384,16 +1416,28 @@ async function go() {
       if (!S.voice) { $("formErr").textContent = t("Bitte erst etwas aufnehmen oder eine Audiodatei wählen."); return; }
       fd.append("audio", S.voice.blob, S.voice.name);
     }
-    appendPicture(fd, S.source, "image", "from");
     const m = S.editModels.find((x) => x.id === S.editModel);
-    if (a.second && S.source2 && (a.video || !m || m.images > 1)) appendPicture(fd, S.source2, "image2", "from2");
+    if (a.second && S.source2 && !S.batch && (a.video || !m || m.images > 1)) appendPicture(fd, S.source2, "image2", "from2");
     if (a.mask) fd.append("mask", S.mask.blob, "mask.png");
   }
-  const b = $("goBtn"); b.disabled = true; b.textContent = t("Wird hochgeladen …");
+  // one request per picture: the same fields, each its own source
+  const sources = S.mode === "generate" ? [null] : (S.batch || [S.source]);
+  const b = $("goBtn"); b.disabled = true;
+  let made = [];
   try {
-    const jobs = await api("/jobs", { method: "POST", body: fd });
-    S.jobs = jobs.concat(S.jobs); renderJobs(); openViewer(jobs[0].id);
+    for (const [i, src] of sources.entries()) {
+      b.textContent = sources.length > 1 ? t("Wird hochgeladen … {i} von {n}", { i: i + 1, n: sources.length }) : t("Wird hochgeladen …");
+      const one = new FormData();
+      for (const [k, v] of fd.entries()) one.append(k, v);
+      if (src) appendPicture(one, src, "image", "from");
+      made = made.concat(await api("/jobs", { method: "POST", body: one }));
+    }
   } catch (e) { $("formErr").textContent = e.message; }
+  if (made.length) {
+    S.jobs = made.concat(S.jobs); renderJobs();
+    if (sources.length > 1) { toast(t("{n} Aufträge in der Warteschlange", { n: made.length })); $("jobs").scrollIntoView({ behavior: "smooth" }); }
+    else openViewer(made[0].id);
+  }
   renderGo(); schedule();
 }
 
@@ -1888,7 +1932,7 @@ async function openFromHash() {
 }
 
 // ── wiring ───────────────────────────────────────────────
-for (const i of document.querySelectorAll("input[type=file]")) i.onchange = (e) => loadFile(e.target.files[0], Number(i.dataset.slot));
+for (const i of document.querySelectorAll("input[type=file]")) i.onchange = (e) => loadFiles(e.target.files, Number(i.dataset.slot));
 $("sourceClear").onclick = () => setSource(null);
 $("source2Clear").onclick = () => setSource2(null);
 for (const b of $("mode").children) b.onclick = () => setMode(b.dataset.mode);

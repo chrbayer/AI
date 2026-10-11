@@ -2160,6 +2160,12 @@ the desk see the same, and stand first under *Mine* (*Eigene*), as written,
 in either language; × and a second tap deletes one. The second photo
 (*picture 2*, *Animate*'s end frame) can be taken with the camera, too.
 
+**Several photos at once.** Choosing several pictures in the gallery (up to
+20) puts them all in as source pictures, shown as a row: the action runs for
+each, one job per picture in the queue (three photos coloured: three jobs,
+the first running before the last was up). Not for *Paint over* (its marking
+belongs to one picture), and without a second photo.
+
 **Crop and turn.** *Crop* (*Zuschneiden*) beside the source picture opens it
 with a frame to drag by its middle and its corners, free or held to 1:1, 4:3,
 3:4, 16:9 or 9:16, and quarter turns either way; *Done* makes the cut-out the
