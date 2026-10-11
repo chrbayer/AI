@@ -21,7 +21,7 @@
 #         Slots are not a fixed set — any N the ports have room for works.
 
 PROG=llmctl
-LLMCTL_VERSION=1.86.0
+LLMCTL_VERSION=1.87.0
 LLMCTL_REPO="chrbayer/AI"          # its releases (vX.Y.Z) are what self-update and outdated follow
 
 # ── Where things live ───────────────────────────────────────
@@ -4649,7 +4649,7 @@ cmd_darkroom() {
                 --api "http://127.0.0.1:$(( PORT_BASE_PROXY + DARKROOM_SLOT ))" \
                 --comfy "http://127.0.0.1:$(( PORT_BASE_SERVER + DARKROOM_SLOT ))" \
                 --comfy-slot "$DARKROOM_SLOT" --comfy-model "$DARKROOM_MODEL" --vision-slot "$DARKROOM_VISION_SLOT" \
-                --llmctl "$(readlink -f "${BASH_SOURCE[0]}")" --data "$DARKROOM_DIR"
+                --llmctl "$(readlink -f "${BASH_SOURCE[0]}")" --data "$DARKROOM_DIR" --docs "$SHARE_DIR/docs"
             ;;
         key)
             _darkroom_migrate
