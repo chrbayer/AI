@@ -26,6 +26,10 @@ paint_input-e3a6d72fd3c2.jpg
 paint_result-25975f9d5f60.jpg
 pose_input-6a1713f7ee11.jpg
 pose_result-d590a1314f38.jpg
+recipe_1-1a038f44e73d.jpg
+recipe_2-330a24555e2b.jpg
+recipe_3-3577f6ff398c.jpg
+recipe_input-4cc743d02dd0.jpg
 remove_input-17f53b5f7beb.jpg
 remove_result-c63097a06f07.jpg
 repair_result-3d810b33fbb7.jpg

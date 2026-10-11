@@ -964,6 +964,42 @@
           ]
         },
         {
+          "id": "recipes",
+          "title": "Recipes: several steps as one",
+          "public": true,
+          "text": "A recipe runs several actions one after the other, each on the result of the one before, without waiting in between: *Do up an old photo* (restore → colorize → upscale), *Bring an old photo to life* (restore → colorize → animate), *For printing* (faces → upscale). Each step is a card of its own (step 1/3 …), ‹ › in the viewer go through them, a cancelled or failed step stops the rest, and the phone is told once, at the end. The damaged wedding photo: restored 57 s, coloured 22 s, enlarged to 3044×4096 in 138 s — under four minutes, one tap. With several photos chosen, each gets its recipe.",
+          "de": {
+            "title": "Rezepte: mehrere Schritte in einem",
+            "text": "Ein Rezept lässt mehrere Aktionen nacheinander laufen, jede auf dem Ergebnis der vorigen, ohne Warten dazwischen: *Altes Foto aufbereiten* (Restaurieren → Kolorieren → Vergrößern), *Altes Foto lebendig* (Restaurieren → Kolorieren → Animieren), *Zum Drucken* (Gesichter → Vergrößern). Jeder Schritt ist eine eigene Karte (Schritt 1/3 …), ‹ › im Betrachter blättert durch, ein abgebrochener oder fehlgeschlagener Schritt hält den Rest an, und das Handy meldet sich einmal, am Ende. Das beschädigte Hochzeitsfoto: restauriert 57 s, koloriert 22 s, auf 3044×4096 vergrößert in 138 s — keine vier Minuten, ein Tipp. Mit mehreren gewählten Fotos bekommt jedes sein Rezept."
+          },
+          "media": [
+            {
+              "file": "bench:darkroom/recipe_input.jpg",
+              "caption": "Before",
+              "caption_de": "Vorher",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/recipe_1.jpg",
+              "caption": "1 · Restored",
+              "caption_de": "1 · Restauriert",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/recipe_2.jpg",
+              "caption": "2 · Coloured",
+              "caption_de": "2 · Koloriert",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/recipe_3.jpg",
+              "caption": "3 · Enlarged, 3044×4096",
+              "caption_de": "3 · Vergrößert, 3044×4096",
+              "public": true
+            }
+          ]
+        },
+        {
           "id": "animate",
           "title": "Animate",
           "public": true,

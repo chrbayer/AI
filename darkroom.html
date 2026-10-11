@@ -548,7 +548,7 @@ const EN = {
   "✨ Ausbauen": "✨ Expand", "Jetzt ausbauen": "Expand it now",
   "Das Sprachmodell startet – beim ersten Mal etwa 15 Sekunden …": "The language model is starting – about 15 seconds the first time …",
   "Ausgebaut – lesen, anpassen, dann los": "Expanded – read it, change it, then go",
-  "{n} von {m}": "{n} of {m}", "{n} Fotos": "{n} photos",
+  "{n} von {m}": "{n} of {m}", "Wartet auf den Schritt davor.": "Waits for the step before.", "Schritt {n} von {m}": "Step {n} of {m}", "Schritt {n}/{m}": "step {n}/{m}", "{n} Fotos": "{n} photos",
   "{n} Fotos – die Aktion läuft für jedes": "{n} photos – the action runs for each",
   "Höchstens {n} Fotos auf einmal – die ersten {n} sind gewählt.": "At most {n} photos at once – the first {n} are chosen.",
   "Übermalen geht nur mit einem Foto – erst eins wählen.": "Paint over takes one photo only – choose one first.",
@@ -852,7 +852,7 @@ function renderEdit() {
   const m = S.editModels.find((x) => x.id === S.editModel);
   show("secondWrap", !S.batch && a.second && (a.video ? a.second_available !== false : !m || m.images > 1));
   $("secondLabel").textContent = a.second_label || t("Zweites Foto (optional) – im Text „Bild 2“");
-  show("secondsWrap", a.video && !a.audio); press("seconds", "v", S.seconds);
+  show("secondsWrap", a.video && !a.audio && !a.steps); press("seconds", "v", S.seconds);
   show("variantsWrap", a.variants); press("variants", "n", S.variants);
   show("pick2", !S.source2); show("source2", !!S.source2);
   show("sidesWrap", a.sides); press("sides", "v", S.sides);
@@ -1484,7 +1484,9 @@ function renderJobs() {
     const b = document.createElement("button");
     b.type = "button"; b.className = "job";
     let thumb;
-    if (j.state === "done" || j.action !== "generate") {
+    if (j.after && j.state === "queued") {                     // a recipe's step: its picture comes later
+      thumb = document.createElement("div"); thumb.className = "ph"; thumb.textContent = "⋯";
+    } else if (j.state === "done" || j.action !== "generate") {
       thumb = document.createElement("img"); thumb.loading = "lazy"; thumb.alt = "";
       thumb.src = `${API}/jobs/${j.id}/${j.state === "done" ? "result" : "input"}?thumb=1`;
       if (j.video) { const w = document.createElement("div"); w.className = "thumb"; w.appendChild(thumb); thumb = w; }
@@ -1494,6 +1496,7 @@ function renderJobs() {
     if (j.uncensored) { const u = document.createElement("span"); u.className = "badge"; u.textContent = "U"; title.appendChild(u); }
     if (j.star) { const v = document.createElement("span"); v.className = "star"; v.textContent = "★"; title.prepend(v); }
     if (j.group) { const v = document.createElement("span"); v.className = "badge n"; v.textContent = j.variant + "/" + j.variants; title.appendChild(v); }
+    if (j.chain) { const v = document.createElement("span"); v.className = "badge n"; v.textContent = t("Schritt {n}/{m}", { n: j.step, m: j.steps }); title.appendChild(v); }
     const sub = document.createElement("span");
     sub.textContent = (j.text ? (LANG === "en" ? "“" + j.text + "” · " : "„" + j.text + "“ · ") : "") + new Date(j.created * 1000).toLocaleString(LANG === "en" ? "en-GB" : "de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
     meta.append(title, sub);
@@ -1526,15 +1529,17 @@ function openViewer(id) {
   $("vDelete").disabled = job.state === "running";
   $("vStar").textContent = job.star ? "★" : "☆"; $("vStar").classList.toggle("on", !!job.star);
   $("vStar").style.visibility = done ? "" : "hidden";
-  // the variants of one request: from one to the next, and keep the best
-  const sib = job.group ? S.jobs.filter((x) => x.group === job.group).sort((x, y) => x.variant - y.variant) : [];
+  // the variants of one request, or the steps of a recipe: from one to the next
+  // (and of variants, keep the best)
+  const sib = job.group ? S.jobs.filter((x) => x.group === job.group).sort((x, y) => x.variant - y.variant)
+    : job.chain ? S.jobs.filter((x) => x.chain === job.chain).sort((x, y) => x.step - y.step) : [];
   show("vNav", sib.length > 1);
   if (sib.length > 1) {
     const i = sib.findIndex((x) => x.id === job.id);
-    $("vNum").textContent = t("{n} von {m}", { n: i + 1, m: sib.length });
+    $("vNum").textContent = t(job.chain ? "Schritt {n} von {m}" : "{n} von {m}", { n: i + 1, m: sib.length });
     $("vPrev").onclick = () => openViewer(sib[(i + sib.length - 1) % sib.length].id);
     $("vNext").onclick = () => openViewer(sib[(i + 1) % sib.length].id);
-    $("vKeep").style.display = done ? "" : "none";
+    $("vKeep").style.display = done && job.group ? "" : "none";
     $("vKeep").textContent = t("Behalten");
   }
   if (checked) showChecked(job);
@@ -1579,7 +1584,7 @@ function updateWaiting(job) {
   const typ = typical(job);
   const later = t("Du kannst die Seite schließen – das Ergebnis kommt in den Verlauf.");
   $("vHint").textContent = stopping ? t("ComfyUI hält nach dem laufenden Schritt an.")
-    : job.state === "queued" ? t("Vorher ist noch etwas anderes dran.")
+    : job.state === "queued" ? t(job.after ? "Wartet auf den Schritt davor." : "Vorher ist noch etwas anderes dran.")
     : job.phase ? job.phase + " " + later
     : (typ ? t("Üblich sind {d}. ", { d: duration(typ) }) : "") + later;
 }

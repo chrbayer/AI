@@ -609,6 +609,42 @@ class Darkroom(unittest.TestCase):
         while not darkroom._queue.empty():
             darkroom._queue.get_nowait()
 
+    def test_a_recipe_is_a_job_per_step_each_on_the_one_before(self):
+        from unittest import mock
+        jobs = self.post(action="recipe-old", quality="best", image=self.jpeg(640, 480)).get_json()
+        while not darkroom._queue.empty():
+            darkroom._queue.get_nowait()
+        self.assertEqual([j["action"] for j in jobs], ["restore", "colorize", "upscale"])
+        self.assertEqual([j["step"] for j in jobs], [1, 2, 3])
+        self.assertEqual(len({j["chain"] for j in jobs}), 1)
+        self.assertEqual([j["after"] for j in jobs], [None, jobs[0]["id"], jobs[1]["id"]])
+        self.assertEqual(jobs[1]["model"], "qwen-image-21-colorize")                 # best for every step
+        self.assertIsNotNone(darkroom.input_file(darkroom.job_path(jobs[0]["id"])))
+        self.assertIsNone(darkroom.input_file(darkroom.job_path(jobs[1]["id"])))
+        # the step before done: its result becomes the picture, brought to the step's size
+        (darkroom.job_path(jobs[0]["id"]) / "result.png").write_bytes(self.jpeg(2000, 1500))
+        darkroom.update_job(jobs[0]["id"], state="done")
+        darkroom.take_step_input(darkroom.read_job(jobs[1]["id"]), darkroom.job_path(jobs[1]["id"]))
+        self.assertIsNotNone(darkroom.input_file(darkroom.job_path(jobs[1]["id"])))
+        self.assertEqual(darkroom.read_job(jobs[1]["id"])["input_size"], [2000, 1500])       # colorize: up to 2048
+        # the step before failed or cancelled: this one does not run
+        darkroom.update_job(jobs[1]["id"], state="failed")
+        with self.assertRaises(RuntimeError):
+            darkroom.take_step_input(darkroom.read_job(jobs[2]["id"]), darkroom.job_path(jobs[2]["id"]))
+        darkroom.update_job(jobs[1]["id"], cancelled=True)
+        with self.assertRaises(darkroom.Cancelled):
+            darkroom.take_step_input(darkroom.read_job(jobs[2]["id"]), darkroom.job_path(jobs[2]["id"]))
+        # a push only at the end
+        with mock.patch.object(darkroom, "webpush", mock.Mock()), \
+             mock.patch.object(darkroom, "subscriptions", return_value=[]) as subs:
+            darkroom.update_job(jobs[0]["id"], state="done")
+            darkroom.notify(jobs[0]["id"])
+            subs.assert_not_called()
+        with mock.patch.object(darkroom.requests, "get", side_effect=darkroom.requests.ConnectionError):
+            acts = {a["id"]: a for a in darkroom.app.test_client().get("/darkroom/api/actions").get_json()["actions"]}
+        self.assertEqual(acts["recipe-alive"]["steps"], ["restore", "colorize", "animate"])
+        self.assertTrue(acts["recipe-alive"]["video"])
+
     def test_the_marked_spot_is_shown_to_the_model_in_red(self):
         from PIL import Image
         photo = io.BytesIO(); Image.new("RGB", (100, 100), (128, 128, 128)).save(photo, "PNG")
@@ -806,7 +842,9 @@ class Darkroom(unittest.TestCase):
 
     def test_every_action_has_its_group(self):
         ids = [i for _, group in darkroom.GROUPS for i in group]
-        self.assertEqual(sorted(ids), sorted(darkroom.ACTIONS))
+        self.assertEqual(sorted(ids), sorted(list(darkroom.ACTIONS) + list(darkroom.RECIPES)))
+        for r in darkroom.RECIPES.values():                     # a recipe is made of actions
+            self.assertTrue(set(r["steps"]) <= set(darkroom.ACTIONS))
 
     def test_pose_and_restyle_take_the_users_words(self):
         _, form, _ = self.sent(action="pose", text="a dancer on a stage")

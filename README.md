@@ -2160,6 +2160,16 @@ the desk see the same, and stand first under *Mine* (*Eigene*), as written,
 in either language; × and a second tap deletes one. The second photo
 (*picture 2*, *Animate*'s end frame) can be taken with the camera, too.
 
+**Recipes.** A fifth group, *Recipes* (*Rezepte*), runs several actions one
+after the other, each on the result of the one before: *Do up an old photo*
+(restore → colorize → upscale), *Bring an old photo to life* (restore →
+colorize → animate), *For printing* (faces → upscale). Each step is a job of
+its own that waits for the one before (`after`) and takes its result, brought
+to its own size, when its turn comes — so each has its card (step 1/3 …), its
+cancel and its time; a cancelled or failed step stops the rest, and the push
+comes once, at the end. A damaged wedding photo: restored 57 s, coloured 22 s,
+enlarged to 3044×4096 in 138 s.
+
 **Several photos at once.** Choosing several pictures in the gallery (up to
 20) puts them all in as source pictures, shown as a row: the action runs for
 each, one job per picture in the queue (three photos coloured: three jobs,

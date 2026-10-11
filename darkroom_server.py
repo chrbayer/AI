@@ -215,10 +215,21 @@ ACTIONS = {
     },
 }
 # How the page groups the actions.
+# Rezepte: several actions one after the other, each on the result of the one
+# before — a job each, the later ones waiting for theirs ("after"), so each
+# step has its card, its cancel and its time; a push only at the end.
+RECIPES = {
+    "recipe-old": {"label": "Altes Foto aufbereiten", "hint": "Restaurieren → Kolorieren → Vergrößern",
+                   "steps": ["restore", "colorize", "upscale"]},
+    "recipe-alive": {"label": "Altes Foto lebendig", "hint": "Restaurieren → Kolorieren → Animieren",
+                     "steps": ["restore", "colorize", "animate"]},
+    "recipe-print": {"label": "Zum Drucken", "hint": "Gesichter → Vergrößern", "steps": ["detail", "upscale"]},
+}
 GROUPS = [("Verbessern", ["colorize", "restore", "detail", "upscale"]),
           ("Verändern", ["background", "cutout", "remove", "paint", "edit", "expand"]),
           ("Neu erschaffen", ["pose", "restyle", "art"]),
-          ("Video", ["animate", "talk"])]
+          ("Video", ["animate", "talk"]),
+          ("Rezepte", list(RECIPES))]
 # Als Kunstwerk: the style, and the instruction it makes for Qwen-Image Edit.
 # Colour styles keep the photo's colours; the pencil drawing is grey.
 KEEP_ALL = "Keep the composition, the people and their features, the hair colour and the colours of the clothes."
@@ -366,7 +377,11 @@ EN = {
     "natürliche Fotos": "natural photos", "lebendig, warmes Licht": "vivid, warm light", "Schrift im Bild": "text in the picture",
     "mehr Abwechslung, Stile": "more variety, styles", "fast wie dev": "almost like dev", "beste Qualität": "best quality",
     "Startbild, dann Clip mit Ton": "first frame, then a clip with sound",
-    "Eigene": "Mine", "ein freigestelltes Bild lässt sich nicht prüfen": "a cut-out picture cannot be checked", "keine Variante": "not a variant",
+    "Eigene": "Mine", "Rezepte": "Recipes", "Altes Foto aufbereiten": "Do up an old photo",
+    "Restaurieren → Kolorieren → Vergrößern": "Restore → Colorize → Upscale",
+    "Altes Foto lebendig": "Bring an old photo to life", "Restaurieren → Kolorieren → Animieren": "Restore → Colorize → Animate",
+    "Zum Drucken": "For printing", "Gesichter → Vergrößern": "Faces → Upscale",
+    "Der Schritt davor hat nicht geklappt": "The step before did not work", "ein freigestelltes Bild lässt sich nicht prüfen": "a cut-out picture cannot be checked", "keine Variante": "not a variant",
     "Die anderen Varianten laufen noch": "The other variants are still running",
     "Ausbauen ist hier nicht eingerichtet": "Expanding is not set up here",
     "Für diese Aktion gibt es kein Ausbauen": "This action has no expanding",
@@ -673,6 +688,8 @@ def run_job(jid):
     d = job_path(jid)
     try:
         model = job.get("model")
+        if job.get("after"):
+            take_step_input(job, d)
         if job.get("video"):
             return run_clip(job, d)
         if job["action"] == "check":
@@ -1266,6 +1283,16 @@ def actions():
                     "second_available": avail(FIRST_LAST) if a.get("video") else True,
                     "available": avail(fast), "best_available": avail(best),
                     "uncensored": [unc(fast), unc(best)]})
+    for key, r in RECIPES.items():
+        specs = [ACTIONS[a] for a in r["steps"]]
+        out.append({"id": key, "label": tr(r["label"]), "hint": tr(r["hint"]), "text": None, "steps": r["steps"],
+                    "qualities": True, "variants": False, "expand": False, "group": tr("Rezepte"),
+                    "video": bool(specs[-1].get("video")), "seconds_steps": [a["seconds"] for a in specs],
+                    "seconds": [sum(a["seconds"][0] for a in specs), sum(a["seconds"][1] for a in specs)],
+                    "available": None if have is None else all(avail(a["model"][0]) for a in specs),
+                    "best_available": None if have is None else all(avail(a["model"][1]) for a in specs),
+                    "uncensored": [None, None]})
+
     def models(table):
         # a clip from a prompt needs its first frame's model too, and is as uncensored as that
         return [dict(v, id=k, hint=tr(v["hint"]),
@@ -1319,6 +1346,40 @@ def repair_job(action, f):
                     "base": base, "boxes": chosen, "parent": parent["id"], "quality": quality,
                     "model": REPAIR_MODEL[1 if quality == "best" else 0], "png": False},
                    [("input.png", src.read_bytes())])
+
+
+def recipe_jobs(recipe, f):
+    """The jobs of a recipe: the first on the picture, each later one waiting
+    for the one before and taking its result when its turn comes."""
+    steps = RECIPES[recipe]["steps"]
+    data, parent = picture("image", "from")
+    if data is None:
+        raise Refused("kein Bild")
+    body, name, size = fit(data, steps[0])
+    quality = "best" if f.get("quality") == "best" else "fast"
+    chain, jobs = uuid.uuid4().hex[:10], []
+    for i, action in enumerate(steps):
+        spec = ACTIONS[action]
+        fields = {"action": action, "label": spec["label"], "text": "", "quality": quality, "lang": lang(),
+                  "model": spec["model"][1 if quality == "best" else 0], "model_label": None,
+                  "png": bool(spec.get("png")), "recipe": recipe, "chain": chain, "step": i + 1, "steps": len(steps),
+                  "parent": parent if i == 0 else None, "after": jobs[-1]["id"] if jobs else None,
+                  "input_size": list(size) if i == 0 else None,
+                  **({"video": True, "seconds": 5} if spec.get("video") else {})}
+        jobs.append(new_job(fields, [(name, body)] if i == 0 else []))
+    return jobs
+
+
+def take_step_input(job, d):
+    """A recipe's later step: the result of the step before, as its picture."""
+    prev = read_job(job["after"])
+    if prev is None or prev.get("cancelled"):
+        raise Cancelled()
+    if prev["state"] != "done":
+        raise RuntimeError("Der Schritt davor hat nicht geklappt")
+    body, name, size = fit((job_path(prev["id"]) / "result.png").read_bytes(), job["action"])
+    (d / name).write_bytes(body)
+    update_job(job["id"], input_size=list(size))
 
 
 def voice(data):
@@ -1391,6 +1452,8 @@ def create_job():
             return jsonify([public(j) for j in jobs])
         if action in ("check", "repair"):
             return jsonify([public(repair_job(action, f))])
+        if action in RECIPES:
+            return jsonify([public(j) for j in recipe_jobs(action, f)])
         if action not in ACTIONS:
             raise Refused("unbekannte Aktion")
         spec = ACTIONS[action]
@@ -1625,6 +1688,8 @@ def notify(jid):
     job = read_job(jid)
     if job is None or job.get("cancelled") or job["state"] not in ("done", "failed"):
         return
+    if job["state"] == "done" and job.get("step") and job["step"] < job["steps"]:
+        return                                  # a recipe tells when its last step is done
     subs = subscriptions()
     if not subs:
         return
