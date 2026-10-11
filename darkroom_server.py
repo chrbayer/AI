@@ -1000,7 +1000,49 @@ def old_page():
 def manifest():
     return jsonify({"name": "Darkroom", "short_name": "Darkroom", "start_url": "/darkroom", "scope": "/darkroom",
                     "display": "standalone", "background_color": "#161618", "theme_color": "#161618",
-                    "icons": [{"src": "/darkroom/icon.svg", "sizes": "any", "type": "image/svg+xml"}]})
+                    "icons": [{"src": "/darkroom/icon.svg", "sizes": "any", "type": "image/svg+xml"}],
+                    # Android's share menu (installed as an app): photos → Darkroom
+                    "share_target": {"action": "/darkroom/share", "method": "POST", "enctype": "multipart/form-data",
+                                     "params": {"files": [{"name": "image", "accept": ["image/*"]}]}}})
+
+
+# Teilen: photos shared from the phone's gallery come here (the manifest's
+# share_target, Android; Apple has none for web apps), wait in an inbox for a
+# day, and the page takes them as source pictures (#share=<ids>).
+INBOX_KEEP = 86400
+
+
+def inbox():
+    return Path(ARGS.data) / "inbox"
+
+
+@app.post("/darkroom/share")
+def share():
+    ids = []
+    d = inbox()
+    d.mkdir(parents=True, exist_ok=True)
+    for f in [f for f in d.iterdir() if time.time() - f.stat().st_mtime > INBOX_KEEP]:
+        f.unlink(missing_ok=True)
+    for f in request.files.getlist("image")[:20]:
+        data = f.read()
+        try:
+            im = Image.open(io.BytesIO(data))
+            im.verify()
+        except Exception:                                         # noqa: BLE001
+            continue
+        iid = uuid.uuid4().hex[:16]
+        (d / iid).write_bytes(data)
+        ids.append(iid)
+    return Response(status=303, headers={"Location": "/darkroom" + ("#share=" + ",".join(ids) if ids else "")})
+
+
+@app.get("/darkroom/api/inbox/<iid>")
+def inbox_file(iid):
+    if not re.fullmatch(r"[0-9a-f]{16}", iid) or not (inbox() / iid).is_file():
+        return error("no such picture", 404)
+    data = (inbox() / iid).read_bytes()
+    kind = (Image.open(io.BytesIO(data)).format or "jpeg").lower()
+    return Response(data, mimetype=f"image/{kind}", headers={"Cache-Control": "no-store"})
 
 
 ICON = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">

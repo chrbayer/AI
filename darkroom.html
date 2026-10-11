@@ -548,7 +548,7 @@ const EN = {
   "✨ Ausbauen": "✨ Expand", "Jetzt ausbauen": "Expand it now",
   "Das Sprachmodell startet – beim ersten Mal etwa 15 Sekunden …": "The language model is starting – about 15 seconds the first time …",
   "Ausgebaut – lesen, anpassen, dann los": "Expanded – read it, change it, then go",
-  "{n} von {m}": "{n} of {m}", "Wartet auf den Schritt davor.": "Waits for the step before.", "Schritt {n} von {m}": "Step {n} of {m}", "Schritt {n}/{m}": "step {n}/{m}", "{n} Fotos": "{n} photos",
+  "{n} von {m}": "{n} of {m}", "Die geteilten Fotos sind nicht mehr da.": "The shared photos are gone.", "Wartet auf den Schritt davor.": "Waits for the step before.", "Schritt {n} von {m}": "Step {n} of {m}", "Schritt {n}/{m}": "step {n}/{m}", "{n} Fotos": "{n} photos",
   "{n} Fotos – die Aktion läuft für jedes": "{n} photos – the action runs for each",
   "Höchstens {n} Fotos auf einmal – die ersten {n} sind gewählt.": "At most {n} photos at once – the first {n} are chosen.",
   "Übermalen geht nur mit einem Foto – erst eins wählen.": "Paint over takes one photo only – choose one first.",
@@ -1930,6 +1930,21 @@ function schedule() {
 async function tick() { await Promise.all([refreshStatus(), refreshJobs()]); schedule(); }
 // A link to one job (#job=<id>) opens it.
 async function openFromHash() {
+  // shared from the phone's gallery: the pictures from the inbox, as source pictures
+  const sh = location.hash.match(/^#share=([0-9a-f,]+)$/);
+  if (sh) {
+    history.replaceState(null, "", location.pathname);
+    const files = [];
+    for (const id of sh[1].split(",")) {
+      try {
+        const r = await fetch(API + "/inbox/" + id);
+        if (r.ok) { const b = await r.blob(); files.push(new File([b], id, { type: b.type })); }
+      } catch (e) {}
+    }
+    if (files.length) { setMode("edit"); await loadFiles(files, 1); window.scrollTo({ top: 0 }); }
+    else toast(t("Die geteilten Fotos sind nicht mehr da."));
+    return;
+  }
   const m = location.hash.match(/^#job=([0-9a-f-]+)$/);
   if (!m) return;
   if (!S.jobs.some((j) => j.id === m[1])) await refreshJobs();

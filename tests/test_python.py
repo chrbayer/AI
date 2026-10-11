@@ -686,6 +686,20 @@ class Darkroom(unittest.TestCase):
             darkroom.notify(jid)
         self.assertEqual(len(sent), 2)
 
+    def test_photos_shared_from_the_gallery_wait_in_the_inbox(self):
+        client = darkroom.app.test_client()
+        share = client.get("/darkroom/manifest.webmanifest").get_json()["share_target"]
+        self.assertEqual((share["action"], share["params"]["files"][0]["name"]), ("/darkroom/share", "image"))
+        r = client.post("/darkroom/share", content_type="multipart/form-data", data={"image": [
+            (io.BytesIO(self.jpeg(64, 48)), "a.jpg"), (io.BytesIO(b"not a picture"), "b.jpg"), (io.BytesIO(self.jpeg(32, 32)), "c.jpg")]})
+        self.assertEqual(r.status_code, 303)
+        ids = r.headers["Location"].split("#share=")[1].split(",")
+        self.assertEqual(len(ids), 2)                                     # the one that is no picture left out
+        got = client.get(f"/darkroom/api/inbox/{ids[0]}")
+        self.assertEqual((got.status_code, got.mimetype), (200, "image/jpeg"))
+        self.assertEqual(client.get("/darkroom/api/inbox/../jobs").status_code, 404)
+        self.assertEqual(client.post("/darkroom/share", data={}).headers["Location"], "/darkroom")
+
     def test_the_marked_spot_is_shown_to_the_model_in_red(self):
         from PIL import Image
         photo = io.BytesIO(); Image.new("RGB", (100, 100), (128, 128, 128)).save(photo, "PNG")

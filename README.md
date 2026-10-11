@@ -2185,6 +2185,14 @@ each, one job per picture in the queue (three photos coloured: three jobs,
 the first running before the last was up). Not for *Paint over* (its marking
 belongs to one picture), and without a second photo.
 
+**Share from the gallery (Android).** Added to the home screen, Darkroom is a
+share target: in the phone's gallery, photo(s) → Share → Darkroom. The
+manifest's `share_target` posts them to `/darkroom/share`, the server keeps
+them in an inbox for a day (`inbox/` beside the jobs) and sends the page on
+with `#share=<ids>`, and the page takes them as source pictures — several as
+for *several photos at once*. Apple offers no share target to web apps, so on
+an iPhone it is the gallery button as before.
+
 **Crop and turn.** *Crop* (*Zuschneiden*) beside the source picture opens it
 with a frame to drag by its middle and its corners, free or held to 1:1, 4:3,
 3:4, 16:9 or 9:16, and quarter turns either way; *Done* makes the cut-out the
