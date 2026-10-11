@@ -2034,7 +2034,7 @@ and the notifications, in the language of the page that switched them on.
 The models take what is typed in either. Below, the page's English names,
 with the German ones in brackets where they first come.
 
-**Help.** *?* at the top and *Example and tips* (*Beispiel und Tipps*) under
+The llmctl version stands small beside the page's name. **Help.** *?* at the top and *Example and tips* (*Beispiel und Tipps*) under
 each action open `/darkroom/help`, at that action: what it does, a before and
 after, the time it took here, what to write. It is the gallery's
 [Darkroom section](https://chrbayer.github.io/AI/darkroom.html), built from

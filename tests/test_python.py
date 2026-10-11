@@ -767,6 +767,13 @@ class Darkroom(unittest.TestCase):
         darkroom.ARGS.docs = str(docs / "none")
         self.assertEqual(client.get("/darkroom/help").status_code, 404)
 
+    def test_the_status_says_the_version(self):
+        from unittest import mock
+        darkroom.ARGS.version, darkroom.ARGS.comfy_slot = "9.9.9", 9
+        with mock.patch.object(darkroom, "api_status", return_value=(True, True)):
+            self.assertEqual(darkroom.app.test_client().get("/darkroom/api/status").get_json()["version"], "9.9.9")
+        self.assertIn('id="version"', darkroom.app.test_client().get("/darkroom").get_data(as_text=True))
+
     def test_the_old_address_leads_to_the_new_one(self):
         client = darkroom.app.test_client()
         for path in ("/fotos", "/fotos/"):

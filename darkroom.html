@@ -34,6 +34,7 @@ header { position: sticky; top: 0; z-index: 5; display: flex; align-items: cente
          padding: 12px 16px; background: color-mix(in srgb, var(--bg) 88%, transparent);
          backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
 header h1 { font-size: 22px; margin: 0; flex: 1; letter-spacing: -.01em; }
+header h1 small { font-size: 11px; font-weight: 500; color: var(--muted); margin-left: 6px; letter-spacing: 0; }
 header .lang { font-size: 14px; padding: 8px 4px; text-decoration: none; }
 a.help { display: inline-block; font-size: 14px; text-decoration: none; padding: 4px 0 0; }
 .chip { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line);
@@ -240,7 +241,7 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
 </head>
 <body>
 <header>
-  <h1>Darkroom</h1>
+  <h1>Darkroom<small id="version"></small></h1>
   <a class="link lang" id="helpBtn" href="/darkroom/help" aria-label="Hilfe">?</a>
   <button class="link lang" id="langBtn" type="button" lang="en">EN</button>
   <button class="chip" id="chip" type="button"><span class="dot" id="dot"></span><span id="chipText">…</span></button>
@@ -613,6 +614,7 @@ async function refreshStatus() {
     const s = await api("/status");
     const was = S.comfy;
     S.comfy = s.comfy; S.message = s.message || "";
+    $("version").textContent = s.version ? "v" + s.version : "";
     if (was !== "up" && S.comfy === "up") loadActions();
   } catch (e) { S.comfy = "unknown"; S.message = t("Der Darkroom-Dienst antwortet nicht."); }
   renderStatus();

@@ -967,7 +967,7 @@ def status():
     state = _comfy["state"] or ("up" if api and comfy else "starting" if api else "down")
     busy = [j for j in all_jobs() if j["state"] in ("queued", "running")]
     return jsonify({"comfy": state, "message": tr(_comfy["message"]), "busy": len(busy),
-                    "slot": ARGS.comfy_slot})
+                    "slot": ARGS.comfy_slot, "version": getattr(ARGS, "version", "")})
 
 
 @app.post("/darkroom/api/comfy")
@@ -1597,6 +1597,7 @@ def main():
     p.add_argument("--comfy-model", default="comfy")
     p.add_argument("--llmctl", required=True, help="llmctl itself, to start and stop ComfyUI")
     p.add_argument("--data", required=True, help="where the jobs are kept")
+    p.add_argument("--version", default="", help="llmctl's version, shown small on the page")
     p.add_argument("--docs", default=str(Path(__file__).with_name("docs")),
                    help="the gallery's pages, for the help (docs/help, docs/media)")
     p.add_argument("--vision-slot", type=int, default=0,
