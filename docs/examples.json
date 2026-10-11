@@ -584,22 +584,28 @@
           "id": "restore",
           "title": "Restore",
           "public": true,
-          "text": "Scratches, dust, stains, creases and noise away, the people and the composition kept: Qwen-Image Edit with a restoring prompt, 57 s. Best on a scan or a photo of the print taken straight on; colour it afterwards with *Edit further* → *Colorize*.",
+          "text": "Scratches, dust, stains, creases and noise away, the people and the composition kept: Qwen-Image Edit with a restoring prompt, 59 s. This wedding photo was made damaged on purpose — Z-Image Turbo drew the fold and the water stains, a script added dust and scratches — and came back clean, both faces the same. Best on a scan or a photo of the print taken straight on; colour it afterwards with *Edit further* → *Colorize*.",
           "de": {
             "title": "Restaurieren",
-            "text": "Kratzer, Staub, Flecken, Knicke und Rauschen weg, Personen und Bildaufbau bleiben: Qwen-Image Edit mit einem Restaurier-Prompt, 57 s. Am besten mit einem Scan oder einem gerade abfotografierten Abzug; danach über *Weiter bearbeiten* → *Kolorieren* in Farbe."
+            "text": "Kratzer, Staub, Flecken, Knicke und Rauschen weg, Personen und Bildaufbau bleiben: Qwen-Image Edit mit einem Restaurier-Prompt, 59 s. Dieses Hochzeitsfoto wurde absichtlich beschädigt erzeugt — Z-Image Turbo malte die Knickfalte und die Wasserflecken, ein Skript fügte Staub und Kratzer hinzu — und kam sauber zurück, beide Gesichter dieselben. Am besten mit einem Scan oder einem gerade abfotografierten Abzug; danach über *Weiter bearbeiten* → *Kolorieren* in Farbe."
           },
           "media": [
             {
-              "file": "bench:darkroom/restore_input.jpg",
+              "file": "bench:darkroom/restore2_input.jpg",
               "caption": "Before",
               "caption_de": "Vorher",
               "public": true
             },
             {
-              "file": "bench:darkroom/restore_result.jpg",
+              "file": "bench:darkroom/restore2_result.jpg",
               "caption": "After",
               "caption_de": "Nachher",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/restore2_faces.jpg",
+              "caption": "The faces, twice the size: before above, after below",
+              "caption_de": "Die Gesichter, doppelt so groß: oben vorher, unten nachher",
               "public": true
             }
           ]

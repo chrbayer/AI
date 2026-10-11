@@ -23,8 +23,9 @@ pose_result-d590a1314f38.jpg
 remove_input-17f53b5f7beb.jpg
 remove_result-c63097a06f07.jpg
 repair_result-3d810b33fbb7.jpg
-restore_input-79888c61ccd3.jpg
-restore_result-a4deb59d2fe2.jpg
+restore2_faces-b12613c8376f.jpg
+restore2_input-bde2ceca299a.jpg
+restore2_result-7f6323a90573.jpg
 restyle_input-f65b3066e257.jpg
 restyle_result-3ccb06b62dd6.jpg
 talk_input-208273e50bc0.jpg
