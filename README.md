@@ -933,7 +933,8 @@ decode 31–32 prose and 49–50 code (50.5 / 72.4). halogen stays the one for
 daily use; the entry is there to see gufo catch up. gufo 0.10.0 brought the
 prefill up a little (1149 / 1444 / 1404), the answers byte for byte the same;
 0.11.0 the decode (38.1 prose, 55.3 code, one run each against 33.7 / 50.8 on
-0.10.0 the same evening).
+0.10.0 the same evening), 0.12.0 the prefill again (1108 / 1447 / 1386 against
+1031 / 1394 / 1301), the decode within its spread.
 
 `flash-gufo-unc` is the uncensored Flash-Next on gufo: vmlinux's Q4 Mix of
 orcarouter's Qwen3.8-Flash-Next-Uncensored (one file, 110 GB), with the MTP
@@ -965,13 +966,14 @@ What llmctl does for it:
   Messages API splits the thinking off into a thinking block and handles
   tools, streamed or not, since 0.10.0 (0.4.0 still returned the thinking
   inside the text, `</think>` and all). It reports the prompt cache as it
-  really was hit. Only what it lacks goes through chat completions: requests
-  with images (it refuses them on `/v1/messages`) and `count_tokens` (not
-  implemented there), which the proxy estimates. `LLMCTL_GUFO_TRANSLATE=1`
-  translates every request, as up to llmctl 1.75; `LLMCTL_GUFO_NATIVE_MESSAGES=1`
-  translates none. Claude Code also works against gufo's port directly, text
-  only, but loses the time stamp normalization (prompt-cache hits) and image
-  URLs.
+  really was hit. Since 0.12.0 it also takes images (in tool results too, as
+  Claude Code sends screenshots) and answers `count_tokens` itself, with its
+  own tokenizer; up to llmctl 1.90 the proxy translated those two to chat
+  completions and estimated the count. `LLMCTL_GUFO_TRANSLATE=images` does
+  that again (for an older image), `LLMCTL_GUFO_TRANSLATE=1` translates every
+  request, as up to llmctl 1.75. Claude Code also works against gufo's port
+  directly, but loses the time stamp normalization (prompt-cache hits) and
+  image URLs.
 - **Vision with `--mmproj`**: gufo looks for `mmproj-BF16.gguf` beside the
   model and does not find HauhauCS's name on its own, so llmctl passes it;
   it is uploaded at the first image.
