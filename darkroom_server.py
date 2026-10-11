@@ -366,7 +366,7 @@ EN = {
     "natürliche Fotos": "natural photos", "lebendig, warmes Licht": "vivid, warm light", "Schrift im Bild": "text in the picture",
     "mehr Abwechslung, Stile": "more variety, styles", "fast wie dev": "almost like dev", "beste Qualität": "best quality",
     "Startbild, dann Clip mit Ton": "first frame, then a clip with sound",
-    "Eigene": "Mine", "keine Variante": "not a variant",
+    "Eigene": "Mine", "ein freigestelltes Bild lässt sich nicht prüfen": "a cut-out picture cannot be checked", "keine Variante": "not a variant",
     "Die anderen Varianten laufen noch": "The other variants are still running",
     "Ausbauen ist hier nicht eingerichtet": "Expanding is not set up here",
     "Für diese Aktion gibt es kein Ausbauen": "This action has no expanding",
@@ -512,7 +512,8 @@ def all_jobs():
 
 
 def prune_jobs():
-    for job in all_jobs()[KEEP_JOBS:]:
+    """The last KEEP_JOBS jobs stay, and every starred one besides."""
+    for job in [j for j in all_jobs() if not j.get("star")][KEEP_JOBS:]:
         if job["state"] in ("done", "failed"):
             shutil.rmtree(job_path(job["id"]), ignore_errors=True)
 
@@ -887,8 +888,8 @@ def janitor():
             except requests.RequestException:
                 pass
             _last_done["freed"] = True
-        if (getattr(ARGS, "expand_slot", 0) and _expand["started"]
-                and time.time() - _expand["used"] > EXPAND_IDLE):
+        if (getattr(ARGS, "expand_slot", 0) and time.time() - _expand["used"] > EXPAND_IDLE
+                and (_expand["started"] or expander_state() is True)):
             stop_expander()
 
 
@@ -1081,9 +1082,10 @@ def ensure_expander():
 
 
 def stop_expander():
-    """Stop the model, if this server started it (for Fehler suchen's flash, or when idle)."""
+    """Stop the model on its slot (for Fehler suchen's flash, or when idle) — also
+    one an earlier run of this server started: it is ours if it runs there."""
     with _expand_lock:
-        if not _expand["started"]:
+        if not getattr(ARGS, "expand_slot", 0) or not (_expand["started"] or expander_state() is True):
             return
         subprocess.run([ARGS.llmctl, "stop", str(ARGS.expand_slot)], capture_output=True, timeout=120)
         _expand["started"] = False
@@ -1295,6 +1297,8 @@ def repair_job(action, f):
     parent = read_job(f.get("from") or "")
     if parent is None or parent["state"] != "done" or parent.get("video"):
         raise Refused("das Bild gibt es nicht (mehr)")
+    if action == "check" and parent.get("png"):
+        raise Refused("ein freigestelltes Bild lässt sich nicht prüfen")   # Inpaint has no background there
     src = job_path(parent["id"]) / "result.png"
     # what the picture was made from, for the check and the repair prompt
     base = parent.get("base") if parent["action"] in ("check", "repair") else parent.get("text") or ""
@@ -1456,7 +1460,21 @@ def create_job():
 
 @app.get("/darkroom/api/jobs")
 def list_jobs():
-    return jsonify([public(j) for j in all_jobs()[:60]])
+    """The newest 60, and the starred ones older than that."""
+    jobs = all_jobs()
+    return jsonify([public(j) for j in jobs[:60] + [j for j in jobs[60:] if j.get("star")]])
+
+
+@app.post("/darkroom/api/jobs/<jid>/star")
+def star_job(jid):
+    """A favourite: never pruned, and found with the history's ★."""
+    try:
+        job_path(jid)
+    except Refused:
+        return error("no such job", 404)
+    on = bool((request.get_json(silent=True) or {}).get("on", True))
+    job = update_job(jid, star=on)
+    return jsonify(public(job)) if job else error("no such job", 404)
 
 
 @app.get("/darkroom/api/jobs/<jid>")

@@ -140,6 +140,8 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
          border-radius: 5px; padding: 0 4px; margin-left: 6px; vertical-align: 2px; }
 .empty { color: var(--muted); font-size: 14px; margin: 0; }
 .badge.n { color: var(--muted); }
+.job .star { color: #e0a500; margin-right: 5px; }
+.layer .top #vStar.on { color: #ffc93c; }
 .layer .top .vnav { display: flex; align-items: center; gap: 4px; color: #fff; font-size: 14px; white-space: nowrap; }
 .layer .top .vnav button { padding: 6px 11px; }
 .layer .top .vnav button.keep { background: var(--accent); }
@@ -395,7 +397,7 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
   <p class="err" id="formErr"></p>
 
   <section class="card">
-    <h2>Verlauf</h2>
+    <div class="labelrow"><h2>Verlauf</h2><button class="link" type="button" id="starFilter" aria-pressed="false">☆ Favoriten</button></div>
     <div class="jobs" id="jobs"><p class="empty">Noch nichts bearbeitet.</p></div>
   </section>
 </main>
@@ -405,6 +407,7 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
 <div class="layer" id="viewer" role="dialog" aria-modal="true">
   <div class="top"><b id="vTitle"></b>
     <span class="vnav hidden" id="vNav"><button type="button" id="vPrev" aria-label="Vorige Variante">‹</button><span id="vNum"></span><button type="button" id="vNext" aria-label="Nächste Variante">›</button><button type="button" class="keep" id="vKeep">Behalten</button></span>
+    <button type="button" id="vStar" aria-label="Favorit">☆</button>
     <button type="button" id="vClose">Schließen</button></div>
   <div class="stage" id="stage"></div>
   <div class="info" id="vInfo"></div>
@@ -514,7 +517,9 @@ const EN = {
   "✨ Ausbauen": "✨ Expand", "Jetzt ausbauen": "Expand it now",
   "Das Sprachmodell startet – beim ersten Mal etwa 15 Sekunden …": "The language model is starting – about 15 seconds the first time …",
   "Ausgebaut – lesen, anpassen, dann los": "Expanded – read it, change it, then go",
-  "{n} von {m}": "{n} of {m}", "Behalten": "Keep", "Vorige Variante": "Previous variant", "Nächste Variante": "Next variant",
+  "{n} von {m}": "{n} of {m}", "Favoriten": "Favourites", "Favorit": "Favourite",
+  "Noch keine Favoriten – im Ergebnis ☆ antippen.": "No favourites yet – tap ☆ on a result.",
+  "Favorit – wird nie automatisch gelöscht": "Favourite – never deleted by itself", "Kein Favorit mehr": "No longer a favourite", "Behalten": "Keep", "Vorige Variante": "Previous variant", "Nächste Variante": "Next variant",
   "Nochmal tippen: diese behalten, die anderen Varianten löschen": "Tap again: keep this one, delete the other variants",
   "Behalten – die anderen sind gelöscht": "Kept – the others are deleted",
   "Pinsel": "Brush", "Beispiel und Tipps": "Example and tips", "Hilfe": "Help", "Rückgängig": "Undo", "Alles weg": "Clear all", "Fertig": "Done",
@@ -1311,9 +1316,16 @@ function stateText(job) {
 
 function renderJobs() {
   const box = $("jobs");
-  if (!S.jobs.length) { box.innerHTML = '<p class="empty"></p>'; box.firstChild.textContent = t("Noch nichts bearbeitet."); return; }
+  const list = S.starsOnly ? S.jobs.filter((j) => j.star) : S.jobs;
+  $("starFilter").textContent = (S.starsOnly ? "★ " : "☆ ") + t("Favoriten");
+  $("starFilter").setAttribute("aria-pressed", String(!!S.starsOnly));
+  if (!list.length) {
+    box.innerHTML = '<p class="empty"></p>';
+    box.firstChild.textContent = t(S.starsOnly ? "Noch keine Favoriten – im Ergebnis ☆ antippen." : "Noch nichts bearbeitet.");
+    return;
+  }
   box.innerHTML = "";
-  for (const j of S.jobs) {
+  for (const j of list) {
     const b = document.createElement("button");
     b.type = "button"; b.className = "job";
     let thumb;
@@ -1325,6 +1337,7 @@ function renderJobs() {
     const meta = document.createElement("div"); meta.className = "meta";
     const title = document.createElement("b"); title.textContent = j.label + (j.model_label ? " · " + j.model_label : "");
     if (j.uncensored) { const u = document.createElement("span"); u.className = "badge"; u.textContent = "U"; title.appendChild(u); }
+    if (j.star) { const v = document.createElement("span"); v.className = "star"; v.textContent = "★"; title.prepend(v); }
     if (j.group) { const v = document.createElement("span"); v.className = "badge n"; v.textContent = j.variant + "/" + j.variants; title.appendChild(v); }
     const sub = document.createElement("span");
     sub.textContent = (j.text ? (LANG === "en" ? "“" + j.text + "” · " : "„" + j.text + "“ · ") : "") + new Date(j.created * 1000).toLocaleString(LANG === "en" ? "en-GB" : "de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
@@ -1350,12 +1363,14 @@ function openViewer(id) {
   const done = job.state === "done";
   for (const b of $("vBar").children) b.style.visibility = done || b.id === "vDelete" ? "" : "hidden";
   if (job.video) $("vMore").style.visibility = "hidden";        // a clip is no picture to edit on
-  // Fehler suchen: for what a model made from nothing but words, and for a repair to check again
-  const checkable = done && !job.video && ["generate", "repair"].includes(job.action);
+  // Fehler suchen: for every picture a model made or changed — not a clip, not a check, not one cut out
+  const checkable = done && !job.video && !job.png && job.action !== "check";
   const checked = done && job.action === "check";
   show("vCheck", checkable); show("vSave", !checked); show("vRepair", checked && job.artifacts && job.artifacts.length > 0);
   $("viewer").classList.toggle("checking", checked); show("vFound", checked);
   $("vDelete").disabled = job.state === "running";
+  $("vStar").textContent = job.star ? "★" : "☆"; $("vStar").classList.toggle("on", !!job.star);
+  $("vStar").style.visibility = done ? "" : "hidden";
   // the variants of one request: from one to the next, and keep the best
   const sib = job.group ? S.jobs.filter((x) => x.group === job.group).sort((x, y) => x.variant - y.variant) : [];
   show("vNav", sib.length > 1);
@@ -1628,6 +1643,16 @@ function continueWith() {
 }
 
 const confirmDelete = {};
+async function toggleStar() {
+  const job = S.jobs.find((x) => x.id === S.viewing.id);
+  try {
+    const j = await api("/jobs/" + job.id + "/star", { method: "POST", headers: { "Content-Type": "application/json" },
+                                                     body: JSON.stringify({ on: !job.star }) });
+    job.star = j.star; renderJobs(); openViewer(job.id);
+    toast(t(j.star ? "Favorit – wird nie automatisch gelöscht" : "Kein Favorit mehr"));
+  } catch (e) { toast(e.message); }
+}
+
 async function keepVariant() {
   const id = S.viewing.id;
   if (confirmDelete.keep !== id) {
@@ -1796,6 +1821,8 @@ $("vCheck").onclick = checkPicture;
 $("vRepair").onclick = repairPicture;
 $("vDelete").onclick = removeJob;
 $("vKeep").onclick = keepVariant;
+$("vStar").onclick = toggleStar;
+$("starFilter").onclick = () => { S.starsOnly = !S.starsOnly; renderJobs(); };
 document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
 window.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeViewer(); closeSheet(); closePainter(); closeTemplates(); } });
 window.addEventListener("hashchange", openFromHash);

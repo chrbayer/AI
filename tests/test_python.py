@@ -564,6 +564,51 @@ class Darkroom(unittest.TestCase):
             self.assertEqual(r.get_json()["error"], "Only 12 GiB of memory free; the language model needs about 30 GB")
         darkroom.ARGS.expand_slot = 0
 
+    def test_a_favourite_is_never_pruned_and_always_listed(self):
+        from unittest import mock
+        ids = []
+        for i in range(5):
+            j = darkroom.new_job({"action": "edit", "label": "Ändern", "text": str(i)})
+            darkroom.update_job(j["id"], state="done", created=1000 + i)
+            ids.append(j["id"])
+        client = darkroom.app.test_client()
+        r = client.post(f"/darkroom/api/jobs/{ids[0]}/star", json={"on": True})
+        self.assertTrue(r.get_json()["star"])
+        with mock.patch.object(darkroom, "KEEP_JOBS", 2):
+            darkroom.prune_jobs()
+        left = {j["id"] for j in darkroom.all_jobs()}
+        self.assertEqual(left, {ids[0], ids[3], ids[4]})                  # the newest two, and the star
+        with mock.patch.object(darkroom, "all_jobs", return_value=[{"id": str(i), "state": "done", "star": i == 99}
+                                                                     for i in range(100)]):
+            listed = [j["id"] for j in client.get("/darkroom/api/jobs").get_json()]
+        self.assertEqual(len(listed), 61)
+        self.assertEqual(listed[-1], "99")
+        self.assertFalse(client.post(f"/darkroom/api/jobs/{ids[0]}/star", json={"on": False}).get_json()["star"])
+
+    def test_the_expanding_model_is_stopped_also_when_an_earlier_run_started_it(self):
+        from unittest import mock
+        darkroom.ARGS.expand_slot, darkroom.ARGS.llmctl, darkroom.ARGS.expand_model = 4, "llmctl", "gemma-moe"
+        darkroom._expand.update(started=False)
+        with mock.patch.object(darkroom, "expander_state", return_value=True), \
+             mock.patch.object(darkroom.subprocess, "run") as run:
+            darkroom.stop_expander()
+            self.assertEqual(run.call_args[0][0], ["llmctl", "stop", "4"])
+        with mock.patch.object(darkroom, "expander_state", return_value=None), \
+             mock.patch.object(darkroom.subprocess, "run") as run:
+            darkroom.stop_expander()
+            run.assert_not_called()
+        darkroom.ARGS.expand_slot = 0
+
+    def test_find_flaws_takes_edits_but_not_cut_outs(self):
+        for action, png, ok in (("edit", False, True), ("background", True, False)):
+            j = darkroom.new_job({"action": action, "label": "x", "text": "t", "png": png})
+            (darkroom.job_path(j["id"]) / "result.png").write_bytes(b"x")
+            darkroom.update_job(j["id"], state="done")
+            r = darkroom.app.test_client().post("/darkroom/api/jobs", data={"action": "check", "from": j["id"]})
+            self.assertEqual(r.status_code == 200, ok, r.get_json())
+        while not darkroom._queue.empty():
+            darkroom._queue.get_nowait()
+
     def test_the_marked_spot_is_shown_to_the_model_in_red(self):
         from PIL import Image
         photo = io.BytesIO(); Image.new("RGB", (100, 100), (128, 128, 128)).save(photo, "PNG")

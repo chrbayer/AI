@@ -2160,6 +2160,10 @@ the desk see the same, and stand first under *Mine* (*Eigene*), as written,
 in either language; × and a second tap deletes one. The second photo
 (*picture 2*, *Animate*'s end frame) can be taken with the camera, too.
 
+**Favourites.** ☆ in the viewer stars a result: the history keeps the last
+100 jobs and every starred one besides, and lists the starred ones also past
+the newest 60; *☆ Favourites* (*Favoriten*) over the history shows only them.
+
 **Expand a short wish.** A few words often do little — "Als Almhütte" put
 mountains in the window, "rot" on a marked shirt made it white. *✨ Expand*
 (*✨ Ausbauen*) under the text field sends the photo, the marked spot (drawn in
@@ -2174,7 +2178,8 @@ shirt. Tried on six wishes: Gemma-4 26B-A4B (`gemma-moe`) got them right, up in
 (`LLMCTL_DARKROOM_EXPAND_SLOT`, 4; `LLMCTL_DARKROOM_EXPAND_MODEL`), started
 with `--mmproj --no-reasoning` on the first request — refused with less than
 32 GiB free or another model on the slot — and stopped after 10 idle minutes,
-or when *Find flaws* needs the room for flash. For *Redesign*, *Paint over*,
+or when *Find flaws* needs the room for flash — also when an earlier run of
+the service started it (a check failed for want of 84 GiB while it held 29). For *Redesign*, *Paint over*,
 *Edit*, *Copy pose*, *Expand* and *Create*.
 
 **Variants, cancel, zoom.** Where one's own words steer the result
@@ -2204,8 +2209,9 @@ gone (404/410) is dropped. Tested against Mozilla's push service: the
 message arrived 3 s after the job and decrypted. On an iPhone, Web Push needs
 the page added to the home screen and opened from there; the switch says so.
 
-**Find flaws.** A picture made in *Create* (or a repaired one) has
-*Find flaws* (*Fehler suchen*) in the viewer: the image API's check from `/repair`. The
+**Find flaws.** Every picture a model made or changed — not a clip, not one
+cut out on transparency — has *Find flaws* (*Fehler suchen*) in the viewer
+(the knight from *Copy pose*: fused gauntlet fingers, found in 129 s): the image API's check from `/repair`. The
 vision model (flash, `--mmproj`) and Inpaint do not fit together, so the job
 has ComfyUI let go of its models, starts flash on the vision slot, checks,
 and stops it again — unless it was running before. The page starts ComfyUI
