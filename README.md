@@ -2160,6 +2160,12 @@ the desk see the same, and stand first under *Mine* (*Eigene*), as written,
 in either language; × and a second tap deletes one. The second photo
 (*picture 2*, *Animate*'s end frame) can be taken with the camera, too.
 
+**Crop and turn.** *Crop* (*Zuschneiden*) beside the source picture opens it
+with a frame to drag by its middle and its corners, free or held to 1:1, 4:3,
+3:4, 16:9 or 9:16, and quarter turns either way; *Done* makes the cut-out the
+source picture — in the browser, on a canvas, nothing goes to the server
+until the job.
+
 **Favourites.** ☆ in the viewer stars a result: the history keeps the last
 100 jobs and every starred one besides, and lists the starred ones also past
 the newest 60; *☆ Favourites* (*Favoriten*) over the history shows only them.

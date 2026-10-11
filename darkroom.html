@@ -208,6 +208,18 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
 .paint { position: relative; }
 .paint img { max-height: calc(100dvh - 230px); }
 .paint canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+.crop { position: relative; }
+.crop img { max-height: calc(100dvh - 250px); }
+.crop .kbox { position: absolute; border: 2px solid #fff; box-shadow: 0 0 0 9999px rgba(0,0,0,.55); touch-action: none; cursor: move; }
+.crop .kbox i { position: absolute; width: 26px; height: 26px; border: 4px solid #fff; }
+.crop .kbox i[data-h="nw"] { left: -6px; top: -6px; border-width: 4px 0 0 4px; }
+.crop .kbox i[data-h="ne"] { right: -6px; top: -6px; border-width: 4px 4px 0 0; }
+.crop .kbox i[data-h="sw"] { left: -6px; bottom: -6px; border-width: 0 0 4px 4px; }
+.crop .kbox i[data-h="se"] { right: -6px; bottom: -6px; border-width: 0 4px 4px 0; }
+.crop .kbox i::after { content: ""; position: absolute; inset: -14px; }
+.ratios { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; padding: 4px 12px 0; }
+.ratios button { background: rgba(255,255,255,.14); border: none; color: #fff; border-radius: 999px; padding: 7px 13px; font-size: 14px; }
+.ratios button[aria-pressed="true"] { background: #fff; color: #000; }
 .brush { display: flex; align-items: center; gap: 12px; padding: 4px 16px 0; color: #ddd; font-size: 14px; }
 .brush input { flex: 1; accent-color: #fff; }
 .toast { position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom)); transform: translateX(-50%);
@@ -280,7 +292,8 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
     </div>
     <div class="source hidden" id="source">
       <img id="sourceImg" alt="Ausgangsbild">
-      <div class="row"><span id="sourceInfo"></span><button class="link" id="sourceClear" type="button">Anderes Bild</button></div>
+      <div class="row"><span id="sourceInfo"></span><span><button class="link" id="sourceCrop" type="button">Zuschneiden</button>
+        <button class="link" id="sourceClear" type="button" style="margin-left:14px">Anderes Bild</button></span></div>
     </div>
   </section>
 
@@ -432,6 +445,21 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
   </div>
 </div>
 
+<div class="layer" id="cropper" role="dialog" aria-modal="true">
+  <div class="top"><b>Zuschneiden und drehen</b><button type="button" id="kCancel">Abbrechen</button></div>
+  <div class="stage" id="kStage"><div class="crop" id="kWrap"><img id="kImg" alt=""><div class="kbox" id="kBox">
+    <i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i></div></div></div>
+  <div class="ratios" id="kRatios">
+    <button type="button" data-r="0" aria-pressed="true">Frei</button><button type="button" data-r="1">1:1</button>
+    <button type="button" data-r="1.3333">4:3</button><button type="button" data-r="0.75">3:4</button>
+    <button type="button" data-r="1.7778">16:9</button><button type="button" data-r="0.5625">9:16</button></div>
+  <div class="bar">
+    <button type="button" id="kLeft"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9a8 8 0 1 1 2 7"/><path d="M4 4v5h5"/></svg>Links drehen</button>
+    <button type="button" id="kRight"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 9a8 8 0 1 0-2 7"/><path d="M20 4v5h-5"/></svg>Rechts drehen</button>
+    <button type="button" class="primary" id="kDone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 5 5L20 7"/></svg>Fertig</button>
+  </div>
+</div>
+
 <div class="sheet-bg" id="sheetBg"></div>
 <div class="sheet" id="sheet">
   <h3>ComfyUI</h3>
@@ -517,7 +545,8 @@ const EN = {
   "✨ Ausbauen": "✨ Expand", "Jetzt ausbauen": "Expand it now",
   "Das Sprachmodell startet – beim ersten Mal etwa 15 Sekunden …": "The language model is starting – about 15 seconds the first time …",
   "Ausgebaut – lesen, anpassen, dann los": "Expanded – read it, change it, then go",
-  "{n} von {m}": "{n} of {m}", "Favoriten": "Favourites", "Favorit": "Favourite",
+  "{n} von {m}": "{n} of {m}", "Zuschneiden": "Crop", "Zuschneiden und drehen": "Crop and turn", "Frei": "Free",
+  "Links drehen": "Turn left", "Rechts drehen": "Turn right", "Favoriten": "Favourites", "Favorit": "Favourite",
   "Noch keine Favoriten – im Ergebnis ☆ antippen.": "No favourites yet – tap ☆ on a result.",
   "Favorit – wird nie automatisch gelöscht": "Favourite – never deleted by itself", "Kein Favorit mehr": "No longer a favourite", "Behalten": "Keep", "Vorige Variante": "Previous variant", "Nächste Variante": "Next variant",
   "Nochmal tippen: diese behalten, die anderen Varianten löschen": "Tap again: keep this one, delete the other variants",
@@ -1148,6 +1177,88 @@ async function saveTemplate() {
     await api("/prompts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   } catch (e) { $("saveErr").textContent = e.message; return; }
   T.data = null; closeSave(); toast(t("Als Vorlage gespeichert"));
+}
+
+// ── cropping and turning ─────────────────────────────────
+// The source picture on a canvas, turned by quarters; the box in fractions of
+// it, moved by its middle, sized by its corners, held to a shape if one is chosen.
+const K = { canvas: null, rect: [0, 0, 1, 1], ratio: 0, drag: null };
+
+async function openCropper() {
+  if (!S.source) return;
+  const img = new Image(); img.crossOrigin = "anonymous";
+  try { await new Promise((ok, bad) => { img.onload = ok; img.onerror = bad; img.src = S.source.url; }); }
+  catch (e) { toast(t("Das Bild lässt sich nicht öffnen.")); return; }
+  const c = document.createElement("canvas"); c.width = img.naturalWidth; c.height = img.naturalHeight;
+  c.getContext("2d").drawImage(img, 0, 0);
+  K.canvas = c; K.ratio = 0; press("kRatios", "r", "0");
+  showCrop(true);
+  $("cropper").classList.add("on"); document.body.style.overflow = "hidden";
+}
+function closeCropper() { $("cropper").classList.remove("on"); if (!S.viewing) document.body.style.overflow = ""; }
+
+function showCrop(reset) {
+  if (reset) K.rect = fitRatio(K.ratio);
+  $("kImg").onload = placeBox;
+  $("kImg").src = K.canvas.toDataURL("image/jpeg", 0.85);
+}
+function placeBox() {
+  const [x, y, w, h] = K.rect, b = $("kBox").style;
+  b.left = x * 100 + "%"; b.top = y * 100 + "%"; b.width = w * 100 + "%"; b.height = h * 100 + "%";
+}
+// the largest box of the shape r (width/height in pixels), centred; 0: all of it
+function fitRatio(r) {
+  if (!r) return [0, 0, 1, 1];
+  const k = r * K.canvas.height / K.canvas.width;             // the shape in fractions
+  const w = k <= 1 ? k : 1, h = k <= 1 ? 1 : 1 / k;
+  return [(1 - w) / 2, (1 - h) / 2, w, h];
+}
+function turn(dir) {
+  const c = K.canvas, n = document.createElement("canvas");
+  n.width = c.height; n.height = c.width;
+  const ctx = n.getContext("2d");
+  ctx.translate(n.width / 2, n.height / 2); ctx.rotate(dir * Math.PI / 2); ctx.drawImage(c, -c.width / 2, -c.height / 2);
+  K.canvas = n; showCrop(true);
+}
+{
+  const box = $("kBox"), MIN = 0.06;
+  box.onpointerdown = (e) => {
+    e.preventDefault(); box.setPointerCapture(e.pointerId);
+    K.drag = { h: e.target.dataset.h || "move", x: e.clientX, y: e.clientY, r: K.rect.slice() };
+  };
+  box.onpointermove = (e) => {
+    if (!K.drag) return;
+    const wr = $("kWrap").getBoundingClientRect();
+    const dx = (e.clientX - K.drag.x) / wr.width, dy = (e.clientY - K.drag.y) / wr.height;
+    let [x, y, w, h] = K.drag.r;
+    if (K.drag.h === "move") {
+      x = Math.min(1 - w, Math.max(0, x + dx)); y = Math.min(1 - h, Math.max(0, y + dy));
+    } else {
+      const left = K.drag.h.includes("w"), top = K.drag.h.includes("n");
+      let x2 = x + w, y2 = y + h;
+      if (left) x = Math.min(x2 - MIN, Math.max(0, x + dx)); else x2 = Math.max(x + MIN, Math.min(1, x2 + dx));
+      if (top) y = Math.min(y2 - MIN, Math.max(0, y + dy)); else y2 = Math.max(y + MIN, Math.min(1, y2 + dy));
+      w = x2 - x; h = y2 - y;
+      if (K.ratio) {                                   // the height follows the width, within the picture
+        const k = K.ratio * K.canvas.height / K.canvas.width;
+        h = w / k;
+        if (top) y = y2 - h;
+        if (y < 0 || y + h > 1) { h = top ? y2 : 1 - y; if (top) y = 0; w = h * k; if (left) x = x2 - w; }
+      }
+    }
+    K.rect = [x, y, w, h]; placeBox();
+  };
+  box.onpointerup = box.onpointercancel = () => { K.drag = null; };
+}
+async function finishCrop() {
+  const c = K.canvas, [x, y, w, h] = K.rect;
+  const out = document.createElement("canvas");
+  out.width = Math.max(1, Math.round(w * c.width)); out.height = Math.max(1, Math.round(h * c.height));
+  out.getContext("2d").drawImage(c, x * c.width, y * c.height, out.width, out.height, 0, 0, out.width, out.height);
+  const png = S.source.blob && S.source.blob.type === "image/png";
+  const blob = await new Promise((ok) => out.toBlob(ok, png ? "image/png" : "image/jpeg", 0.92));
+  closeCropper();
+  setSource({ blob, url: URL.createObjectURL(blob), w: out.width, h: out.height });
 }
 
 // ── painting the mask ────────────────────────────────────
@@ -1803,6 +1914,10 @@ for (const b of $("genQuality").children) b.onclick = () => { S.genQuality = b.d
 $("unc").onchange = (e) => setUnc(e.target.checked);
 $("push").onchange = (e) => setPush(e.target.checked);
 $("maskBtn").onclick = openPainter;
+$("sourceCrop").onclick = openCropper;
+$("kCancel").onclick = closeCropper; $("kDone").onclick = finishCrop;
+$("kLeft").onclick = () => turn(-1); $("kRight").onclick = () => turn(1);
+for (const b of $("kRatios").children) b.onclick = () => { K.ratio = Number(b.dataset.r); press("kRatios", "r", b.dataset.r); K.rect = fitRatio(K.ratio); placeBox(); };
 $("pCancel").onclick = closePainter;
 $("pDone").onclick = finishPainter;
 $("pUndo").onclick = () => { P.strokes.pop(); redraw(); };
@@ -1824,7 +1939,7 @@ $("vKeep").onclick = keepVariant;
 $("vStar").onclick = toggleStar;
 $("starFilter").onclick = () => { S.starsOnly = !S.starsOnly; renderJobs(); };
 document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
-window.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeViewer(); closeSheet(); closePainter(); closeTemplates(); } });
+window.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeViewer(); closeSheet(); closePainter(); closeTemplates(); closeCropper(); } });
 window.addEventListener("hashchange", openFromHash);
 
 translatePage();
