@@ -4,7 +4,7 @@ One command for a local AI machine (AMD Strix Halo): language models on
 llama.cpp, halogen and gufo behind OpenAI- and Anthropic-compatible proxies (for
 Claude Code and other clients), speech in and out, and pictures, video, music and
 3D on ComfyUI with an image API, and a web page for editing photos from the
-phone ([`llmctl fotos`](#photos-from-the-phone-llmctl-fotos)). It starts, stops
+phone ([`llmctl darkroom`](#darkroom-photos-from-the-phone-llmctl-darkroom)). It starts, stops
 and combines them in slots and presets, checks that they fit in memory,
 downloads models, measures them, and tells what has a newer version.
 
@@ -16,7 +16,7 @@ sudo make install-link     # instead: /usr/local/bin/llmctl → this checkout, e
 sudo make uninstall
 
 pip install flask requests pillow # for proxy.py and the image API
-pip install cryptography   # optional: notifications from the Fotos page
+pip install cryptography   # optional: notifications from the Darkroom page
 pip install waitress       # optional, recommended for production proxy
 ```
 
@@ -25,9 +25,9 @@ your home directory:
 
 | Where | What | Override |
 | --- | --- | --- |
-| `~/.config/llmctl/` | `models.conf`, `presets.conf`, `tokens`, `tls/`, `fotos_tunnel_key` | `LLMCTL_CONFIG_DIR` (tokens/tls also `LLM_CONF_DIR`, `LLM_TOKEN_FILE`) |
+| `~/.config/llmctl/` | `models.conf`, `presets.conf`, `tokens`, `tls/`, `darkroom_tunnel_key` | `LLMCTL_CONFIG_DIR` (tokens/tls also `LLM_CONF_DIR`, `LLM_TOKEN_FILE`) |
 | `~/.local/share/llmctl/models/` | the GGUF files (`$MODELS_DIR` in `models.conf`), ComfyUI's models in `comfyui/` | `LLMCTL_MODELS_DIR`, or set `MODELS_DIR` in `models.conf` |
-| `~/.local/share/llmctl/` | `llama.cpp/` (prebuilt llama-server, see below), `benchmarks/`, `claude/<model>[-<slot>]` (Claude Code profiles set by `env`), `comfyui/` (ComfyUI's checkout in `app/`, its workflows, input and output), `tts/` (voices; a voice-design venv only without ComfyUI), `fotos/` (the Fotos page's jobs, own templates, push subscriptions and VAPID key) | `LLMCTL_DATA_DIR` |
+| `~/.local/share/llmctl/` | `llama.cpp/` (prebuilt llama-server, see below), `benchmarks/`, `claude/<model>[-<slot>]` (Claude Code profiles set by `env`), `comfyui/` (ComfyUI's checkout in `app/`, its workflows, input and output), `tts/` (voices; a voice-design venv only without ComfyUI), `darkroom/` (the Darkroom page's jobs, own templates, push subscriptions and VAPID key) | `LLMCTL_DATA_DIR` |
 | `~/.local/state/llmctl/` | `logs/`, `pids/`, `slots/` | `LLMCTL_STATE_DIR` |
 
 **llama-server** itself: `llmctl download llama` installs prebuilt builds at
@@ -114,7 +114,7 @@ llmctl clear                           # Clear env vars
 llmctl download <model>                # Download model(s); --check: only say what is missing
 llmctl prune [--dry-run]               # Models nothing names any more; deletes after a typed yes
 llmctl outdated [--quick]              # What has a newer version (images, builds, ComfyUI, models)
-llmctl fotos enable|disable|status|key # Photo editing from the phone: a user service with its own tunnel
+llmctl darkroom enable|disable|status|key # Photo editing from the phone: a user service with its own tunnel
 llmctl version                         # Print the version
 ```
 
@@ -2007,68 +2007,84 @@ the server's Apache with this vhost: 401 with a Basic Auth prompt on every
 path without credentials, and with them ComfyUI and the repair page load in
 the browser.
 
-### Photos from the phone (`llmctl fotos`)
+### Darkroom: photos from the phone (`llmctl darkroom`)
 
-ComfyUI's workflows are not made for a phone. `/fotos` is a page that is:
+ComfyUI's workflows are not made for a phone. `/darkroom` is a page that is:
 pick a photo from the gallery or take one, tap what should happen, look at
 the result with a before/after slider, and save it to the phone's photos
-through its share sheet — or switch to *Erzeugen* and make a picture from a
-prompt. *Animieren* turns a photo into a short clip with sound, *Sprechen
-lassen* makes it speak a voice recorded on the phone. The actions come in
-four groups: Verbessern, Verändern, Neu erschaffen, Video. Big buttons, one column, dark mode; it can sit on the home screen
-like an app.
+through its share sheet — or switch to *Create* and make a picture from a
+prompt. *Animate* turns a photo into a short clip with sound, *Make it talk*
+makes it speak a voice recorded on the phone. The actions come in four
+groups: Enhance, Change, Reimagine, Video. Big buttons, one column, dark
+mode; it can sit on the home screen like an app.
+
+**German and English.** The page speaks the browser's language, German or
+English; *DE*/*EN* at the top switches and is remembered. The server answers
+in it as well (`X-Darkroom-Lang`): actions, hints, templates, errors, the
+history — what a job keeps is German on disk and translated on the way out —
+and the notifications, in the language of the page that switched them on.
+The models take what is typed in either. Below, the page's English names,
+with the German ones in brackets where they first come.
+
+It was called *Fotos* (`llmctl fotos`, `/fotos`) until 1.86. `llmctl darkroom
+enable` takes over what that left: the old service stopped and removed, its
+jobs, templates, push subscriptions and tunnel key moved to the new names.
+`/fotos` sends the page on to `/darkroom`, and `llmctl fotos` still works,
+with a note. The vhost needs the `/darkroom` lines (see below); notifications
+switched on at `/fotos` are switched off once and have to be switched on again
+at `/darkroom`, and a home-screen icon for `/fotos` is best made anew.
 
 | Action | Workflow (fast / thorough) | Measured here |
 |---|---|---|
-| Kolorieren — black and white to colour; colours can be named | Qwen-Image 2.1 Colorize Turbo / Colorize | 29 s / 65 s |
-| Restaurieren — scratches, stains, noise | Qwen-Image 2.1 Edit Turbo / Edit, with a restoring prompt | 146 s (with loading) |
-| Gesichter — faces and hands redrawn | Qwen-Image 2.1 Detailer / FLUX.2 klein Detailer (small faces) | 136 s / 235 s |
-| Vergrößern — 4× | SeedVR2 7B (the picture brought to 1024 px first) | 103 s, 1024 → 4096 px |
-| Freistellen — background removed (PNG) | BiRefNet / BiRefNet Matting | 3 s |
-| Entfernen — "die Person", "den Mülleimer" | Qwen-Image 2.1 Edit Turbo / Edit: "Entferne … aus dem Foto" | 45 s |
-| Ändern — in one's own words, with a second photo as "Bild 2" | Qwen-Image Edit Turbo, Edit, FLUX.2 klein (one photo), FLUX.2 dev Turbo | 43–158 s |
-| Erweitern — more picture left and right, above and below, or all round | Qwen-Image 2.1 Outpaint Turbo / Outpaint | 26 s |
-| Übermalen — a place marked with a finger, and what goes there; *Form behalten* keeps cut and folds | Qwen-Image 2.1 Inpaint Crop Turbo / Inpaint Crop; Canny Inpaint Turbo / Canny Inpaint | 22 s; 29 s |
-| Ausschneiden — one named thing, alone on transparency (PNG) | Qwen-Image Layered Control (640 px, the first of two layers) | 119 s |
-| Pose übernehmen — someone else, standing the same way | Z-Image Turbo Pose Control / Qwen-Image 2.1 Pose Control | 45 s / 72 s |
-| Neu gestalten — the same room or landscape in another style | Qwen-Image 2.1 Depth Control Turbo / Depth Control | 27 s / 72 s |
-| Als Kunstwerk — watercolour, pencil, oil, comic, anime | Qwen-Image 2.1 Edit Turbo / Edit: "Turn this photo into …" | 45–75 s |
-| Animieren — a clip of 3, 5 or 8 s with sound; with an end picture the clip runs to it | LTX-2.5 Video (first stage only / both) / First-Last Frame | 83 s / 375 s for 5 s |
-| Sprechen lassen — the photo speaks or sings a recording of up to 10 s | LTX-2.5 Talking (first stage only / both) | 124 s for 6 s fast |
+| Colorize (Kolorieren) — black and white to colour; colours can be named | Qwen-Image 2.1 Colorize Turbo / Colorize | 29 s / 65 s |
+| Restore (Restaurieren) — scratches, stains, noise | Qwen-Image 2.1 Edit Turbo / Edit, with a restoring prompt | 146 s (with loading) |
+| Faces (Gesichter) — faces and hands redrawn | Qwen-Image 2.1 Detailer / FLUX.2 klein Detailer (small faces) | 136 s / 235 s |
+| Upscale (Vergrößern) — 4× | SeedVR2 7B (the picture brought to 1024 px first) | 103 s, 1024 → 4096 px |
+| Remove background (Freistellen) — background removed (PNG) | BiRefNet / BiRefNet Matting | 3 s |
+| Erase (Entfernen) — "the person", "the bin" | Qwen-Image 2.1 Edit Turbo / Edit: "Remove … from the photo" ("Entferne … aus dem Foto") | 45 s |
+| Edit (Ändern) — in one's own words, with a second photo as "picture 2" | Qwen-Image Edit Turbo, Edit, FLUX.2 klein (one photo), FLUX.2 dev Turbo | 43–158 s |
+| Expand (Erweitern) — more picture left and right, above and below, or all round | Qwen-Image 2.1 Outpaint Turbo / Outpaint | 26 s |
+| Paint over (Übermalen) — a place marked with a finger, and what goes there; *Keep shape* (*Form behalten*) keeps cut and folds | Qwen-Image 2.1 Inpaint Crop Turbo / Inpaint Crop; Canny Inpaint Turbo / Canny Inpaint | 22 s; 29 s |
+| Cut out (Ausschneiden) — one named thing, alone on transparency (PNG) | Qwen-Image Layered Control (640 px, the first of two layers) | 119 s |
+| Copy pose (Pose übernehmen) — someone else, standing the same way | Z-Image Turbo Pose Control / Qwen-Image 2.1 Pose Control | 45 s / 72 s |
+| Redesign (Neu gestalten) — the same room or landscape in another style | Qwen-Image 2.1 Depth Control Turbo / Depth Control | 27 s / 72 s |
+| As artwork (Als Kunstwerk) — watercolour, pencil, oil, comic, anime | Qwen-Image 2.1 Edit Turbo / Edit: "Turn this photo into …" | 45–75 s |
+| Animate (Animieren) — a clip of 3, 5 or 8 s with sound; with an end picture the clip runs to it | LTX-2.5 Video (first stage only / both) / First-Last Frame | 83 s / 375 s for 5 s |
+| Make it talk (Sprechen lassen) — the photo speaks or sings a recording of up to 10 s | LTX-2.5 Talking (first stage only / both) | 124 s for 6 s fast |
 
-*Erzeugen* takes a prompt, a model, a shape (1:1, 4:3, 3:4, 16:9, 9:16, about
+*Create* (*Erzeugen*) takes a prompt, a model, a shape (1:1, 4:3, 3:4, 16:9, 9:16, about
 1 MP each) and a count (1–4, one job per picture): Z-Image Turbo 20 s,
 FLUX.2 klein 30 s, Qwen-Image 2.1 46 s (lettering with umlauts right), Z-Image
 ~110 s, FLUX.2 dev Turbo 130 s, FLUX.2 dev ~5 min — as compared under
-[Which model for a picture](#which-model-for-a-picture). *Unzensiert*, a switch
+[Which model for a picture](#which-model-for-a-picture). *Uncensored* (*Unzensiert*), a switch
 for both, takes the uncensored variant where there is one (Z-Image Turbo's
 NSFW finetune, klein's and dev's NSFW workflows, Qwen-Image Heretic) and greys
 out the models without (Z-Image base, FLUX.2 dev Turbo); colouring or
 enlarging has nothing to refuse and stays as it is. With two photos, Qwen-Image
 Edit Turbo took the whole woman from picture 2 into picture 1's beach where it
 was asked for her outfit only — say plainly what comes from which.
-*Erzeugen* also offers LTX-2.5 Video, in the same shapes at ~0.9 MP
+*Create* also offers LTX-2.5 Video, in the same shapes at ~0.9 MP
 (1280×704, 704×1280, 960×960, 1088×832, 832×1088): Z-Image Turbo makes the
-first frame from the prompt (with *Unzensiert* its NSFW finetune), and LTX
+first frame from the prompt (with *Uncensored* its NSFW finetune), and LTX
 animates it — 133 s for 5 s fast. LTX from text alone drifts with a short
 prompt: of three seeds for "a tram in a rainy street", two made a film still
 of a man's face; the template's prompt enhancement (Gemma-4 E2B) answered
 with an essay on the instructions instead of a caption.
 
-*Animieren* goes through the image API's `/v1/video/clips`. Without a text the
+*Animate* goes through the image API's `/v1/video/clips`. Without a text the
 clip gets a prompt of gentle, natural movement with a still camera; what
-should happen ("sie winkt in die Kamera") can be written in German. The clip
+should happen ("she waves at the camera") can be written in German or English. The clip
 takes the photo's shape at ~0.9 MP (the template would cut a portrait to
-16:9). *Schnell* decodes LTX's first stage straight away: half the size
+16:9). *Fast* (*Schnell*) decodes LTX's first stage straight away: half the size
 (640×352 from a 16:9 photo), 83 s for 5 s (112 s with loading), where both
 stages take 375 s at 1280×704. Sampling the first stage at 960×544 instead
 took 248 s: not worth it beside the full two stages.
 A second photo makes it First-Last Frame, the clip running from the first
-to the second; that workflow has one stage only, so *Schnell* there makes it
+to the second; that workflow has one stage only, so *Fast* there makes it
 at a third of the pixels (768×448, 159 s for 5 s). The player starts muted, as phones
-want; *Sichern* hands the MP4 to the share sheet.
+want; *Save* (*Sichern*) hands the MP4 to the share sheet.
 
-*Pose übernehmen* and *Neu gestalten* are the ControlNet workflows: the
+*Copy pose* and *Redesign* are the ControlNet workflows: the
 photo's pose (DWPose) or depth (Depth Anything V2) and a new scene on it. Tried: a man waving in a park became a
 dancer on a stage and a knight in a misty forest, arm and hand on the hip
 exactly his; a living room became an alpine cabin and a spaceship cabin,
@@ -2077,116 +2093,118 @@ full**: "als futuristisches Raumschiff-Quartier" alone left the living room
 as it was, with "Metallwände, blaue Leuchtstreifen" it was a spaceship; "Als
 Almhütte" only made a living room darker, and wrapping it ("the same room,
 completely redesigned: …", German or English) did not help — the page says so
-under the text while it is shorter than five words. *Übermalen* the same: "rot"
-left a grey hat grey, with *Form behalten* as well, "ein roter Hut" made it
+under the text while it is shorter than five words. *Paint over* the same: "rot"
+left a grey hat grey, with *Keep shape* as well, "ein roter Hut" made it
 red; one word gets the hint there.
-*Neu gestalten* runs on Qwen-Image's Depth Turbo: Z-Image's turned an
+*Redesign* runs on Qwen-Image's Depth Turbo: Z-Image's turned an
 untidy garden into neon-green mush and a living room's windows into black
 panels, where Qwen-Image laid out lawn, beds and path and kept the windows.
-*Als Kunstwerk* runs on Qwen-Image Edit, told "Turn this photo into a … ;
+*As artwork* runs on Qwen-Image Edit, told "Turn this photo into a … ;
 keep the composition, the people and their features, the hair colour and
 the colours of the clothes" (the pencil drawing keeps no colours). It used
 to run on Canny, which sees only the photo's edges: a blonde girl in a grey
 hat came back red- or purple-haired in a yellow one with a stranger's face,
 and the old prompt without colour words ("clean line art") a pale line
 drawing. Tried on a girl, a beach with a woman and her dog and a man in a
-park, all five styles: faces, hair, clothes and the scene kept, 45–75 s. *Form behalten* (Canny Inpaint) changes the material and
+park, all five styles: faces, hair, clothes and the scene kept, 45–75 s. *Keep shape* (Canny Inpaint) changes the material and
 keeps the thing: a black wool coat asked to be red leather stayed the same
 coat, collar and buttons, where plain Inpaint made another coat with
 zips — but only with all of the coat marked; half of it marked, it stayed
-black (also at strength 0.6). *Ausschneiden* takes the first layer of
+black (also at strength 0.6). *Cut out* takes the first layer of
 Qwen-Image Layered Control: "the dog" came back as the dog alone, clean.
 
-*Sprechen lassen* records the voice in the browser (WebM/Opus, on an
+*Make it talk* records the voice in the browser (WebM/Opus, on an
 iPhone MP4/AAC) or takes an audio file; the server makes it WAV, cut to
 10 s, and LTX-2.5 Talking makes the clip exactly as long, the voice kept
-as it is. *Schnell* is the first stage alone, as for *Animieren*. A face
+as it is. *Fast* is the first stage alone, as for *Animate*. A face
 that fills the picture works best: from a full-length photo the mouth
 moves with the words, but small and soft.
 
-**Vorlagen.** Next to each text field, *Vorlagen* opens a library of
-prompts (`fotos_prompts.json`, ~70): weather and light, seasons, tidying
+**Templates.** Next to each text field, *Templates* (*Vorlagen*) opens a library of
+prompts (`darkroom_prompts.json`, ~70, each in German and English): weather and light, seasons, tidying
 up, people, backgrounds, rooms, new scenes, video, and pictures to make
 (product photo, postcard, birthday card, logo). The search goes through
-title, keywords and text, with umlauts folded ("sonne", "regen" and
-"himmel" all find *Sonniger Tag*); without a search it shows the ones for
+title, keywords and text, with umlauts folded ("sun", "rain" and "sky" all
+find *Sunny day*; on the German page "sonne", "regen" and "himmel" find
+*Sonniger Tag*); without a search it shows the ones for
 the chosen action. A tap puts the text in and switches to its action;
 a `[placeholder]` is selected to type over — left standing, its words
 count, the brackets are dropped.
 
-Own ones: with text in the field, *Speichern* beside *Vorlagen* keeps it
-under a title, with the action and what it has set (Erweitern's sides, a
-style, *Form behalten*). They are kept on the server
-(`~/.local/share/llmctl/fotos/prompts.json`, up to 200), so the phone and
-the desk see the same, and stand first under *Eigene*; × and a second tap
-deletes one. The second photo (*Bild 2*, *Animieren*'s end frame) can be
-taken with the camera, too.
+Own ones: with text in the field, *Save* (*Speichern*) beside *Templates* keeps it
+under a title, with the action and what it has set (*Expand*'s sides, a
+style, *Keep shape*). They are kept on the server
+(`~/.local/share/llmctl/darkroom/prompts.json`, up to 200), so the phone and
+the desk see the same, and stand first under *Mine* (*Eigene*), as written,
+in either language; × and a second tap deletes one. The second photo
+(*picture 2*, *Animate*'s end frame) can be taken with the camera, too.
 
-**Varianten, Abbrechen, Zoom.** Where one's own words steer the result
-(*Ändern*, *Übermalen*, *Entfernen*, *Erweitern*, *Pose übernehmen*, *Neu gestalten*,
-*Als Kunstwerk*), *Varianten* 1–3 makes as many jobs, each with a seed of
+**Variants, cancel, zoom.** Where one's own words steer the result
+(*Edit*, *Paint over*, *Erase*, *Expand*, *Copy pose*, *Redesign*,
+*As artwork*), *Variants* (*Varianten*) 1–3 makes as many jobs, each with a seed of
 its own and a card of its own: the same sunset on the beach came out once
 with the sun hidden, once with it on the horizon and its glitter on the
-sand, 21 and 17 s. A waiting or running job has *Abbrechen*: one that waits
+sand, 21 and 17 s. A waiting or running job has *Cancel* (*Abbrechen*): one that waits
 is crossed out, one that runs has ComfyUI's workflow interrupted — it
 stopped after 1 to 4 s (the step it was in) and the next job ran on at
-once. *Fehler suchen* cannot stop flash mid-answer; its answer is dropped and
+once. *Find flaws* cannot stop flash mid-answer; its answer is dropped and
 flash stopped as usual. In the viewer two fingers zoom up to 4×, one finger
 then moves the picture, a double tap zooms in 2.5× or back out (the wheel on
 a desk); the slider and the boxes keep their size on screen.
 
-**Benachrichtigungen.** *Benachrichtigen, wenn fertig* subscribes the device
-to Web Push: when a job ends, the server sends "Fertig: Ändern · 62 s" (or
-what went wrong), and a tap opens it. Not for a cancelled job, nor for a
+**Notifications.** *Notify me when done* (*Benachrichtigen, wenn fertig*) subscribes the device
+to Web Push: when a job ends, the server sends "Done: Edit · 62 s" ("Fertig:
+Ändern · 62 s" to a German page) or what went wrong, and a tap opens it. Not for a cancelled job, nor for a
 device whose page is being looked at — the page sends its device id with
-each request while it is visible (`X-Fotos-Device`). `webpush.py` encrypts
+each request while it is visible (`X-Darkroom-Device`). `webpush.py` encrypts
 the message for the browser (RFC 8291) and signs it with VAPID (RFC 8292),
 with `cryptography` — no push library, no service in between; the key is
-made on first use (`~/.local/share/llmctl/fotos/vapid.pem`), the
+made on first use (`~/.local/share/llmctl/darkroom/vapid.pem`), the
 subscriptions are in `push.json` beside it, and one the push service calls
 gone (404/410) is dropped. Tested against Mozilla's push service: the
 message arrived 3 s after the job and decrypted. On an iPhone, Web Push needs
 the page added to the home screen and opened from there; the switch says so.
 
-**Fehler suchen.** A picture made in *Erzeugen* (or a repaired one) has
-*Fehler suchen* in the viewer: the image API's check from `/repair`. The
+**Find flaws.** A picture made in *Create* (or a repaired one) has
+*Find flaws* (*Fehler suchen*) in the viewer: the image API's check from `/repair`. The
 vision model (flash, `--mmproj`) and Inpaint do not fit together, so the job
 has ComfyUI let go of its models, starts flash on the vision slot, checks,
 and stops it again — unless it was running before. The page starts ComfyUI
-with `--vision $LLMCTL_FOTOS_VISION_SLOT` (2, as preset `comfy-remote`; 0
+with `--vision $LLMCTL_DARKROOM_VISION_SLOT` (2, as preset `comfy-remote`; 0
 for none); a ComfyUI started without it says so. The flaws come as numbered
 boxes over the picture and a list to tick, each with its fix to edit;
-*Reparieren* repaints the ticked ones with Inpaint Crop (Turbo or, *Gründlich*,
+*Repair* (*Reparieren*) repaints the ticked ones with Inpaint Crop (Turbo or, *Thorough*,
 14 steps), boxes whose crops meet in one run, the others one after the other,
 the prompt made from the picture's and the fixes — as `/repair` does. A
 check took 166 s (flash up 40 s, the check 116 s, down 8 s): on old hands
 knitting it found a missing little finger and a "garbled" temple of the
 folded glasses — the second healthy, which is why the list is there to
-untick. Turbo (53 s, two runs) left a white fleck at the finger; *Gründlich*
+untick. Turbo (53 s, two runs) left a white fleck at the finger; *Thorough*
 (134 s) made two clean curled fingers. A spot of one's own goes through
-*Weiter bearbeiten* → *Übermalen*. `/repair` stays, for the desk.
+*Edit further* (*Weiter bearbeiten*) → *Paint over*. `/repair` stays, for the desk.
 
 **Edits at 1 MP.** Qwen-Image Edit works at the picture's own size, and its
 time grows faster than the pixels: a rainy street made sunny took 151 s at
 1.6 MP, 62 s at 1.0 MP and 33 s at 0.7 MP (Turbo, warm). 1.0 MP was as sharp
-as 1.6; at 0.7 MP it was softer and the framing shifted. Ändern, Entfernen
-and Restaurieren bring the photo to 1 MP first.
+as 1.6; at 0.7 MP it was softer and the framing shifted. *Edit*, *Erase*
+and *Restore* bring the photo to 1 MP first.
 
-"Entfernen" is an instruction edit, not Inpaint: a mask in the shape of a
+*Erase* is an instruction edit, not Inpaint: a mask in the shape of a
 person, SAM 3's, had another person painted into it (both Inpaint Crop
 variants); told to remove her, Qwen-Image Edit filled in beach and waves —
-in German as well as in English. A result can be taken on ("Weiter
-bearbeiten"): coloured, then enlarged.
+in German as well as in English; the page sends "Entferne … aus dem Foto" or
+"Remove … from the photo" in its language. A result can be taken on
+(*Edit further*): coloured, then enlarged.
 
 **A service of its own.** The image API belongs to the ComfyUI slot and goes
-with it; the page must not, or it could not start ComfyUI. `llmctl fotos
-enable` makes it a user service (`llmctl-fotos.service`, port 8190, at every
+with it; the page must not, or it could not start ComfyUI. `llmctl darkroom
+enable` makes it a user service (`llmctl-darkroom.service`, port 8190, at every
 login) with a tunnel of its own to the tunnel host (→ its localhost:18190;
-`deploy/vps-comfy-vhost.conf` routes `/fotos` there, behind the same Basic
-Auth). The page shows whether ComfyUI runs, starts it (`llmctl start comfy 9
---proxy`, `LLMCTL_FOTOS_SLOT`/`LLMCTL_FOTOS_MODEL`) and stops it to free the
+`deploy/vps-comfy-vhost.conf` routes `/darkroom` there, and the old `/fotos`,
+behind the same Basic Auth). The page shows whether ComfyUI runs, starts it (`llmctl start comfy 9
+--proxy`, `LLMCTL_DARKROOM_SLOT`/`LLMCTL_DARKROOM_MODEL`) and stops it to free the
 memory. With less than 40 GiB free — an LLM like `flash` beside it — it says
-so and starts only on "Trotzdem starten": Qwen-Image takes 25–30 GB while it
+so and starts only on *Start anyway* (*Trotzdem starten*): Qwen-Image takes 25–30 GB while it
 works, LTX-2.5 over 40. After 15 minutes without a job it has ComfyUI unload its models.
 
 **Open files.** ROCm holds a dmabuf file descriptor for every block of GPU
@@ -2199,24 +2217,25 @@ raised to the hard one.
 **Jobs run on the server.** The phone sends the picture once — scaled to
 2560 px in the browser, turned upright by its EXIF, iPhone HEIC as JPEG — and
 the server queues it, one at a time, sends it to the image API and keeps the
-result in `~/.local/share/llmctl/fotos/jobs/` (the last 100). A locked screen
+result in `~/.local/share/llmctl/darkroom/jobs/` (the last 100). A locked screen
 or a lost connection costs nothing: the page finds the result in its list
 when it comes back. Results come as JPEG (quality 92), cut-outs as PNG.
 
 **The tunnel's key.** A service has no ssh agent, so the tunnel logs in with
-a key of its own without a passphrase (`~/.config/llmctl/fotos_tunnel_key`),
-and the tunnel host restricts it to that one forward — `llmctl fotos key`
+a key of its own without a passphrase (`~/.config/llmctl/darkroom_tunnel_key`),
+and the tunnel host restricts it to that one forward — `llmctl darkroom key`
 prints the line for its `authorized_keys`:
 
 ```
-restrict,port-forwarding,permitlisten="localhost:18190",command="/bin/false" ssh-ed25519 AAAA… llmctl-fotos@host
+restrict,port-forwarding,permitlisten="localhost:18190",command="/bin/false" ssh-ed25519 AAAA… llmctl-darkroom@host
 ```
 
-Setting it up: `llmctl fotos enable`, the line from `llmctl fotos key` into
-the tunnel host's `~/.ssh/authorized_keys`, the vhost's `/fotos` lines, and
+Setting it up: `llmctl darkroom enable`, the line from `llmctl darkroom key` into
+the tunnel host's `~/.ssh/authorized_keys`, the vhost's `/darkroom` lines, and
 `loginctl enable-linger $USER` for it to run before anyone logs in.
-`llmctl fotos status` shows service, page, tunnel and jobs; `fotos disable`
-stops it.
+`llmctl darkroom status` shows service, page, tunnel and jobs; `darkroom disable`
+stops it. The key made under the old name keeps working: it moves with the
+rest, and its line in `authorized_keys` stays as it is.
 
 ### Which model for a picture
 
@@ -2928,15 +2947,15 @@ English. Kolibri reasons in English.
 - `halogen_bench.py` — `bench` for halogen models: prefill and decode speed of a running slot
 - `hf_parts.py` — joins models the Hub holds as byte parts (`*.partNofM`), checks them against its hashes and keeps those in `X.gguf.parts.json`
 - `images_server.py` — OpenAI image API in front of a ComfyUI slot (`start comfy N --proxy`); `comfyui/export_api.py` makes the API-format workflows in `comfyui/api/` it runs
-- `fotos_server.py` — the Fotos web server (`llmctl fotos`, port 8190): the job queue in front of the image API, templates, cancelling, notifications; it serves `fotos.html` (the phone page), `fotos_prompts.json` (the template library) and the service worker
-- `webpush.py` — Web Push for the Fotos page without a library of its own: aes128gcm encryption (RFC 8291) and VAPID (RFC 8292) with `cryptography`
+- `darkroom_server.py` — the Darkroom web server (`llmctl darkroom`, port 8190): the job queue in front of the image API, templates, cancelling, notifications, German and English; it serves `darkroom.html` (the phone page), `darkroom_prompts.json` (the template library) and the service worker
+- `webpush.py` — Web Push for the Darkroom page without a library of its own: aes128gcm encryption (RFC 8291) and VAPID (RFC 8292) with `cryptography`
 - `examples/models.conf` — Model definitions (paths, binaries, ROCm env vars); read from `~/.config/llmctl/`
 - `examples/presets.conf` — Named configurations: which models run together, on which slots, with which flags (`llmctl preset <name>`)
 - `templates/` — chat templates referenced from `models.conf` as `$SHARE_DIR/templates/…`
 - `Makefile` — `install`, `install-link`, `uninstall`, `test`
 - `tests/` — `smoke.sh` and `test_python.py`, see [Tests](#tests)
 - `deploy/vps-llm-tunnel-vhost.conf` — Apache vhost on the server for tunnelled LLM slots (`/sN/`, the token as the login)
-- `deploy/vps-comfy-vhost.conf` — Apache vhost on the server for ComfyUI, the image API and `/fotos`, behind Basic Auth
+- `deploy/vps-comfy-vhost.conf` — Apache vhost on the server for ComfyUI, the image API and `/darkroom`, behind Basic Auth
 
 ## Tests
 

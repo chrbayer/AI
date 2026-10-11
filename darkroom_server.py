@@ -108,6 +108,7 @@ ACTIONS = {
         "label": "Entfernen", "hint": "Etwas aus dem Bild nehmen",
         "model": ("qwen-image-21-turbo", "qwen-image-21"),
         "prompt": "Entferne {} aus dem Foto. Alles andere bleibt genau so, wie es ist.",
+        "prompt_en": "Remove {} from the photo. Everything else stays exactly as it is.",
         "variants": True, "text": "fill", "text_label": "Was soll weg?",
         "text_placeholder": "z. B. die Person, den Mülleimer, die Stromleitungen",
         "max_pixels": EDIT_PIXELS, "seconds": (45, 120),
@@ -305,12 +306,150 @@ SEEN_FOR = 12                                  # a page seen this recently is lo
 _last_done = {"at": 0.0, "freed": True}
 
 
+# ── German and English ───────────────────────────────────────
+# The page asks in its language (X-Darkroom-Lang: de or en, else the browser's
+# Accept-Language). Everything here is written in German; EN is what an English
+# page gets instead. What a job keeps (label, model label, phase, error) stays
+# German on disk and is translated on the way out, so the history follows the
+# page's language; a push goes out in the language of the page that asked for it.
+EN = {
+    # the actions
+    "Kolorieren": "Colorize", "Schwarzweiß wird Farbe": "Black and white becomes colour",
+    "Farben vorgeben (optional, englisch) — wirkt aufs ganze Bild": "Name colours (optional) — applies to the whole picture",
+    "z. B. blue sky, green trees": "e.g. blue sky, green trees",
+    "Restaurieren": "Restore", "Kratzer, Flecken, Rauschen weg": "Scratches, stains, noise gone",
+    "Gesichter": "Faces", "Gesichter und Hände nachzeichnen": "Redraw faces and hands",
+    "Vergrößern": "Upscale", "4× größer und schärfer": "4× bigger and sharper",
+    "Freistellen": "Remove background", "Hintergrund entfernen": "Background gone, PNG",
+    "Entfernen": "Erase", "Etwas aus dem Bild nehmen": "Take something out of the picture",
+    "Was soll weg?": "What should go?",
+    "z. B. die Person, den Mülleimer, die Stromleitungen": "e.g. the person, the bin, the power lines",
+    "Ändern": "Edit", "In eigenen Worten, auch mit 2 Fotos": "In your own words, also with 2 photos",
+    "Was soll sich ändern?": "What should change?",
+    "z. B. Mach den Himmel abendrot – oder mit 2 Fotos: Setze die Person aus Bild 1 in die Szene aus Bild 2":
+        "e.g. Make the sky an evening red – or with 2 photos: Put the person from picture 1 into the scene of picture 2",
+    "Erweitern": "Expand", "Mehr Rand ums Bild": "More picture around the edges",
+    "Die ganze Szene beschreiben (optional)": "Describe the whole scene (optional)",
+    "z. B. Ein Strand bei Sonnenuntergang mit Dünen": "e.g. A beach at sunset with dunes",
+    "Übermalen": "Paint over", "Stelle markieren, neu malen": "Mark a spot, paint it anew",
+    "Was soll an die markierte Stelle?": "What should go in the marked spot?",
+    "z. B. ein roter Strohhut, eine Vase mit Sonnenblumen": "e.g. a red straw hat, a vase of sunflowers",
+    "Nenne das Ding ganz – „ein roter Hut“ statt nur „rot“.": "Name the whole thing – “a red hat”, not just “red”.",
+    "Ausschneiden": "Cut out", "Ein Ding als PNG, ohne Rest": "One thing as a PNG, nothing else",
+    "Was soll ausgeschnitten werden?": "What should be cut out?",
+    "z. B. die Gitarre, die Frau, das rote Auto": "e.g. the guitar, the woman, the red car",
+    "Pose übernehmen": "Copy pose", "Jemand anderes, gleiche Haltung": "Someone else, the same pose",
+    "Wer oder was soll so dastehen, und wo?": "Who or what should stand like this, and where?",
+    "z. B. eine Tänzerin im roten Kleid auf einer Bühne": "e.g. a dancer in a red dress on a stage",
+    "Neu gestalten": "Redesign", "Gleicher Raum, anderer Stil": "Same room, different style",
+    "Wie soll es jetzt aussehen?": "How should it look now?",
+    "z. B. dasselbe Wohnzimmer als gemütliche Almhütte aus altem Holz, Kamin, rote Teppiche – je genauer, desto besser":
+        "e.g. the same living room as a cosy alpine cabin of old wood, fireplace, red rugs – the more exact, the better",
+    "Kurze Angaben wirken oft kaum: „Als Almhütte“ machte ein Wohnzimmer nur dunkler. Nenne Materialien, Farben und Licht.":
+        "A few words often do little: “as an alpine cabin” only made a living room darker. Name materials, colours and light.",
+    "Als Kunstwerk": "As artwork", "Aquarell, Zeichnung, Comic …": "Watercolour, drawing, comic …",
+    "Sonst noch etwas? (optional)": "Anything else? (optional)",
+    "z. B. wie in einem Kinderbuch, der Hintergrund als Sommerwiese": "e.g. like a children's book, the background a summer meadow",
+    "Animieren": "Animate", "Kurzes Video mit Ton": "A short video with sound",
+    "Was soll passieren? (optional)": "What should happen? (optional)",
+    "z. B. Sie lacht und winkt in die Kamera, die Wellen rollen heran": "e.g. She laughs and waves at the camera, the waves roll in",
+    "Endbild (optional) – das Video läuft dorthin": "End picture (optional) – the video runs towards it",
+    "Sprechen lassen": "Make it talk", "Das Foto spricht deine Aufnahme": "The photo speaks your recording",
+    "Wie soll es wirken? (optional)": "How should it come across? (optional)",
+    "z. B. Sie singt mit geschlossenen Augen, ganz gefühlvoll": "e.g. She sings with her eyes closed, full of feeling",
+    # groups, styles, models
+    "Verbessern": "Enhance", "Verändern": "Change", "Neu erschaffen": "Reimagine", "Video": "Video",
+    "Aquarell": "Watercolour", "Bleistift": "Pencil", "Ölgemälde": "Oil painting", "Comic": "Comic", "Anime": "Anime",
+    "schnell, 2 Fotos": "fast, 2 photos", "gründlicher, 2 Fotos": "more thorough, 2 photos",
+    "lebendig, 1 Foto": "vivid, 1 photo", "beste Qualität, langsam": "best quality, slow",
+    "natürliche Fotos": "natural photos", "lebendig, warmes Licht": "vivid, warm light", "Schrift im Bild": "text in the picture",
+    "mehr Abwechslung, Stile": "more variety, styles", "fast wie dev": "almost like dev", "beste Qualität": "best quality",
+    "Startbild, dann Clip mit Ton": "first frame, then a clip with sound",
+    "Eigene": "Mine",
+    # what a job keeps
+    "Erzeugt": "Created", "Fehlersuche": "Find flaws", "Repariert": "Repaired", "Form behalten": "Keep shape",
+    "mit Endbild": "with end picture", "Abgebrochen": "Cancelled", "Wird abgebrochen …": "Cancelling …",
+    "ComfyUI läuft nicht (mehr)": "ComfyUI is not running (any more)",
+    "Vision-Modell startet (ComfyUI gibt dafür seinen Speicher frei) …":
+        "Vision model starting (ComfyUI frees its memory for it) …",
+    "Vision-Modell sucht Fehler …": "Vision model looking for flaws …", "Vision-Modell stoppt …": "Vision model stopping …",
+    "das Ausgangsbild fehlt": "the source picture is missing",
+    "das Vision-Modell ist nach 15 min nicht da": "the vision model is not up after 15 min",
+    "das Vision-Modell ist nach 15 min nicht weg": "the vision model is not gone after 15 min",
+    # refusals
+    "das ist kein Bild, das der Server lesen kann": "that is not a picture the server can read",
+    "die Markierung ist kein Bild": "the marking is not a picture", "es ist keine Stelle markiert": "no spot is marked",
+    "das Bild gibt es nicht (mehr)": "that picture is gone", "reparieren geht nach einer Fehlersuche": "repair comes after Find flaws",
+    "ungültige Stellen": "invalid spots", "bitte mindestens eine Stelle wählen": "please choose at least one spot",
+    "die Aufnahme lässt sich nicht lesen": "the recording cannot be read", "die Aufnahme ist zu kurz": "the recording is too short",
+    "ungültige Länge": "invalid length", "dieses Ergebnis gibt es nicht mehr": "that result is gone",
+    "der Text ist zu lang": "the text is too long", "unbekanntes Modell": "unknown model", "unbekannte Aktion": "unknown action",
+    "Was soll auf dem Bild sein? – bitte beschreiben": "What should be in the picture? – please describe it",
+    "kein Bild": "no picture", "bitte erst die Stelle markieren": "please mark the spot first",
+    "bitte erst etwas aufnehmen oder eine Audiodatei wählen": "please record something or choose an audio file first",
+    "ungültige Angabe": "invalid input", "Es läuft gerade eine Bearbeitung": "A job is running",
+    "Der Text ist zu lang (höchstens 2000 Zeichen)": "The text is too long (2000 characters at most)",
+    "Für diese Aktion gibt es keine Vorlagen": "This action has no templates",
+    "Diese Vorlage gibt es nicht": "There is no such template", "läuft nicht mehr": "not running any more",
+    "läuft gerade": "running right now", "ungültiges Abo": "invalid subscription",
+    "Benachrichtigungen gehen hier nicht (Python-Paket cryptography fehlt)":
+        "No notifications here (the Python package cryptography is missing)",
+    "ComfyUI wird gerade schon gestartet": "ComfyUI is already starting", "ComfyUI wird gerade schon gestoppt": "ComfyUI is already stopping",
+    # notifications
+    "Keine Fehler gefunden": "No flaws found", "Zum Ansehen tippen": "Tap to see it",
+}
+# What has a number or a name in it: the German as a pattern, the English with
+# its parts (translated as well, where they are German).
+EN_PATTERNS = [
+    (r"Stelle (\d+) von (\d+) …", "Spot {0} of {1} …"),
+    (r"(\d+) Stelle\(n\) gefunden", "{0} spot(s) found"),
+    (r"Fertig: (.*)", "Done: {0}"),
+    (r"Fehlgeschlagen: (.*)", "Failed: {0}"),
+    (r"(.*) · (.*)", "{0} · {1}"),
+    (r"Startbild: (.*)", "First frame: {0}"),
+    (r"(.*) – bitte ausfüllen", "{0} – please fill in"),
+    (r"(.*) nimmt nur ein Foto – für zwei Qwen-Image oder FLUX.2 dev wählen",
+     "{0} takes one photo only – for two choose Qwen-Image or FLUX.2 dev"),
+    (r"ein Video ist (.*) Sekunden lang", "a video is {0} seconds long"),
+    (r"Schon (\d+) eigene Vorlagen – bitte erst welche löschen", "Already {0} templates of your own – please delete some first"),
+    (r"Auf Slot (\d+) läuft keine ComfyUI mit Bild-API", "No ComfyUI with an image API on slot {0}"),
+    (r"ComfyUI ist nicht hochgekommen — llmctl logs (\d+)", "ComfyUI did not come up — llmctl logs {0}"),
+    (r"Nur (\d+) GiB Speicher frei, .*", "Only {0} GiB of memory free; ComfyUI needs 25–30 GB to edit, over 40 GB for videos. "
+                                         "Is a large language model running? Stop that first – or start anyway."),
+    (r"ComfyUI läuft ohne Vision-Modell – .* --vision (\S+)",
+     "ComfyUI runs without a vision model – stop it from the page and start it again, then it starts with --vision {0}"),
+]
+EN_PATTERNS = [(re.compile(rx + r"\Z", re.S), out) for rx, out in EN_PATTERNS]
+
+
+def lang():
+    """The language of the page that asks: "de" or "en"."""
+    try:
+        want = request.headers.get("X-Darkroom-Lang") or request.accept_languages.best_match(["de", "en"]) or "de"
+    except RuntimeError:                      # no request: a job, a push
+        return "de"
+    return "en" if want.startswith("en") else "de"
+
+
+def tr(text, lng=None):
+    """text for an English page; as it is for a German one."""
+    if not text or not isinstance(text, str) or (lng or lang()) != "en":
+        return text
+    if text in EN:
+        return EN[text]
+    for rx, out in EN_PATTERNS:
+        m = rx.match(text)
+        if m:
+            return out.format(*(tr(g, "en") for g in m.groups()))
+    return text
+
+
 class Refused(Exception):
     pass
 
 
 def error(message, status=400):
-    return jsonify({"error": message}), status
+    return jsonify({"error": tr(message)}), status
 
 
 # ── jobs on disk ─────────────────────────────────────────────
@@ -368,6 +507,8 @@ def prune_jobs():
 def public(job):
     """A job as the page sees it, with its place in the queue."""
     j = dict(job)
+    for k in ("label", "model_label", "phase", "error"):
+        j[k] = tr(j.get(k))
     if j["state"] == "queued":
         waiting = [x for x in all_jobs() if x["state"] == "queued"]
         waiting.sort(key=lambda x: x["created"])
@@ -461,7 +602,7 @@ def edit_form(job):
     elif spec["text"] == "optional":
         form["prompt"] = spec["prompt"] + (", " + text if text else "")
     elif spec["text"] == "fill":
-        form["prompt"] = spec["prompt"].format(text)
+        form["prompt"] = spec.get("prompt_" + job.get("lang", "de"), spec["prompt"]).format(text)
     elif spec["text"] == "replace":
         form["prompt"] = text or spec["prompt"]
     elif spec["prompt"]:
@@ -823,7 +964,7 @@ def status():
     api, comfy = api_status()
     state = _comfy["state"] or ("up" if api and comfy else "starting" if api else "down")
     busy = [j for j in all_jobs() if j["state"] in ("queued", "running")]
-    return jsonify({"comfy": state, "message": _comfy["message"], "busy": len(busy),
+    return jsonify({"comfy": state, "message": tr(_comfy["message"]), "busy": len(busy),
                     "slot": ARGS.comfy_slot})
 
 
@@ -835,9 +976,9 @@ def comfy():
         return error("action is start or stop")
     free = mem_available_gib()
     if action == "start" and not body.get("force") and free is not None and free < FREE_NEEDED_GIB:
-        return jsonify({"error": f"Nur {free:.0f} GiB Speicher frei, ComfyUI braucht beim Bearbeiten "
+        return jsonify({"error": tr(f"Nur {free:.0f} GiB Speicher frei, ComfyUI braucht beim Bearbeiten "
                                  f"25–30 GB, für Videos über 40 GB. Läuft ein großes Sprachmodell? Erst das stoppen – "
-                                 f"oder trotzdem starten.", "code": "memory"}), 409
+                                 f"oder trotzdem starten."), "code": "memory"}), 409
     with _comfy_lock:
         if _comfy["state"]:
             return error(f"ComfyUI wird gerade schon {'gestartet' if _comfy['state'] == 'starting' else 'gestoppt'}", 409)
@@ -879,10 +1020,18 @@ def prompts():
     except (OSError, ValueError):
         data = {"topics": [], "prompts": []}
     data.pop("_comment", None)
+    topics_en = data.pop("topics_en", None)
+    if lang() == "en":
+        data["topics"] = topics_en or data["topics"]
+        names = dict(zip(json.loads(PROMPTS.read_text())["topics"], data["topics"])) if topics_en else {}
+        data["prompts"] = [dict(p, topic=names.get(p["topic"], p["topic"]), **p["en"]) if p.get("en") else p
+                           for p in data["prompts"]]
+    for p in data["prompts"]:
+        p.pop("en", None)
     own = own_prompts()
     if own:
-        data["topics"] = [OWN_TOPIC] + data["topics"]
-        data["prompts"] = [dict(p, topic=OWN_TOPIC, own=True, tags=[]) for p in own] + data["prompts"]
+        data["topics"] = [tr(OWN_TOPIC)] + data["topics"]
+        data["prompts"] = [dict(p, topic=tr(OWN_TOPIC), own=True, tags=[]) for p in own] + data["prompts"]
     return jsonify(data)
 
 
@@ -946,31 +1095,32 @@ def actions():
     out = []
     for key, a in ACTIONS.items():
         fast, best = a["model"]
-        out.append({"id": key, "label": a["label"], "hint": a["hint"], "text": a["text"],
-                    "text_label": a.get("text_label"), "text_placeholder": a.get("text_placeholder"),
+        out.append({"id": key, "label": tr(a["label"]), "hint": tr(a["hint"]), "text": a["text"],
+                    "text_label": tr(a.get("text_label")), "text_placeholder": tr(a.get("text_placeholder")),
                     # (fewer words than this, the hint shown under the text)
-                    "short_hint": list(a["short_hint"]) if a.get("short_hint") else None,
+                    "short_hint": [a["short_hint"][0], tr(a["short_hint"][1])] if a.get("short_hint") else None,
                     "qualities": (fast != best or bool(a.get("video"))) and not a.get("models"),
                     "seconds": a["seconds"], "end_seconds": a.get("end_seconds"),
                     "models": bool(a.get("models")), "second": bool(a.get("second")),
                     "sides": bool(a.get("sides")), "mask": bool(a.get("mask")),
-                    "video": bool(a.get("video")), "second_label": a.get("second_label"),
+                    "video": bool(a.get("video")), "second_label": tr(a.get("second_label")),
                     "audio": bool(a.get("audio")), "styles": bool(a.get("styles")),
                     "keep": bool(a.get("keep")), "keep_available": avail(a["keep"][0]) if a.get("keep") else None,
                     "variants": bool(a.get("variants")),
-                    "group": next(g for g, ids in GROUPS for i in ids if i == key),
+                    "group": tr(next(g for g, ids in GROUPS for i in ids if i == key)),
                     "second_available": avail(FIRST_LAST) if a.get("video") else True,
                     "available": avail(fast), "best_available": avail(best),
                     "uncensored": [unc(fast), unc(best)]})
     def models(table):
         # a clip from a prompt needs its first frame's model too, and is as uncensored as that
-        return [dict(v, id=k, available=avail(k) if avail(k) is False else avail(v.get("frame_model", k)),
+        return [dict(v, id=k, hint=tr(v["hint"]),
+                     available=avail(k) if avail(k) is False else avail(v.get("frame_model", k)),
                      uncensored=unc(v.get("frame_model", k))) for k, v in table.items()]
 
     return jsonify({"actions": out, "edit_models": models(EDIT_MODELS), "gen_models": models(GEN_MODELS),
                     "aspects": list(ASPECTS), "clip_seconds": list(CLIP_SECONDS), "voice_max": VOICE_MAX,
                     "variants_max": VARIANTS_MAX,
-                    "groups": [g for g, _ in GROUPS], "styles": [[k, v[0]] for k, v in STYLES.items()]})
+                    "groups": [tr(g) for g, _ in GROUPS], "styles": [[k, tr(v[0])] for k, v in STYLES.items()]})
 
 
 def new_job(fields, files=()):
@@ -1132,7 +1282,7 @@ def create_job():
         sides = f.get("sides") if f.get("sides") in SIDES else "wide"
         # Varianten: the same edit again, each with a seed of its own and a card of its own
         n = min(VARIANTS_MAX, max(1, int(f.get("n") or 1))) if spec.get("variants") else 1
-        jobs = [new_job({"action": action, "label": spec["label"], "text": text, "quality": quality,
+        jobs = [new_job({"action": action, "label": spec["label"], "text": text, "quality": quality, "lang": lang(),
                        "model": resolve(model, uncensored), "model_label": label,
                        "uncensored": uncensored and model in UNCENSORED,
                        "parent": parent, "parent2": parent2, "two": data2 is not None,
@@ -1272,8 +1422,9 @@ def seen():
         _seen[dev[:32]] = time.time()
 
 
-def message(job):
-    """What the notification says about a job that ended."""
+def message(job, lng="de"):
+    """What the notification says about a job that ended, in the language of
+    the page that subscribed."""
     took = ""
     if job.get("started") and job.get("finished"):
         t = round(job["finished"] - job["started"])
@@ -1286,8 +1437,9 @@ def message(job):
             body = f"{n} Stelle(n) gefunden" if n else "Keine Fehler gefunden"
         else:
             body = (text[:80] + ("…" if len(text) > 80 else "")) if text else "Zum Ansehen tippen"
-        return {"title": f"Fertig: {what}{took}", "body": body, "tag": job["id"], "url": f"/darkroom#job={job['id']}"}
-    return {"title": f"Fehlgeschlagen: {what}", "body": (job.get("error") or "")[:160],
+        return {"title": tr(f"Fertig: {what}{took}", lng), "body": tr(body, lng), "tag": job["id"],
+                "url": f"/darkroom#job={job['id']}"}
+    return {"title": tr(f"Fehlgeschlagen: {what}", lng), "body": tr(job.get("error") or "", lng)[:160],
             "tag": job["id"], "url": f"/darkroom#job={job['id']}"}
 
 
@@ -1302,7 +1454,7 @@ def notify(jid):
     subs = subscriptions()
     if not subs:
         return
-    payload = json.dumps(message(job), ensure_ascii=False).encode()
+    payloads = {lng: json.dumps(message(job, lng), ensure_ascii=False).encode() for lng in ("de", "en")}
 
     def go():
         gone = []
@@ -1315,7 +1467,7 @@ def notify(jid):
             if time.time() - _seen.get(sub["id"], 0) < SEEN_FOR:
                 continue
             try:
-                status = webpush.send(sub["subscription"], payload, key)
+                status = webpush.send(sub["subscription"], payloads[sub.get("lang", "de")], key)
             except Exception as e:                                # noqa: BLE001
                 app.logger.warning("push %s: %s", sub["id"], e)
                 continue
@@ -1348,7 +1500,7 @@ def push_subscribe():
     with _push_lock:
         items = [s for s in subscriptions() if s["id"] != sid]
         items.append({"id": sid, "subscription": {"endpoint": endpoint, "keys": {"p256dh": keys["p256dh"], "auth": keys["auth"]}},
-                      "created": time.time(), "agent": request.headers.get("User-Agent", "")[:200]})
+                      "created": time.time(), "agent": request.headers.get("User-Agent", "")[:200], "lang": lang()})
         write_subscriptions(items[-20:])
     return jsonify({"id": sid}), 201
 

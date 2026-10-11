@@ -701,6 +701,53 @@ class Darkroom(unittest.TestCase):
         self.assertEqual(self.sent(action="restyle", text="x", quality="best")[1]["model"], "qwen-image-21-depth-control")
         self.assertEqual(self.post(action="pose", image=self.jpeg(64, 64)).status_code, 400)
 
+    def test_an_english_page_gets_english(self):
+        client, en = darkroom.app.test_client(), {"X-Darkroom-Lang": "en"}
+        from unittest import mock
+        with mock.patch.object(darkroom.requests, "get", side_effect=darkroom.requests.ConnectionError):
+            got = client.get("/darkroom/api/actions", headers=en).get_json()
+            de = client.get("/darkroom/api/actions").get_json()
+        acts = {a["id"]: a for a in got["actions"]}
+        self.assertEqual((acts["colorize"]["label"], acts["remove"]["label"]), ("Colorize", "Erase"))
+        self.assertEqual(acts["paint"]["short_hint"][0], 2)
+        self.assertEqual(got["groups"][0], "Enhance")
+        self.assertIn(["anime", "Anime"], got["styles"])
+        self.assertEqual(de["actions"][0]["label"], "Kolorieren")
+        # every German text the actions show has its English
+        for a in darkroom.ACTIONS.values():
+            for k in ("label", "hint", "text_label", "text_placeholder", "second_label"):
+                if a.get(k):
+                    self.assertIn(a[k], darkroom.EN, k)
+        for table in (darkroom.EDIT_MODELS, darkroom.GEN_MODELS):
+            for m in table.values():
+                self.assertIn(m["hint"], darkroom.EN)
+        prompts = client.get("/darkroom/api/prompts", headers=en).get_json()
+        self.assertEqual(prompts["topics"][0], "Weather & light")
+        self.assertEqual(prompts["prompts"][0]["title"], "Sunny day")
+        self.assertEqual(prompts["prompts"][0]["topic"], "Weather & light")
+        self.assertNotIn("en", prompts["prompts"][0])
+        self.assertEqual(client.get("/darkroom/api/prompts").get_json()["prompts"][0]["title"], "Sonniger Tag")
+        r = client.post("/darkroom/api/jobs", data={"action": "generate"}, headers=en)
+        self.assertEqual(r.get_json()["error"], "What should be in the picture? – please describe it")
+
+    def test_what_a_job_keeps_is_translated_on_the_way_out(self):
+        job = {"id": "x", "state": "failed", "label": "Ändern", "model_label": "Form behalten",
+               "phase": "Stelle 2 von 3 …", "error": "Startbild: ComfyUI läuft nicht (mehr)", "action": "edit"}
+        with darkroom.app.test_request_context(headers={"X-Darkroom-Lang": "en"}):
+            out = darkroom.public(job)
+        self.assertEqual((out["label"], out["model_label"], out["phase"], out["error"]),
+                         ("Edit", "Keep shape", "Spot 2 of 3 …", "First frame: ComfyUI is not running (any more)"))
+        with darkroom.app.test_request_context():
+            self.assertEqual(darkroom.public(job)["label"], "Ändern")
+        self.assertEqual(darkroom.message(dict(job, model_label=None), "en")["title"], "Failed: Edit")
+        done = dict(job, state="done", started=100, finished=120, model_label="Qwen-Image Turbo", text="")
+        self.assertEqual(darkroom.message(done, "en")["title"], "Done: Edit · Qwen-Image Turbo · 20 s")
+        self.assertEqual(darkroom.message(done, "en")["body"], "Tap to see it")
+        self.assertEqual(darkroom.message(done)["title"], "Fertig: Ändern · Qwen-Image Turbo · 20 s")
+        form = darkroom.edit_form({"action": "remove", "model": "m", "text": "the bin", "lang": "en"})
+        self.assertEqual(form["prompt"], "Remove the bin from the photo. Everything else stays exactly as it is.")
+        self.assertTrue(darkroom.edit_form({"action": "remove", "model": "m", "text": "x"})["prompt"].startswith("Entferne x"))
+
     def test_the_old_address_leads_to_the_new_one(self):
         client = darkroom.app.test_client()
         for path in ("/fotos", "/fotos/"):

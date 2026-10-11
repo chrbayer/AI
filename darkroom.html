@@ -34,6 +34,7 @@ header { position: sticky; top: 0; z-index: 5; display: flex; align-items: cente
          padding: 12px 16px; background: color-mix(in srgb, var(--bg) 88%, transparent);
          backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
 header h1 { font-size: 22px; margin: 0; flex: 1; letter-spacing: -.01em; }
+header .lang { font-size: 14px; padding: 8px 4px; }
 .chip { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line);
         background: var(--panel); border-radius: 999px; padding: 6px 12px; font-size: 14px; }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
@@ -239,6 +240,7 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
 <body>
 <header>
   <h1>Darkroom</h1>
+  <button class="link lang" id="langBtn" type="button" lang="en">EN</button>
   <button class="chip" id="chip" type="button"><span class="dot" id="dot"></span><span id="chipText">…</span></button>
 </header>
 
@@ -457,13 +459,125 @@ const S = {
   mask: null,                    // {blob, preview} — transparent where to redraw
   jobs: [], viewing: null, pollTimer: null,
 };
-const STATE_TEXT = { up: "Bereit", down: "Aus", starting: "Startet …", stopping: "Stoppt …" };
-
 function store(key, value) { try { localStorage.setItem("darkroom." + key, value); } catch (e) {} }
 // The page was "Fotos" at /fotos until 1.86: what it kept then still counts.
 function recall(key) {
   try { return localStorage.getItem("darkroom." + key) ?? localStorage.getItem("fotos." + key); } catch (e) { return null; }
 }
+
+// ── German and English ───────────────────────────────────
+// The page is written in German; EN is what it says in English. The language
+// is the one chosen with the switch at the top, else the browser's. The server
+// answers in it as well (X-Darkroom-Lang): actions, templates, errors, history.
+const LANG = (recall("lang") || navigator.language || "de").startsWith("de") ? "de" : "en";
+const EN = {
+  // the page as it is written
+  "ComfyUI ist aus.": "ComfyUI is off.", "Starten": "Start", "Bearbeiten": "Edit", "Erzeugen": "Create",
+  "Bild": "Picture", "Aus der Galerie": "From the gallery", "Foto aufnehmen": "Take a photo", "Ausgangsbild": "Source picture",
+  "Anderes Bild": "Another picture", "Was soll passieren?": "What should happen?", "Schnell": "Fast", "Gründlich": "Thorough",
+  "Modell": "Model", "Galerie": "Gallery", "Aufnehmen": "Take one", "Zweites Bild": "Second picture", "Entfernen": "Remove",
+  "Wie?": "How?", "Neu malen": "Paint anew", "Form behalten": "Keep shape",
+  "Form behalten: Schnitt, Falten und Kanten bleiben, z. B. derselbe Mantel in rotem Leder. Dafür das Ding ganz markieren.":
+    "Keep shape: cut, folds and edges stay, e.g. the same coat in red leather. Mark all of the thing for it.",
+  "Stil": "Style", "Stimme (bis": "Voice (up to", "s) – das Video ist so lang wie die Aufnahme": "s) – the video is as long as the recording",
+  "● Aufnehmen": "● Record", "Audiodatei": "Audio file", "Länge": "Length",
+  "Varianten – jede mit anderem Zufall, die beste behalten": "Variants – each with another seed, keep the best",
+  "Wo soll mehr Bild hin?": "Where should more picture go?", "Links und rechts": "Left and right", "Oben und unten": "Top and bottom",
+  "Nur oben": "Top only", "Rundum": "All round", "Stelle": "Spot", "Mit dem Finger markieren": "Mark it with a finger",
+  "Speichern": "Save", "Vorlagen": "Templates", "Bild erzeugen": "Create a picture",
+  "Was soll auf dem Bild sein?": "What should be in the picture?",
+  "z. B. Ein roter Fuchs im Schnee bei Morgenlicht": "e.g. A red fox in the snow in morning light",
+  "Format": "Format", "Qualität": "Quality", "Anzahl": "Number",
+  "Unzensiert": "Uncensored", "Modelle ohne Inhaltsfilter, wo es sie gibt": "Models without a content filter, where there are any",
+  "Benachrichtigen, wenn fertig": "Notify me when done", "Auf diesem Gerät, auch bei gesperrtem Bildschirm": "On this device, also with the screen locked",
+  "Verlauf": "History", "Noch nichts bearbeitet.": "Nothing edited yet.", "Bild wählen": "Choose a picture",
+  "Schließen": "Close", "Sichern": "Save", "Fehler suchen": "Find flaws", "Reparieren": "Repair",
+  "Weiter bearbeiten": "Edit further", "Löschen": "Delete", "Stelle markieren": "Mark the spot", "Abbrechen": "Cancel",
+  "Pinsel": "Brush", "Rückgängig": "Undo", "Alles weg": "Clear all", "Fertig": "Done",
+  "Stoppen und Speicher freigeben": "Stop and free the memory", "Trotzdem starten": "Start anyway",
+  "Suchen: z. B. Sonne, Schnee, Kabel, Lächeln": "Search: e.g. sun, snow, cables, smile", "Für diese Aktion": "For this action",
+  "Alle": "All", "Als Vorlage speichern": "Save as a template", "Titel": "Title",
+  // what the script says
+  "Bereit": "Ready", "Aus": "Off", "Startet …": "Starting …", "Stoppt …": "Stopping …",
+  "etwa {n} Sekunden": "about {n} seconds", "etwa {n} Minuten": "about {n} minutes", "Fehler {n}": "Error {n}",
+  "Der Darkroom-Dienst antwortet nicht.": "The Darkroom service does not answer.",
+  "ComfyUI startet – dauert etwa eine halbe Minute.": "ComfyUI is starting – takes about half a minute.",
+  "ComfyUI stoppt …": "ComfyUI is stopping …", "ComfyUI ist aus. Zum Bearbeiten erst starten.": "ComfyUI is off. Start it to edit.",
+  "Läuft. Stoppen gibt den Speicher für andere Modelle frei; laufende Bearbeitungen müssen vorher fertig sein.":
+    "Running. Stopping frees the memory for other models; running jobs have to finish first.",
+  "Wird gerade gestartet.": "Starting right now.", "Wird gerade gestoppt.": "Stopping right now.", "Ist aus.": "Is off.",
+  "Modell fehlt in ComfyUI": "Model missing in ComfyUI", "fehlt in ComfyUI": "missing in ComfyUI",
+  "nicht unzensiert": "not uncensored", "unzensiert fehlt": "uncensored one missing",
+  "Zweites Foto (optional) – im Text „Bild 2“": "Second photo (optional) – “picture 2” in the text",
+  "Markierung ändern": "Change the marking",
+  "{n} Varianten nacheinander, je {each} – zusammen {all}": "{n} variants one after the other, {each} each – {all} in all",
+  "Dauert {d}": "Takes {d}",
+  " (beim ersten Mal länger, weil das Modell lädt). Du kannst den Bildschirm sperren – das Ergebnis wartet im Verlauf.":
+    " (longer the first time, while the model loads). You can lock the screen – the result waits in the history.",
+  "{n} Videos nacheinander, je {d}. Jedes Video kommt einzeln in den Verlauf.": "{n} videos one after the other, {d} each. Each video goes into the history on its own.",
+  "{n} Bilder nacheinander, je {d}. Jedes Bild kommt einzeln in den Verlauf.": "{n} pictures one after the other, {d} each. Each picture goes into the history on its own.",
+  "Dauert {d}. Jedes Video kommt einzeln in den Verlauf.": "Takes {d}. Each video goes into the history on its own.",
+  "Dauert {d}. Jedes Bild kommt einzeln in den Verlauf.": "Takes {d}. Each picture goes into the history on its own.",
+  "Das Bild lässt sich nicht öffnen.": "The picture cannot be opened.", "Ergebnis aus dem Verlauf · ": "Result from the history · ",
+  "Bild 2": "Picture 2", "Wird nach {n} s abgeschnitten. ": "Cut off after {n} s. ", "Länge: {n} s": "Length: {n} s",
+  "Kein Zugriff aufs Mikrofon – im Browser erlauben oder eine Audiodatei wählen.": "No access to the microphone – allow it in the browser or choose an audio file.",
+  "● Neu aufnehmen": "● Record again", "■ Stopp · {n} / {max} s": "■ Stop · {n} / {max} s",
+  "Für {what}": "For {what}", "Nichts gefunden – andere Wörter probieren.": "Nothing found – try other words.",
+  "Vorlage löschen": "Delete template", "Diese Aktion ist gerade nicht verfügbar.": "This action is not available right now.",
+  "Markierten Platzhalter überschreiben": "Type over the selected placeholder", "Löschen?": "Delete?", "Vorlage gelöscht": "Template deleted",
+  "Für {what}{extra}. Zu finden unter „Eigene“ in den Vorlagen.": "For {what}{extra}. You find it under “Mine” in the templates.",
+  "Bitte einen Titel eingeben.": "Please enter a title.", "Als Vorlage gespeichert": "Saved as a template",
+  "ComfyUI startet …": "ComfyUI is starting …", "ComfyUI starten": "Start ComfyUI",
+  "{n} Videos erzeugen ›": "Create {n} videos ›", "{n} Bilder erzeugen ›": "Create {n} pictures ›",
+  "Video erzeugen ›": "Create a video ›", "Erzeugen ›": "Create ›", "{n} Varianten": "{n} variants", "Los": "Go",
+  "Was soll auf dem Bild sein? – bitte beschreiben.": "What should be in the picture? – please describe it.",
+  "{what} – bitte ausfüllen.": "{what} – please fill in.", "Bitte erst die Stelle mit dem Finger markieren.": "Please mark the spot with a finger first.",
+  "Bitte erst etwas aufnehmen oder eine Audiodatei wählen.": "Please record something or choose an audio file first.",
+  "Wird hochgeladen …": "Uploading …", "Darkroom ({n} läuft)": "Darkroom ({n} running)",
+  "Abgebrochen": "Cancelled", "Wartet (#{n})": "Waiting (#{n})", "Wartet": "Waiting", "Läuft · {t}": "Running · {t}", "Fehler": "Failed",
+  "Das hat nicht geklappt.": "That did not work.", "Abgebrochen.": "Cancelled.",
+  "gründlich": "thorough", "schnell": "fast", "unzensiert": "uncensored",
+  "{n} Stelle(n) gefunden – abwählen, was gesund ist": "{n} spot(s) found – untick what is fine", "Keine Fehler gefunden": "No flaws found",
+  " — zwei Finger zum Zoomen": " — two fingers to zoom",
+  " — Regler ziehen für vorher/nachher, zwei Finger zum Zoomen": " — drag the slider for before/after, two fingers to zoom",
+  "Wird abgebrochen …": "Cancelling …", "ComfyUI hält nach dem laufenden Schritt an.": "ComfyUI stops after the current step.",
+  "Vorher ist noch etwas anderes dran.": "Something else comes first.",
+  "Du kannst die Seite schließen – das Ergebnis kommt in den Verlauf.": "You can close the page – the result goes into the history.",
+  "Üblich sind {d}. ": "Usually {d}. ", "Ergebnis": "Result", "Das Vision-Modell hat nichts gefunden.": "The vision model found nothing.",
+  " Hinweise zum ganzen Bild: ": " Notes on the whole picture: ",
+  " Eine Stelle selbst neu malen geht mit „Weiter bearbeiten“ → Übermalen.": " To paint a spot anew yourself: “Edit further” → Paint over.",
+  "Was soll dort hin?": "What should go there?", "Schnell · 30 s je Stelle": "Fast · 30 s a spot", "Gründlich · 80 s": "Thorough · 80 s",
+  "{n} reparieren": "Repair {n}", "nachher": "after", "vorher": "before",
+  "Ergebnis ist jetzt das Ausgangsbild – nächste Aktion wählen.": "The result is now the source picture – choose the next action.",
+  "Nochmal tippen zum Löschen": "Tap again to delete",
+  "Auf dem iPhone: Teilen → „Zum Home-Bildschirm“, dann die Seite von dort öffnen.": "On the iPhone: Share → “Add to Home Screen”, then open the page from there.",
+  "Dieser Browser kann keine Benachrichtigungen.": "This browser cannot show notifications.",
+  "Im Browser blockiert – in den Website-Einstellungen erlauben.": "Blocked in the browser – allow it in the site settings.",
+  "Benachrichtigungen sind nicht erlaubt.": "Notifications are not allowed.", "Benachrichtigungen an": "Notifications on",
+  "Benachrichtigungen aus": "Notifications off",
+};
+// German as it is, or its English; {name} filled from vars.
+function t(text, vars) {
+  let out = (LANG === "en" && EN[text]) || text;
+  if (vars) out = out.replace(/\{(\w+)\}/g, (all, k) => (k in vars ? vars[k] : all));
+  return out;
+}
+// The page as written: its texts and placeholders, once, in English.
+function translatePage() {
+  document.documentElement.lang = LANG;
+  $("langBtn").textContent = LANG === "en" ? "DE" : "EN";
+  $("langBtn").lang = LANG === "en" ? "de" : "en";
+  if (LANG !== "en") return;
+  const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+    const key = n.nodeValue.trim().replace(/\u00a0/g, " ");
+    if (key && EN[key]) n.nodeValue = n.nodeValue.replace(n.nodeValue.trim(), EN[key]);
+  }
+  for (const el of document.querySelectorAll("[placeholder], [alt]")) {
+    for (const a of ["placeholder", "alt"]) if (el.getAttribute(a) && EN[el.getAttribute(a)]) el.setAttribute(a, EN[el.getAttribute(a)]);
+  }
+}
+const STATE_TEXT = { up: "Bereit", down: "Aus", starting: "Startet …", stopping: "Stoppt …" };
 
 function toast(text, ms = 2600) {
   const t = $("toast"); t.textContent = text; t.classList.add("on");
@@ -471,17 +585,18 @@ function toast(text, ms = 2600) {
 }
 function show(id, on) { $(id).classList.toggle("hidden", !on); }
 function press(box, attr, value) { for (const b of $(box).children) b.setAttribute("aria-pressed", String(b.dataset[attr] === String(value))); }
-function duration(s) { return s < 90 ? "etwa " + s + " Sekunden" : "etwa " + Math.round(s / 60) + " Minuten"; }
+function duration(s) { return s < 90 ? t("etwa {n} Sekunden", { n: s }) : t("etwa {n} Minuten", { n: Math.round(s / 60) }); }
 function short(s) { return s < 90 ? s + " s" : Math.round(s / 60) + " min"; }
 
 async function api(path, opts = {}) {
   const dev = recall("pushId");
-  if (dev && !document.hidden) opts.headers = Object.assign({ "X-Darkroom-Device": dev }, opts.headers || {});
+  opts.headers = Object.assign({ "X-Darkroom-Lang": LANG }, opts.headers || {});
+  if (dev && !document.hidden) opts.headers["X-Darkroom-Device"] = dev;
   const r = await fetch(API + path, opts);
   let body = null;
   try { body = await r.json(); } catch (e) {}
   if (!r.ok) {
-    const err = new Error((body && body.error) || ("Fehler " + r.status));
+    const err = new Error((body && body.error) || t("Fehler {n}", { n: r.status }));
     err.code = body && body.code;
     throw err;
   }
@@ -495,24 +610,24 @@ async function refreshStatus() {
     const was = S.comfy;
     S.comfy = s.comfy; S.message = s.message || "";
     if (was !== "up" && S.comfy === "up") loadActions();
-  } catch (e) { S.comfy = "unknown"; S.message = "Der Darkroom-Dienst antwortet nicht."; }
+  } catch (e) { S.comfy = "unknown"; S.message = t("Der Darkroom-Dienst antwortet nicht."); }
   renderStatus();
 }
 
 function renderStatus() {
   const busy = S.comfy === "starting" || S.comfy === "stopping";
   $("dot").className = "dot " + (S.comfy === "up" ? "up" : busy ? "busy" : "down");
-  $("chipText").textContent = "ComfyUI: " + (STATE_TEXT[S.comfy] || "?");
+  $("chipText").textContent = "ComfyUI: " + (STATE_TEXT[S.comfy] ? t(STATE_TEXT[S.comfy]) : "?");
   show("banner", S.comfy !== "up");
   if (S.comfy !== "up") {
     $("bannerText").textContent = S.message ? S.message
-      : busy ? (S.comfy === "starting" ? "ComfyUI startet – dauert etwa eine halbe Minute." : "ComfyUI stoppt …")
-      : "ComfyUI ist aus. Zum Bearbeiten erst starten.";
+      : busy ? t(S.comfy === "starting" ? "ComfyUI startet – dauert etwa eine halbe Minute." : "ComfyUI stoppt …")
+      : t("ComfyUI ist aus. Zum Bearbeiten erst starten.");
     $("bannerBtn").style.display = busy ? "none" : "";
   }
   $("sheetText").textContent = S.comfy === "up"
-    ? "Läuft. Stoppen gibt den Speicher für andere Modelle frei; laufende Bearbeitungen müssen vorher fertig sein."
-    : busy ? "Wird gerade " + (S.comfy === "starting" ? "gestartet." : "gestoppt.") : "Ist aus.";
+    ? t("Läuft. Stoppen gibt den Speicher für andere Modelle frei; laufende Bearbeitungen müssen vorher fertig sein.")
+    : t(busy ? (S.comfy === "starting" ? "Wird gerade gestartet." : "Wird gerade gestoppt.") : "Ist aus.");
   show("sheetStart", !(S.comfy === "up" || busy));
   show("sheetStop", S.comfy === "up");
   renderGo();
@@ -562,7 +677,7 @@ async function loadActions() {
     b.type = "button"; b.className = "action"; b.dataset.id = a.id;
     b.innerHTML = "<b></b><span></span>";
     b.querySelector("b").textContent = a.label;
-    b.querySelector("span").textContent = a.available === false ? "Modell fehlt in ComfyUI" : a.hint;
+    b.querySelector("span").textContent = a.available === false ? t("Modell fehlt in ComfyUI") : a.hint;
     b.disabled = a.available === false;
     b.onclick = () => chooseAction(a.id);
     (grids[a.group] || box).appendChild(b);
@@ -618,9 +733,9 @@ function modelCards(box, list, onPick) {
 
 // Whether a model can be used now: ComfyUI has it, and an uncensored one when asked.
 function usable(m) {
-  if (m.available === false) return [false, "fehlt in ComfyUI"];
-  if (S.unc && m.uncensored === null) return [false, "nicht unzensiert"];
-  if (S.unc && m.uncensored === false) return [false, "unzensiert fehlt"];
+  if (m.available === false) return [false, t("fehlt in ComfyUI")];
+  if (S.unc && m.uncensored === null) return [false, t("nicht unzensiert")];
+  if (S.unc && m.uncensored === false) return [false, t("unzensiert fehlt")];
   return [true, null];
 }
 
@@ -670,13 +785,13 @@ function renderEdit() {
   }
   const m = S.editModels.find((x) => x.id === S.editModel);
   show("secondWrap", a.second && (a.video ? a.second_available !== false : !m || m.images > 1));
-  $("secondLabel").textContent = a.second_label || "Zweites Foto (optional) – im Text „Bild 2“";
+  $("secondLabel").textContent = a.second_label || t("Zweites Foto (optional) – im Text „Bild 2“");
   show("secondsWrap", a.video && !a.audio); press("seconds", "v", S.seconds);
   show("variantsWrap", a.variants); press("variants", "n", S.variants);
   show("pick2", !S.source2); show("source2", !!S.source2);
   show("sidesWrap", a.sides); press("sides", "v", S.sides);
   show("maskWrap", a.mask);
-  $("maskBtn").textContent = S.mask ? "Markierung ändern" : "Mit dem Finger markieren";
+  $("maskBtn").textContent = t(S.mask ? "Markierung ändern" : "Mit dem Finger markieren");
   $("maskBtn").disabled = !S.source;
   show("maskThumb", !!S.mask);
   if (S.mask) $("maskThumb").src = S.mask.preview;
@@ -687,9 +802,10 @@ function renderEdit() {
                          seconds: a.audio ? (S.voice ? Math.max(1, Math.ceil(S.voice.seconds)) : 5) : S.seconds,
                          two: a.video && !a.audio && !!S.source2 });
   const many = a.variants && S.variants > 1;
-  $("estimate").textContent = (many ? S.variants + " Varianten nacheinander, je " + short(secs) + " – zusammen "
-                                      + duration(secs * S.variants) : "Dauert " + duration(secs))
-    + " (beim ersten Mal länger, weil das Modell lädt). Du kannst den Bildschirm sperren – das Ergebnis wartet im Verlauf.";
+  $("estimate").textContent = (many ? t("{n} Varianten nacheinander, je {each} – zusammen {all}",
+                                        { n: S.variants, each: short(secs), all: duration(secs * S.variants) })
+                                    : t("Dauert {d}", { d: duration(secs) }))
+    + t(" (beim ersten Mal länger, weil das Modell lädt). Du kannst den Bildschirm sperren – das Ergebnis wartet im Verlauf.");
   renderGo();
 }
 
@@ -704,10 +820,11 @@ function renderGen() {
   const video = !!(m && m.video);
   show("genSecondsWrap", video); press("genSeconds", "v", S.genSeconds);
   show("genQualityWrap", video); press("genQuality", "q", S.genQuality);
-  const what = video ? ["Video", "Videos"] : ["Bild", "Bilder"];
-  if (m) $("genEstimate").textContent = (S.count > 1 ? S.count + " " + what[1] + " nacheinander, je " : "Dauert ")
-    + duration(typical({ action: "generate", model_label: m.label, quality: S.genQuality, seconds: S.genSeconds }))
-    + ". Jedes " + what[0] + " kommt einzeln in den Verlauf.";
+  const d = m && duration(typical({ action: "generate", model_label: m.label, quality: S.genQuality, seconds: S.genSeconds }));
+  if (m) $("genEstimate").textContent = S.count > 1
+    ? t(video ? "{n} Videos nacheinander, je {d}. Jedes Video kommt einzeln in den Verlauf."
+              : "{n} Bilder nacheinander, je {d}. Jedes Bild kommt einzeln in den Verlauf.", { n: S.count, d })
+    : t(video ? "Dauert {d}. Jedes Video kommt einzeln in den Verlauf." : "Dauert {d}. Jedes Bild kommt einzeln in den Verlauf.", { d });
   renderGo();
 }
 
@@ -749,7 +866,7 @@ async function loadFile(file, slot) {
   try {
     const p = await readPicture(file);
     if (slot === 2) setSource2(p); else setSource(p);
-  } catch (e) { $("formErr").textContent = "Das Bild lässt sich nicht öffnen."; }
+  } catch (e) { $("formErr").textContent = t("Das Bild lässt sich nicht öffnen."); }
 }
 
 function clearInputs() { for (const i of document.querySelectorAll("input[type=file]")) i.value = ""; }
@@ -760,7 +877,7 @@ function setSource(src) {
   show("pick", !src); show("source", !!src);
   if (src) {
     $("sourceImg").src = src.url;
-    $("sourceInfo").textContent = (src.from ? "Ergebnis aus dem Verlauf · " : "") + (src.w && src.h ? src.w + " × " + src.h : "");
+    $("sourceInfo").textContent = (src.from ? t("Ergebnis aus dem Verlauf · ") : "") + (src.w && src.h ? src.w + " × " + src.h : "");
   }
   clearInputs(); renderEdit();
 }
@@ -768,7 +885,7 @@ function setSource(src) {
 function setSource2(src) {
   if (S.source2 && S.source2.blob) URL.revokeObjectURL(S.source2.url);
   S.source2 = src;
-  if (src) { $("source2Img").src = src.url; $("source2Info").textContent = "Bild 2" + (src.w ? " · " + src.w + " × " + src.h : ""); }
+  if (src) { $("source2Img").src = src.url; $("source2Info").textContent = t("Bild 2") + (src.w ? " · " + src.w + " × " + src.h : ""); }
   clearInputs(); renderEdit();
 }
 
@@ -787,8 +904,8 @@ async function setVoice(blob, name) {
   const seconds = measured || (R.stopped - R.started) / 1000 || 0;
   S.voice = { blob, name, url, seconds: Math.min(seconds, S.voiceMax) };
   $("voicePlayer").src = url; show("voicePlayer", true);
-  $("voiceInfo").textContent = (seconds > S.voiceMax ? "Wird nach " + S.voiceMax + " s abgeschnitten. " : "")
-    + (seconds ? "Länge: " + S.voice.seconds.toFixed(1) + " s" : "");
+  $("voiceInfo").textContent = (seconds > S.voiceMax ? t("Wird nach {n} s abgeschnitten. ", { n: S.voiceMax }) : "")
+    + (seconds ? t("Länge: {n} s", { n: S.voice.seconds.toFixed(1) }) : "");
   renderEdit();
 }
 
@@ -796,7 +913,7 @@ async function toggleRecording() {
   if (R.rec) { R.rec.stop(); return; }
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
-  catch (e) { $("formErr").textContent = "Kein Zugriff aufs Mikrofon – im Browser erlauben oder eine Audiodatei wählen."; return; }
+  catch (e) { $("formErr").textContent = t("Kein Zugriff aufs Mikrofon – im Browser erlauben oder eine Audiodatei wählen."); return; }
   const type = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm"].find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || "";
   R.rec = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
   R.chunks = [];
@@ -805,14 +922,14 @@ async function toggleRecording() {
     R.stopped = Date.now();
     stream.getTracks().forEach((t) => t.stop()); clearInterval(R.timer);
     const blob = new Blob(R.chunks, { type: R.rec.mimeType || "audio/webm" });
-    R.rec = null; $("recBtn").classList.remove("on"); $("recBtn").textContent = "● Neu aufnehmen";
+    R.rec = null; $("recBtn").classList.remove("on"); $("recBtn").textContent = t("● Neu aufnehmen");
     setVoice(blob, "stimme." + (blob.type.includes("mp4") ? "m4a" : "webm"));
   };
   R.started = Date.now(); R.rec.start();
   $("recBtn").classList.add("on");
   const tick = () => {
     const s = (Date.now() - R.started) / 1000;
-    $("recBtn").textContent = "■ Stopp · " + Math.floor(s) + " / " + S.voiceMax + " s";
+    $("recBtn").textContent = t("■ Stopp · {n} / {max} s", { n: Math.floor(s), max: S.voiceMax });
     if (s >= S.voiceMax && R.rec && R.rec.state === "recording") R.rec.stop();
   };
   tick(); R.timer = setInterval(tick, 250);
@@ -830,7 +947,7 @@ function fold(s) {
 function hay(p) { return p._hay || (p._hay = fold([p.title, p.topic, p.text, ...(p.tags || [])].join(" "))); }
 
 function actionLabel(id) {
-  if (id === "generate") return "Erzeugen";
+  if (id === "generate") return t("Erzeugen");
   const a = S.actions.find((x) => x.id === id); return a ? a.label : id;
 }
 
@@ -838,7 +955,7 @@ async function openTemplates(from) {
   T.from = from;
   if (!T.data) { try { T.data = await api("/prompts"); } catch (e) { toast(e.message); return; } }
   const here = from === "generate" ? "generate" : S.action;
-  $("tplHere").textContent = "Für " + actionLabel(here);
+  $("tplHere").textContent = t("Für {what}", { what: actionLabel(here) });
   const has = T.data.prompts.some((p) => p.action === here);
   T.scope = has ? "here" : "all";
   $("tplHere").disabled = !has;
@@ -857,7 +974,7 @@ function renderTemplates() {
   const list = T.data.prompts.filter((p) => (words.length || T.scope === "all" ? true : p.action === here)
     && words.every((w) => hay(p).includes(w)));
   const box = $("tplList"); box.innerHTML = "";
-  if (!list.length) { box.innerHTML = '<p class="empty">Nichts gefunden – andere Wörter probieren.</p>'; return; }
+  if (!list.length) { box.innerHTML = '<p class="empty"></p>'; box.firstChild.textContent = t("Nichts gefunden – andere Wörter probieren."); return; }
   for (const topic of T.data.topics) {
     const items = list.filter((p) => p.topic === topic);
     if (!items.length) continue;
@@ -872,7 +989,7 @@ function renderTemplates() {
       if (!p.own) { box.appendChild(b); continue; }
       const row = document.createElement("div"); row.className = "tplrow"; row.appendChild(b);
       const del = document.createElement("button"); del.type = "button"; del.className = "del";
-      del.textContent = "×"; del.setAttribute("aria-label", "Vorlage löschen");
+      del.textContent = "×"; del.setAttribute("aria-label", t("Vorlage löschen"));
       del.onclick = () => deleteTemplate(p, del);
       row.appendChild(del); box.appendChild(row);
     }
@@ -887,7 +1004,7 @@ function useTemplate(p) {
   if (p.action === "generate") { setMode("generate"); field = $("genText"); }
   else {
     const a = S.actions.find((x) => x.id === p.action);
-    if (!a || a.available === false) { toast("Diese Aktion ist gerade nicht verfügbar."); return; }
+    if (!a || a.available === false) { toast(t("Diese Aktion ist gerade nicht verfügbar.")); return; }
     setMode("edit"); chooseAction(p.action); field = $("text");
   }
   // what the template sets besides the text: Erweitern's sides, a style, Form behalten
@@ -903,13 +1020,13 @@ function useTemplate(p) {
   if (at >= 0) field.setSelectionRange(at, p.text.indexOf("]", at) + 1);
   else field.setSelectionRange(p.text.length, p.text.length);
   field.scrollIntoView({ block: "center", behavior: "smooth" });
-  if (at >= 0) toast("Markierten Platzhalter überschreiben");
+  if (at >= 0) toast(t("Markierten Platzhalter überschreiben"));
 }
 
 // The first tap on × asks, the second deletes — no browser dialog.
 async function deleteTemplate(p, del) {
   if (!del.classList.contains("sure")) {
-    del.classList.add("sure"); del.textContent = "Löschen?";
+    del.classList.add("sure"); del.textContent = t("Löschen?");
     setTimeout(() => { del.classList.remove("sure"); del.textContent = "×"; }, 3000);
     return;
   }
@@ -917,7 +1034,7 @@ async function deleteTemplate(p, del) {
     await api("/prompts/" + encodeURIComponent(p.id), { method: "DELETE" });
     T.data = await api("/prompts");
     if (!T.data.prompts.some((x) => x.action === (T.from === "generate" ? "generate" : S.action))) T.scope = "all";
-    renderTemplates(); toast("Vorlage gelöscht");
+    renderTemplates(); toast(t("Vorlage gelöscht"));
   } catch (e) { toast(e.message); }
 }
 
@@ -949,9 +1066,9 @@ function openSave(from) {
   const o = saveOptions(from), extra = [];
   if (o.sides) extra.push($("sides").querySelector('[aria-pressed="true"]')?.textContent || o.sides);
   if (o.style) extra.push(($("styles").querySelector('[aria-pressed="true"]')?.textContent) || o.style);
-  if (o.keep === "1") extra.push("Form behalten");
-  $("saveInfo").textContent = "Für " + actionLabel(from === "generate" ? "generate" : S.action)
-    + (extra.length ? " · " + extra.join(" · ") : "") + ". Zu finden unter „Eigene“ in den Vorlagen.";
+  if (o.keep === "1") extra.push(t("Form behalten"));
+  $("saveInfo").textContent = t("Für {what}{extra}. Zu finden unter „Eigene“ in den Vorlagen.",
+    { what: actionLabel(from === "generate" ? "generate" : S.action), extra: extra.length ? " · " + extra.join(" · ") : "" });
   $("saveTitle").value = text.replace(/[\[\]]/g, "").split(/\s+/).slice(0, 4).join(" ").replace(/[.,:;]+$/, "").slice(0, 60);
   $("saveErr").textContent = "";
   $("saveSheet").classList.add("on"); $("saveBg").classList.add("on");
@@ -963,11 +1080,11 @@ async function saveTemplate() {
   const from = V.from;
   const body = { title: $("saveTitle").value.trim(), text: $(from === "generate" ? "genText" : "text").value.trim(),
                  action: from === "generate" ? "generate" : S.action, options: saveOptions(from) };
-  if (!body.title) { $("saveErr").textContent = "Bitte einen Titel eingeben."; return; }
+  if (!body.title) { $("saveErr").textContent = t("Bitte einen Titel eingeben."); return; }
   try {
     await api("/prompts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   } catch (e) { $("saveErr").textContent = e.message; return; }
-  T.data = null; closeSave(); toast("Als Vorlage gespeichert");
+  T.data = null; closeSave(); toast(t("Als Vorlage gespeichert"));
 }
 
 // ── painting the mask ────────────────────────────────────
@@ -1045,18 +1162,19 @@ function renderGo() {
   const b = $("goBtn");
   if (S.comfy !== "up") {
     const busy = S.comfy === "starting" || S.comfy === "stopping";
-    b.textContent = busy ? "ComfyUI " + (S.comfy === "starting" ? "startet …" : "stoppt …") : "ComfyUI starten";
+    b.textContent = t(busy ? (S.comfy === "starting" ? "ComfyUI startet …" : "ComfyUI stoppt …") : "ComfyUI starten");
     b.disabled = busy; return;
   }
   if (S.mode === "generate") {
     const m = S.genModels.find((x) => x.id === S.genModel);
-    const what = m && m.video ? ["Video", "Videos"] : ["", "Bilder"];
-    b.textContent = S.count > 1 ? S.count + " " + what[1] + " erzeugen ›" : (what[0] ? what[0] + " erzeugen ›" : "Erzeugen ›");
+    const video = !!(m && m.video);
+    b.textContent = S.count > 1 ? t(video ? "{n} Videos erzeugen ›" : "{n} Bilder erzeugen ›", { n: S.count })
+      : t(video ? "Video erzeugen ›" : "Erzeugen ›");
     b.disabled = !S.genModels.length; return;
   }
-  if (!S.source) { b.textContent = "Bild wählen"; b.disabled = true; return; }
+  if (!S.source) { b.textContent = t("Bild wählen"); b.disabled = true; return; }
   const a = S.actions.find((x) => x.id === S.action);
-  b.textContent = (a ? a.label + (a.variants && S.variants > 1 ? " · " + S.variants + " Varianten" : "") : "Los") + " ›"; b.disabled = !a;
+  b.textContent = (a ? a.label + (a.variants && S.variants > 1 ? " · " + t("{n} Varianten", { n: S.variants }) : "") : t("Los")) + " ›"; b.disabled = !a;
 }
 
 function appendPicture(fd, src, field, fromField) {
@@ -1071,7 +1189,7 @@ async function go() {
   fd.append("uncensored", S.unc ? "1" : "0");
   if (S.mode === "generate") {
     const text = $("genText").value.trim();
-    if (!text) { $("formErr").textContent = "Was soll auf dem Bild sein? – bitte beschreiben."; $("genText").focus(); return; }
+    if (!text) { $("formErr").textContent = t("Was soll auf dem Bild sein? – bitte beschreiben."); $("genText").focus(); return; }
     fd.append("action", "generate"); fd.append("text", text); fd.append("model", S.genModel);
     fd.append("aspect", S.aspect); fd.append("n", String(S.count));
     const m = S.genModels.find((x) => x.id === S.genModel);
@@ -1079,8 +1197,8 @@ async function go() {
   } else {
     const a = S.actions.find((x) => x.id === S.action);
     const text = $("text").value.trim();
-    if (a.text && !["optional", "replace"].includes(a.text) && !text) { $("formErr").textContent = a.text_label + " – bitte ausfüllen."; $("text").focus(); return; }
-    if (a.mask && !S.mask) { $("formErr").textContent = "Bitte erst die Stelle mit dem Finger markieren."; return; }
+    if (a.text && !["optional", "replace"].includes(a.text) && !text) { $("formErr").textContent = t("{what} – bitte ausfüllen.", { what: a.text_label }); $("text").focus(); return; }
+    if (a.mask && !S.mask) { $("formErr").textContent = t("Bitte erst die Stelle mit dem Finger markieren."); return; }
     fd.append("action", a.id); fd.append("quality", S.quality); fd.append("text", text);
     if (a.models) fd.append("model", S.editModel);
     if (a.sides) fd.append("sides", S.sides);
@@ -1089,7 +1207,7 @@ async function go() {
     if (a.keep) fd.append("keep", S.keep);
     if (a.variants) fd.append("n", String(S.variants));
     if (a.audio) {
-      if (!S.voice) { $("formErr").textContent = "Bitte erst etwas aufnehmen oder eine Audiodatei wählen."; return; }
+      if (!S.voice) { $("formErr").textContent = t("Bitte erst etwas aufnehmen oder eine Audiodatei wählen."); return; }
       fd.append("audio", S.voice.blob, S.voice.name);
     }
     appendPicture(fd, S.source, "image", "from");
@@ -1097,7 +1215,7 @@ async function go() {
     if (a.second && S.source2 && (a.video || !m || m.images > 1)) appendPicture(fd, S.source2, "image2", "from2");
     if (a.mask) fd.append("mask", S.mask.blob, "mask.png");
   }
-  const b = $("goBtn"); b.disabled = true; b.textContent = "Wird hochgeladen …";
+  const b = $("goBtn"); b.disabled = true; b.textContent = t("Wird hochgeladen …");
   try {
     const jobs = await api("/jobs", { method: "POST", body: fd });
     S.jobs = jobs.concat(S.jobs); renderJobs(); openViewer(jobs[0].id);
@@ -1115,7 +1233,7 @@ async function refreshJobs() {
     else if (j) updateWaiting(j);
   }
   const running = S.jobs.filter((j) => j.state === "running" || j.state === "queued").length;
-  document.title = running ? "Darkroom (" + running + " läuft)" : "Darkroom";
+  document.title = running ? t("Darkroom ({n} läuft)", { n: running }) : "Darkroom";
 }
 
 function elapsed(job) {
@@ -1126,16 +1244,16 @@ function elapsed(job) {
 }
 
 function stateText(job) {
-  if (job.cancelled) return "Abgebrochen";
-  if (job.state === "queued") return job.position > 1 ? "Wartet (#" + job.position + ")" : "Wartet";
-  if (job.state === "running") return "Läuft · " + elapsed(job);
-  if (job.state === "done") return "Fertig";
-  return "Fehler";
+  if (job.cancelled) return t("Abgebrochen");
+  if (job.state === "queued") return job.position > 1 ? t("Wartet (#{n})", { n: job.position }) : t("Wartet");
+  if (job.state === "running") return t("Läuft · {t}", { t: elapsed(job) });
+  if (job.state === "done") return t("Fertig");
+  return t("Fehler");
 }
 
 function renderJobs() {
   const box = $("jobs");
-  if (!S.jobs.length) { box.innerHTML = '<p class="empty">Noch nichts bearbeitet.</p>'; return; }
+  if (!S.jobs.length) { box.innerHTML = '<p class="empty"></p>'; box.firstChild.textContent = t("Noch nichts bearbeitet."); return; }
   box.innerHTML = "";
   for (const j of S.jobs) {
     const b = document.createElement("button");
@@ -1147,11 +1265,11 @@ function renderJobs() {
       if (j.video) { const w = document.createElement("div"); w.className = "thumb"; w.appendChild(thumb); thumb = w; }
     } else { thumb = document.createElement("div"); thumb.className = "ph"; thumb.textContent = j.video ? "▶" : "✦"; }
     const meta = document.createElement("div"); meta.className = "meta";
-    const t = document.createElement("b"); t.textContent = j.label + (j.model_label ? " · " + j.model_label : "");
-    if (j.uncensored) { const u = document.createElement("span"); u.className = "badge"; u.textContent = "U"; t.appendChild(u); }
+    const title = document.createElement("b"); title.textContent = j.label + (j.model_label ? " · " + j.model_label : "");
+    if (j.uncensored) { const u = document.createElement("span"); u.className = "badge"; u.textContent = "U"; title.appendChild(u); }
     const sub = document.createElement("span");
-    sub.textContent = (j.text ? "„" + j.text + "“ · " : "") + new Date(j.created * 1000).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-    meta.append(t, sub);
+    sub.textContent = (j.text ? (LANG === "en" ? "“" + j.text + "” · " : "„" + j.text + "“ · ") : "") + new Date(j.created * 1000).toLocaleString(LANG === "en" ? "en-GB" : "de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    meta.append(title, sub);
     const st = document.createElement("div"); st.className = "state " + j.state; st.textContent = stateText(j);
     b.append(thumb, meta, st);
     b.onclick = () => openViewer(j.id);
@@ -1185,13 +1303,15 @@ function openViewer(id) {
   else if (done) showCompare(job);
   else {
     const w = document.createElement("div"); w.className = "waiting";
-    if (job.state === "failed") w.innerHTML = '<b>Das hat nicht geklappt.</b><span id="vErr"></span>';
+    if (job.state === "failed") w.innerHTML = '<b></b><span id="vErr"></span>';
     else w.innerHTML = '<div class="spinner"></div><b id="vState"></b><span id="vHint"></span>'
-      + '<button type="button" class="cancel" id="vCancel">Abbrechen</button>';
+      + '<button type="button" class="cancel" id="vCancel"></button>';
+    if (job.state === "failed") w.querySelector("b").textContent = t("Das hat nicht geklappt.");
+    else w.querySelector("#vCancel").textContent = t("Abbrechen");
     stage.appendChild(w);
     if (job.state === "failed") $("vErr").textContent = job.cancelled ? "" : job.error || "";
     else $("vCancel").onclick = () => cancelJob(job.id);
-    if (job.cancelled) w.querySelector("b").textContent = "Abgebrochen.";
+    if (job.cancelled) w.querySelector("b").textContent = t("Abgebrochen.");
     updateWaiting(job);
   }
   $("vInfo").textContent = done ? info(job) : "";
@@ -1202,28 +1322,31 @@ function info(job) {
   if (job.result_size) parts.push(job.result_size[0] + " × " + job.result_size[1]);
   if (job.video) parts.push(job.seconds + " s");
   if (job.model_label) parts.push(job.model_label);
-  if (job.video || (!job.model_label && job.action !== "generate")) parts.push(job.quality === "best" ? "gründlich" : "schnell");
-  if (job.uncensored) parts.push("unzensiert");
+  if (job.video || (!job.model_label && job.action !== "generate")) parts.push(t(job.quality === "best" ? "gründlich" : "schnell"));
+  if (job.uncensored) parts.push(t("unzensiert"));
   if (job.started && job.finished) parts.push(elapsed(job));
-  if (job.action === "check") return (job.artifacts.length ? job.artifacts.length + " Stelle(n) gefunden – abwählen, was gesund ist" : "Keine Fehler gefunden") + " · " + elapsed(job);
-  return parts.join(" · ") + (job.video ? "" : job.action === "generate" ? " — zwei Finger zum Zoomen" : " — Regler ziehen für vorher/nachher, zwei Finger zum Zoomen");
+  if (job.action === "check") return (job.artifacts.length ? t("{n} Stelle(n) gefunden – abwählen, was gesund ist", { n: job.artifacts.length })
+                                                           : t("Keine Fehler gefunden")) + " · " + elapsed(job);
+  return parts.join(" · ") + (job.video ? "" : t(job.action === "generate" ? " — zwei Finger zum Zoomen"
+                                                                         : " — Regler ziehen für vorher/nachher, zwei Finger zum Zoomen"));
 }
 
 function updateWaiting(job) {
   if (!$("vState")) return;
-  const stopping = job.phase === "Wird abgebrochen …";
-  $("vCancel").disabled = stopping; $("vCancel").textContent = stopping ? "Wird abgebrochen …" : "Abbrechen";
+  const stopping = job.phase === t("Wird abgebrochen …");
+  $("vCancel").disabled = stopping; $("vCancel").textContent = t(stopping ? "Wird abgebrochen …" : "Abbrechen");
   $("vState").textContent = stateText(job);
   const typ = typical(job);
-  $("vHint").textContent = stopping ? "ComfyUI hält nach dem laufenden Schritt an."
-    : job.state === "queued" ? "Vorher ist noch etwas anderes dran."
-    : job.phase ? job.phase + " Du kannst die Seite schließen – das Ergebnis kommt in den Verlauf."
-    : (typ ? "Üblich sind " + duration(typ) + ". " : "") + "Du kannst die Seite schließen – das Ergebnis kommt in den Verlauf.";
+  const later = t("Du kannst die Seite schließen – das Ergebnis kommt in den Verlauf.");
+  $("vHint").textContent = stopping ? t("ComfyUI hält nach dem laufenden Schritt an.")
+    : job.state === "queued" ? t("Vorher ist noch etwas anderes dran.")
+    : job.phase ? job.phase + " " + later
+    : (typ ? t("Üblich sind {d}. ", { d: duration(typ) }) : "") + later;
 }
 
 function showSingle(job) {
   const frame = document.createElement("div"); frame.className = "frame";
-  const img = document.createElement("img"); img.alt = "Ergebnis"; img.src = `${API}/jobs/${job.id}/result`;
+  const img = document.createElement("img"); img.alt = t("Ergebnis"); img.src = `${API}/jobs/${job.id}/result`;
   frame.appendChild(img); $("stage").appendChild(frame);
   zoomable(frame);
 }
@@ -1308,7 +1431,7 @@ const C = { boxes: [], quality: "fast" };
 function showChecked(job) {
   C.boxes = job.artifacts.map((a) => ({ ...a, on: true }));
   const frame = document.createElement("div"); frame.className = "frame";
-  const img = document.createElement("img"); img.alt = "Bild"; img.src = `${API}/jobs/${job.id}/result`;
+  const img = document.createElement("img"); img.alt = t("Bild"); img.src = `${API}/jobs/${job.id}/result`;
   frame.appendChild(img);
   const [w, h] = job.result_size;
   for (const b of C.boxes) {
@@ -1324,21 +1447,23 @@ function showChecked(job) {
   const list = $("vFound"); list.innerHTML = "";
   if (!C.boxes.length) {
     const p = document.createElement("p");
-    p.textContent = "Das Vision-Modell hat nichts gefunden." + (job.remarks && job.remarks.length ? " Hinweise zum ganzen Bild: " + job.remarks.map((r) => r.what).join("; ") : "")
-      + " Eine Stelle selbst neu malen geht mit „Weiter bearbeiten“ → Übermalen.";
+    p.textContent = t("Das Vision-Modell hat nichts gefunden.")
+      + (job.remarks && job.remarks.length ? t(" Hinweise zum ganzen Bild: ") + job.remarks.map((r) => r.what).join("; ") : "")
+      + t(" Eine Stelle selbst neu malen geht mit „Weiter bearbeiten“ → Übermalen.");
     list.appendChild(p); return;
   }
   for (const b of C.boxes) {
     const l = document.createElement("label");
     l.innerHTML = '<input type="checkbox" checked><div class="t"><b></b><input type="text" enterkeyhint="done"></div>';
     l.querySelector("b").textContent = b.id + " · " + b.what;
-    const fix = l.querySelector('input[type="text"]'); fix.value = b.fix; fix.placeholder = "Was soll dort hin?";
+    const fix = l.querySelector('input[type="text"]'); fix.value = b.fix; fix.placeholder = t("Was soll dort hin?");
     fix.oninput = () => { b.fix = fix.value; };
     const cb = l.querySelector('input[type="checkbox"]'); cb.onchange = () => { b.on = cb.checked; renderFound(); };
     b.cb = cb; list.appendChild(l);
   }
   const q = document.createElement("div"); q.className = "seg small";
-  q.innerHTML = '<button type="button" data-q="fast">Schnell · 30 s je Stelle</button><button type="button" data-q="best">Gründlich · 80 s</button>';
+  q.innerHTML = '<button type="button" data-q="fast"></button><button type="button" data-q="best"></button>';
+  q.children[0].textContent = t("Schnell · 30 s je Stelle"); q.children[1].textContent = t("Gründlich · 80 s");
   for (const b of q.children) b.onclick = () => { C.quality = b.dataset.q; renderFound(); };
   C.seg = q; list.appendChild(q);
   renderFound();
@@ -1349,7 +1474,7 @@ function renderFound() {
   if (C.seg) for (const b of C.seg.children) b.setAttribute("aria-pressed", String(b.dataset.q === C.quality));
   const n = C.boxes.filter((b) => b.on).length;
   $("vRepair").disabled = !n;
-  $("vRepair").lastChild.textContent = n ? n + " reparieren" : "Reparieren";
+  $("vRepair").lastChild.textContent = n ? t("{n} reparieren", { n }) : t("Reparieren");
 }
 
 async function checkPicture() {
@@ -1383,15 +1508,15 @@ function showVideo(job) {
 function showCompare(job) {
   const stage = $("stage");
   const frame = document.createElement("div"); frame.className = "frame" + (job.png ? " checker" : "");
-  const after = document.createElement("img"); after.alt = "nachher";
+  const after = document.createElement("img"); after.alt = t("nachher");
   after.src = `${API}/jobs/${job.id}/result`;
-  const before = document.createElement("img"); before.alt = "vorher"; before.className = "before";
+  const before = document.createElement("img"); before.alt = t("vorher"); before.className = "before";
   before.src = `${API}/jobs/${job.id}/input`;
   // An extended picture: the original sits smaller in the middle of the new one.
   before.style.objectFit = job.action === "expand" ? "contain" : "fill";
   const line = document.createElement("div"); line.className = "line";
-  const tl = document.createElement("div"); tl.className = "tag l"; tl.textContent = "vorher";
-  const tr = document.createElement("div"); tr.className = "tag r"; tr.textContent = "nachher";
+  const tl = document.createElement("div"); tl.className = "tag l"; tl.textContent = t("vorher");
+  const tr = document.createElement("div"); tr.className = "tag r"; tr.textContent = t("nachher");
   frame.append(after, before, line, tl, tr);
   stage.appendChild(frame);
   const set = (p) => {
@@ -1429,7 +1554,7 @@ function continueWith() {
   setSource({ from: job.id, url: `${API}/jobs/${job.id}/result`, w: job.result_size && job.result_size[0], h: job.result_size && job.result_size[1] });
   setMode("edit");
   closeViewer(); window.scrollTo({ top: 0, behavior: "smooth" });
-  toast("Ergebnis ist jetzt das Ausgangsbild – nächste Aktion wählen.");
+  toast(t("Ergebnis ist jetzt das Ausgangsbild – nächste Aktion wählen."));
 }
 
 const confirmDelete = {};
@@ -1442,7 +1567,7 @@ async function cancelJob(id) {
 async function removeJob() {
   const id = S.viewing.id;
   if (confirmDelete.armed !== id) {
-    confirmDelete.armed = id; toast("Nochmal tippen zum Löschen"); setTimeout(() => { confirmDelete.armed = null; }, 3000); return;
+    confirmDelete.armed = id; toast(t("Nochmal tippen zum Löschen")); setTimeout(() => { confirmDelete.armed = null; }, 3000); return;
   }
   confirmDelete.armed = null;
   try { await api("/jobs/" + id, { method: "DELETE" }); } catch (e) { toast(e.message); return; }
@@ -1470,8 +1595,8 @@ async function initPush() {
   if (!pushSupported()) {
     $("push").disabled = true;
     $("pushNote").textContent = isIOS() && !navigator.standalone
-      ? "Auf dem iPhone: Teilen → „Zum Home-Bildschirm“, dann die Seite von dort öffnen."
-      : "Dieser Browser kann keine Benachrichtigungen.";
+      ? t("Auf dem iPhone: Teilen → „Zum Home-Bildschirm“, dann die Seite von dort öffnen.")
+      : t("Dieser Browser kann keine Benachrichtigungen.");
     return;
   }
   await dropOldPush();
@@ -1479,7 +1604,7 @@ async function initPush() {
   const sub = reg && await reg.pushManager.getSubscription();
   $("push").checked = !!(sub && recall("pushId") && Notification.permission === "granted");
   if (!$("push").checked && recall("pushId")) store("pushId", "");
-  if (Notification.permission === "denied") $("pushNote").textContent = "Im Browser blockiert – in den Website-Einstellungen erlauben.";
+  if (Notification.permission === "denied") $("pushNote").textContent = t("Im Browser blockiert – in den Website-Einstellungen erlauben.");
 }
 
 // Notifications switched on at /fotos (before 1.86) belong to a worker there:
@@ -1501,20 +1626,20 @@ async function setPush(on) {
   $("push").disabled = true;
   try {
     if (on) {
-      if (await Notification.requestPermission() !== "granted") throw new Error("Benachrichtigungen sind nicht erlaubt.");
+      if (await Notification.requestPermission() !== "granted") throw new Error(t("Benachrichtigungen sind nicht erlaubt."));
       const reg = await navigator.serviceWorker.register("/darkroom/sw.js", { scope: "/darkroom" });
       await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription()
         || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64bytes(PUSH.key) });
       const r = await api("/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: sub.toJSON() }) });
-      store("pushId", r.id); toast("Benachrichtigungen an");
+      store("pushId", r.id); toast(t("Benachrichtigungen an"));
     } else {
       const id = recall("pushId"); store("pushId", "");
       const reg = await navigator.serviceWorker.getRegistration("/darkroom");
       const sub = reg && await reg.pushManager.getSubscription();
       if (sub) await sub.unsubscribe();
       if (id) await api("/push/" + encodeURIComponent(id), { method: "DELETE" });
-      toast("Benachrichtigungen aus");
+      toast(t("Benachrichtigungen aus"));
     }
   } catch (e) {
     toast(e.message, 4000); $("push").checked = !on;
@@ -1587,6 +1712,8 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) tick
 window.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeViewer(); closeSheet(); closePainter(); closeTemplates(); } });
 window.addEventListener("hashchange", openFromHash);
 
+translatePage();
+$("langBtn").onclick = () => { store("lang", LANG === "en" ? "de" : "en"); location.reload(); };
 S.quality = recall("quality") === "best" ? "best" : "fast";
 S.editModel = recall("editModel") || S.editModel;
 S.genModel = recall("genModel") || S.genModel;
