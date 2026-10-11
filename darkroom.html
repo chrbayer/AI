@@ -1969,6 +1969,17 @@ $("saveTitle").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault();
 $("text").addEventListener("input", () => { E.before.edit = null; updateSave(); });
 $("genText").addEventListener("input", () => { E.before.generate = null; updateSave(); });
 for (const b of document.querySelectorAll("[data-expand]")) b.onclick = () => expandText(b.dataset.expand);
+// Entering the text field starts the model in the background (the server keeps
+// it 30 minutes), so that ✨ Ausbauen answers at once: at most once a minute.
+let warmed = 0;
+function warmExpander(from) {
+  const a = S.actions.find((x) => x.id === S.action);
+  if (!S.expand || (from !== "generate" && !(a && a.expand)) || Date.now() - warmed < 60000) return;
+  warmed = Date.now();
+  api("/expand/warm", { method: "POST" }).catch(() => {});
+}
+$("text").addEventListener("focus", () => warmExpander("edit"));
+$("genText").addEventListener("focus", () => warmExpander("generate"));
 for (const b of document.querySelectorAll("[data-undo]")) b.onclick = () => undoExpand(b.dataset.undo);
 for (const b of $("tplScope").children) b.onclick = () => { if (!b.disabled) { T.scope = b.dataset.v; renderTemplates(); } };
 $("audioFile").onchange = (e) => { const f = e.target.files[0]; if (f) setVoice(f, f.name); e.target.value = ""; };

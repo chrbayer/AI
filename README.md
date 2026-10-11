@@ -2215,8 +2215,10 @@ shirt. Tried on six wishes: Gemma-4 26B-A4B (`gemma-moe`) got them right, up in
 9 s, 2–3 s an answer; Qwen3-VL-8B made "rot" a black shirt, Qwen3.6-35B-A3B
 "Hawaii" a hibiscus flower on the chest. The model runs on a slot of its own
 (`LLMCTL_DARKROOM_EXPAND_SLOT`, 4; `LLMCTL_DARKROOM_EXPAND_MODEL`), started
-with `--mmproj --no-reasoning` on the first request — refused with less than
-32 GiB free or another model on the slot — and stopped after 10 idle minutes,
+with `--mmproj --no-reasoning` in the background as soon as the text field is
+entered (so the 9 s are over by the time the wish is typed; kept running
+always it would hold 30 GB that FLUX.2 dev or an LLM at the desk need) —
+not with less than 32 GiB free or another model on the slot — and stopped after 30 idle minutes,
 or when *Find flaws* needs the room for flash — also when an earlier run of
 the service started it (a check failed for want of 84 GiB while it held 29). For *Redesign*, *Paint over*,
 *Edit*, *Copy pose*, *Expand* and *Create*.

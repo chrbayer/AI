@@ -1118,9 +1118,9 @@ EXPAND_TASKS = {
     "expand": "The photo is continued beyond its edges. Describe the whole wider scene, the photo's part included.",
     "generate": "A picture is made from words alone. Describe the whole picture: subject, setting, light, style.",
 }
-EXPAND_IDLE = 600                    # s without a request, then the model is stopped again
+EXPAND_IDLE = 1800                   # s without a request, then the model is stopped again
 EXPAND_NEEDED_GIB = 32               # gemma-moe at Q8 with its mmproj
-_expand = {"started": False, "used": 0.0}
+_expand = {"started": False, "used": 0.0, "warming": False}
 _expand_lock = threading.Lock()
 
 
@@ -1184,6 +1184,26 @@ def marked(data, mask_data):
     buf = io.BytesIO()
     im.save(buf, "JPEG", quality=85)
     return buf.getvalue()
+
+
+@app.post("/darkroom/api/expand/warm")
+def warm_expander():
+    """Start the model in the background as the text field is entered, so that
+    ✨ Ausbauen answers at once; quietly nothing when it cannot (memory, slot)."""
+    if not getattr(ARGS, "expand_slot", 0):
+        return error("Ausbauen ist hier nicht eingerichtet", 501)
+    if not _expand["warming"]:
+        _expand["warming"] = True
+
+        def warm():
+            try:
+                ensure_expander()
+            except Exception as e:                                # noqa: BLE001
+                app.logger.info("expand: not warmed: %s", e)
+            finally:
+                _expand["warming"] = False
+        threading.Thread(target=warm, daemon=True).start()
+    return jsonify({"ok": True}), 202
 
 
 @app.post("/darkroom/api/expand")

@@ -20,6 +20,8 @@ import re
 import warnings
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from typing import Any
@@ -597,6 +599,25 @@ class Darkroom(unittest.TestCase):
              mock.patch.object(darkroom.subprocess, "run") as run:
             darkroom.stop_expander()
             run.assert_not_called()
+        darkroom.ARGS.expand_slot = 0
+
+    def test_entering_the_text_field_warms_the_expanding_model_in_the_background(self):
+        from unittest import mock
+        client = darkroom.app.test_client()
+        darkroom.ARGS.expand_slot = 0
+        self.assertEqual(client.post("/darkroom/api/expand/warm").status_code, 501)
+        darkroom.ARGS.expand_slot = 4
+        started = threading.Event()
+        with mock.patch.object(darkroom, "ensure_expander", side_effect=started.set):
+            self.assertEqual(client.post("/darkroom/api/expand/warm").status_code, 202)
+            self.assertTrue(started.wait(5))
+        with mock.patch.object(darkroom, "ensure_expander", side_effect=darkroom.Refused("Nur 10 GiB")):
+            self.assertEqual(client.post("/darkroom/api/expand/warm").status_code, 202)   # quietly
+        for _ in range(50):
+            if not darkroom._expand["warming"]:
+                break
+            time.sleep(0.05)
+        self.assertFalse(darkroom._expand["warming"])
         darkroom.ARGS.expand_slot = 0
 
     def test_find_flaws_takes_edits_but_not_cut_outs(self):
