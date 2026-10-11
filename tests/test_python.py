@@ -509,6 +509,74 @@ class Darkroom(unittest.TestCase):
         self.assertEqual(len(self.post(action="colorize", n="3", image=self.jpeg(64, 64)).get_json()), 1)
         self.assertEqual(len(self.post(action="animate", n="3", image=self.jpeg(64, 64)).get_json()), 1)
 
+    def test_variants_belong_together_and_one_is_kept(self):
+        jobs = self.post(action="edit", text="x", n="3", image=self.jpeg(64, 64)).get_json()
+        self.assertEqual(len({j["group"] for j in jobs}), 1)
+        self.assertEqual([(j["variant"], j["variants"]) for j in jobs], [(1, 3), (2, 3), (3, 3)])
+        self.assertNotIn("group", self.post(action="edit", text="x", image=self.jpeg(64, 64)).get_json()[0])
+        client = darkroom.app.test_client()
+        keep = jobs[1]["id"]
+        self.assertEqual(client.post(f"/darkroom/api/jobs/{keep}/keep").status_code, 409)   # the others still wait
+        for j in jobs:
+            darkroom.update_job(j["id"], state="done")
+        r = client.post(f"/darkroom/api/jobs/{keep}/keep")
+        self.assertEqual(sorted(r.get_json()["deleted"]), sorted([jobs[0]["id"], jobs[2]["id"]]))
+        self.assertFalse(darkroom.job_path(jobs[0]["id"]).exists())
+        self.assertIsNone(darkroom.read_job(keep)["group"])
+        self.assertEqual(client.post(f"/darkroom/api/jobs/{keep}/keep").status_code, 409)   # no variant any more
+
+    def test_expanding_a_short_wish(self):
+        from unittest import mock
+        client = darkroom.app.test_client()
+        darkroom.ARGS.expand_slot, darkroom.ARGS.expand_port, darkroom.ARGS.expand_model = 0, 8004, "gemma-moe"
+        self.assertEqual(client.post("/darkroom/api/expand", data={"action": "restyle", "text": "x"}).status_code, 501)
+        darkroom.ARGS.expand_slot = 4
+        sent = []
+
+        def post(url, json=None, timeout=None):
+            sent.append((url, json))
+            return mock.Mock(json=lambda: {"choices": [{"message": {"content": '"Derselbe Raum als Almhütte: Holzwände."'}}]})
+        with mock.patch.object(darkroom, "ensure_expander") as ensure, \
+             mock.patch.object(darkroom.requests, "post", side_effect=post):
+            r = client.post("/darkroom/api/expand", data={"action": "restyle", "text": "Als Almhütte",
+                                                           "image": (io.BytesIO(self.jpeg(64, 48)), "a.jpg")},
+                            content_type="multipart/form-data")
+            self.assertEqual(r.get_json()["text"], "Derselbe Raum als Almhütte: Holzwände.")
+            ensure.assert_called_once()
+            url, body = sent[0]
+            self.assertEqual(url, "http://127.0.0.1:8004/v1/chat/completions")
+            self.assertIn("German", body["messages"][0]["content"])
+            user = body["messages"][1]["content"]
+            self.assertTrue(user[0]["image_url"]["url"].startswith("data:image/jpeg;base64,"))
+            self.assertIn("The wish: Als Almhütte", user[1]["text"])
+            r = client.post("/darkroom/api/expand", data={"action": "generate", "text": "a fox"},
+                            headers={"X-Darkroom-Lang": "en"})
+            self.assertIn("English", sent[1][1]["messages"][0]["content"])
+            self.assertEqual(len(sent[1][1]["messages"][1]["content"]), 1)          # no picture for Create
+            self.assertEqual(client.post("/darkroom/api/expand", data={"action": "upscale", "text": "x"}).status_code, 400)
+            self.assertEqual(client.post("/darkroom/api/expand", data={"action": "paint", "text": ""}).status_code, 400)
+        with mock.patch.object(darkroom, "expander_state", return_value=False):
+            r = client.post("/darkroom/api/expand", data={"action": "generate", "text": "a fox"})
+            self.assertEqual(r.get_json()["error"], "Auf Slot 4 läuft ein anderes Modell")
+        with mock.patch.object(darkroom, "expander_state", return_value=None), \
+             mock.patch.object(darkroom, "mem_available_gib", return_value=12.0):
+            r = client.post("/darkroom/api/expand", data={"action": "generate", "text": "a fox"}, headers={"X-Darkroom-Lang": "en"})
+            self.assertEqual(r.get_json()["error"], "Only 12 GiB of memory free; the language model needs about 30 GB")
+        darkroom.ARGS.expand_slot = 0
+
+    def test_the_marked_spot_is_shown_to_the_model_in_red(self):
+        from PIL import Image
+        photo = io.BytesIO(); Image.new("RGB", (100, 100), (128, 128, 128)).save(photo, "PNG")
+        mask = Image.new("RGBA", (100, 100), (0, 0, 0, 255))
+        for x in range(50):
+            for y in range(100):
+                mask.putpixel((x, y), (0, 0, 0, 0))                      # the left half marked
+        m = io.BytesIO(); mask.save(m, "PNG")
+        im = Image.open(io.BytesIO(darkroom.marked(photo.getvalue(), m.getvalue()))).convert("RGB")
+        left, right = im.getpixel((10, 50)), im.getpixel((90, 50))
+        self.assertGreater(left[0] - left[1], 60)
+        self.assertLess(abs(right[0] - right[1]), 8)
+
     def test_a_waiting_job_is_crossed_out_and_not_run(self):
         from unittest import mock
         jid = self.post(action="edit", text="x", image=self.jpeg(64, 64)).get_json()[0]["id"]

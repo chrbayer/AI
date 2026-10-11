@@ -139,6 +139,13 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
 .badge { display: inline-block; font-size: 11px; font-weight: 700; color: var(--bad); border: 1px solid currentColor;
          border-radius: 5px; padding: 0 4px; margin-left: 6px; vertical-align: 2px; }
 .empty { color: var(--muted); font-size: 14px; margin: 0; }
+.badge.n { color: var(--muted); }
+.layer .top .vnav { display: flex; align-items: center; gap: 4px; color: #fff; font-size: 14px; white-space: nowrap; }
+.layer .top .vnav button { padding: 6px 11px; }
+.layer .top .vnav button.keep { background: var(--accent); }
+.labelrow .links .link + .link { margin-left: 10px; }
+.textactions { display: flex; gap: 16px; }
+.textactions .link { padding: 6px 0 2px; }
 /* full-screen layers: viewer and painter */
 .layer { position: fixed; inset: 0; z-index: 20; background: #000; color: #fff; display: none; flex-direction: column; }
 .layer.on { display: flex; }
@@ -338,7 +345,9 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
           <span class="links"><button class="link hidden" type="button" data-save="edit" id="saveEdit">Speichern</button>
           <button class="link" type="button" data-tpl="edit">Vorlagen</button></span></div>
         <textarea id="text" rows="2"></textarea>
-        <p class="note hidden" id="textHint"></p>
+        <div class="textactions"><button class="link hidden" type="button" data-expand="edit" id="expandEdit">✨ Ausbauen</button>
+          <button class="link hidden" type="button" data-undo="edit" id="undoEdit">Rückgängig</button></div>
+        <p class="note hidden" id="textHint"><span id="textHintText"></span></p>
       </div>
       <p class="note" id="estimate"></p>
       <a class="link help" id="actionHelp" href="/darkroom/help">Beispiel und Tipps</a>
@@ -352,7 +361,9 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
       <div class="field"><div class="labelrow"><label for="genText">Was soll auf dem Bild sein?</label>
           <span class="links"><button class="link hidden" type="button" data-save="generate" id="saveGen">Speichern</button>
           <button class="link" type="button" data-tpl="generate">Vorlagen</button></span></div>
-        <textarea id="genText" rows="3" placeholder="z. B. Ein roter Fuchs im Schnee bei Morgenlicht"></textarea></div>
+        <textarea id="genText" rows="3" placeholder="z. B. Ein roter Fuchs im Schnee bei Morgenlicht"></textarea>
+        <div class="textactions"><button class="link hidden" type="button" data-expand="generate" id="expandGen">✨ Ausbauen</button>
+          <button class="link hidden" type="button" data-undo="generate" id="undoGen">Rückgängig</button></div></div>
       <div class="field"><label>Modell</label><div class="models" id="genModels"></div></div>
       <div class="field"><label>Format</label><div class="chips" id="aspects"></div></div>
       <div class="field" id="genSecondsWrap"><label>Länge</label><div class="chips" id="genSeconds"></div></div>
@@ -392,7 +403,9 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
 <div class="go"><button class="btn primary" id="goBtn" type="button" disabled>Bild wählen</button></div>
 
 <div class="layer" id="viewer" role="dialog" aria-modal="true">
-  <div class="top"><b id="vTitle"></b><button type="button" id="vClose">Schließen</button></div>
+  <div class="top"><b id="vTitle"></b>
+    <span class="vnav hidden" id="vNav"><button type="button" id="vPrev" aria-label="Vorige Variante">‹</button><span id="vNum"></span><button type="button" id="vNext" aria-label="Nächste Variante">›</button><button type="button" class="keep" id="vKeep">Behalten</button></span>
+    <button type="button" id="vClose">Schließen</button></div>
   <div class="stage" id="stage"></div>
   <div class="info" id="vInfo"></div>
   <div class="found hidden" id="vFound"></div>
@@ -498,6 +511,12 @@ const EN = {
   "Verlauf": "History", "Noch nichts bearbeitet.": "Nothing edited yet.", "Bild wählen": "Choose a picture",
   "Schließen": "Close", "Sichern": "Save", "Fehler suchen": "Find flaws", "Reparieren": "Repair",
   "Weiter bearbeiten": "Edit further", "Löschen": "Delete", "Stelle markieren": "Mark the spot", "Abbrechen": "Cancel",
+  "✨ Ausbauen": "✨ Expand", "Jetzt ausbauen": "Expand it now",
+  "Das Sprachmodell startet – beim ersten Mal etwa 15 Sekunden …": "The language model is starting – about 15 seconds the first time …",
+  "Ausgebaut – lesen, anpassen, dann los": "Expanded – read it, change it, then go",
+  "{n} von {m}": "{n} of {m}", "Behalten": "Keep", "Vorige Variante": "Previous variant", "Nächste Variante": "Next variant",
+  "Nochmal tippen: diese behalten, die anderen Varianten löschen": "Tap again: keep this one, delete the other variants",
+  "Behalten – die anderen sind gelöscht": "Kept – the others are deleted",
   "Pinsel": "Brush", "Beispiel und Tipps": "Example and tips", "Hilfe": "Help", "Rückgängig": "Undo", "Alles weg": "Clear all", "Fertig": "Done",
   "Stoppen und Speicher freigeben": "Stop and free the memory", "Trotzdem starten": "Start anyway",
   "Suchen: z. B. Sonne, Schnee, Kabel, Lächeln": "Search: e.g. sun, snow, cables, smile", "Für diese Aktion": "For this action",
@@ -663,7 +682,7 @@ async function loadActions() {
   S.clipSeconds = r.clip_seconds || [];
   secondsChips("seconds", (n) => { S.seconds = n; renderEdit(); });
   secondsChips("genSeconds", (n) => { S.genSeconds = n; renderGen(); });
-  S.groups = r.groups || []; S.styles = r.styles || []; S.voiceMax = r.voice_max || 10;
+  S.groups = r.groups || []; S.styles = r.styles || []; S.voiceMax = r.voice_max || 10; S.expand = !!r.expand;
   $("voiceMax").textContent = S.voiceMax;
   const box = $("actions"); box.innerHTML = "";
   const grids = {};
@@ -768,7 +787,7 @@ function settle(list, current) {
 function chooseAction(id, quiet) {
   const a = S.actions.find((x) => x.id === id && x.available !== false) || S.actions.find((x) => x.available !== false);
   if (!a) return;
-  if (S.action !== a.id && !quiet) $("text").value = "";
+  if (S.action !== a.id && !quiet) { $("text").value = ""; E.before.edit = null; }
   S.action = a.id; store("action", a.id);
   renderEdit();
 }
@@ -1062,8 +1081,40 @@ function updateSave() {
   // A word or two is too little for some actions: they need the thing or the look in full.
   const words = $("text").value.trim().split(/\s+/).filter(Boolean).length;
   const [below, hint] = (a && a.short_hint) || [0, ""];
-  $("textHint").textContent = hint;
+  $("textHintText").textContent = hint;
   show("textHint", words > 0 && words < below);
+  // Ausbauen: for the actions whose text describes the picture, once there is a text
+  show("expandEdit", !!(a && a.expand) && words > 0 && !E.busy);
+  show("expandGen", S.expand && !!$("genText").value.trim() && !E.busy);
+  show("undoEdit", E.before.edit != null); show("undoGen", E.before.generate != null);
+}
+
+// ── Ausbauen ───────────────────────────────────────────
+// A short wish spelled out by a language model that sees the photo (and the
+// marked spot), into the text field: read it, change it, then go. Once, the
+// text before can be had back.
+const E = { busy: false, before: { edit: null, generate: null } };
+async function expandText(from) {
+  const field = $(from === "generate" ? "genText" : "text");
+  const text = field.value.trim();
+  if (!text || E.busy) return;
+  const fd = new FormData();
+  fd.append("action", from === "generate" ? "generate" : S.action); fd.append("text", text);
+  if (from !== "generate" && S.source) appendPicture(fd, S.source, "image", "from");
+  if (from !== "generate" && S.mask) fd.append("mask", S.mask.blob, "mask.png");
+  E.busy = true; updateSave();
+  const slow = setTimeout(() => toast(t("Das Sprachmodell startet – beim ersten Mal etwa 15 Sekunden …"), 15000), 2500);
+  try {
+    const r = await api("/expand", { method: "POST", body: fd });
+    E.before[from] = field.value; field.value = r.text;
+    toast(t("Ausgebaut – lesen, anpassen, dann los"));
+  } catch (e) { toast(e.message, 5000); }
+  clearTimeout(slow); E.busy = false; updateSave();
+}
+function undoExpand(from) {
+  const field = $(from === "generate" ? "genText" : "text");
+  if (E.before[from] == null) return;
+  field.value = E.before[from]; E.before[from] = null; updateSave();
 }
 
 const V = { from: "edit" };
@@ -1274,6 +1325,7 @@ function renderJobs() {
     const meta = document.createElement("div"); meta.className = "meta";
     const title = document.createElement("b"); title.textContent = j.label + (j.model_label ? " · " + j.model_label : "");
     if (j.uncensored) { const u = document.createElement("span"); u.className = "badge"; u.textContent = "U"; title.appendChild(u); }
+    if (j.group) { const v = document.createElement("span"); v.className = "badge n"; v.textContent = j.variant + "/" + j.variants; title.appendChild(v); }
     const sub = document.createElement("span");
     sub.textContent = (j.text ? (LANG === "en" ? "“" + j.text + "” · " : "„" + j.text + "“ · ") : "") + new Date(j.created * 1000).toLocaleString(LANG === "en" ? "en-GB" : "de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
     meta.append(title, sub);
@@ -1304,6 +1356,17 @@ function openViewer(id) {
   show("vCheck", checkable); show("vSave", !checked); show("vRepair", checked && job.artifacts && job.artifacts.length > 0);
   $("viewer").classList.toggle("checking", checked); show("vFound", checked);
   $("vDelete").disabled = job.state === "running";
+  // the variants of one request: from one to the next, and keep the best
+  const sib = job.group ? S.jobs.filter((x) => x.group === job.group).sort((x, y) => x.variant - y.variant) : [];
+  show("vNav", sib.length > 1);
+  if (sib.length > 1) {
+    const i = sib.findIndex((x) => x.id === job.id);
+    $("vNum").textContent = t("{n} von {m}", { n: i + 1, m: sib.length });
+    $("vPrev").onclick = () => openViewer(sib[(i + sib.length - 1) % sib.length].id);
+    $("vNext").onclick = () => openViewer(sib[(i + 1) % sib.length].id);
+    $("vKeep").style.display = done ? "" : "none";
+    $("vKeep").textContent = t("Behalten");
+  }
   if (checked) showChecked(job);
   else if (done && job.video) showVideo(job);
   else if (done && job.action === "generate") showSingle(job);
@@ -1565,6 +1628,20 @@ function continueWith() {
 }
 
 const confirmDelete = {};
+async function keepVariant() {
+  const id = S.viewing.id;
+  if (confirmDelete.keep !== id) {
+    confirmDelete.keep = id; toast(t("Nochmal tippen: diese behalten, die anderen Varianten löschen"));
+    setTimeout(() => { confirmDelete.keep = null; }, 3000); return;
+  }
+  confirmDelete.keep = null;
+  try {
+    const r = await api("/jobs/" + id + "/keep", { method: "POST" });
+    S.jobs = S.jobs.filter((j) => !r.deleted.includes(j.id))
+      .map((j) => (j.id === id ? Object.assign(j, { group: null, variant: null, variants: null }) : j));
+    renderJobs(); openViewer(id); toast(t("Behalten – die anderen sind gelöscht"));
+  } catch (e) { toast(e.message, 4000); }
+}
 async function cancelJob(id) {
   $("vCancel").disabled = true;
   try { await api("/jobs/" + id + "/cancel", { method: "POST" }); } catch (e) { toast(e.message); }
@@ -1689,7 +1766,10 @@ $("tplSearch").oninput = renderTemplates;
 for (const b of document.querySelectorAll("[data-save]")) b.onclick = () => openSave(b.dataset.save);
 $("saveOk").onclick = saveTemplate; $("saveCancel").onclick = closeSave; $("saveBg").onclick = closeSave;
 $("saveTitle").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); saveTemplate(); } };
-$("text").addEventListener("input", updateSave); $("genText").addEventListener("input", updateSave);
+$("text").addEventListener("input", () => { E.before.edit = null; updateSave(); });
+$("genText").addEventListener("input", () => { E.before.generate = null; updateSave(); });
+for (const b of document.querySelectorAll("[data-expand]")) b.onclick = () => expandText(b.dataset.expand);
+for (const b of document.querySelectorAll("[data-undo]")) b.onclick = () => undoExpand(b.dataset.undo);
 for (const b of $("tplScope").children) b.onclick = () => { if (!b.disabled) { T.scope = b.dataset.v; renderTemplates(); } };
 $("audioFile").onchange = (e) => { const f = e.target.files[0]; if (f) setVoice(f, f.name); e.target.value = ""; };
 for (const b of $("variants").children) b.onclick = () => { S.variants = Number(b.dataset.n); renderEdit(); };
@@ -1715,6 +1795,7 @@ $("vMore").onclick = continueWith;
 $("vCheck").onclick = checkPicture;
 $("vRepair").onclick = repairPicture;
 $("vDelete").onclick = removeJob;
+$("vKeep").onclick = keepVariant;
 document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
 window.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeViewer(); closeSheet(); closePainter(); closeTemplates(); } });
 window.addEventListener("hashchange", openFromHash);

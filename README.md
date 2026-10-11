@@ -2160,10 +2160,28 @@ the desk see the same, and stand first under *Mine* (*Eigene*), as written,
 in either language; × and a second tap deletes one. The second photo
 (*picture 2*, *Animate*'s end frame) can be taken with the camera, too.
 
+**Expand a short wish.** A few words often do little — "Als Almhütte" put
+mountains in the window, "rot" on a marked shirt made it white. *✨ Expand*
+(*✨ Ausbauen*) under the text field sends the photo, the marked spot (drawn in
+red) and the words to a language model that writes the wish out in full, in
+the page's language, into the text field: read it, change it, then go; *Undo*
+brings the short text back. "rot" became "Ein rotes T-Shirt aus leichter
+Baumwolle, das den Oberkörper des Mannes vollständig bedeckt" and the shirt red,
+the cabin got old-wood walls, floor boards and a sheepskin, "Hawaii" a Hawaiian
+shirt. Tried on six wishes: Gemma-4 26B-A4B (`gemma-moe`) got them right, up in
+9 s, 2–3 s an answer; Qwen3-VL-8B made "rot" a black shirt, Qwen3.6-35B-A3B
+"Hawaii" a hibiscus flower on the chest. The model runs on a slot of its own
+(`LLMCTL_DARKROOM_EXPAND_SLOT`, 4; `LLMCTL_DARKROOM_EXPAND_MODEL`), started
+with `--mmproj --no-reasoning` on the first request — refused with less than
+32 GiB free or another model on the slot — and stopped after 10 idle minutes,
+or when *Find flaws* needs the room for flash. For *Redesign*, *Paint over*,
+*Edit*, *Copy pose*, *Expand* and *Create*.
+
 **Variants, cancel, zoom.** Where one's own words steer the result
 (*Edit*, *Paint over*, *Erase*, *Expand*, *Copy pose*, *Redesign*,
 *As artwork*), *Variants* (*Varianten*) 1–3 makes as many jobs, each with a seed of
-its own and a card of its own: the same sunset on the beach came out once
+its own and a card of its own (marked 1/3, 2/3 …; in the viewer ‹ › go
+from one to the next, and *Keep* keeps the one shown and deletes the others): the same sunset on the beach came out once
 with the sun hidden, once with it on the horizon and its glitter on the
 sand, 21 and 17 s. A waiting or running job has *Cancel* (*Abbrechen*): one that waits
 is crossed out, one that runs has ComfyUI's workflow interrupted — it

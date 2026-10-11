@@ -886,13 +886,61 @@
           ]
         },
         {
+          "id": "expand-text",
+          "title": "Expand a short wish",
+          "public": true,
+          "text": "A few words often do little: \"as an alpine cabin\" put mountains in the window, \"red\" on a marked shirt made it white. *✨ Expand* beside the text field has a language model (Gemma-4 26B-A4B) look at the photo — and the marked spot — and write the wish out in full, into the text field, to read and change before it runs. \"red\" became \"a red T-shirt of light cotton that covers the man's upper body\", the cabin got old-wood walls, floor boards and a sheepskin. About 10 s the first time (the model starts, on a slot of its own, and stops after 10 idle minutes), then 2–3 s; *Undo* brings the short text back. For *Redesign*, *Paint over*, *Edit*, *Copy pose*, *Expand* and *Create*.",
+          "de": {
+            "title": "Kurze Wünsche ausbauen",
+            "text": "Ein paar Wörter wirken oft kaum: „Als Almhütte“ setzte Berge ins Fenster, „rot“ auf einem markierten Shirt machte es weiß. *✨ Ausbauen* neben dem Textfeld lässt ein Sprachmodell (Gemma-4 26B-A4B) das Foto — und die markierte Stelle — ansehen und den Wunsch ausschreiben, ins Textfeld, zum Lesen und Ändern, bevor es losgeht. Aus „rot“ wurde „Ein rotes T-Shirt aus leichter Baumwolle, das den Oberkörper des Mannes vollständig bedeckt“, die Hütte bekam Altholzwände, Dielen und ein Schaffell. Beim ersten Mal etwa 10 s (das Modell startet, auf einem eigenen Slot, und stoppt nach 10 Minuten ohne Nutzung), danach 2–3 s; *Rückgängig* holt den kurzen Text zurück. Für *Neu gestalten*, *Übermalen*, *Ändern*, *Pose übernehmen*, *Erweitern* und *Erzeugen*."
+          },
+          "media": [
+            {
+              "file": "bench:darkroom/expand_room.png",
+              "caption": "The room",
+              "caption_de": "Der Raum",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/expand_cabin_short.jpg",
+              "caption": "\"Als Almhütte\"",
+              "caption_de": "„Als Almhütte“",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/expand_cabin_long.jpg",
+              "caption": "Expanded: Ein gemütliches Wohnzimmer im Stil einer Almhütte mit rustikalen Wänden aus dunklem Althol …",
+              "caption_de": "Ausgebaut: Ein gemütliches Wohnzimmer im Stil einer Almhütte mit rustikalen Wänden aus dunklem Althol …",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/expand_red_short.jpg",
+              "caption": "\"rot\" on the marked shirt",
+              "caption_de": "„rot“ auf dem markierten Shirt",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/expand_red_long.jpg",
+              "caption": "Expanded: Ein rotes T-Shirt aus leichter Baumwolle, das den Oberkörper des Mannes vollständig bedeckt.",
+              "caption_de": "Ausgebaut: Ein rotes T-Shirt aus leichter Baumwolle, das den Oberkörper des Mannes vollständig bedeckt.",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/expand_hawaii_long.jpg",
+              "caption": "\"Hawaii\", expanded",
+              "caption_de": "„Hawaii“, ausgebaut",
+              "public": true
+            }
+          ]
+        },
+        {
           "id": "variants",
           "title": "Variants",
           "public": true,
-          "text": "Where one's own words steer the result, *Variants* 1–3 makes as many, one after the other, each with another seed — keep the best. The same sunset twice: 46 and 18 s.",
+          "text": "Where one's own words steer the result, *Variants* 1–3 makes as many, one after the other, each with another seed — keep the best. The same sunset twice: 46 and 18 s. In the viewer ‹ › go from one variant to the next; *Keep* keeps the one shown and deletes the others.",
           "de": {
             "title": "Varianten",
-            "text": "Wo die eigenen Worte das Ergebnis bestimmen, macht *Varianten* 1–3 so viele, nacheinander, jede mit anderem Zufall — die beste behalten. Derselbe Sonnenuntergang zweimal: 46 und 18 s."
+            "text": "Wo die eigenen Worte das Ergebnis bestimmen, macht *Varianten* 1–3 so viele, nacheinander, jede mit anderem Zufall — die beste behalten. Derselbe Sonnenuntergang zweimal: 46 und 18 s. Im Betrachter geht man mit ‹ › von einer Variante zur nächsten; *Behalten* behält die gezeigte und löscht die anderen."
           },
           "media": [
             {

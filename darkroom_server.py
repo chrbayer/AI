@@ -139,7 +139,7 @@ ACTIONS = {
         "prompt": "", "variants": True, "text": "prompt", "text_label": "Was soll an die markierte Stelle?",
         "text_placeholder": "z. B. ein roter Strohhut, eine Vase mit Sonnenblumen",
         # One word ("rot") left a grey hat grey, with Form behalten as well.
-        "short_hint": (2, "Nenne das Ding ganz – „ein roter Hut“ statt nur „rot“."),
+        "short_hint": (2, "Nenne das Ding ganz – „ein roter Hut“ statt nur „rot“ –, oder tippe ✨ Ausbauen."),
         "max_side": 2048, "seconds": (35, 90), "mask": True,
         # Form behalten: the photo's edges steer the repaint — a coat masked to be
         # red leather stays the same coat, buttons and folds, in red leather. Only
@@ -176,7 +176,7 @@ ACTIONS = {
         "text_placeholder": "z. B. dasselbe Wohnzimmer als gemütliche Almhütte aus altem Holz, "
                             "Kamin, rote Teppiche – je genauer, desto besser",
         "short_hint": (5, "Kurze Angaben wirken oft kaum: „Als Almhütte“ machte ein Wohnzimmer nur dunkler. "
-                          "Nenne Materialien, Farben und Licht."),
+                          "Nenne Materialien, Farben und Licht – oder tippe ✨ Ausbauen."),
         "max_pixels": EDIT_PIXELS, "seconds": (30, 75),
     },
     # Qwen-Image Edit, which sees the photo: the ControlNet (Canny) saw only its
@@ -334,7 +334,8 @@ EN = {
     "Übermalen": "Paint over", "Stelle markieren, neu malen": "Mark a spot, paint it anew",
     "Was soll an die markierte Stelle?": "What should go in the marked spot?",
     "z. B. ein roter Strohhut, eine Vase mit Sonnenblumen": "e.g. a red straw hat, a vase of sunflowers",
-    "Nenne das Ding ganz – „ein roter Hut“ statt nur „rot“.": "Name the whole thing – “a red hat”, not just “red”.",
+    "Nenne das Ding ganz – „ein roter Hut“ statt nur „rot“ –, oder tippe ✨ Ausbauen.":
+        "Name the whole thing – “a red hat”, not just “red” – or tap ✨ Expand.",
     "Ausschneiden": "Cut out", "Ein Ding als PNG, ohne Rest": "One thing as a PNG, nothing else",
     "Was soll ausgeschnitten werden?": "What should be cut out?",
     "z. B. die Gitarre, die Frau, das rote Auto": "e.g. the guitar, the woman, the red car",
@@ -345,8 +346,8 @@ EN = {
     "Wie soll es jetzt aussehen?": "How should it look now?",
     "z. B. dasselbe Wohnzimmer als gemütliche Almhütte aus altem Holz, Kamin, rote Teppiche – je genauer, desto besser":
         "e.g. the same living room as a cosy alpine cabin of old wood, fireplace, red rugs – the more exact, the better",
-    "Kurze Angaben wirken oft kaum: „Als Almhütte“ machte ein Wohnzimmer nur dunkler. Nenne Materialien, Farben und Licht.":
-        "A few words often do little: “as an alpine cabin” only made a living room darker. Name materials, colours and light.",
+    "Kurze Angaben wirken oft kaum: „Als Almhütte“ machte ein Wohnzimmer nur dunkler. Nenne Materialien, Farben und Licht – oder tippe ✨ Ausbauen.":
+        "A few words often do little: “as an alpine cabin” only made a living room darker. Name materials, colours and light – or tap ✨ Expand.",
     "Als Kunstwerk": "As artwork", "Aquarell, Zeichnung, Comic …": "Watercolour, drawing, comic …",
     "Sonst noch etwas? (optional)": "Anything else? (optional)",
     "z. B. wie in einem Kinderbuch, der Hintergrund als Sommerwiese": "e.g. like a children's book, the background a summer meadow",
@@ -365,7 +366,13 @@ EN = {
     "natürliche Fotos": "natural photos", "lebendig, warmes Licht": "vivid, warm light", "Schrift im Bild": "text in the picture",
     "mehr Abwechslung, Stile": "more variety, styles", "fast wie dev": "almost like dev", "beste Qualität": "best quality",
     "Startbild, dann Clip mit Ton": "first frame, then a clip with sound",
-    "Eigene": "Mine",
+    "Eigene": "Mine", "keine Variante": "not a variant",
+    "Die anderen Varianten laufen noch": "The other variants are still running",
+    "Ausbauen ist hier nicht eingerichtet": "Expanding is not set up here",
+    "Für diese Aktion gibt es kein Ausbauen": "This action has no expanding",
+    "Erst ein paar Wörter schreiben": "Write a few words first",
+    "Das Sprachmodell hat nichts geschrieben": "The language model wrote nothing",
+    "Das Sprachmodell antwortet nicht": "The language model does not answer",
     "Die Hilfe ist nicht installiert (docs/help)": "The help is not installed (docs/help)",
     # what a job keeps
     "Erzeugt": "Created", "Fehlersuche": "Find flaws", "Repariert": "Repaired", "Form behalten": "Keep shape",
@@ -414,8 +421,12 @@ EN_PATTERNS = [
     (r"ein Video ist (.*) Sekunden lang", "a video is {0} seconds long"),
     (r"Schon (\d+) eigene Vorlagen – bitte erst welche löschen", "Already {0} templates of your own – please delete some first"),
     (r"Auf Slot (\d+) läuft keine ComfyUI mit Bild-API", "No ComfyUI with an image API on slot {0}"),
+    (r"Auf Slot (\d+) läuft ein anderes Modell", "Another model runs on slot {0}"),
+    (r"Nur (\d+) GiB Speicher frei, das Sprachmodell braucht etwa 30 GB",
+     "Only {0} GiB of memory free; the language model needs about 30 GB"),
+    (r"Das Sprachmodell ist nicht hochgekommen — llmctl logs (\d+)", "The language model did not come up — llmctl logs {0}"),
     (r"ComfyUI ist nicht hochgekommen — llmctl logs (\d+)", "ComfyUI did not come up — llmctl logs {0}"),
-    (r"Nur (\d+) GiB Speicher frei, .*", "Only {0} GiB of memory free; ComfyUI needs 25–30 GB to edit, over 40 GB for videos. "
+    (r"Nur (\d+) GiB Speicher frei, ComfyUI braucht .*", "Only {0} GiB of memory free; ComfyUI needs 25–30 GB to edit, over 40 GB for videos. "
                                          "Is a large language model running? Stop that first – or start anyway."),
     (r"ComfyUI läuft ohne Vision-Modell – .* --vision (\S+)",
      "ComfyUI runs without a vision model – stop it from the page and start it again, then it starts with --vision {0}"),
@@ -754,6 +765,7 @@ def run_check(job, d):
             raise RuntimeError("ComfyUI läuft ohne Vision-Modell – über die Seite stoppen und neu starten, "
                                "dann startet es mit --vision " + str(getattr(ARGS, "vision_slot", 0) or "?"))
         update_job(jid, phase="Vision-Modell startet (ComfyUI gibt dafür seinen Speicher frei) …")
+        stop_expander()                        # flash takes the room the expanding model holds
         started = True                         # stopped again below, also when cancelled while it starts
     try:
         if started:
@@ -875,6 +887,9 @@ def janitor():
             except requests.RequestException:
                 pass
             _last_done["freed"] = True
+        if (getattr(ARGS, "expand_slot", 0) and _expand["started"]
+                and time.time() - _expand["used"] > EXPAND_IDLE):
+            stop_expander()
 
 
 # ── ComfyUI itself ───────────────────────────────────────────
@@ -994,6 +1009,141 @@ def comfy():
     return jsonify({"comfy": _comfy["state"]})
 
 
+# ── Ausbauen: a short wish spelled out ───────────────────────
+# "Als Almhütte" made a living room only darker; the image models want the
+# look in full. A language model that sees the photo writes it, into the text
+# field, where the user reads and changes it before anything runs. Tried on
+# six wishes: Gemma-4 26B-A4B (gemma-moe) wrote old-wood walls, dark floor
+# boards and loden for the cabin and a Hawaiian shirt for "Hawaii" on a
+# marked shirt, up in 9 s, 3 s an answer; Qwen3-VL-8B made "rot" a black
+# shirt, Qwen3.6-35B-A3B "Hawaii" a hibiscus flower on the chest. It runs on
+# a slot of its own, started on the first request and stopped when idle.
+EXPAND_SYSTEM = (
+    "You turn a short wish for a photo edit into the full text an image model needs. Keep exactly what the wish "
+    "asks for: its colours, things and style words mean what they say (German 'rot' is red, 'blau' blue, "
+    "'Almhütte' an alpine cabin) and are never replaced by something else. Add only concrete detail that makes "
+    "the wish visible: materials, colours, light, textures. Write in {lang}, one paragraph, at most 70 words, "
+    "no preamble, no quotes.")
+EXPAND_TASKS = {
+    "restyle": "The room or place in the photo gets a new look; only its layout is kept, everything else comes "
+               "from your text. Describe the whole scene as it should look: walls, floor, furniture, materials, "
+               "colours, light.",
+    "paint": "Only the area marked in translucent red is painted anew. Name the thing that fills it as a whole "
+             "object, with its material and colour (for example 'a red T-shirt of light cotton') — never 'the "
+             "area' or 'a surface'.",
+    "edit": "The photo is changed by an instruction. Write the instruction, ending with what stays exactly the same.",
+    "pose": "Someone or something new takes exactly the pose of the person in the photo, somewhere new; the "
+            "photo's person and place are not kept. Describe who or what stands there and where, in full.",
+    "expand": "The photo is continued beyond its edges. Describe the whole wider scene, the photo's part included.",
+    "generate": "A picture is made from words alone. Describe the whole picture: subject, setting, light, style.",
+}
+EXPAND_IDLE = 600                    # s without a request, then the model is stopped again
+EXPAND_NEEDED_GIB = 32               # gemma-moe at Q8 with its mmproj
+_expand = {"started": False, "used": 0.0}
+_expand_lock = threading.Lock()
+
+
+def expander_url():
+    return f"http://127.0.0.1:{ARGS.expand_port}"
+
+
+def expander_state():
+    """None: nothing on the slot; True: our model; False: something else."""
+    try:
+        r = requests.get(f"{expander_url()}/v1/models", timeout=3)
+        names = {m.get(k) for m in r.json().get("data", []) + r.json().get("models", []) for k in ("id", "name")}
+        return ARGS.expand_model in names
+    except (requests.RequestException, ValueError):
+        return None
+
+
+def ensure_expander():
+    """The model up on its slot — started here if need be."""
+    with _expand_lock:
+        state = expander_state()
+        if state is False:
+            raise Refused(f"Auf Slot {ARGS.expand_slot} läuft ein anderes Modell")
+        if state is None:
+            free = mem_available_gib()
+            if free is not None and free < EXPAND_NEEDED_GIB:
+                raise Refused(f"Nur {free:.0f} GiB Speicher frei, das Sprachmodell braucht etwa 30 GB")
+            r = subprocess.run([ARGS.llmctl, "start", ARGS.expand_model, str(ARGS.expand_slot), "--mmproj",
+                                "--no-reasoning"], capture_output=True, text=True, timeout=300)
+            if r.returncode != 0:
+                raise Refused("llmctl: " + " ".join((r.stdout + r.stderr).strip().splitlines()[-2:]))
+            deadline = time.time() + 240
+            while expander_state() is not True:
+                if time.time() > deadline:
+                    raise Refused(f"Das Sprachmodell ist nicht hochgekommen — llmctl logs {ARGS.expand_slot}")
+                time.sleep(1)
+            _expand["started"] = True
+        _expand["used"] = time.time()
+
+
+def stop_expander():
+    """Stop the model, if this server started it (for Fehler suchen's flash, or when idle)."""
+    with _expand_lock:
+        if not _expand["started"]:
+            return
+        subprocess.run([ARGS.llmctl, "stop", str(ARGS.expand_slot)], capture_output=True, timeout=120)
+        _expand["started"] = False
+        app.logger.info("expand: %s on slot %s stopped", ARGS.expand_model, ARGS.expand_slot)
+
+
+def marked(data, mask_data):
+    """The photo with the marked spot in translucent red, as the model is told; small, as JPEG."""
+    im = Image.open(io.BytesIO(data))
+    im = ImageOps.exif_transpose(im).convert("RGB")
+    if mask_data:
+        alpha = Image.open(io.BytesIO(mask_data)).convert("RGBA").split()[3].resize(im.size)
+        red = Image.new("RGB", im.size, (255, 0, 0))
+        im = Image.composite(Image.blend(im, red, 0.45), im, alpha.point(lambda v: 255 if v < 128 else 0))
+    im.thumbnail((768, 768))
+    buf = io.BytesIO()
+    im.save(buf, "JPEG", quality=85)
+    return buf.getvalue()
+
+
+@app.post("/darkroom/api/expand")
+def expand_text():
+    """A short wish as the full text the image model needs, in the page's language."""
+    try:
+        if not getattr(ARGS, "expand_slot", 0):
+            return error("Ausbauen ist hier nicht eingerichtet", 501)
+        f = request.form
+        action, text = f.get("action", ""), (f.get("text") or "").strip()
+        if action not in EXPAND_TASKS:
+            raise Refused("Für diese Aktion gibt es kein Ausbauen")
+        if not text:
+            raise Refused("Erst ein paar Wörter schreiben")
+        if len(text) > 2000:
+            raise Refused("der Text ist zu lang")
+        content = [{"type": "text", "text": f"{EXPAND_TASKS[action]}\nThe wish: {text}"}]
+        data, _ = picture("image", "from") if action != "generate" else (None, None)
+        if data:
+            mask = request.files["mask"].read() if "mask" in request.files else None
+            try:
+                jpg = marked(data, mask)
+            except Exception:                                     # noqa: BLE001
+                raise Refused("das ist kein Bild, das der Server lesen kann") from None
+            content.insert(0, {"type": "image_url",
+                               "image_url": {"url": "data:image/jpeg;base64," + base64.b64encode(jpg).decode()}})
+        ensure_expander()
+        r = requests.post(f"{expander_url()}/v1/chat/completions", timeout=120, json={
+            "messages": [{"role": "system", "content": EXPAND_SYSTEM.format(lang="German" if lang() == "de" else "English")},
+                         {"role": "user", "content": content}],
+            "max_tokens": 260, "temperature": 0.3})
+        _expand["used"] = time.time()
+        out = r.json()["choices"][0]["message"]["content"].strip().strip('"„“”').strip()
+        if not out:
+            raise Refused("Das Sprachmodell hat nichts geschrieben")
+        return jsonify({"text": out[:2000]})
+    except Refused as e:
+        return error(str(e))
+    except (requests.RequestException, ValueError, KeyError, IndexError):
+        return error("Das Sprachmodell antwortet nicht", 502)
+
+
 def own_file():
     return Path(ARGS.data) / "prompts.json"
 
@@ -1109,6 +1259,7 @@ def actions():
                     "audio": bool(a.get("audio")), "styles": bool(a.get("styles")),
                     "keep": bool(a.get("keep")), "keep_available": avail(a["keep"][0]) if a.get("keep") else None,
                     "variants": bool(a.get("variants")),
+                    "expand": key in EXPAND_TASKS and bool(getattr(ARGS, "expand_slot", 0)),
                     "group": tr(next(g for g, ids in GROUPS for i in ids if i == key)),
                     "second_available": avail(FIRST_LAST) if a.get("video") else True,
                     "available": avail(fast), "best_available": avail(best),
@@ -1121,7 +1272,7 @@ def actions():
 
     return jsonify({"actions": out, "edit_models": models(EDIT_MODELS), "gen_models": models(GEN_MODELS),
                     "aspects": list(ASPECTS), "clip_seconds": list(CLIP_SECONDS), "voice_max": VOICE_MAX,
-                    "variants_max": VARIANTS_MAX,
+                    "variants_max": VARIANTS_MAX, "expand": bool(getattr(ARGS, "expand_slot", 0)),
                     "groups": [tr(g) for g, _ in GROUPS], "styles": [[k, tr(v[0])] for k, v in STYLES.items()]})
 
 
@@ -1284,7 +1435,10 @@ def create_job():
         sides = f.get("sides") if f.get("sides") in SIDES else "wide"
         # Varianten: the same edit again, each with a seed of its own and a card of its own
         n = min(VARIANTS_MAX, max(1, int(f.get("n") or 1))) if spec.get("variants") else 1
+        # the variants of one request belong together: the viewer goes from one to the next
+        group = {"group": uuid.uuid4().hex[:10], "variants": n} if n > 1 else {}
         jobs = [new_job({"action": action, "label": spec["label"], "text": text, "quality": quality, "lang": lang(),
+                       **(dict(group, variant=i + 1) if group else {}),
                        "model": resolve(model, uncensored), "model_label": label,
                        "uncensored": uncensored and model in UNCENSORED,
                        "parent": parent, "parent2": parent2, "two": data2 is not None,
@@ -1292,7 +1446,7 @@ def create_job():
                        "input_size": list(size), "png": bool(spec.get("png")),
                        "style": style if spec.get("styles") else None,
                        **({"video": True, "seconds": seconds} if spec.get("video") else {})},
-                        files) for _ in range(n)]
+                        files) for i in range(n)]
         return jsonify([public(j) for j in jobs])
     except Refused as e:
         return error(str(e))
@@ -1582,6 +1736,27 @@ def delete_job(jid):
     return jsonify({"deleted": jid})
 
 
+@app.post("/darkroom/api/jobs/<jid>/keep")
+def keep_variant(jid):
+    """Keep this variant, delete the other ones of its group that have ended."""
+    try:
+        job_path(jid)
+    except Refused:
+        return error("no such job", 404)
+    job = read_job(jid)
+    if job is None:
+        return error("no such job", 404)
+    if not job.get("group"):
+        return error("keine Variante", 409)
+    others = [j for j in all_jobs() if j.get("group") == job["group"] and j["id"] != jid]
+    if any(j["state"] in ("queued", "running") for j in others):
+        return error("Die anderen Varianten laufen noch", 409)
+    for j in others:
+        shutil.rmtree(job_path(j["id"]), ignore_errors=True)
+    update_job(jid, group=None, variant=None, variants=None)
+    return jsonify({"deleted": [j["id"] for j in others]})
+
+
 @app.get("/health")
 def health():
     return jsonify({"status": "ok"})
@@ -1597,6 +1772,10 @@ def main():
     p.add_argument("--comfy-model", default="comfy")
     p.add_argument("--llmctl", required=True, help="llmctl itself, to start and stop ComfyUI")
     p.add_argument("--data", required=True, help="where the jobs are kept")
+    p.add_argument("--expand-slot", type=int, default=0,
+                   help="the slot for the model that spells out short wishes (Ausbauen); 0 for none")
+    p.add_argument("--expand-port", type=int, default=0, help="its llama-server port")
+    p.add_argument("--expand-model", default="gemma-moe", help="the llmctl model it starts there")
     p.add_argument("--version", default="", help="llmctl's version, shown small on the page")
     p.add_argument("--docs", default=str(Path(__file__).with_name("docs")),
                    help="the gallery's pages, for the help (docs/help, docs/media)")

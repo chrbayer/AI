@@ -14,8 +14,14 @@ detail_input-586be0734d79.jpg
 detail_result-3b3b3914515c.jpg
 edit_input-9b78cbba7935.jpg
 edit_result-d0a9de29ec32.jpg
+expand_cabin_long-167cfc40b13a.jpg
+expand_cabin_short-dae02d22ddaa.jpg
+expand_hawaii_long-66d9fe228312.jpg
 expand_input-af15da35b300.jpg
+expand_red_long-9a1abb88efd7.jpg
+expand_red_short-39b9b87d9189.jpg
 expand_result-9ef44024bc8b.jpg
+expand_room-121c0645d973.jpg
 paint_input-e3a6d72fd3c2.jpg
 paint_result-25975f9d5f60.jpg
 pose_input-6a1713f7ee11.jpg
