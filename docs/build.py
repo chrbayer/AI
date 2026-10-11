@@ -12,6 +12,14 @@ seeds, steps, size — and offered as the API graph to run again.
                                      small into docs/media/, the pages into docs/
                                      (GitHub Pages); refused above --limit MB
 
+A section with "de" (title, summary, intro; its examples' title and text, its
+media's caption_de) is also built in German, as <id>.de.html. A section with
+"help": true is Darkroom's help as well: --public writes it, in English and
+German, into docs/help/ — the page without the gallery around it, its media
+under /darkroom/help/media/ — and lists the media it needs in
+docs/help/media.txt; `make install` takes those along, darkroom_server.py
+serves them at /darkroom/help.
+
 Media are named by a root and a path: out:video/x.mp4 (ComfyUI's output),
 in:… (its input), bench:… (~/.local/share/llmctl/benchmarks), repo:… (here).
 """
@@ -178,11 +186,14 @@ MODEL_VIEWER = '<script type="module" src="https://unpkg.com/@google/model-viewe
 
 
 def inline(text):
-    """A little markdown: `code`, **bold**, [link](url), paragraphs and lists."""
+    """A little markdown: `code`, **bold**, *italic*, [link](url), paragraphs and lists."""
     def one(s):
         s = html.escape(s)
         s = re.sub(r"`([^`]+)`", r"<code>\1</code>", s)
         s = re.sub(r"\*\*([^*]+)\*\*", r"<b>\1</b>", s)
+        s = "".join(part if part.startswith("<code>") else
+                    re.sub(r"(?<![*\w])\*([^*\s][^*]*?)\*(?![*\w])", r"<i>\1</i>", part)
+                    for part in re.split(r"(<code>.*?</code>)", s))
         s = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', s)
         return s
     out = []
@@ -197,15 +208,48 @@ def inline(text):
     return "\n".join(out)
 
 
-def page(title, body, sections, current, public):
+def page(title, body, sections, current, public, lang="en", other=None):
     nav = "".join(f'<a href="{s["id"]}.html"{" class=on" if s["id"] == current else ""}>{html.escape(s["title"])}</a>'
                   for s in sections)
+    if other:                                  # the same page in the other language
+        nav += f'<a href="{other[0]}" lang="{other[1]}">{"Deutsch" if other[1] == "de" else "English"}</a>'
     note = "Examples and results, made with llmctl on one Strix Halo machine." + ("" if public else " Local edition: every example, the media in full.")
-    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+    return f"""<!doctype html><html lang="{lang}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(title)}</title>
 <style>{CSS}</style>{MODEL_VIEWER}</head><body>
 <header><a href="index.html">llmctl gallery</a><nav>{nav}</nav></header>
 <main>{body}</main><footer>{note} <a href="https://github.com/chrbayer/AI">github.com/chrbayer/AI</a></footer></body></html>"""
+
+
+GALLERY = "https://chrbayer.github.io/AI/"
+
+
+def help_page(title, body, lang):
+    """Darkroom's help: the section alone, a way back to the page, the gallery
+    for more."""
+    back, more = ("← Zurück zu Darkroom", "Mehr Beispiele in der Galerie") if lang == "de" \
+        else ("← Back to Darkroom", "More examples in the gallery")
+    # before and after side by side, also on a phone
+    css = CSS + ("header{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}"
+                 "@media (max-width:600px){.media{grid-template-columns:1fr 1fr;gap:8px}}")
+    return f"""<!doctype html><html lang="{lang}"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(title)}</title>
+<style>{css}</style></head><body>
+<header><a href="/darkroom">{back}</a><a href="{GALLERY}" style="font-weight:400">{more}</a></header>
+<main>{body}</main><footer><a href="https://github.com/chrbayer/AI">github.com/chrbayer/AI</a></footer></body></html>"""
+
+
+def german(item):
+    """A section, example or medium as the German page has it."""
+    de = item.get("de") or {}
+    out = dict(item, **de)
+    if item.get("caption_de"):
+        out["caption"] = item["caption_de"]
+    if "media" in item:
+        out["media"] = [german(m) for m in item["media"]]
+    if "examples" in item:
+        out["examples"] = [german(e) for e in item["examples"]]
+    return out
 
 
 class Builder:
@@ -217,13 +261,17 @@ class Builder:
             self.media.mkdir(parents=True, exist_ok=True)
         self.graphs.mkdir(parents=True, exist_ok=True)
         self.used = set()
+        self.prefix = "media/"                 # where a page finds its media; the help's elsewhere
+        self.help_used = None                  # the media a help page takes, while one is built
 
     def src(self, path):
         """Where the page finds a medium."""
         if self.public:
             dst = small(path, self.media)
             self.used.add(dst.name)
-            return f"media/{dst.name}"
+            if self.help_used is not None:
+                self.help_used.add(dst.name)
+            return f"{self.prefix}{dst.name}"
         return path.resolve().as_uri()
 
     def figure(self, m):
@@ -300,8 +348,24 @@ class Builder:
             table = ("<table><tr>" + "".join(f"<th>{html.escape(str(h))}</th>" for h in head) + "</tr>" +
                      "".join("<tr>" + "".join(f"<td>{inline(str(c))[3:-4]}</td>" for c in r) + "</tr>" for r in rows) +
                      "</table>")
+        made = "" if self.help_used is not None else self.made(ex)
         return (f'<section class="ex" id="{ex.get("id", "")}"><h2>{html.escape(ex["title"])}</h2>'
-                f'{inline(ex.get("text", ""))}{table}<div class="media{wide}">{figs}</div>{self.made(ex)}</section>')
+                f'{inline(ex.get("text", ""))}{table}<div class="media{wide}">{figs}</div>{made}</section>')
+
+    def help(self, s, exs):
+        """Darkroom's help, from the same section: docs/help/<id>.<lang>.html."""
+        d = self.out / "help"
+        d.mkdir(exist_ok=True)
+        self.prefix, self.help_used = "/darkroom/help/media/", set()
+        try:
+            for lang, sec in (("en", dict(s, examples=exs)), ("de", german(dict(s, examples=exs)))):
+                body = f'<h1>{html.escape(sec["title"])}</h1><div class="lead">{inline(sec.get("intro", ""))}</div>' + \
+                       "".join(self.example(e) for e in sec["examples"])
+                (d / f"{s['id']}.{lang}.html").write_text(help_page(sec["title"], body, lang))
+            (d / "media.txt").write_text("".join(f"{n}\n" for n in sorted(self.help_used)))
+            print(f"  help/{s['id']}.en.html, .de.html: {len(self.help_used)} media")
+        finally:
+            self.prefix, self.help_used = "media/", None
 
     def build(self, data):
         sections = [s for s in data["sections"] if not self.public or any(
@@ -310,8 +374,19 @@ class Builder:
             exs = [e for e in s["examples"] if not self.public or e.get("public") or any(m.get("public") for m in e.get("media", []))]
             body = f'<h1>{html.escape(s["title"])}</h1><div class="lead">{inline(s.get("intro", ""))}</div>' + \
                    "".join(self.example(e) for e in exs)
-            (self.out / f"{s['id']}.html").write_text(page(f"{s['title']} — llmctl gallery", body, sections, s["id"], self.public))
+            other = (f"{s['id']}.de.html", "de") if s.get("de") else None
+            (self.out / f"{s['id']}.html").write_text(page(f"{s['title']} — llmctl gallery", body, sections, s["id"],
+                                                            self.public, "en", other))
             print(f"  {s['id']}.html: {len(exs)} examples")
+            if s.get("de"):
+                g = german(dict(s, examples=exs))
+                body = f'<h1>{html.escape(g["title"])}</h1><div class="lead">{inline(g.get("intro", ""))}</div>' + \
+                       "".join(self.example(e) for e in g["examples"])
+                (self.out / f"{s['id']}.de.html").write_text(page(f"{g['title']} — llmctl gallery", body, sections,
+                                                                   s["id"], self.public, "de", (f"{s['id']}.html", "en")))
+                print(f"  {s['id']}.de.html")
+            if s.get("help") and self.public:
+                self.help(s, exs)
         cards = "".join(f'<a href="{s["id"]}.html"><b>{html.escape(s["title"])}</b><span>{html.escape(s.get("summary", ""))}</span></a>'
                         for s in sections)
         body = f'<h1>{html.escape(data["title"])}</h1><div class="lead">{inline(data.get("intro", ""))}</div><div class="cards">{cards}</div>'

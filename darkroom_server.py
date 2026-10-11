@@ -366,6 +366,7 @@ EN = {
     "mehr Abwechslung, Stile": "more variety, styles", "fast wie dev": "almost like dev", "beste Qualität": "best quality",
     "Startbild, dann Clip mit Ton": "first frame, then a clip with sound",
     "Eigene": "Mine",
+    "Die Hilfe ist nicht installiert (docs/help)": "The help is not installed (docs/help)",
     # what a job keeps
     "Erzeugt": "Created", "Fehlersuche": "Find flaws", "Repariert": "Repaired", "Form behalten": "Keep shape",
     "mit Endbild": "with end picture", "Abgebrochen": "Cancelled", "Wird abgebrochen …": "Cancelling …",
@@ -425,7 +426,8 @@ EN_PATTERNS = [(re.compile(rx + r"\Z", re.S), out) for rx, out in EN_PATTERNS]
 def lang():
     """The language of the page that asks: "de" or "en"."""
     try:
-        want = request.headers.get("X-Darkroom-Lang") or request.accept_languages.best_match(["de", "en"]) or "de"
+        want = (request.args.get("lang") or request.headers.get("X-Darkroom-Lang")
+                or request.accept_languages.best_match(["de", "en"]) or "de")
     except RuntimeError:                      # no request: a job, a push
         return "de"
     return "en" if want.startswith("en") else "de"
@@ -1535,6 +1537,27 @@ self.addEventListener("notificationclick", (e) => {
 """
 
 
+# Hilfe: the gallery's Darkroom section, built by docs/build.py into
+# docs/help/ in both languages, with the media it lists in media.txt.
+@app.get("/darkroom/help")
+def help_page():
+    f = Path(ARGS.docs) / "help" / f"darkroom.{lang()}.html"
+    if not f.is_file():
+        return error("Die Hilfe ist nicht installiert (docs/help)", 404)
+    return Response(f.read_text(), mimetype="text/html", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/darkroom/help/media/<name>")
+def help_media(name):
+    try:
+        listed = (Path(ARGS.docs) / "help" / "media.txt").read_text().split()
+    except OSError:
+        listed = []
+    if name not in listed:
+        return error("no such file", 404)
+    return send_file(Path(ARGS.docs) / "media" / name, max_age=86400)
+
+
 @app.get("/darkroom/sw.js")
 def service_worker():
     # at /darkroom/, but for the page at /darkroom as well
@@ -1574,6 +1597,8 @@ def main():
     p.add_argument("--comfy-model", default="comfy")
     p.add_argument("--llmctl", required=True, help="llmctl itself, to start and stop ComfyUI")
     p.add_argument("--data", required=True, help="where the jobs are kept")
+    p.add_argument("--docs", default=str(Path(__file__).with_name("docs")),
+                   help="the gallery's pages, for the help (docs/help, docs/media)")
     p.add_argument("--vision-slot", type=int, default=0,
                    help="slot of the vision model ComfyUI's image API starts for Fehler suchen (0: none)")
     p.add_argument("--timeout", type=int, default=3700)

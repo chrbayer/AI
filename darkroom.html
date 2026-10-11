@@ -34,7 +34,8 @@ header { position: sticky; top: 0; z-index: 5; display: flex; align-items: cente
          padding: 12px 16px; background: color-mix(in srgb, var(--bg) 88%, transparent);
          backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
 header h1 { font-size: 22px; margin: 0; flex: 1; letter-spacing: -.01em; }
-header .lang { font-size: 14px; padding: 8px 4px; }
+header .lang { font-size: 14px; padding: 8px 4px; text-decoration: none; }
+a.help { display: inline-block; font-size: 14px; text-decoration: none; padding: 4px 0 0; }
 .chip { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line);
         background: var(--panel); border-radius: 999px; padding: 6px 12px; font-size: 14px; }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
@@ -240,6 +241,7 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
 <body>
 <header>
   <h1>Darkroom</h1>
+  <a class="link lang" id="helpBtn" href="/darkroom/help" aria-label="Hilfe">?</a>
   <button class="link lang" id="langBtn" type="button" lang="en">EN</button>
   <button class="chip" id="chip" type="button"><span class="dot" id="dot"></span><span id="chipText">…</span></button>
 </header>
@@ -338,6 +340,7 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
         <p class="note hidden" id="textHint"></p>
       </div>
       <p class="note" id="estimate"></p>
+      <a class="link help" id="actionHelp" href="/darkroom/help">Beispiel und Tipps</a>
     </div>
   </section>
 
@@ -363,6 +366,7 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
           <button type="button" data-n="3" aria-pressed="false">3</button><button type="button" data-n="4" aria-pressed="false">4</button>
         </div></div>
       <p class="note" id="genEstimate"></p>
+      <a class="link help" id="genHelp" href="/darkroom/help#create">Beispiel und Tipps</a>
     </div>
   </section>
 
@@ -493,7 +497,7 @@ const EN = {
   "Verlauf": "History", "Noch nichts bearbeitet.": "Nothing edited yet.", "Bild wählen": "Choose a picture",
   "Schließen": "Close", "Sichern": "Save", "Fehler suchen": "Find flaws", "Reparieren": "Repair",
   "Weiter bearbeiten": "Edit further", "Löschen": "Delete", "Stelle markieren": "Mark the spot", "Abbrechen": "Cancel",
-  "Pinsel": "Brush", "Rückgängig": "Undo", "Alles weg": "Clear all", "Fertig": "Done",
+  "Pinsel": "Brush", "Beispiel und Tipps": "Example and tips", "Hilfe": "Help", "Rückgängig": "Undo", "Alles weg": "Clear all", "Fertig": "Done",
   "Stoppen und Speicher freigeben": "Stop and free the memory", "Trotzdem starten": "Start anyway",
   "Suchen: z. B. Sonne, Schnee, Kabel, Lächeln": "Search: e.g. sun, snow, cables, smile", "Für diese Aktion": "For this action",
   "Alle": "All", "Als Vorlage speichern": "Save as a template", "Titel": "Title",
@@ -573,8 +577,8 @@ function translatePage() {
     const key = n.nodeValue.trim().replace(/\u00a0/g, " ");
     if (key && EN[key]) n.nodeValue = n.nodeValue.replace(n.nodeValue.trim(), EN[key]);
   }
-  for (const el of document.querySelectorAll("[placeholder], [alt]")) {
-    for (const a of ["placeholder", "alt"]) if (el.getAttribute(a) && EN[el.getAttribute(a)]) el.setAttribute(a, EN[el.getAttribute(a)]);
+  for (const el of document.querySelectorAll("[placeholder], [alt], [aria-label]")) {
+    for (const a of ["placeholder", "alt", "aria-label"]) if (el.getAttribute(a) && EN[el.getAttribute(a)]) el.setAttribute(a, EN[el.getAttribute(a)]);
   }
 }
 const STATE_TEXT = { up: "Bereit", down: "Aus", starting: "Startet …", stopping: "Stoppt …" };
@@ -797,6 +801,7 @@ function renderEdit() {
   if (S.mask) $("maskThumb").src = S.mask.preview;
   show("textWrap", !!a.text);
   $("textLabel").textContent = a.text_label || "";
+  $("actionHelp").href = "/darkroom/help?lang=" + LANG + "#" + a.id;
   $("text").placeholder = a.text_placeholder || "";
   const secs = typical({ action: a.id, model_label: a.models && m ? m.label : null, quality: S.quality,
                          seconds: a.audio ? (S.voice ? Math.max(1, Math.ceil(S.voice.seconds)) : 5) : S.seconds,
@@ -1713,6 +1718,7 @@ window.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeViewe
 window.addEventListener("hashchange", openFromHash);
 
 translatePage();
+$("helpBtn").href = "/darkroom/help?lang=" + LANG; $("genHelp").href = "/darkroom/help?lang=" + LANG + "#create";
 $("langBtn").onclick = () => { store("lang", LANG === "en" ? "de" : "en"); location.reload(); };
 S.quality = recall("quality") === "best" ? "best" : "fast";
 S.editModel = recall("editModel") || S.editModel;

@@ -545,6 +545,463 @@
       ]
     },
     {
+      "id": "darkroom",
+      "help": true,
+      "title": "Darkroom: photos from the phone",
+      "summary": "Every action of the phone page, with an example and tips — German and English",
+      "intro": "`llmctl darkroom` is a page for the phone in front of ComfyUI: pick or take a photo, tap what should happen, compare before and after, save it to the phone — or make a picture from words. Every example here ran through the page; the times are this machine's (Strix Halo), the first job after a pause takes longer while the model loads. The page speaks German and English.",
+      "de": {
+        "title": "Darkroom: Fotos vom Handy",
+        "summary": "Jede Aktion der Handy-Seite, mit Beispiel und Tipps",
+        "intro": "`llmctl darkroom` ist eine Seite fürs Handy vor ComfyUI: Foto wählen oder aufnehmen, antippen, was passieren soll, vorher und nachher vergleichen, aufs Handy sichern — oder ein Bild aus Worten machen. Jedes Beispiel hier lief über die Seite; die Zeiten sind die dieses Rechners (Strix Halo), der erste Auftrag nach einer Pause dauert länger, weil das Modell lädt. Die Seite spricht Deutsch und Englisch."
+      },
+      "examples": [
+        {
+          "id": "colorize",
+          "title": "Colorize",
+          "public": true,
+          "text": "A black-and-white photo in colour: Qwen-Image 2.1 Colorize, 26 s fast. Colours can be named in the text (\"blue sky, green trees\"); they apply to the whole picture. More: [the gallery](https://chrbayer.github.io/AI/images.html#colorize).",
+          "de": {
+            "title": "Kolorieren",
+            "text": "Ein Schwarzweißfoto in Farbe: Qwen-Image 2.1 Colorize, 26 s schnell. Farben kann man im Text vorgeben („blue sky, green trees“); sie wirken aufs ganze Bild. Mehr: [Galerie](https://chrbayer.github.io/AI/images.html#colorize)."
+          },
+          "media": [
+            {
+              "file": "bench:darkroom/colorize_input.jpg",
+              "caption": "Before",
+              "caption_de": "Vorher",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/colorize_result.jpg",
+              "caption": "After",
+              "caption_de": "Nachher",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "restore",
+          "title": "Restore",
+          "public": true,
+          "text": "Scratches, dust, stains, creases and noise away, the people and the composition kept: Qwen-Image Edit with a restoring prompt, 57 s. Best on a scan or a photo of the print taken straight on; colour it afterwards with *Edit further* → *Colorize*.",
+          "de": {
+            "title": "Restaurieren",
+            "text": "Kratzer, Staub, Flecken, Knicke und Rauschen weg, Personen und Bildaufbau bleiben: Qwen-Image Edit mit einem Restaurier-Prompt, 57 s. Am besten mit einem Scan oder einem gerade abfotografierten Abzug; danach über *Weiter bearbeiten* → *Kolorieren* in Farbe."
+          },
+          "media": [
+            {
+              "file": "bench:darkroom/restore_input.jpg",
+              "caption": "Before",
+              "caption_de": "Vorher",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/restore_result.jpg",
+              "caption": "After",
+              "caption_de": "Nachher",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "detail",
+          "title": "Faces",
+          "public": true,
+          "text": "Faces and hands found (YOLO), outlined and redrawn at full resolution, then pasted back — for group photos whose small faces came out soft or melted. Seven people: 526 s, the time grows with each face and hand. *Thorough* uses FLUX.2 klein, better on very small faces. A harder case: [the gallery](https://chrbayer.github.io/AI/images.html#detailer).",
+          "de": {
+            "title": "Gesichter",
+            "text": "Gesichter und Hände werden gefunden (YOLO), umrissen, in voller Auflösung neu gezeichnet und zurückgesetzt — für Gruppenfotos mit weichen oder zerlaufenen kleinen Gesichtern. Sieben Personen: 526 s, die Zeit wächst mit jedem Gesicht und jeder Hand. *Gründlich* nimmt FLUX.2 klein, besser bei sehr kleinen Gesichtern. Ein schwierigerer Fall: [Galerie](https://chrbayer.github.io/AI/images.html#detailer)."
+          },
+          "media": [
+            {
+              "file": "bench:darkroom/detail_input.png",
+              "caption": "Before",
+              "caption_de": "Vorher",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/detail_result.jpg",
+              "caption": "After",
+              "caption_de": "Nachher",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "upscale",
+          "title": "Upscale",
+          "public": true,
+          "text": "Four times the size, sharper: SeedVR2 7B, the picture brought to 1024 px first. 512 px → 2048 px in 34 s.",
+          "de": {
+            "title": "Vergrößern",
+            "text": "Viermal so groß und schärfer: SeedVR2 7B, das Bild vorher auf 1024 px gebracht. 512 px → 2048 px in 34 s."
+          },
+          "media": [
+            {
+              "file": "bench:darkroom/upscale_input.jpg",
+              "caption": "512 px",
+              "caption_de": "512 px",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/upscale_result.jpg",
+              "caption": "2048 px",
+              "caption_de": "2048 px",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "background",
+          "title": "Remove background",
+          "public": true,
+          "text": "The background gone, the person on transparency (PNG, shown here as a checkerboard): BiRefNet, 3 s. *Thorough* uses BiRefNet Matting, finer at hair.",
+          "de": {
+            "title": "Freistellen",
+            "text": "Der Hintergrund weg, die Person auf Transparenz (PNG, hier als Schachbrett): BiRefNet, 3 s. *Gründlich* nimmt BiRefNet Matting, feiner an Haaren."
+          },
+          "media": [
+            {
+              "file": "bench:darkroom/background_input.jpg",
+              "caption": "Before",
+              "caption_de": "Vorher",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/background_result.png",
+              "caption": "After",
+              "caption_de": "Nachher",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "remove",
+          "title": "Erase",
+          "public": true,
+          "text": "Name what should go: \"the power lines and pylons\" — gone, the sky filled in, 65 s. An instruction to Qwen-Image Edit, no marking needed. Works for people in the background, cars, signs, bins; the templates under *Clean up* have the usual ones.",
+          "de": {
+            "title": "Entfernen",
+            "text": "Nennen, was weg soll: „die Stromleitungen und Strommasten“ — weg, der Himmel ergänzt, 65 s. Eine Anweisung an Qwen-Image Edit, ohne Markieren. Klappt für Passanten, Autos, Schilder, Mülltonnen; die Vorlagen unter *Aufräumen* haben die üblichen."
+          },
+          "media": [
+            {
+              "file": "bench:darkroom/remove_input.jpg",
+              "caption": "Before",
+              "caption_de": "Vorher",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/remove_result.jpg",
+              "caption": "After",
+              "caption_de": "Nachher",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "edit",
+          "title": "Edit",
+          "public": true,
+          "text": "In one's own words: \"Make it a winter day: fresh snow on the street, the roofs and the cars …\", 66 s with Qwen-Image Edit Turbo. End with \"everything else stays exactly the same\" to keep the rest. With a second photo as *picture 2*: say plainly what comes from which — asked for an outfit, the model once took the whole person.",
+          "de": {
+            "title": "Ändern",
+            "text": "In eigenen Worten: „Mach daraus einen Wintertag: frischer Schnee auf der Straße, den Dächern und den Autos …“, 66 s mit Qwen-Image Edit Turbo. Mit „Alles andere bleibt genau gleich“ am Ende bleibt der Rest. Mit einem zweiten Foto als *Bild 2*: klar sagen, was woher kommt — nach dem Outfit gefragt, nahm das Modell einmal die ganze Person."
+          },
+          "media": [
+            {
+              "file": "bench:darkroom/edit_input.jpg",
+              "caption": "Before",
+              "caption_de": "Vorher",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/edit_result.jpg",
+              "caption": "After",
+              "caption_de": "Nachher",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "expand",
+          "title": "Expand",
+          "public": true,
+          "text": "More picture around it — left and right, above and below, above only, or all round — the scene continued: 40 s, here above and below. A text is optional; if written, describe the whole scene, not only the new part.",
+          "de": {
+            "title": "Erweitern",
+            "text": "Mehr Bild drumherum — links und rechts, oben und unten, nur oben oder rundum — die Szene fortgesetzt: 40 s, hier oben und unten. Ein Text ist optional; wenn, dann die ganze Szene beschreiben, nicht nur das Neue."
+          },
+          "media": [
+            {
+              "file": "bench:darkroom/expand_input.jpg",
+              "caption": "Before",
+              "caption_de": "Vorher",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/expand_result.jpg",
+              "caption": "After",
+              "caption_de": "Nachher",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "paint",
+          "title": "Paint over",
+          "public": true,
+          "text": "Mark a spot with a finger and say what goes there: \"a red Hawaiian shirt with white flowers\", 26 s. *Keep shape* kept the shirt's cut and folds — mark all of the thing for it. **Name the whole thing**: \"red\" alone left a grey hat grey; \"a red hat\" made it red.",
+          "de": {
+            "title": "Übermalen",
+            "text": "Eine Stelle mit dem Finger markieren und sagen, was hin soll: „ein rotes Hawaiihemd mit weißen Blüten“, 26 s. *Form behalten* behielt Schnitt und Falten des Shirts — dafür das Ding ganz markieren. **Das Ding ganz nennen**: „rot“ allein ließ einen grauen Hut grau; „ein roter Hut“ machte ihn rot."
+          },
+          "media": [
+            {
+              "file": "bench:darkroom/paint_input.jpg",
+              "caption": "Before",
+              "caption_de": "Vorher",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/paint_result.jpg",
+              "caption": "After",
+              "caption_de": "Nachher",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "cutout",
+          "title": "Cut out",
+          "public": true,
+          "text": "One named thing alone on transparency: \"the dog\", 120 s (Qwen-Image Layered Control). Unlike *Remove background* it takes what is named, not what is in front.",
+          "de": {
+            "title": "Ausschneiden",
+            "text": "Ein benanntes Ding allein auf Transparenz: „der Hund“, 120 s (Qwen-Image Layered Control). Anders als *Freistellen* nimmt es das Genannte, nicht das, was vorne steht."
+          },
+          "media": [
+            {
+              "file": "bench:darkroom/cutout_input.jpg",
+              "caption": "Before",
+              "caption_de": "Vorher",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/cutout_result.png",
+              "caption": "After",
+              "caption_de": "Nachher",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "pose",
+          "title": "Copy pose",
+          "public": true,
+          "text": "Someone else, standing exactly the same way: the pose read from the photo (DWPose), \"a knight in silver armour in a misty forest\" painted on it, 45 s. Describe person and place in full.",
+          "de": {
+            "title": "Pose übernehmen",
+            "text": "Jemand anderes in genau derselben Haltung: die Pose aus dem Foto gelesen (DWPose), darauf „ein Ritter in silberner Rüstung in einem nebligen Wald“, 45 s. Person und Ort ganz beschreiben."
+          },
+          "media": [
+            {
+              "file": "bench:darkroom/pose_input.jpg",
+              "caption": "Before",
+              "caption_de": "Vorher",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/pose_result.jpg",
+              "caption": "After",
+              "caption_de": "Nachher",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "restyle",
+          "title": "Redesign",
+          "public": true,
+          "text": "The same room, the furniture where it was, in another style: the depth of the photo kept, the rest from the text, 31 s. **Describe materials, colours and light**: \"as an alpine cabin\" alone only made the room darker; \"wooden walls, beamed ceiling, fireplace, red rugs, sheepskins, warm light\" made the cabin. The page says so while the text is shorter than five words.",
+          "de": {
+            "title": "Neu gestalten",
+            "text": "Derselbe Raum, die Möbel an ihrem Platz, in anderem Stil: die Tiefe des Fotos bleibt, der Rest kommt aus dem Text, 31 s. **Materialien, Farben und Licht nennen**: „als Almhütte“ allein machte den Raum nur dunkler; „Holzwände, Balkendecke, Kamin, rote Teppiche, Lammfelle, warmes Licht“ machte die Hütte. Die Seite sagt das, solange der Text kürzer als fünf Wörter ist."
+          },
+          "media": [
+            {
+              "file": "bench:darkroom/restyle_input.jpg",
+              "caption": "Before",
+              "caption_de": "Vorher",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/restyle_result.jpg",
+              "caption": "After",
+              "caption_de": "Nachher",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "art",
+          "title": "As artwork",
+          "public": true,
+          "text": "The photo as watercolour, pencil drawing, oil painting, comic or anime — the people, their faces and the colours kept: Qwen-Image Edit, 58 s, here as a comic. A text is optional (\"like a children's book\").",
+          "de": {
+            "title": "Als Kunstwerk",
+            "text": "Das Foto als Aquarell, Bleistiftzeichnung, Ölgemälde, Comic oder Anime — Personen, Gesichter und Farben bleiben: Qwen-Image Edit, 58 s, hier als Comic. Ein Text ist optional („wie in einem Kinderbuch“)."
+          },
+          "media": [
+            {
+              "file": "bench:darkroom/art_input.jpg",
+              "caption": "Before",
+              "caption_de": "Vorher",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/art_result.jpg",
+              "caption": "After",
+              "caption_de": "Nachher",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "variants",
+          "title": "Variants",
+          "public": true,
+          "text": "Where one's own words steer the result, *Variants* 1–3 makes as many, one after the other, each with another seed — keep the best. The same sunset twice: 46 and 18 s.",
+          "de": {
+            "title": "Varianten",
+            "text": "Wo die eigenen Worte das Ergebnis bestimmen, macht *Varianten* 1–3 so viele, nacheinander, jede mit anderem Zufall — die beste behalten. Derselbe Sonnenuntergang zweimal: 46 und 18 s."
+          },
+          "media": [
+            {
+              "file": "bench:darkroom/variants1_input.jpg",
+              "caption": "Before",
+              "caption_de": "Vorher",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/variants1_result.jpg",
+              "caption": "Variant 1",
+              "caption_de": "Variante 1",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/variants2_result.jpg",
+              "caption": "Variant 2",
+              "caption_de": "Variante 2",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "animate",
+          "title": "Animate",
+          "public": true,
+          "text": "A clip of 3, 5 or 8 s with sound: \"the waves roll onto the beach, the dog wags its tail\", 5 s in 114 s (*Fast*: LTX-2.5's first stage, half the size; *Thorough* both stages, about 6 min). With a second photo the clip runs from the first to it.",
+          "de": {
+            "title": "Animieren",
+            "text": "Ein Clip von 3, 5 oder 8 s mit Ton: „die Wellen rollen an den Strand, der Hund wedelt mit dem Schwanz“, 5 s in 114 s (*Schnell*: die erste Stufe von LTX-2.5, halbe Größe; *Gründlich* beide Stufen, etwa 6 min). Mit einem zweiten Foto läuft der Clip vom ersten zu ihm."
+          },
+          "media": [
+            {
+              "file": "bench:darkroom/animate_input.jpg",
+              "caption": "The photo",
+              "caption_de": "Das Foto",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/animate_result.mp4",
+              "caption": "The clip",
+              "caption_de": "Der Clip",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "talk",
+          "title": "Make it talk",
+          "public": true,
+          "text": "The photo speaks a recording made on the phone (up to 10 s), the clip as long as the voice: 153 s for 8.5 s, *Fast*. A face that fills the picture works best.",
+          "de": {
+            "title": "Sprechen lassen",
+            "text": "Das Foto spricht eine Aufnahme vom Handy (bis 10 s), der Clip so lang wie die Stimme: 153 s für 8,5 s, *Schnell*. Ein Gesicht, das das Bild füllt, klappt am besten."
+          },
+          "media": [
+            {
+              "file": "bench:darkroom/talk_input.jpg",
+              "caption": "The photo",
+              "caption_de": "Das Foto",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/talk_result.mp4",
+              "caption": "The clip, with the voice",
+              "caption_de": "Der Clip, mit der Stimme",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "create",
+          "title": "Create",
+          "public": true,
+          "text": "A picture from words, no photo needed: six models from fast (Z-Image Turbo, 20 s) to best (FLUX.2 dev, ~5 min); Qwen-Image for lettering, umlauts right — this postcard 41 s. LTX-2.5 makes a clip from words. Compared in [the gallery](https://chrbayer.github.io/AI/images.html#fox).",
+          "de": {
+            "title": "Erzeugen",
+            "text": "Ein Bild aus Worten, ohne Foto: sechs Modelle von schnell (Z-Image Turbo, 20 s) bis beste Qualität (FLUX.2 dev, ~5 min); Qwen-Image für Schrift, mit richtigen Umlauten — diese Postkarte 41 s. LTX-2.5 macht einen Clip aus Worten. Verglichen in der [Galerie](https://chrbayer.github.io/AI/images.html#fox)."
+          },
+          "media": [
+            {
+              "file": "bench:darkroom/create_result.jpg",
+              "caption": "Qwen-Image 2.1",
+              "caption_de": "Qwen-Image 2.1",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "check",
+          "title": "Find flaws and repair",
+          "public": true,
+          "text": "A picture from *Create* has *Find flaws*: a vision model looks for broken hands, faces and text and marks them — here: fused fingers on one hand, an over-long index finger on the other (183 s, the model started and stopped for it). Untick what is fine, edit the fix, *Repair*: 71 s, *Thorough*.",
+          "de": {
+            "title": "Fehler suchen und reparieren",
+            "text": "Ein Bild aus *Erzeugen* hat *Fehler suchen*: ein Vision-Modell sucht kaputte Hände, Gesichter und Schrift und markiert sie — hier: verwachsene Finger an der einen Hand, ein zu langer Zeigefinger an der anderen (183 s, das Modell dafür gestartet und wieder gestoppt). Abwählen, was gesund ist, die Korrektur anpassen, *Reparieren*: 71 s, *Gründlich*."
+          },
+          "media": [
+            {
+              "file": "bench:darkroom/create_hands_result.jpg",
+              "caption": "Made",
+              "caption_de": "Erzeugt",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/repair_result.jpg",
+              "caption": "Repaired",
+              "caption_de": "Repariert",
+              "public": true
+            }
+          ]
+        },
+        {
+          "id": "templates",
+          "title": "Templates, cancel, zoom, notifications",
+          "public": true,
+          "text": "- **Templates** beside each text field: about 70 tried prompts — weather and light, seasons, clean-up, people, backgrounds, rooms, new scenes, video, cards and logos — searchable; a `[placeholder]` is selected to type over. *Save* keeps one's own, for phone and desk alike.\n- **Cancel** stops a waiting or running job within seconds.\n- **Zoom**: two fingers up to 4×, a double tap 2.5×.\n- **Notify me when done**: a push when a job ends, also with the screen locked (on an iPhone: from the home screen).\n- **The history** keeps the last 100 results on the server; *Edit further* takes a result on — restored, then coloured, then enlarged.",
+          "de": {
+            "title": "Vorlagen, Abbrechen, Zoom, Benachrichtigungen",
+            "text": "- **Vorlagen** neben jedem Textfeld: rund 70 erprobte Texte — Wetter und Licht, Jahreszeiten, Aufräumen, Personen, Hintergründe, Räume, neue Szenen, Video, Karten und Logos — durchsuchbar; ein `[Platzhalter]` ist zum Überschreiben markiert. *Speichern* behält eigene, für Handy und Rechner gleich.\n- **Abbrechen** stoppt einen wartenden oder laufenden Auftrag in Sekunden.\n- **Zoom**: zwei Finger bis 4×, Doppeltippen 2,5×.\n- **Benachrichtigen, wenn fertig**: eine Push-Nachricht, wenn ein Auftrag fertig ist, auch bei gesperrtem Bildschirm (auf dem iPhone: vom Home-Bildschirm aus).\n- **Der Verlauf** behält die letzten 100 Ergebnisse auf dem Server; *Weiter bearbeiten* nimmt ein Ergebnis mit — restauriert, dann koloriert, dann vergrößert."
+          },
+          "media": []
+        }
+      ]
+    },
+    {
       "id": "sound",
       "title": "Music and sound",
       "summary": "ACE-Step songs in German and English, YuE2, Stable Audio, voices.",

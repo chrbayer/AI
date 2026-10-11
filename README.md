@@ -1841,8 +1841,9 @@ llmctl update comfy --master          # master instead of the releases (download
   - **Jumps:** waves that start moving at a join count as one, where nothing
     jumps.
 - **The gallery** (#53): `llmctl docs` builds pages of examples and results
-  (storyboard, music video, video, pictures, music and sound, 3D, language
-  models) and opens them. Each example shows its media and a *How it was
+  (storyboard, music video, video, pictures, Darkroom, music and sound, 3D,
+  language models) and opens them — online at
+  [chrbayer.github.io/AI](https://chrbayer.github.io/AI/). Each example shows its media and a *How it was
   made* block: the models, prompts, seeds and steps read from the files
   themselves (ComfyUI stores its graph in every PNG, MP4 and FLAC), and the
   graph to make it again. `docs/examples.json` lists the examples and
@@ -1852,6 +1853,13 @@ llmctl update comfy --master          # master instead of the releases (download
   - `--public`: the examples marked public, their media made small (pictures
     to 1280 px JPEG, video to 960 px, sound to MP3), into `docs/` for GitHub
     Pages; refused above 100 MB.
+  - A section with `de` texts (title, intro, each example's title and text,
+    `caption_de`) is built in German as well, `<id>.de.html`, the two linked.
+    One with `"help": true` — Darkroom's — is also written into `docs/help/`
+    as [its help](#darkroom-photos-from-the-phone-llmctl-darkroom): the
+    section alone, in both languages, its media listed in `media.txt` for
+    `make install`. Texts take a little markdown: `**bold**`, `*italic*`,
+    `` `code` ``, `[links](url)`, lists.
 - **Music videos** (#47): `llmctl musicvideo <song> <picture>...` makes one on
   the running ComfyUI. The song is cut into sections (`--seconds`, 5 by
   default); in each the pictures take turns to sing it (LTX-2.5 Talking), or a
@@ -2025,6 +2033,19 @@ history — what a job keeps is German on disk and translated on the way out —
 and the notifications, in the language of the page that switched them on.
 The models take what is typed in either. Below, the page's English names,
 with the German ones in brackets where they first come.
+
+**Help.** *?* at the top and *Example and tips* (*Beispiel und Tipps*) under
+each action open `/darkroom/help`, at that action: what it does, a before and
+after, the time it took here, what to write. It is the gallery's
+[Darkroom section](https://chrbayer.github.io/AI/darkroom.html), built from
+the same `docs/examples.json` in German and English and installed with
+llmctl, so it matches the version that runs and works without the internet.
+Every example went through the page (generated pictures only, 22 jobs, all
+done): erasing power lines 65 s, a red Hawaiian shirt with *Keep shape* 26 s,
+a knight in the man's pose 45 s, an alpine cabin 31 s, a comic 58 s, 5 s of
+waves with sound 114 s, 9 s of speech 153 s, *Find flaws* on knitting hands
+183 s and their repair 71 s. *Faces* took 526 s for seven people in a group:
+it grows with every face and hand.
 
 It was called *Fotos* (`llmctl fotos`, `/fotos`) until 1.86. `llmctl darkroom
 enable` takes over what that left: the old service stopped and removed, its

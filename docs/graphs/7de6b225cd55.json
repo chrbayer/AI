@@ -1,0 +1,47 @@
+{
+ "5": {
+  "inputs": {
+   "image": "llmctl-api/a8c6a3a1fa1fb14851a5f337.png"
+  },
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "Photo — the subject stays, the background goes"
+  },
+  "is_changed": [
+   "a8c6a3a1fa1fb14851a5f337b058d4dd0c61686b2f576f4d3188cc48f0c61890"
+  ]
+ },
+ "13": {
+  "inputs": {
+   "images": [
+    "30",
+    0
+   ]
+  },
+  "class_type": "PreviewImage",
+  "_meta": {
+   "title": "Save Image"
+  }
+ },
+ "30": {
+  "inputs": {
+   "model": "BiRefNet-general",
+   "sensitivity": 1.0,
+   "mask_blur": 0,
+   "mask_offset": 0,
+   "invert_output": false,
+   "refine_foreground": false,
+   "unload_model": false,
+   "background": "Alpha",
+   "background_color": "#222222",
+   "image": [
+    "5",
+    0
+   ]
+  },
+  "class_type": "BiRefNetRMBG",
+  "_meta": {
+   "title": "BiRefNet Remove Background (RMBG)"
+  }
+ }
+}

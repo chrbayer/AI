@@ -748,6 +748,25 @@ class Darkroom(unittest.TestCase):
         self.assertEqual(form["prompt"], "Remove the bin from the photo. Everything else stays exactly as it is.")
         self.assertTrue(darkroom.edit_form({"action": "remove", "model": "m", "text": "x"})["prompt"].startswith("Entferne x"))
 
+    def test_the_help_is_the_gallery_section_in_the_page_language(self):
+        docs = Path(self.tmp.name) / "docs"
+        (docs / "help").mkdir(parents=True); (docs / "media").mkdir()
+        (docs / "help" / "darkroom.en.html").write_text("<h1>Darkroom</h1>")
+        (docs / "help" / "darkroom.de.html").write_text("<h1>Darkroom: Fotos</h1>")
+        (docs / "help" / "media.txt").write_text("a.jpg\n")
+        (docs / "media" / "a.jpg").write_bytes(b"jpg")
+        (docs / "media" / "b.jpg").write_bytes(b"other")
+        darkroom.ARGS.docs = str(docs)
+        client = darkroom.app.test_client()
+        self.assertIn("Fotos", client.get("/darkroom/help?lang=de").get_data(as_text=True))
+        self.assertNotIn("Fotos", client.get("/darkroom/help?lang=en").get_data(as_text=True))
+        self.assertIn("Fotos", client.get("/darkroom/help", headers={"Accept-Language": "de-DE,de"}).get_data(as_text=True))
+        self.assertEqual(client.get("/darkroom/help/media/a.jpg").data, b"jpg")
+        for name in ("b.jpg", "..%2Fhelp%2Fmedia.txt"):          # only what the help lists
+            self.assertEqual(client.get(f"/darkroom/help/media/{name}").status_code, 404)
+        darkroom.ARGS.docs = str(docs / "none")
+        self.assertEqual(client.get("/darkroom/help").status_code, 404)
+
     def test_the_old_address_leads_to_the_new_one(self):
         client = darkroom.app.test_client()
         for path in ("/fotos", "/fotos/"):
@@ -870,6 +889,54 @@ class Darkroom(unittest.TestCase):
         self.assertEqual((r.status_code, r.data), (206, b"p4"))
         self.assertEqual(client.get(f"/darkroom/api/jobs/{job['id']}/result?thumb=1").mimetype, "image/jpeg")
         self.assertEqual(client.get(f"/darkroom/api/jobs/{job['id']}/poster").mimetype, "image/jpeg")
+
+
+class Gallery(unittest.TestCase):
+    """docs/build.py: the German pages, and Darkroom's help made from the same section."""
+
+    def setUp(self):
+        sys.path.insert(0, str(ROOT / "docs"))
+        import build
+        self.build = build
+
+    def test_markdown_has_italics_but_not_in_code(self):
+        self.assertEqual(self.build.inline("*Keep shape* 2*3*4 `*k*` **b**"),
+                         "<p><i>Keep shape</i> 2*3*4 <code>*k*</code> <b>b</b></p>")
+
+    def test_a_section_in_german_and_as_darkroom_help(self):
+        import tempfile
+        try:
+            import PIL  # noqa: F401
+        except ImportError:
+            self.skipTest("pillow")
+        pic = sorted((ROOT / "examples").glob("*.png"))[0]
+        data = {"title": "g", "sections": [
+            {"id": "darkroom", "help": True, "title": "Darkroom", "intro": "en intro",
+             "de": {"title": "Darkroom DE", "intro": "de intro"},
+             "examples": [{"id": "paint", "title": "Paint over", "public": True, "text": "*Keep shape*",
+                           "de": {"title": "Übermalen", "text": "*Form behalten*"},
+                           "media": [{"file": f"repo:examples/{pic.name}", "caption": "After",
+                                      "caption_de": "Nachher", "public": True}]}]},
+            {"id": "other", "title": "Other", "examples": [{"id": "x", "title": "X", "public": True}]}]}
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d)
+            self.build.Builder(out, True, 100).build(data)
+            de = (out / "darkroom.de.html").read_text()
+            self.assertIn("<h2>Übermalen</h2>", de)
+            self.assertIn("Nachher", de)
+            self.assertIn('lang="de"', de)
+            self.assertIn('href="darkroom.de.html"', (out / "darkroom.html").read_text())
+            self.assertFalse((out / "other.de.html").exists())
+            help_de = (out / "help" / "darkroom.de.html").read_text()
+            listed = (out / "help" / "media.txt").read_text().split()
+            self.assertEqual(len(listed), 1)
+            self.assertIn(f'src="/darkroom/help/media/{listed[0]}"', help_de)
+            self.assertIn('id="paint"', help_de)
+            self.assertIn('href="/darkroom"', help_de)
+            self.assertNotIn("graphs/", help_de)
+            self.assertIn("<i>Keep shape</i>", (out / "help" / "darkroom.en.html").read_text())
+            self.assertTrue((out / "media" / listed[0]).is_file())
+            self.assertIn('src="media/', (out / "darkroom.html").read_text())   # the gallery's own path
 
 
 class ThinkingOff(unittest.TestCase):

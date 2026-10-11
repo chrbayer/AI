@@ -41,6 +41,9 @@ install:
 	install -Dm644 docs/build.py $(SHAREDIR)/docs/build.py
 	install -Dm644 docs/examples.json $(SHAREDIR)/docs/examples.json
 	install -Dm644 docs/tools/glb_small.py $(SHAREDIR)/docs/tools/glb_small.py
+	# Darkroom's help (/darkroom/help): its pages and the media they list
+	install -Dm644 -t $(SHAREDIR)/docs/help docs/help/darkroom.en.html docs/help/darkroom.de.html docs/help/media.txt
+	for f in $$(cat docs/help/media.txt); do install -Dm644 docs/media/$$f $(SHAREDIR)/docs/media/$$f; done
 	install -Dm644 comfyui_models.py $(LIBDIR)/comfyui_models.py
 	install -Dm644 tts_server.py $(LIBDIR)/tts_server.py
 	install -Dm644 images_server.py $(LIBDIR)/images_server.py
