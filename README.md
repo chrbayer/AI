@@ -2061,6 +2061,7 @@ at `/darkroom`, and a home-screen icon for `/fotos` is best made anew.
 |---|---|---|
 | Colorize (Kolorieren) — black and white to colour; colours can be named | Qwen-Image 2.1 Colorize Turbo / Colorize | 29 s / 65 s |
 | Restore (Restaurieren) — scratches, stains, noise | Qwen-Image 2.1 Edit Turbo / Edit, with a restoring prompt | 146 s (with loading) |
+| Sharpen (Scharf machen) — a dim photo, shaken or someone moving; with variants | Qwen-Image 2.1 Edit Turbo / Edit: "Make this photo sharp … as if taken with a fast shutter" | 72 s / 78 s |
 | Faces (Gesichter) — faces and hands redrawn | Qwen-Image 2.1 Detailer / FLUX.2 klein Detailer (small faces) | 136 s / 235 s |
 | Upscale (Vergrößern) — 4× | SeedVR2 7B (the picture brought to 1024 px first) | 103 s, 1024 → 4096 px |
 | Remove background (Freistellen) — background removed (PNG) | BiRefNet / BiRefNet Matting | 3 s |
@@ -2174,7 +2175,8 @@ line all logins share one history, as before.
 **Recipes.** A fifth group, *Recipes* (*Rezepte*), runs several actions one
 after the other, each on the result of the one before: *Do up an old photo*
 (restore → colorize → upscale), *Bring an old photo to life* (restore →
-colorize → animate), *For printing* (faces → upscale). Each step is a job of
+colorize → animate), *For printing* (faces → upscale), *Rescue a blurred
+photo* (sharpen → upscale). Each step is a job of
 its own that waits for the one before (`after`) and takes its result, brought
 to its own size, when its turn comes — so each has its card (step 1/3 …), its
 cancel and its time; a cancelled or failed step stops the rest, and the push

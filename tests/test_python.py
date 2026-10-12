@@ -370,6 +370,12 @@ class Darkroom(unittest.TestCase):
         self.assertEqual(self.sent(action="restore", quality="best")[1]["model"], "qwen-image-21")
         self.assertEqual(self.sent(action="detail", quality="best")[1]["model"], "flux2-klein-9b-detailer")
 
+    def test_sharpen_asks_the_edit_model_for_a_fast_shutter(self):
+        path, form, _ = self.sent(action="sharpen")
+        self.assertEqual(form["model"], "qwen-image-21-turbo")
+        self.assertIn("motion blur", form["prompt"])
+        self.assertEqual(darkroom.RECIPES["recipe-blur"]["steps"], ["sharpen", "upscale"])
+
     def test_remove_tells_the_edit_model_what_goes(self):
         _, form, _ = self.sent(action="remove", text="den Mülleimer")
         self.assertEqual(form["model"], "qwen-image-21-turbo")

@@ -84,6 +84,20 @@ ACTIONS = {
                    "exactly as they are."),
         "text": None, "max_pixels": EDIT_PIXELS, "seconds": (40, 120),
     },
+    # A dim photo, shaken or someone moving. Tried on one (two girls dancing at
+    # dusk, 887×1183): Restaurieren left the blur, Gesichter redrew the faces
+    # but changed one, Vergrößern sharpened the texture and kept the blur —
+    # this prompt on Qwen-Image Edit made both faces sharp and true — not every
+    # time, so it offers variants to keep the best of. A hand that is only a
+    # smear stays one: Übermalen for that.
+    "sharpen": {
+        "label": "Scharf machen", "hint": "Verwackelt, bewegt, schlechtes Licht",
+        "model": ("qwen-image-21-turbo", "qwen-image-21"),
+        "prompt": ("Make this photo sharp: remove the motion blur from the people's faces, hands and arms "
+                   "and the noise of the dim light, as if taken with a fast shutter. Keep the people, "
+                   "their faces, glasses, hair, clothes, pose, the room and the colours exactly as they are."),
+        "variants": True, "text": None, "max_pixels": EDIT_PIXELS, "seconds": (40, 120),
+    },
     # Thorough: FLUX.2 klein's detailer, which redraws small faces (a group
     # photo) where Qwen-Image's repaints a smear.
     "detail": {
@@ -224,8 +238,10 @@ RECIPES = {
     "recipe-alive": {"label": "Altes Foto lebendig", "hint": "Restaurieren → Kolorieren → Animieren",
                      "steps": ["restore", "colorize", "animate"]},
     "recipe-print": {"label": "Zum Drucken", "hint": "Gesichter → Vergrößern", "steps": ["detail", "upscale"]},
+    "recipe-blur": {"label": "Verwackeltes Foto retten", "hint": "Scharf machen → Vergrößern",
+                    "steps": ["sharpen", "upscale"]},
 }
-GROUPS = [("Verbessern", ["colorize", "restore", "detail", "upscale"]),
+GROUPS = [("Verbessern", ["colorize", "restore", "sharpen", "detail", "upscale"]),
           ("Verändern", ["background", "cutout", "remove", "paint", "edit", "expand"]),
           ("Neu erschaffen", ["pose", "restyle", "art"]),
           ("Video", ["animate", "talk"]),
@@ -329,6 +345,7 @@ EN = {
     "Farben vorgeben (optional, englisch) — wirkt aufs ganze Bild": "Name colours (optional) — applies to the whole picture",
     "z. B. blue sky, green trees": "e.g. blue sky, green trees",
     "Restaurieren": "Restore", "Kratzer, Flecken, Rauschen weg": "Scratches, stains, noise gone",
+    "Scharf machen": "Sharpen", "Verwackelt, bewegt, schlechtes Licht": "Shaken, moving, dim light",
     "Gesichter": "Faces", "Gesichter und Hände nachzeichnen": "Redraw faces and hands",
     "Vergrößern": "Upscale", "4× größer und schärfer": "4× bigger and sharper",
     "Freistellen": "Remove background", "Hintergrund entfernen": "Background gone, PNG",
@@ -381,6 +398,7 @@ EN = {
     "Restaurieren → Kolorieren → Vergrößern": "Restore → Colorize → Upscale",
     "Altes Foto lebendig": "Bring an old photo to life", "Restaurieren → Kolorieren → Animieren": "Restore → Colorize → Animate",
     "Zum Drucken": "For printing", "Gesichter → Vergrößern": "Faces → Upscale",
+    "Verwackeltes Foto retten": "Rescue a blurred photo", "Scharf machen → Vergrößern": "Sharpen → Upscale",
     "Der Schritt davor hat nicht geklappt": "The step before did not work", "ein freigestelltes Bild lässt sich nicht prüfen": "a cut-out picture cannot be checked", "keine Variante": "not a variant",
     "Die anderen Varianten laufen noch": "The other variants are still running",
     "Ausbauen ist hier nicht eingerichtet": "Expanding is not set up here",
