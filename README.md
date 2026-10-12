@@ -2062,6 +2062,7 @@ at `/darkroom`, and a home-screen icon for `/fotos` is best made anew.
 | Colorize (Kolorieren) — black and white to colour; colours can be named | Qwen-Image 2.1 Colorize Turbo / Colorize | 29 s / 65 s |
 | Restore (Restaurieren) — scratches, stains, noise | Qwen-Image 2.1 Edit Turbo / Edit, with a restoring prompt | 146 s (with loading) |
 | Sharpen (Scharf machen) — a dim photo, shaken or someone moving; with variants | Qwen-Image 2.1 Edit Turbo / Edit: "Make this photo sharp … as if taken with a fast shutter" | 72 s / 78 s |
+| Remove reflections (Spiegelung entfernen) — taken through a pane of glass; with variants; what stays, *Paint over* | Qwen-Image 2.1 Edit Turbo / Edit: "Remove the reflections of the glass pane … as if photographed without glass" — at a zoo window Turbo took the reflected hands out too, Edit did not | 70 s / 78 s |
 | Faces (Gesichter) — faces and hands redrawn | Qwen-Image 2.1 Detailer / FLUX.2 klein Detailer (small faces) | 136 s / 235 s |
 | Upscale (Vergrößern) — 4× | SeedVR2 7B (the picture brought to 1024 px first) | 103 s, 1024 → 4096 px |
 | Remove background (Freistellen) — background removed (PNG) | BiRefNet / BiRefNet Matting | 3 s |

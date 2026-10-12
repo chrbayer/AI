@@ -98,6 +98,22 @@ ACTIONS = {
                    "their faces, glasses, hair, clothes, pose, the room and the colours exactly as they are."),
         "variants": True, "text": None, "max_pixels": EDIT_PIXELS, "seconds": (40, 120),
     },
+    # Through a pane of glass: the haze and the light spots go, and with
+    # luck the reflected photographer too. Tried on a monkey at a zoo window,
+    # two variants each: the haze went and the contrast came back on both;
+    # Turbo (70 s) took the reflected hands out as well, Edit (78 s) kept them;
+    # the hoodie's cords on the fur stayed on all four — Übermalen for those.
+    # Entfernen, told what the reflection showed, dressed the monkey in the
+    # red hoodie instead.
+    "glass": {
+        "label": "Spiegelung entfernen", "hint": "Durch eine Glasscheibe fotografiert",
+        "model": ("qwen-image-21-turbo", "qwen-image-21"),
+        "prompt": ("Remove the reflections of the glass pane this photo was taken through: reflected people, "
+                   "hands, lights, the light spots and the milky haze over the whole picture. Keep everything "
+                   "behind the glass exactly as it is, the subject, its face, the background and the colours, "
+                   "now clear and with full contrast, as if photographed without glass."),
+        "variants": True, "text": None, "max_pixels": EDIT_PIXELS, "seconds": (40, 120),
+    },
     # Thorough: FLUX.2 klein's detailer, which redraws small faces (a group
     # photo) where Qwen-Image's repaints a smear.
     "detail": {
@@ -241,7 +257,7 @@ RECIPES = {
     "recipe-blur": {"label": "Verwackeltes Foto retten", "hint": "Scharf machen → Vergrößern",
                     "steps": ["sharpen", "upscale"]},
 }
-GROUPS = [("Verbessern", ["colorize", "restore", "sharpen", "detail", "upscale"]),
+GROUPS = [("Verbessern", ["colorize", "restore", "sharpen", "glass", "detail", "upscale"]),
           ("Verändern", ["background", "cutout", "remove", "paint", "edit", "expand"]),
           ("Neu erschaffen", ["pose", "restyle", "art"]),
           ("Video", ["animate", "talk"]),
@@ -346,6 +362,7 @@ EN = {
     "z. B. blue sky, green trees": "e.g. blue sky, green trees",
     "Restaurieren": "Restore", "Kratzer, Flecken, Rauschen weg": "Scratches, stains, noise gone",
     "Scharf machen": "Sharpen", "Verwackelt, bewegt, schlechtes Licht": "Shaken, moving, dim light",
+    "Spiegelung entfernen": "Remove reflections", "Durch eine Glasscheibe fotografiert": "Taken through a pane of glass",
     "Gesichter": "Faces", "Gesichter und Hände nachzeichnen": "Redraw faces and hands",
     "Vergrößern": "Upscale", "4× größer und schärfer": "4× bigger and sharper",
     "Freistellen": "Remove background", "Hintergrund entfernen": "Background gone, PNG",

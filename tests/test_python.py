@@ -375,6 +375,7 @@ class Darkroom(unittest.TestCase):
         self.assertEqual(form["model"], "qwen-image-21-turbo")
         self.assertIn("motion blur", form["prompt"])
         self.assertEqual(darkroom.RECIPES["recipe-blur"]["steps"], ["sharpen", "upscale"])
+        self.assertIn("glass pane", self.sent(action="glass")[1]["prompt"])
 
     def test_remove_tells_the_edit_model_what_goes(self):
         _, form, _ = self.sent(action="remove", text="den Mülleimer")
