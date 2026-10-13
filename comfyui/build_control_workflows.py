@@ -41,6 +41,9 @@ BIREFNET = "4d000788a9698c7f8d67c8c6ce2b40c768f5b909"
 FLORENCE = "21a599d414c4d928c9032694c424fb94458e3594"
 SAM3 = "ea8e153c669a0284a496c0ec65a53b8e4f5ca7e7"
 MODELS = {   # file -> (directory, url), for the loader nodes' download entries
+    # Hybrid Demucs (torchaudio's HDEMUCS_HIGH_MUSDB_PLUS), for Singing voice alone
+    "hdemucs_high_trained.pt": ("audio_separation",
+        "https://download.pytorch.org/torchaudio/models/hdemucs_high_trained.pt"),
     "qwen_image_2.1_bf16.safetensors": ("diffusion_models",
         f"{HF}/Comfy-Org/Qwen-Image-2.1/resolve/main/diffusion_models/qwen_image_2.1_bf16.safetensors"),
     "qwen3vl_8b_bf16.safetensors": ("text_encoders",
@@ -93,7 +96,8 @@ MODELS = {   # file -> (directory, url), for the loader nodes' download entries
 LOADER_INPUT = {"UNETLoader": "unet_name", "CLIPLoader": "clip_name", "VAELoader": "vae_name",
                 "ModelPatchLoader": "name", "LoraLoaderModelOnly": "lora_name",
                 "UltralyticsDetectorProvider": "model_name", "SAMLoader": "model_name",
-                "BiRefNetRMBG": "model", "DownloadAndLoadFlorence2Model": "model", "SAM3Segment": "model_name"}
+                "BiRefNetRMBG": "model", "DownloadAndLoadFlorence2Model": "model", "SAM3Segment": "model_name",
+                "LlmctlVocals": "model_name"}
 
 
 def base(prompt, prefix):
@@ -723,16 +727,20 @@ def talking():
     the video made exactly that long: with a shorter audio the lips ran on after
     the voice had stopped. The audio is made exactly as long as the video — N
     frames / rate, to the sample — not just to the second. ComfyUI's ia2v
-    template does this for LTX-2.3."""
+    template does this for LTX-2.3. LTX hears the voice alone (Singing voice
+    alone): from a whole song it took the music for the lips, and the singer
+    smiled along with her mouth shut."""
     g = from_base("ltx_i2v")
     find = lambda cls, t=None: next(k for k, n in g.items() if n["class_type"] == cls and (t is None or variants.title(n) == t))
     empty = find("LTXVEmptyLatentAudio")
     audio_vae = g[empty]["inputs"]["audio_vae"]
-    a, fit, enc, mask, held = (str(int(_new_id(g)) + i) for i in range(5))
+    a, fit, enc, mask, held, voc = (str(int(_new_id(g)) + i) for i in range(6))
     g[a] = {"class_type": "LoadAudio", "inputs": {"audio": "voice.wav"}, "_meta": {"title": "Voice or song"}}
     rate = find("PrimitiveInt", "Frame Rate")
     g[fit] = {"class_type": "LlmctlAudioFit", "inputs": {"audio": [a, 0], "frame_rate": [rate, 0], "extra_seconds": 0}}
-    g[enc] = {"class_type": "LTXVAudioVAEEncode", "inputs": {"audio": [fit, 0], "audio_vae": audio_vae}}
+    g[voc] = {"class_type": "LlmctlVocals", "inputs": {"audio": [fit, 0], "model_name": "hdemucs_high_trained.pt",
+                                                       "enabled": True}, "_meta": {"title": "Gesang abtrennen"}}
+    g[enc] = {"class_type": "LTXVAudioVAEEncode", "inputs": {"audio": [voc, 0], "audio_vae": audio_vae}}
     g[mask] = {"class_type": "SolidMask", "inputs": {"value": 0.0, "width": 64, "height": 64}}
     g[held] = {"class_type": "SetLatentNoiseMask", "inputs": {"samples": [enc, 0], "mask": [mask, 0]},
                "_meta": {"title": "Audio held as it is"}}

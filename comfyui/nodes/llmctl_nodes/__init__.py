@@ -243,6 +243,88 @@ class LlmctlAudioFit:
         return ({"waveform": wave, "sample_rate": rate}, seconds, frames)
 
 
+class LlmctlVocals:
+    """The singing voice of a song alone: Hybrid Demucs (torchaudio's
+    HDEMUCS_HIGH_MUSDB_PLUS, MIT) takes drums, bass and the rest away. LTX's
+    picture+audio reads the lips off the sound it is given, and from a whole song
+    it took the music for them: the singer smiled and moved to it with her mouth
+    shut. Given the voice alone she sang. The sound under the video stays the
+    song — only what LTX listens to is the voice."""
+    CATEGORY = "llmctl"
+    FUNCTION = "separate"
+    RETURN_TYPES = ("AUDIO",)
+    RETURN_NAMES = ("vocals",)
+    _model = {}
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"audio": ("AUDIO",),
+                             "model_name": (cls.models(),),
+                             "enabled": ("BOOLEAN", {"default": True,
+                                                     "tooltip": "off: the audio passes as it is"})}}
+
+    @staticmethod
+    def models():
+        d = os.path.join(folder_paths.models_dir, "audio_separation")
+        return sorted(f for f in os.listdir(d) if f.endswith(".pt")) if os.path.isdir(d) else ["hdemucs_high_trained.pt"]
+
+    def load(self, name, device):
+        import torchaudio
+        if name not in self._model:
+            path = os.path.join(folder_paths.models_dir, "audio_separation", name)
+            model = torchaudio.models.hdemucs_high(sources=["drums", "bass", "other", "vocals"])
+            model.load_state_dict(torch.load(path, map_location="cpu", weights_only=True))
+            self._model.clear()
+            self._model[name] = model.eval()
+        return self._model[name].to(device)
+
+    def separate(self, audio, model_name, enabled):
+        if not enabled:
+            return (audio,)
+        import torchaudio.functional as F
+        import comfy.model_management as mm
+        wave, rate = audio["waveform"], audio["sample_rate"]          # [batch, channels, samples]
+        device = mm.get_torch_device()
+        model = self.load(model_name, device)
+        sr = 44100                                                     # what it was trained on
+        out = []
+        for mix in wave:
+            channels = mix.shape[0]
+            x = F.resample(mix.float(), rate, sr) if rate != sr else mix.float()
+            x = x.expand(2, -1) if channels == 1 else x[:2]
+            mean, std = x.mean(), x.std() + 1e-8
+            x = (x - mean) / std
+            # in 10 s pieces with 1 s overlapping, faded into one another (torchaudio's tutorial)
+            seg, over = 10 * sr, sr
+            n = x.shape[-1]
+            voc = torch.zeros(2, n)
+            weight = torch.zeros(n)
+            start = 0
+            with torch.no_grad():
+                while start < n:
+                    end = min(n, start + seg + over)
+                    piece = x[:, start:end]
+                    got = model(piece[None].to(device))[0, 3].float().cpu()   # sources[3]: vocals
+                    w = torch.ones(end - start)
+                    fade = min(over, end - start)
+                    if start > 0:
+                        w[:fade] = torch.linspace(0, 1, fade)
+                    if end < n:
+                        w[-fade:] = torch.minimum(w[-fade:], torch.linspace(1, 0, fade))
+                    voc[:, start:end] += got * w
+                    weight[start:end] += w
+                    if end == n:
+                        break
+                    start += seg
+            voc = voc / weight.clamp(min=1e-6) * std + mean
+            voc = voc.mean(0, keepdim=True) if channels == 1 else voc
+            if rate != sr:
+                voc = F.resample(voc, sr, rate)
+            out.append(voc[..., :mix.shape[-1]])
+        mm.soft_empty_cache()
+        return ({"waveform": torch.stack(out).to(wave.dtype), "sample_rate": rate},)
+
+
 class LlmctlJoinClips:
     """Clips that continue one another, joined into one video with its sound. Each
     clip after the first starts on the last frame of the one before, so that frame
@@ -333,8 +415,10 @@ class LlmctlJoinClips:
 
 
 NODE_CLASS_MAPPINGS = {"LlmctlArtifactCheck": LlmctlArtifactCheck, "LlmctlControlImage": LlmctlControlImage,
-                       "LlmctlAudioFit": LlmctlAudioFit, "LlmctlJoinClips": LlmctlJoinClips}
+                       "LlmctlAudioFit": LlmctlAudioFit, "LlmctlJoinClips": LlmctlJoinClips,
+                       "LlmctlVocals": LlmctlVocals}
 NODE_DISPLAY_NAME_MAPPINGS = {"LlmctlArtifactCheck": "Artifact Check (llmctl)",
                               "LlmctlControlImage": "Control image (llmctl)",
                               "LlmctlAudioFit": "Audio to whole seconds (llmctl)",
-                              "LlmctlJoinClips": "Join clips with their sound (llmctl)"}
+                              "LlmctlJoinClips": "Join clips with their sound (llmctl)",
+                              "LlmctlVocals": "Singing voice alone (llmctl)"}

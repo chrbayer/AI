@@ -1578,7 +1578,21 @@ llmctl update comfy --master          # master instead of the releases (download
   moved the voice 60 ms ahead of the lips and cut 70 ms off its end. A close-up, the face filling the
   frame, follows better than a head-and-shoulders shot. A 7 s clip at
   1280×704 takes ~12 min. Voices from the speech slot or the Qwen3-TTS
-  workflows, songs from ACE-Step or YuE2 fit straight in.
+  workflows, songs from ACE-Step or YuE2 fit in — with the voice alone for the
+  lips (below).
+
+  **Singing voice alone** (*Gesang abtrennen*, llmctl's `LlmctlVocals`): LTX
+  reads the lips off the sound it encodes, and from a whole song it took the
+  music for them — a 10 s German children's song from ACE-Step, *fast* and
+  *full* alike: the singer smiled, nodded and gestured to it with her mouth
+  shut. The same 10 s with the voice alone (separated with Demucs) and she
+  sang, the mouth shaping the words. So the Talking workflow gives LTX the
+  voice alone and keeps the song under the video: Hybrid Demucs, torchaudio's
+  `HDEMUCS_HIGH_MUSDB_PLUS` (MIT, 335 MB, `models/audio_separation/`,
+  fetched by `download comfy`), no new package. 20 s of song in 4.4 s, 0.6 s
+  once loaded; in the song's instrumental end the voice track is at −66 dB
+  (htdemucs v4: −65). A spoken voice passes it unharmed: the lips move with
+  it as before. *enabled* off passes the audio as it is.
 - **Longer videos: chains and storyboards** (#48). LTX makes 5–10 s a clip;
   `LTX-2.5 Chain (int8, distilled, 4 clips)` puts four in a row, each starting
   on the last frame of the one before with a prompt of its own (*Prompt 1–4*).
@@ -1876,7 +1890,8 @@ llmctl update comfy --master          # master instead of the releases (download
   were made from): a run that stops, or one with a few sections changed, renders
   only what is missing. `--dry-run` shows the plan and the time it takes —
   about 6–7 min per 5 s section at 1280×704. Songs from ACE-Step or YuE2
-  (`/v1/audio/music`), singers from Z-Image and Qwen-Image Edit fit straight in.
+  (`/v1/audio/music`), singers from Z-Image and Qwen-Image Edit fit straight in;
+  the Talking workflow listens to the voice alone (*Singing voice alone*).
 - **Smoother video** (#44). `Video Frame Interpolation (FILM)` is ComfyUI's own
   template: Google's FILM (69 MB) puts frames between the frames of a video,
   2× by default (up to 16×), the frame rate raised with it and the sound kept.
@@ -2243,7 +2258,12 @@ always it would hold 30 GB that FLUX.2 dev or an LLM at the desk need) —
 not with less than 32 GiB free or another model on the slot — and stopped after 30 idle minutes,
 or when *Find flaws* needs the room for flash — also when an earlier run of
 the service started it (a check failed for want of 84 GiB while it held 29). For *Redesign*, *Paint over*,
-*Edit*, *Copy pose*, *Expand* and *Create*.
+*Edit*, *Copy pose*, *Expand*, *Animate* and *Create*. For *Animate* it writes
+what moves, the faces and what is heard ("sie winkt und lacht": the girl on the
+beach waves and laughs, the waves roll in, her laughter and the surf are heard),
+3.6 s. Whether the model is up already the page asks first: only when it is
+not does it say the model is starting — describing a photo takes a few seconds
+too, and the notice came every time.
 
 **Variants, cancel, zoom.** Where one's own words steer the result
 (*Edit*, *Paint over*, *Erase*, *Expand*, *Copy pose*, *Redesign*,

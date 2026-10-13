@@ -675,14 +675,14 @@
  "50": {
   "inputs": {
    "fps": [
-    "77",
+    "78",
     0
    ],
    "bit_depth": 8,
    "color_space": "sRGB",
    "codec": "none",
    "images": [
-    "76",
+    "77",
     0
    ],
    "audio": [
@@ -724,7 +724,7 @@
  "53": {
   "inputs": {
    "audio": [
-    "52",
+    "56",
     0
    ],
    "audio_vae": [
@@ -766,16 +766,30 @@
  },
  "56": {
   "inputs": {
+   "model_name": "hdemucs_high_trained.pt",
+   "enabled": true,
+   "audio": [
+    "52",
+    0
+   ]
+  },
+  "class_type": "LlmctlVocals",
+  "_meta": {
+   "title": "Gesang abtrennen"
+  }
+ },
+ "57": {
+  "inputs": {
    "tile_size": 512,
    "overlap": 128,
    "temporal_size": 64,
    "temporal_overlap": 8,
    "pixels": [
-    "62",
+    "63",
     0
    ],
    "vae": [
-    "57",
+    "58",
     0
    ]
   },
@@ -784,7 +798,7 @@
    "title": "VAE Encode (Tiled)"
   }
  },
- "57": {
+ "58": {
   "inputs": {
    "vae_name": "seedvr2_ema_vae_fp16.safetensors"
   },
@@ -793,7 +807,7 @@
    "title": "Load VAE"
   }
  },
- "58": {
+ "59": {
   "inputs": {
    "unet_name": "seedvr2_3b_int8_convrot.safetensors",
    "weight_dtype": "default"
@@ -803,7 +817,7 @@
    "title": "Load Diffusion Model"
   }
  },
- "59": {
+ "60": {
   "inputs": {
    "seed": 959948902156062,
    "steps": 1,
@@ -812,19 +826,19 @@
    "scheduler": "simple",
    "denoise": 1,
    "model": [
-    "58",
+    "59",
     0
    ],
    "positive": [
-    "64",
+    "65",
     0
    ],
    "negative": [
-    "64",
+    "65",
     1
    ],
    "latent_image": [
-    "67",
+    "68",
     0
    ]
   },
@@ -833,18 +847,18 @@
    "title": "KSampler"
   }
  },
- "60": {
+ "61": {
   "inputs": {
    "tile_size": 512,
    "overlap": 128,
    "temporal_size": 64,
    "temporal_overlap": 8,
    "samples": [
-    "68",
+    "69",
     0
    ],
    "vae": [
-    "57",
+    "58",
     0
    ]
   },
@@ -853,7 +867,7 @@
    "title": "VAE Decode (Tiled)"
   }
  },
- "61": {
+ "62": {
   "inputs": {
    "resize_type": "scale by multiplier",
    "resize_type.multiplier": 1.5,
@@ -868,10 +882,10 @@
    "title": "Resize Image/Mask"
   }
  },
- "62": {
+ "63": {
   "inputs": {
    "resized_images": [
-    "61",
+    "62",
     0
    ]
   },
@@ -880,15 +894,15 @@
    "title": "Pre-Process SeedVR2 Input"
   }
  },
- "63": {
+ "64": {
   "inputs": {
    "color_correction_method": "none",
    "images": [
-    "60",
+    "61",
     0
    ],
    "original_resized_images": [
-    "61",
+    "62",
     0
    ]
   },
@@ -897,14 +911,14 @@
    "title": "Post-Process SeedVR2 Output"
   }
  },
- "64": {
+ "65": {
   "inputs": {
    "model": [
-    "58",
+    "59",
     0
    ],
    "vae_conditioning": [
-    "67",
+    "68",
     0
    ]
   },
@@ -913,12 +927,12 @@
    "title": "Apply SeedVR2 Conditioning"
   }
  },
- "65": {
+ "66": {
   "inputs": {
    "temporal_overlap": 0,
    "chunking_mode": "auto",
    "latent": [
-    "56",
+    "57",
     0
    ]
   },
@@ -927,14 +941,14 @@
    "title": "Split SeedVR2 Latent"
   }
  },
- "66": {
+ "67": {
   "inputs": {
    "latents": [
-    "59",
+    "60",
     0
    ],
    "temporal_overlap": [
-    "65",
+    "66",
     1
    ]
   },
@@ -943,34 +957,14 @@
    "title": "Merge SeedVR2 Latents"
   }
  },
- "67": {
-  "inputs": {
-   "switch": [
-    "69",
-    0
-   ],
-   "on_false": [
-    "56",
-    0
-   ],
-   "on_true": [
-    "65",
-    0
-   ]
-  },
-  "class_type": "ComfySwitchNode",
-  "_meta": {
-   "title": "If/Else Switch"
-  }
- },
  "68": {
   "inputs": {
    "switch": [
-    "69",
+    "70",
     0
    ],
    "on_false": [
-    "59",
+    "57",
     0
    ],
    "on_true": [
@@ -985,6 +979,26 @@
  },
  "69": {
   "inputs": {
+   "switch": [
+    "70",
+    0
+   ],
+   "on_false": [
+    "60",
+    0
+   ],
+   "on_true": [
+    "67",
+    0
+   ]
+  },
+  "class_type": "ComfySwitchNode",
+  "_meta": {
+   "title": "If/Else Switch"
+  }
+ },
+ "70": {
+  "inputs": {
    "value": true
   },
   "class_type": "PrimitiveBoolean",
@@ -992,7 +1006,7 @@
    "title": "Boolean (Split Latent)"
   }
  },
- "70": {
+ "71": {
   "inputs": {
    "value": false
   },
@@ -1001,10 +1015,10 @@
    "title": "Hochskalieren (SeedVR2)"
   }
  },
- "71": {
+ "72": {
   "inputs": {
    "switch": [
-    "70",
+    "71",
     0
    ],
    "on_false": [
@@ -1012,7 +1026,7 @@
     0
    ],
    "on_true": [
-    "63",
+    "64",
     0
    ]
   },
@@ -1021,7 +1035,7 @@
    "title": "Hochskalieren (SeedVR2)"
   }
  },
- "72": {
+ "73": {
   "inputs": {
    "model_name": "film_net_fp16.safetensors"
   },
@@ -1030,15 +1044,15 @@
    "title": "Load Frame Interpolation Model"
   }
  },
- "73": {
+ "74": {
   "inputs": {
    "multiplier": 2,
    "interp_model": [
-    "72",
+    "73",
     0
    ],
    "images": [
-    "71",
+    "72",
     0
    ]
   },
@@ -1047,7 +1061,7 @@
    "title": "Run Frame Interpolation Model"
   }
  },
- "74": {
+ "75": {
   "inputs": {
    "expression": "a * 2",
    "values.a": [
@@ -1060,7 +1074,7 @@
    "title": "fps × 2"
   }
  },
- "75": {
+ "76": {
   "inputs": {
    "value": false
   },
@@ -1069,18 +1083,18 @@
    "title": "48 fps (FILM)"
   }
  },
- "76": {
+ "77": {
   "inputs": {
    "switch": [
-    "75",
+    "76",
     0
    ],
    "on_false": [
-    "71",
+    "72",
     0
    ],
    "on_true": [
-    "73",
+    "74",
     0
    ]
   },
@@ -1089,10 +1103,10 @@
    "title": "48 fps (FILM)"
   }
  },
- "77": {
+ "78": {
   "inputs": {
    "switch": [
-    "75",
+    "76",
     0
    ],
    "on_false": [
@@ -1100,7 +1114,7 @@
     0
    ],
    "on_true": [
-    "74",
+    "75",
     0
    ]
   },
