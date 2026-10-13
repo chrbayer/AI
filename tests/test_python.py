@@ -627,6 +627,23 @@ class Darkroom(unittest.TestCase):
         self.assertFalse(darkroom._expand["warming"])
         darkroom.ARGS.expand_slot = 0
 
+    def test_a_typed_text_is_spoken_in_the_chosen_voice_for_talk(self):
+        from unittest import mock
+        client = darkroom.app.test_client()
+        self.assertEqual(client.post("/darkroom/api/speak", json={"text": "  "}).status_code, 400)
+        r = client.post("/darkroom/api/speak", json={"text": "x" * (darkroom.SPEAK_MAX + 1)}, headers={"X-Darkroom-Lang": "en"})
+        self.assertEqual((r.status_code, r.get_json()["error"]), (400, "At most 150 characters – no more fit into 10 seconds"))
+        reply = mock.Mock(status_code=200, content=b"RIFFwav")
+        with mock.patch.object(darkroom.requests, "post", return_value=reply) as post:
+            r = client.post("/darkroom/api/speak", json={"text": " Hallo Oma! ", "voice": "mann"})
+        self.assertEqual((r.status_code, r.mimetype, r.data), (200, "audio/wav", b"RIFFwav"))
+        self.assertEqual(post.call_args.args[0], "http://api/v1/audio/speech")
+        self.assertEqual(post.call_args.kwargs["json"], {"input": "Hallo Oma!", "voice": "mann", "language": "de"})
+        bad = mock.Mock(status_code=400, json=lambda: {"error": {"message": "no voice 'nix'"}})
+        with mock.patch.object(darkroom.requests, "post", return_value=bad):
+            r = client.post("/darkroom/api/speak", json={"text": "Hallo", "voice": "nix"})
+        self.assertEqual((r.status_code, r.get_json()["error"]), (502, "Das Sprechen hat nicht geklappt: no voice 'nix'"))
+
     def test_find_flaws_takes_edits_but_not_cut_outs(self):
         for action, png, ok in (("edit", False, True), ("background", True, False)):
             j = darkroom.new_job({"action": action, "label": "x", "text": "t", "png": png})
@@ -1583,6 +1600,34 @@ class ImageApi(unittest.TestCase):
         for bad in (2, 301):
             with self.subTest(bad), self.assertRaises(images.Refused):
                 images.set_music(json.loads(known["ace-step-15-turbo"].read_text()), "x", None, bad)
+
+    def test_speech_speaks_as_the_bundled_clone_workflow_does(self):
+        wf = json.loads((ROOT / "comfyui" / "workflows" / "Qwen3-TTS Stimme klonen (Base 1.7B).json").read_text())
+        w = next(n for n in wf["nodes"] if n["type"] == images.SPEECH_NODE)["widgets_values"]
+        g = images.speech_graph("Hallo", "voice-frau.wav", "German", 3)
+        i = g["2"]["inputs"]
+        # widgets: text, model, device, precision, language, ref_text, seed, (control), max_new_tokens,
+        # top_p, top_k, temperature, repetition_penalty, x_vector_only, instruct, attention
+        self.assertEqual((i["model_choice"], i["device"], i["precision"], i["language"], i["max_new_tokens"], i["top_p"],
+                          i["top_k"], i["temperature"], i["repetition_penalty"], i["x_vector_only"], i["attention"]),
+                         (w[1], w[2], w[3], w[4], w[8], w[9], w[10], w[11], w[12], w[13], w[15]))
+        self.assertEqual((i["target_text"], i["seed"], g["1"]["inputs"]["audio"]), ("Hallo", 3, "voice-frau.wav"))
+        self.assertEqual(g["3"]["class_type"], "PreviewAudio")              # into temp, not the gallery
+        info = {images.SPEECH_NODE: {}, "LoadAudio": {"input": {"required": {"audio": [
+            ["voice-frau.wav", "voice-ich.mp3", "song.wav", "voice-x.txt"], {}]}}}}
+        class R:
+            def __init__(self, url): self.url = url
+            def json(self): return {k: v for k, v in info.items() if self.url.endswith("/" + k)}
+        old_get, images.requests.get = images.requests.get, lambda url, **k: R(url)
+        old_comfy = getattr(images.ARGS, "comfy", None)
+        images.ARGS.comfy = "http://127.0.0.1:9"
+        try:
+            self.assertEqual(images.speech_voices(), {"frau": "voice-frau.wav", "ich": "voice-ich.mp3"})
+            del info[images.SPEECH_NODE]
+            self.assertIsNone(images.speech_voices())
+        finally:
+            images.requests.get = old_get
+            images.ARGS.comfy = old_comfy
 
     def test_model_lists_in_both_object_info_formats(self):
         info = {"UNETLoader": {"input": {"required": {"unet_name": [["a.safetensors"], {}]}}},

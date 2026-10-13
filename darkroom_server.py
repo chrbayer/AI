@@ -235,7 +235,7 @@ ACTIONS = {
     # LTX-2.5 Talking: the picture speaks or sings along to a voice recorded on
     # the phone, the clip as long as the voice. seconds: for 5 s of voice.
     "talk": {
-        "label": "Sprechen lassen", "hint": "Das Foto spricht deine Aufnahme",
+        "label": "Sprechen lassen", "hint": "Das Foto spricht deine Aufnahme oder deinen Text",
         "model": ("ltx-25-talking", "ltx-25-talking"), "video": True, "audio": True,
         "prompt": ("The person speaks the words clearly and naturally, lips moving exactly with the voice, "
                    "small natural head movements and facial expressions. The camera holds still."),
@@ -283,6 +283,10 @@ REPAIR_MODEL = ("qwen-image-21-inpaint-crop-turbo", "qwen-image-21-inpaint-crop"
 CROP_CONTEXT, MARGIN = 2.5, 16
 # Sprechen lassen: the longest voice, in seconds.
 VOICE_MAX = 10
+# … or from a text: the image API speaks it in a voice of `llmctl voice`
+# (Qwen3-TTS on the ComfyUI already running, ~5 s for a sentence). About 15
+# characters a second: 150 fill the 10 s.
+SPEAK_MAX = 150
 # Animieren with an end picture.
 FIRST_LAST = "ltx-25-first-last-frame"
 # Animieren and the video model of Erzeugen: how long a clip may be.
@@ -400,7 +404,7 @@ EN = {
     "Was soll passieren? (optional)": "What should happen? (optional)",
     "z. B. Sie lacht und winkt in die Kamera, die Wellen rollen heran": "e.g. She laughs and waves at the camera, the waves roll in",
     "Endbild (optional) – das Video läuft dorthin": "End picture (optional) – the video runs towards it",
-    "Sprechen lassen": "Make it talk", "Das Foto spricht deine Aufnahme": "The photo speaks your recording",
+    "Sprechen lassen": "Make it talk", "Das Foto spricht deine Aufnahme oder deinen Text": "The photo speaks your recording or your text",
     "Wie soll es wirken? (optional)": "How should it come across? (optional)",
     "z. B. Sie singt mit geschlossenen Augen, ganz gefühlvoll": "e.g. She sings with her eyes closed, full of feeling",
     # groups, styles, models
@@ -445,6 +449,8 @@ EN = {
     "Was soll auf dem Bild sein? – bitte beschreiben": "What should be in the picture? – please describe it",
     "kein Bild": "no picture", "bitte erst die Stelle markieren": "please mark the spot first",
     "bitte erst etwas aufnehmen oder eine Audiodatei wählen": "please record something or choose an audio file first",
+    "Bitte erst einen Text eingeben": "Please enter a text first",
+    "ComfyUI läuft nicht – bitte erst starten": "ComfyUI is not running – please start it first",
     "ungültige Angabe": "invalid input", "Es läuft gerade eine Bearbeitung": "A job is running",
     "Der Text ist zu lang (höchstens 2000 Zeichen)": "The text is too long (2000 characters at most)",
     "Für diese Aktion gibt es keine Vorlagen": "This action has no templates",
@@ -469,6 +475,8 @@ EN_PATTERNS = [
     (r"(.*) nimmt nur ein Foto – für zwei Qwen-Image oder FLUX.2 dev wählen",
      "{0} takes one photo only – for two choose Qwen-Image or FLUX.2 dev"),
     (r"ein Video ist (.*) Sekunden lang", "a video is {0} seconds long"),
+    (r"Höchstens (\d+) Zeichen – mehr passt nicht in (\d+) Sekunden", "At most {0} characters – no more fit into {1} seconds"),
+    (r"Das Sprechen hat nicht geklappt: (.*)", "Speaking did not work: {0}"),
     (r"Schon (\d+) eigene Vorlagen – bitte erst welche löschen", "Already {0} templates of your own – please delete some first"),
     (r"Auf Slot (\d+) läuft keine ComfyUI mit Bild-API", "No ComfyUI with an image API on slot {0}"),
     (r"Auf Slot (\d+) läuft ein anderes Modell", "Another model runs on slot {0}"),
@@ -1221,6 +1229,30 @@ def marked(data, mask_data):
     return buf.getvalue()
 
 
+@app.post("/darkroom/api/speak")
+def speak():
+    """Sprechen lassen from a text: the voice as WAV, for the page to play and send on."""
+    body = request.get_json(silent=True) or {}
+    text = (body.get("text") or "").strip()
+    if not text:
+        return error("Bitte erst einen Text eingeben")
+    if len(text) > SPEAK_MAX:
+        return error(f"Höchstens {SPEAK_MAX} Zeichen – mehr passt nicht in {VOICE_MAX} Sekunden")
+    try:
+        r = requests.post(f"{ARGS.api}/v1/audio/speech", timeout=300,
+                          json={"input": text, "voice": body.get("voice") or "", "language": lang()})
+    except requests.RequestException:
+        return error("ComfyUI läuft nicht – bitte erst starten", 503)
+    if r.status_code != 200:
+        try:
+            msg = r.json()["error"]["message"]
+        except (ValueError, KeyError, TypeError):
+            msg = f"Fehler {r.status_code}"
+        app.logger.info("speak: %s", msg)
+        return error("Das Sprechen hat nicht geklappt: " + msg, 502)
+    return Response(r.content, mimetype="audio/wav")
+
+
 @app.post("/darkroom/api/expand/warm")
 def warm_expander():
     """Start the model in the background as the text field is entered, so that
@@ -1377,6 +1409,12 @@ def actions():
         have = {m["id"] for m in r.json()["data"]}
     except (requests.RequestException, ValueError, KeyError):
         pass
+    voices = []                                   # Sprechen lassen from a text, when there are any
+    try:
+        r = requests.get(f"{ARGS.api}/v1/audio/voices", timeout=10)
+        voices = r.json()["voices"] if r.ok else []
+    except (requests.RequestException, ValueError, KeyError):
+        pass
     def avail(model):
         return None if have is None else model in have
 
@@ -1421,6 +1459,7 @@ def actions():
 
     return jsonify({"actions": out, "edit_models": models(EDIT_MODELS), "gen_models": models(GEN_MODELS),
                     "aspects": list(ASPECTS), "clip_seconds": list(CLIP_SECONDS), "voice_max": VOICE_MAX,
+                    "voices": voices, "speak_max": SPEAK_MAX,
                     "variants_max": VARIANTS_MAX, "expand": bool(getattr(ARGS, "expand_slot", 0)),
                     "groups": [tr(g) for g, _ in GROUPS], "styles": [[k, tr(v[0])] for k, v in STYLES.items()]})
 

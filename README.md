@@ -1907,6 +1907,13 @@ llmctl update comfy --master          # master instead of the releases (download
   VoiceDesign model `voice design` already has is reflinked, not downloaded
   again. Both run through PyTorch at about 1.6× real time; for speech on
   demand the speech slot (llama.cpp) is faster.
+
+  **Speech through the image API**: `POST /v1/audio/speech` on the slot's
+  image API takes `input` (up to 1000 characters), `voice` (one of
+  `GET /v1/audio/voices`, `frau` by default), `language` (`de` by default),
+  `seed` and `response_format` (`wav`, `mp3`, `flac`) and answers with the
+  audio. It runs the clone workflow's graph ahead of ComfyUI's queue — for
+  Darkroom's *Make it talk* from a text, without a speech slot beside ComfyUI.
 - **Patches.** `comfyui/patches/qwen35-rocm-conv3d.patch` works around a
   segfault of PyTorch's Conv3d fallback on ROCm in the Qwen3-VL vision encoder
   (the Qwen-Image 2.1 edit workflow). `update` takes the patches out before
@@ -2025,7 +2032,7 @@ pick a photo from the gallery or take one, tap what should happen, look at
 the result with a before/after slider, and save it to the phone's photos
 through its share sheet — or switch to *Create* and make a picture from a
 prompt. *Animate* turns a photo into a short clip with sound, *Make it talk*
-makes it speak a voice recorded on the phone. The actions come in four
+makes it speak a voice recorded on the phone or a text typed in. The actions come in four
 groups: Enhance, Change, Reimagine, Video. Big buttons, one column, dark
 mode; it can sit on the home screen like an app.
 
@@ -2076,7 +2083,7 @@ at `/darkroom`, and a home-screen icon for `/fotos` is best made anew.
 | Redesign (Neu gestalten) — the same room or landscape in another style | Qwen-Image 2.1 Depth Control Turbo / Depth Control | 27 s / 72 s |
 | As artwork (Als Kunstwerk) — watercolour, pencil, oil, comic, anime | Qwen-Image 2.1 Edit Turbo / Edit: "Turn this photo into …" | 45–75 s |
 | Animate (Animieren) — a clip of 3, 5 or 8 s with sound; with an end picture the clip runs to it | LTX-2.5 Video (first stage only / both) / First-Last Frame | 83 s / 375 s for 5 s |
-| Make it talk (Sprechen lassen) — the photo speaks or sings a recording of up to 10 s | LTX-2.5 Talking (first stage only / both) | 124 s for 6 s fast |
+| Make it talk (Sprechen lassen) — the photo speaks or sings a recording of up to 10 s, or a typed text | LTX-2.5 Talking (first stage only / both) | 124 s for 6 s fast |
 
 *Create* (*Erzeugen*) takes a prompt, a model, a shape (1:1, 4:3, 3:4, 16:9, 9:16, about
 1 MP each) and a count (1–4, one job per picture): Z-Image Turbo 20 s,
@@ -2145,6 +2152,15 @@ iPhone MP4/AAC) or takes an audio file; the server makes it WAV, cut to
 as it is. *Fast* is the first stage alone, as for *Animate*. A face
 that fills the picture works best: from a full-length photo the mouth
 moves with the words, but small and soft.
+
+Instead of a recording, *Type text* (*Text tippen*) takes up to 150
+characters — about the 10 s — and a voice of `llmctl voice` (the speech
+slot's voices, as chips). *Speak* has the image API say it with Qwen3-TTS
+on the ComfyUI already running, ahead of its queue (after a job that runs,
+which the button says after 15 s): a sentence of 5 s took 4–5 s, 8 s with
+the model loading. It plays back like a recording and goes on as one; a
+take that is not right is spoken again with another seed. Checked with the
+speech recognition: three German takes came back word for word.
 
 **Templates.** Next to each text field, *Templates* (*Vorlagen*) opens a library of
 prompts (`darkroom_prompts.json`, ~70, each in German and English): weather and light, seasons, tidying

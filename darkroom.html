@@ -91,7 +91,8 @@ main { padding: 0 16px; max-width: 640px; margin: 0 auto; display: flex; flex-di
 .group { font-size: 13px; font-weight: 650; color: var(--muted); margin: 16px 2px 8px; }
 .group:first-child { margin-top: 0; }
 .voice { display: flex; flex-direction: column; gap: 10px; }
-.voice .buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.voice .buttons { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 10px; }
+.voice .speak { display: flex; flex-direction: column; gap: 10px; }
 .voice .btn.rec { color: var(--bad); font-weight: 650; }
 .voice .btn.rec.on { background: var(--bad); border-color: var(--bad); color: #fff; }
 .voice audio { width: 100%; }
@@ -334,6 +335,12 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
           <div class="buttons">
             <button class="btn rec" id="recBtn" type="button">● Aufnehmen</button>
             <label class="btn"><input type="file" accept="audio/*" id="audioFile">Audiodatei</label>
+            <button class="btn hidden" id="speakOpen" type="button" aria-pressed="false">Text tippen</button>
+          </div>
+          <div class="speak hidden" id="speakWrap">
+            <textarea id="speakText" rows="2" maxlength="150" placeholder="z. B. Hallo Oma, alles Gute zum Geburtstag! Wir haben dich ganz doll lieb."></textarea>
+            <div class="chips" id="speakVoices"></div>
+            <button class="btn" id="speakBtn" type="button">Sprechen</button>
           </div>
           <audio id="voicePlayer" controls class="hidden"></audio>
           <p class="note" id="voiceInfo"></p>
@@ -506,7 +513,7 @@ const S = {
   comfy: "down", message: "", mode: "edit", unc: false,
   actions: [], editModels: [], genModels: [], aspects: [],
   action: null, quality: "fast", editModel: "qwen-image-21-turbo", sides: "wide",
-  genModel: "z-image-turbo", aspect: "1:1", count: 1, variants: 1, clipSeconds: [], seconds: 5, style: "watercolour", keep: "0", voice: null, voiceMax: 10, groups: [], styles: [], genSeconds: 5, genQuality: "fast",
+  genModel: "z-image-turbo", aspect: "1:1", count: 1, variants: 1, clipSeconds: [], seconds: 5, style: "watercolour", keep: "0", voice: null, voiceMax: 10, voices: [], speakVoice: recall("speakVoice") || "", groups: [], styles: [], genSeconds: 5, genQuality: "fast",
   source: null, source2: null,   // {blob, url, w, h} | {from: jobId, url, w, h}
   mask: null,                    // {blob, preview} — transparent where to redraw
   jobs: [], viewing: null, pollTimer: null,
@@ -532,7 +539,9 @@ const EN = {
   "Form behalten: Schnitt, Falten und Kanten bleiben, z. B. derselbe Mantel in rotem Leder. Dafür das Ding ganz markieren.":
     "Keep shape: cut, folds and edges stay, e.g. the same coat in red leather. Mark all of the thing for it.",
   "Stil": "Style", "Stimme (bis": "Voice (up to", "s) – das Video ist so lang wie die Aufnahme": "s) – the video is as long as the recording",
-  "● Aufnehmen": "● Record", "Audiodatei": "Audio file", "Länge": "Length",
+  "● Aufnehmen": "● Record", "Audiodatei": "Audio file", "Text tippen": "Type text", "Sprechen": "Speak",
+  "Spricht …": "Speaking …", "Wartet, bis die laufende Bearbeitung fertig ist …": "Waiting for the job that is running …", "Neu sprechen": "Speak again",
+  "z. B. Hallo Oma, alles Gute zum Geburtstag! Wir haben dich ganz doll lieb.": "e.g. Hi Grandma, happy birthday! We love you so much.", "Länge": "Length",
   "Varianten – jede mit anderem Zufall, die beste behalten": "Variants – each with another seed, keep the best",
   "Wo soll mehr Bild hin?": "Where should more picture go?", "Links und rechts": "Left and right", "Oben und unten": "Top and bottom",
   "Nur oben": "Top only", "Rundum": "All round", "Stelle": "Spot", "Mit dem Finger markieren": "Mark it with a finger",
@@ -598,6 +607,7 @@ const EN = {
   "Was soll auf dem Bild sein? – bitte beschreiben.": "What should be in the picture? – please describe it.",
   "{what} – bitte ausfüllen.": "{what} – please fill in.", "Bitte erst die Stelle mit dem Finger markieren.": "Please mark the spot with a finger first.",
   "Bitte erst etwas aufnehmen oder eine Audiodatei wählen.": "Please record something or choose an audio file first.",
+  "Bitte erst einen Text eingeben": "Please enter a text first",
   "Wird hochgeladen …": "Uploading …", "Darkroom ({n} läuft)": "Darkroom ({n} running)",
   "Abgebrochen": "Cancelled", "Wartet (#{n})": "Waiting (#{n})", "Wartet": "Waiting", "Läuft · {t}": "Running · {t}", "Fehler": "Failed",
   "Das hat nicht geklappt.": "That did not work.", "Abgebrochen.": "Cancelled.",
@@ -723,7 +733,8 @@ async function loadActions() {
   S.clipSeconds = r.clip_seconds || [];
   secondsChips("seconds", (n) => { S.seconds = n; renderEdit(); });
   secondsChips("genSeconds", (n) => { S.genSeconds = n; renderGen(); });
-  S.groups = r.groups || []; S.styles = r.styles || []; S.voiceMax = r.voice_max || 10; S.expand = !!r.expand;
+  S.groups = r.groups || []; S.styles = r.styles || []; S.voiceMax = r.voice_max || 10; S.voices = r.voices || [];
+  $("speakText").maxLength = r.speak_max || 150; renderSpeak(); S.expand = !!r.expand;
   $("voiceMax").textContent = S.voiceMax;
   const box = $("actions"); box.innerHTML = "";
   const grids = {};
@@ -996,6 +1007,51 @@ async function setVoice(blob, name) {
   $("voiceInfo").textContent = (seconds > S.voiceMax ? t("Wird nach {n} s abgeschnitten. ", { n: S.voiceMax }) : "")
     + (seconds ? t("Länge: {n} s", { n: S.voice.seconds.toFixed(1) }) : "");
   renderEdit();
+}
+
+// … or from a text: the server has it spoken in one of llmctl's voices, and it
+// is then the voice as if recorded — played back here first, sent on as it is.
+function renderSpeak() {
+  show("speakOpen", S.voices.length > 0);
+  if (!S.voices.length) show("speakWrap", false);
+  if (!S.voices.includes(S.speakVoice)) S.speakVoice = S.voices.includes("frau") ? "frau" : S.voices[0] || "";
+  const box = $("speakVoices");
+  if (box.dataset.voices !== S.voices.join(",")) {
+    box.dataset.voices = S.voices.join(",");
+    box.replaceChildren(...S.voices.map((v) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.dataset.v = v; b.textContent = v.charAt(0).toUpperCase() + v.slice(1);
+      b.onclick = () => { S.speakVoice = v; store("speakVoice", v); renderSpeak(); };
+      return b;
+    }));
+  }
+  press("speakVoices", "v", S.speakVoice);
+}
+
+function toggleSpeak() {
+  const on = $("speakWrap").classList.contains("hidden");
+  show("speakWrap", on); $("speakOpen").setAttribute("aria-pressed", String(on));
+  if (on) $("speakText").focus();
+}
+
+async function speakText() {
+  const text = $("speakText").value.trim(), btn = $("speakBtn");
+  $("formErr").textContent = "";
+  if (!text) { $("formErr").textContent = t("Bitte erst einen Text eingeben"); return; }
+  btn.disabled = true; btn.textContent = t("Spricht …");
+  // ComfyUI does one thing at a time: the voice goes first, after the job running
+  const slow = setTimeout(() => { btn.textContent = t("Wartet, bis die laufende Bearbeitung fertig ist …"); }, 15000);
+  try {
+    const r = await fetch(API + "/speak", { method: "POST", body: JSON.stringify({ text, voice: S.speakVoice }),
+                                            headers: { "Content-Type": "application/json", "X-Darkroom-Lang": LANG } });
+    if (!r.ok) {
+      let msg = ""; try { msg = (await r.json()).error; } catch (e) {}
+      throw new Error(msg || t("Fehler {n}", { n: r.status }));
+    }
+    await setVoice(await r.blob(), "sprache.wav");
+    btn.textContent = t("Neu sprechen");
+  } catch (e) { $("formErr").textContent = e.message; btn.textContent = t("Sprechen"); }
+  finally { clearTimeout(slow); btn.disabled = false; }
 }
 
 async function toggleRecording() {
@@ -1960,6 +2016,8 @@ for (const b of $("quality").children) b.onclick = () => { if (!b.disabled) { S.
 for (const b of $("sides").children) b.onclick = () => { S.sides = b.dataset.v; renderEdit(); };
 for (const b of $("keep").children) b.onclick = () => { S.keep = b.dataset.v; renderEdit(); };
 $("recBtn").onclick = toggleRecording;
+$("speakOpen").onclick = toggleSpeak;
+$("speakBtn").onclick = speakText;
 for (const b of document.querySelectorAll("[data-tpl]")) b.onclick = () => openTemplates(b.dataset.tpl);
 $("tplClose").onclick = closeTemplates; $("tplBg").onclick = closeTemplates;
 $("tplSearch").oninput = renderTemplates;

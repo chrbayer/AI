@@ -14,6 +14,9 @@
     POST /v1/audio/music          {"model", "prompt" (style), "lyrics", "duration", "seed", "bpm",
                                   "key", "language", "response_format": mp3|flac}: a song or an
                                   instrumental from the music workflows (comfyui/api/audio/)
+    POST /v1/audio/speech         {"input", "voice", "language" (de), "seed", "response_format":
+                                  wav|mp3|flac}: the text spoken by Qwen3-TTS in a voice of
+                                  `llmctl voice`; GET /v1/audio/voices lists them
     POST /v1/video/clips          multipart or JSON: "prompt", "image" (or two in image[]: first
                                   and last), "model", "seconds" (1-10), "size", "quality":
                                   fast|full, "seed": an MP4 with sound (LTX-2.5, api/video/);
@@ -497,10 +500,11 @@ def prepare(graph, prompt, size, images, mask=None, strength=None, pad=None, box
 
 # ── running it ───────────────────────────────────────────────
 
-def execute(graph):
-    """Queue the workflow, wait for it, return its outputs as ComfyUI's history has them."""
+def execute(graph, front=False):
+    """Queue the workflow, wait for it, return its outputs as ComfyUI's history has them.
+    front: ahead of whatever waits (it still waits for the one running)."""
     r = requests.post(f"{ARGS.comfy}/prompt",
-                      json={"prompt": graph, "client_id": str(uuid.uuid4())}, timeout=60)
+                      json={"prompt": graph, "client_id": str(uuid.uuid4()), "front": front}, timeout=60)
     if r.status_code != 200:
         try:
             j = r.json()
@@ -1075,6 +1079,98 @@ def music():
                         time.time() - t0, seed)
         return Response(body, mimetype="audio/flac" if fmt == "flac" else "audio/mpeg",
                         headers={"X-Seed": str(seed), "X-Model": name})
+    return handle(go)
+
+
+# ── speech ───────────────────────────────────────────────────
+
+# Qwen3-TTS (ComfyUI-Qwen-TTS) speaks a text in one of llmctl's voices — the
+# voice-<name>.wav files `llmctl voice` keeps in ComfyUI's input — as the
+# "Qwen3-TTS Stimme klonen" workflow does, x_vector_only so the clone speaks
+# without an accent. For a voice to a talking picture on the ComfyUI already
+# running (Darkroom's Sprechen lassen): 5 s of speech take ~5 s, 8 s with
+# loading. The speech slot (llama.cpp) is faster for speech on demand.
+SPEECH_NODE = "FB_Qwen3TTSVoiceClone"
+SPEECH_LANGUAGES = {"de": "German", "en": "English", "fr": "French", "es": "Spanish", "it": "Italian",
+                    "pt": "Portuguese", "ru": "Russian", "zh": "Chinese", "ja": "Japanese", "ko": "Korean"}
+SPEECH_MAX_CHARS = 1000
+
+
+def speech_voices():
+    """The voices ComfyUI's LoadAudio offers as voice-<name>.*, or None without Qwen3-TTS."""
+    info = requests.get(f"{ARGS.comfy}/object_info/{SPEECH_NODE}", timeout=30).json()
+    if SPEECH_NODE not in info:
+        return None
+    spec = requests.get(f"{ARGS.comfy}/object_info/LoadAudio", timeout=30).json()["LoadAudio"]["input"]["required"]["audio"]
+    files = spec[0] if isinstance(spec[0], list) else (spec[1] or {}).get("options") or []
+    return {m.group(1): f for f in files if (m := re.fullmatch(r"voice-(.+)\.(wav|mp3|flac)", f))}
+
+
+def speech_graph(text, voice_file, language, seed):
+    return {"1": {"class_type": "LoadAudio", "inputs": {"audio": voice_file}},
+            "2": {"class_type": SPEECH_NODE, "inputs": {
+                "target_text": text, "model_choice": "1.7B", "device": "auto", "precision": "bf16",
+                "language": language, "ref_audio": ["1", 0], "ref_text": "", "seed": seed,
+                "max_new_tokens": 2048, "top_p": 1.0, "top_k": 50, "temperature": 0.9,
+                "repetition_penalty": 1.05, "x_vector_only": True, "instruct": "", "attention": "sdpa",
+                "unload_model_after_generate": False, "custom_model_path": ""}},
+            "3": {"class_type": "PreviewAudio", "inputs": {"audio": ["2", 0]}}}
+
+
+@app.get("/v1/audio/voices")
+def voices():
+    def go():
+        found = speech_voices()
+        if found is None:
+            raise Unavailable("ComfyUI has no Qwen3-TTS (ComfyUI-Qwen-TTS) — llmctl update comfy")
+        return jsonify({"voices": sorted(found)})
+    return handle(go)
+
+
+@app.post("/v1/audio/speech")
+def speech():
+    def go():
+        j = request.get_json(silent=True) or {}
+        text = j.get("input")
+        if not isinstance(text, str) or not text.strip():
+            raise Refused("input (the text to speak) is required")
+        if len(text) > SPEECH_MAX_CHARS:
+            raise Refused(f"input is at most {SPEECH_MAX_CHARS} characters")
+        fmt = j.get("response_format") or "wav"
+        if fmt not in ("wav", "mp3", "flac"):
+            raise Refused("response_format is wav, mp3 or flac")
+        lang = j.get("language") or "de"
+        if lang not in SPEECH_LANGUAGES:
+            raise Refused(f"language is one of {', '.join(SPEECH_LANGUAGES)}")
+        found = speech_voices()
+        if found is None:
+            raise Unavailable("ComfyUI has no Qwen3-TTS (ComfyUI-Qwen-TTS) — llmctl update comfy")
+        voice = j.get("voice") or ("frau" if "frau" in found else next(iter(sorted(found)), ""))
+        if voice not in found:
+            raise Refused(f"no voice '{voice}' — there are: {', '.join(sorted(found)) or 'none (llmctl voice add)'}")
+        seed = random.randrange(2**32) if j.get("seed") in (None, "") else int(j["seed"])
+        t0 = time.time()
+        graph = speech_graph(text.strip(), found[voice], SPEECH_LANGUAGES[lang], seed)
+        # ahead of the queue: someone is waiting to hear it, and it takes seconds
+        clips = [a for out in execute(graph, front=True).values() for a in out.get("audio", [])]
+        if not clips:
+            raise RuntimeError("the workflow gave no audio")
+        q = {"filename": clips[0]["filename"], "subfolder": clips[0].get("subfolder", ""), "type": clips[0].get("type", "temp")}
+        v = requests.get(f"{ARGS.comfy}/view", params=q, timeout=120)
+        v.raise_for_status()
+        if fmt == "mp3":
+            body = to_mp3(v.content)
+        elif fmt == "wav":
+            r = subprocess.run(["ffmpeg", "-v", "error", "-i", "pipe:0", "-f", "wav", "pipe:1"],
+                               input=v.content, capture_output=True, timeout=120)
+            if r.returncode != 0:
+                raise RuntimeError("ffmpeg: " + r.stderr.decode(errors="replace")[-300:])
+            body = r.stdout
+        else:
+            body = v.content
+        app.logger.info("speech %s: %d characters in %.1f s, seed %d", voice, len(text), time.time() - t0, seed)
+        return Response(body, mimetype={"wav": "audio/wav", "mp3": "audio/mpeg", "flac": "audio/flac"}[fmt],
+                        headers={"X-Seed": str(seed), "X-Voice": voice})
     return handle(go)
 
 
