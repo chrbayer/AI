@@ -1260,6 +1260,12 @@ EXPAND_TASKS = {
                "the people, animals and things move, their faces, what is heard; the camera holds still unless the "
                "wish says otherwise. Only what fits into a few seconds.",
 }
+# ✨ Text schreiben for Singen lassen: lyrics to fill the song, about the wish or the photo.
+LYRICS_SYSTEM = (
+    "You write the lyrics of a short {style} song that the person in the photo sings. Write in {lang}: about "
+    "{lines} short lines that rhyme and are easy to sing, about the wish — or, without one, about the photo and "
+    "who is in it. Mark the parts with [Verse] and [Chorus], each on a line of its own. Only the lyrics: no "
+    "title, no preamble, no quotes, no explanation.")
 EXPAND_IDLE = 1800                   # s without a request, then the model is stopped again
 EXPAND_NEEDED_GIB = 32               # gemma-moe at Q8 with its mmproj
 _expand = {"started": False, "used": 0.0, "warming": False}
@@ -1419,13 +1425,25 @@ def expand_text():
             return error("Ausbauen ist hier nicht eingerichtet", 501)
         f = request.form
         action, text = f.get("action", ""), (f.get("text") or "").strip()
-        if action not in EXPAND_TASKS:
+        lyrics = action == "lyrics"
+        if action not in EXPAND_TASKS and not lyrics:
             raise Refused("Für diese Aktion gibt es kein Ausbauen")
-        if not text:
+        if not text and not lyrics:
             raise Refused("Erst ein paar Wörter schreiben")
         if len(text) > 2000:
             raise Refused("der Text ist zu lang")
-        content = [{"type": "text", "text": f"{EXPAND_TASKS[action]}\nThe wish: {text}"}]
+        language = "German" if lang() == "de" else "English"
+        if lyrics:
+            try:
+                seconds = min(SONG_MAX, max(SECTION, int(f.get("seconds") or 20)))
+            except ValueError:
+                seconds = 20
+            style = SONG_STYLES.get(f.get("style"), ("", "pop"))[1].split(",")[0]
+            system = LYRICS_SYSTEM.format(style=style, lang=language, lines=round(seconds / SECTION * 3))
+            content = [{"type": "text", "text": f"The wish: {text}" if text else "There is no wish."}]
+        else:
+            system = EXPAND_SYSTEM.format(lang=language)
+            content = [{"type": "text", "text": f"{EXPAND_TASKS[action]}\nThe wish: {text}"}]
         data, _ = picture("image", "from") if action != "generate" else (None, None)
         if data:
             mask = request.files["mask"].read() if "mask" in request.files else None
@@ -1437,14 +1455,13 @@ def expand_text():
                                "image_url": {"url": "data:image/jpeg;base64," + base64.b64encode(jpg).decode()}})
         ensure_expander()
         r = requests.post(f"{expander_url()}/v1/chat/completions", timeout=120, json={
-            "messages": [{"role": "system", "content": EXPAND_SYSTEM.format(lang="German" if lang() == "de" else "English")},
-                         {"role": "user", "content": content}],
-            "max_tokens": 260, "temperature": 0.3})
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": content}],
+            "max_tokens": 400 if lyrics else 260, "temperature": 0.8 if lyrics else 0.3})
         _expand["used"] = time.time()
         out = r.json()["choices"][0]["message"]["content"].strip().strip('"„“”').strip()
         if not out:
             raise Refused("Das Sprachmodell hat nichts geschrieben")
-        return jsonify({"text": out[:2000]})
+        return jsonify({"text": out[:LYRICS_MAX if lyrics else 2000]})
     except Refused as e:
         return error(str(e))
     except (requests.RequestException, ValueError, KeyError, IndexError):

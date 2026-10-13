@@ -573,6 +573,34 @@ class Darkroom(unittest.TestCase):
             self.assertEqual(r.get_json()["error"], "Only 12 GiB of memory free; the language model needs about 30 GB")
         darkroom.ARGS.expand_slot = 0
 
+    def test_lyrics_are_written_for_the_song_from_a_few_words_or_the_photo(self):
+        from unittest import mock
+        client = darkroom.app.test_client()
+        darkroom.ARGS.expand_slot, darkroom.ARGS.expand_port, darkroom.ARGS.expand_model = 4, 8004, "gemma-moe"
+        sent = []
+
+        def post(url, json=None, timeout=None):
+            sent.append(json)
+            return mock.Mock(json=lambda: {"choices": [{"message": {"content": "[Verse]\nHeute ist ein schöner Tag" * 40}}]})
+        with mock.patch.object(darkroom, "ensure_expander"), mock.patch.object(darkroom.requests, "post", side_effect=post):
+            r = client.post("/darkroom/api/expand", data={"action": "lyrics", "text": "Geburtstag von Oma", "style": "schlager",
+                                                           "seconds": "30", "image": (io.BytesIO(self.jpeg(64, 48)), "a.jpg")},
+                            content_type="multipart/form-data")
+            self.assertEqual(len(r.get_json()["text"]), darkroom.LYRICS_MAX)
+            system, user = sent[0]["messages"][0]["content"], sent[0]["messages"][1]["content"]
+            self.assertIn("German schlager song", system)
+            self.assertIn("about 9 short lines", system)
+            self.assertTrue(user[0]["image_url"]["url"].startswith("data:image/jpeg;base64,"))
+            self.assertEqual(user[1]["text"], "The wish: Geburtstag von Oma")
+            r = client.post("/darkroom/api/expand", data={"action": "lyrics", "text": "", "seconds": "99"})
+            self.assertEqual(r.status_code, 200)                       # no words: a song about the photo
+            self.assertIn("about 9 short lines", sent[1]["messages"][0]["content"])
+            self.assertEqual(sent[1]["messages"][1]["content"][0]["text"], "There is no wish.")
+        self.assertNotIn("lyrics", darkroom.EXPAND_TASKS)              # not the ✨ Ausbauen of the main text field
+        page = (ROOT / "darkroom.html").read_text()
+        self.assertIn('data-expand="lyrics"', page)
+        darkroom.ARGS.expand_slot = 0
+
     def test_a_favourite_is_never_pruned_and_always_listed(self):
         from unittest import mock
         ids = []

@@ -2194,7 +2194,17 @@ which section runs. At each section the picture starts again from the photo,
 like a cut. LTX hears the voice alone (the Talking workflow's *Singing voice
 alone*): from the whole song the singer kept her mouth shut. Where the lyrics
 end, the music plays on and the photo stops singing — ACE-Step sang four short
-lines in about 12 of 20 s, so the page asks for 2–3 lines per 10 s.
+lines in about 12 of 20 s, so the page asks for about 3 lines per 10 s.
+*✨ Write lyrics* (*✨ Text schreiben*) has the language model of *✨ Expand*
+write them: it sees the photo, takes a few words ("Oma's birthday") or none
+(then the song is about the photo), and rhymes three lines per 10 s of the
+chosen length in [Verse] and [Chorus], for the chosen style — 2.5 s with the
+model up, 13 s while it loads.
+
+Asking *Animate* for silence does not hold: told nothing of the sound, LTX
+often lets the people babble words of no language, and a sentence for that
+("The person is silent, mouth closed … no speech, no voice") kept two clips of
+seven free of it — the rest babbled or hummed. So the prompt stays as it is.
 
 **Templates.** Next to each text field, *Templates* (*Vorlagen*) opens a library of
 prompts (`darkroom_prompts.json`, ~70, each in German and English): weather and light, seasons, tidying

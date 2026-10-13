@@ -334,7 +334,9 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
       <div class="field" id="stylesWrap"><label>Stil</label><div class="chips" id="styles"></div></div>
       <div class="field" id="songWrap"><label>Liedtext</label>
         <textarea id="lyrics" rows="5" maxlength="600" placeholder="z. B. Heute ist ein schöner Tag, weil ich dich so gerne mag. [Chorus] Alles Gute, hoch sollst du leben!"></textarea>
-        <p class="note" style="margin-top:6px">Etwa 2–3 Zeilen für 10 s – wo der Text endet, spielt nur noch die Musik, und das Foto singt nicht mehr. [Verse] und [Chorus] in eigenen Zeilen gliedern das Lied.</p></div>
+        <div class="textactions"><button class="link hidden" type="button" data-expand="lyrics" id="expandLyrics">✨ Text schreiben</button>
+          <button class="link hidden" type="button" data-undo="lyrics" id="undoLyrics">Rückgängig</button></div>
+        <p class="note" style="margin-top:6px">Etwa 3 kurze Zeilen für 10 s – wo der Text endet, spielt nur noch die Musik, und das Foto singt nicht mehr. ✨ Text schreiben dichtet sie aus ein paar Stichworten oder zum Foto. [Verse] und [Chorus] in eigenen Zeilen gliedern das Lied.</p></div>
       <div class="field" id="songOpts"><label>Stil</label><div class="chips" id="songStyles"></div>
         <label style="margin-top:12px">Stimme</label><div class="chips" id="songVoices"></div>
         <label style="margin-top:12px">Länge</label><div class="chips" id="songSeconds"></div>
@@ -564,7 +566,7 @@ const EN = {
   "Verlauf": "History", "Noch nichts bearbeitet.": "Nothing edited yet.", "Bild wählen": "Choose a picture",
   "Schließen": "Close", "Sichern": "Save", "Fehler suchen": "Find flaws", "Reparieren": "Repair",
   "Weiter bearbeiten": "Edit further", "Löschen": "Delete", "Stelle markieren": "Mark the spot", "Abbrechen": "Cancel",
-  "✨ Ausbauen": "✨ Expand", "Jetzt ausbauen": "Expand it now",
+  "✨ Ausbauen": "✨ Expand", "✨ Text schreiben": "✨ Write lyrics", "Liedtext geschrieben – lesen, anpassen, dann Lied machen": "Lyrics written – read, adjust, then make the song", "Jetzt ausbauen": "Expand it now",
   "Das Sprachmodell startet – beim ersten Mal etwa 15 Sekunden …": "The language model is starting – about 15 seconds the first time …",
   "Formuliert aus …": "Spelling it out …",
   "Ausgebaut – lesen, anpassen, dann los": "Expanded – read it, change it, then go",
@@ -624,7 +626,7 @@ const EN = {
   "Komponiert … etwa 15 Sekunden, beim ersten Mal bis zu 2 Minuten": "Composing … about 15 seconds, up to 2 minutes the first time",
   "Das Lied – das Video ist so lang wie das Lied": "The song – the video is as long as the song",
   "Stimme (bis {n} s) – das Video ist so lang wie die Aufnahme": "Voice (up to {n} s) – the video is as long as the recording",
-  "Etwa 2–3 Zeilen für 10 s – wo der Text endet, spielt nur noch die Musik, und das Foto singt nicht mehr. [Verse] und [Chorus] in eigenen Zeilen gliedern das Lied.": "About 2–3 lines for 10 s – where the lyrics end only the music plays, and the photo stops singing. [Verse] and [Chorus] on lines of their own give the song its parts.",
+  "Etwa 3 kurze Zeilen für 10 s – wo der Text endet, spielt nur noch die Musik, und das Foto singt nicht mehr. ✨ Text schreiben dichtet sie aus ein paar Stichworten oder zum Foto. [Verse] und [Chorus] in eigenen Zeilen gliedern das Lied.": "About 3 short lines for 10 s – where the lyrics end only the music plays, and the photo stops singing. ✨ Write lyrics writes them from a few words or about the photo. [Verse] and [Chorus] on lines of their own give the song its parts.",
   "z. B. Heute ist ein schöner Tag, weil ich dich so gerne mag. [Chorus] Alles Gute, hoch sollst du leben!": "e.g. What a lovely day today, you are dear in every way. [Chorus] Happy birthday, many happy returns!",
   "Wird hochgeladen …": "Uploading …", "Darkroom ({n} läuft)": "Darkroom ({n} running)",
   "Abgebrochen": "Cancelled", "Wartet (#{n})": "Waiting (#{n})", "Wartet": "Waiting", "Läuft · {t}": "Running · {t}", "Fehler": "Failed",
@@ -1284,21 +1286,25 @@ function updateSave() {
   show("expandEdit", !!(a && a.expand) && words > 0 && !E.busy);
   show("expandGen", S.expand && !!$("genText").value.trim() && !E.busy);
   show("undoEdit", E.before.edit != null); show("undoGen", E.before.generate != null);
+  show("expandLyrics", S.expand && !E.busy); show("undoLyrics", E.before.lyrics != null);
 }
 
 // ── Ausbauen ───────────────────────────────────────────
 // A short wish spelled out by a language model that sees the photo (and the
 // marked spot), into the text field: read it, change it, then go. Once, the
 // text before can be had back.
-const E = { busy: false, before: { edit: null, generate: null } };
+// ✨ Text schreiben: the lyrics for Singen lassen, from a few words or the photo alone.
+const E = { busy: false, before: { edit: null, generate: null, lyrics: null } };
+const expandField = (from) => $({ generate: "genText", lyrics: "lyrics" }[from] || "text");
 async function expandText(from) {
-  const field = $(from === "generate" ? "genText" : "text");
+  const field = expandField(from), lyrics = from === "lyrics";
   const text = field.value.trim();
-  if (!text || E.busy) return;
+  if ((!text && !lyrics) || E.busy) return;
   const fd = new FormData();
-  fd.append("action", from === "generate" ? "generate" : S.action); fd.append("text", text);
+  fd.append("action", from === "generate" ? "generate" : lyrics ? "lyrics" : S.action); fd.append("text", text);
+  if (lyrics) { fd.append("style", S.songStyle); fd.append("seconds", S.songSeconds); }
   if (from !== "generate" && S.source) appendPicture(fd, S.source, "image", "from");
-  if (from !== "generate" && S.mask) fd.append("mask", S.mask.blob, "mask.png");
+  if (from === "edit" && S.mask) fd.append("mask", S.mask.blob, "mask.png");
   E.busy = true; updateSave();
   // Starting only when it does not run yet: describing the photo takes some seconds too.
   let up = false;
@@ -1308,12 +1314,12 @@ async function expandText(from) {
   try {
     const r = await api("/expand", { method: "POST", body: fd });
     E.before[from] = field.value; field.value = r.text;
-    toast(t("Ausgebaut – lesen, anpassen, dann los"));
+    toast(t(lyrics ? "Liedtext geschrieben – lesen, anpassen, dann Lied machen" : "Ausgebaut – lesen, anpassen, dann los"));
   } catch (e) { toast(e.message, 5000); }
   clearTimeout(slow); E.busy = false; updateSave();
 }
 function undoExpand(from) {
-  const field = $(from === "generate" ? "genText" : "text");
+  const field = expandField(from);
   if (E.before[from] == null) return;
   field.value = E.before[from]; E.before[from] = null; updateSave();
 }
@@ -2137,12 +2143,13 @@ for (const b of document.querySelectorAll("[data-expand]")) b.onclick = () => ex
 let warmed = 0;
 function warmExpander(from) {
   const a = S.actions.find((x) => x.id === S.action);
-  if (!S.expand || (from !== "generate" && !(a && a.expand)) || Date.now() - warmed < 60000) return;
+  if (!S.expand || (from === "edit" && !(a && a.expand)) || Date.now() - warmed < 60000) return;
   warmed = Date.now();
   api("/expand/warm", { method: "POST" }).catch(() => {});
 }
 $("text").addEventListener("focus", () => warmExpander("edit"));
 $("genText").addEventListener("focus", () => warmExpander("generate"));
+$("lyrics").addEventListener("focus", () => warmExpander("lyrics"));
 for (const b of document.querySelectorAll("[data-undo]")) b.onclick = () => undoExpand(b.dataset.undo);
 for (const b of $("tplScope").children) b.onclick = () => { if (!b.disabled) { T.scope = b.dataset.v; renderTemplates(); } };
 $("audioFile").onchange = (e) => { const f = e.target.files[0]; if (f) setVoice(f, f.name); e.target.value = ""; };
