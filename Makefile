@@ -64,6 +64,14 @@ install:
 	install -Dm644 -t $(SHAREDIR)/comfyui/api/video comfyui/api/video/*.json
 	install -Dm644 -t $(SHAREDIR)/comfyui/patches comfyui/patches/*.patch
 	install -Dm644 -t $(SHAREDIR)/comfyui/nodes/llmctl_nodes comfyui/nodes/llmctl_nodes/*.py
+	# drop what an earlier release installed there and this one no longer has
+	# (a retired workflow would otherwise be copied out on every update, a
+	# dropped patch applied again)
+	for d in workflows api api/audio api/video patches nodes/llmctl_nodes; do \
+	    for f in $(SHAREDIR)/comfyui/$$d/*; do \
+	        [ ! -f "$$f" ] || [ -e "comfyui/$$d/$${f##*/}" ] || rm -f "$$f"; \
+	    done; \
+	done
 	install -Dm644 comfyui/sources.json $(SHAREDIR)/comfyui/sources.json
 	install -Dm644 comfyui/custom_nodes.txt $(SHAREDIR)/comfyui/custom_nodes.txt
 	install -Dm644 comfyui/retired_workflows.txt $(SHAREDIR)/comfyui/retired_workflows.txt

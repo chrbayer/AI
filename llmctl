@@ -6427,9 +6427,14 @@ _comfyui_sync_workflows() {
     while read -r sum name; do
         [[ -z "$sum" || "$sum" == \#* ]] || earlier["$sum  $name"]=1
     done < "$COMFYUI_SHARE/workflow_versions.txt" 2>/dev/null
+    local -A retired=()
+    while read -r sum name; do
+        [[ -z "$sum" || "$sum" == \#* ]] || retired["$name"]=1
+    done < "$COMFYUI_SHARE/retired_workflows.txt" 2>/dev/null
     local added=0 updated=0 differ=()
     for f in "$src"/*.json; do
         name="$(basename "$f")"
+        [[ -n "${retired["$name"]:-}" ]] && continue      # left over from an older install
         if [[ ! -e "$c_wf/$name" ]]; then
             cp "$f" "$c_wf/$name"; added=$(( added + 1 ))
         elif ! cmp -s "$f" "$c_wf/$name"; then
