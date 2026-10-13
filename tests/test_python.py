@@ -636,6 +636,16 @@ class Darkroom(unittest.TestCase):
             run.assert_not_called()
         darkroom.ARGS.expand_slot = 0
 
+    def test_animate_names_a_sound_so_that_no_one_babbles_unless_the_wish_wants_a_voice(self):
+        prompt = darkroom.clip_prompt({"action": "animate", "text": "Lächeln und mit den Flügeln schlagen"})
+        self.assertEqual(prompt, "Lächeln und mit den Flügeln schlagen." + darkroom.SOUND)
+        self.assertTrue(darkroom.clip_prompt({"action": "animate", "text": ""}).endswith("holds still." + darkroom.SOUND))
+        for wish in ("Sie sagt Hallo", "She sings softly", "Er ruft seinen Hund"):
+            self.assertEqual(darkroom.clip_prompt({"action": "animate", "text": wish}), wish)
+        self.assertEqual(darkroom.clip_prompt({"action": "talk", "text": "Er lacht"}), "Er lacht")
+        self.assertEqual(darkroom.clip_prompt({"action": "animate", "text": "a red dress waves"}),
+                         "a red dress waves." + darkroom.SOUND)
+
     def test_animate_and_editing_further_can_spell_a_wish_out(self):
         self.assertIn("animate", darkroom.EXPAND_TASKS)
         self.assertNotIn("talk", darkroom.EXPAND_TASKS)        # its text is how it looks, the words are the voice
@@ -1211,7 +1221,7 @@ class Darkroom(unittest.TestCase):
 
     def test_animate_with_an_end_picture_runs_first_to_last(self):
         _, form, files, job = self.clip(action="animate", image2=self.jpeg(64, 64), quality="best", text="she waves")
-        self.assertEqual((form["model"], form["quality"], form["prompt"]), ("ltx-25-first-last-frame", "full", "she waves"))
+        self.assertEqual((form["model"], form["quality"], form["prompt"]), ("ltx-25-first-last-frame", "full", "she waves." + darkroom.SOUND))
         self.assertEqual(files, ["image[]", "image[]"])
         self.assertTrue(job["two"])
 

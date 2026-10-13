@@ -1027,10 +1027,22 @@ def run_repair(job, d):
                     time.time() - job["started"])
 
 
+# Animieren: told nothing of the sound, LTX lets the people babble words of no
+# language (a short wish: all 6 seeds, voice nearly all of the sound). Naming a
+# sound that is no voice keeps them quiet (5 of 6); forbidding speech does not,
+# the words "voice" and "speech" call it up. Not where the wish wants a voice.
+SOUND = " Audio: soft background music and the natural sounds of the scene."
+TALKING = re.compile(r"\b(sprech|sprich|spricht|sagt|sage|rede|redet|ruft|rufen|singt|singen|sang|erzähl|flüster|"
+                     r"speak|talk|say|sing|shout|whisper)", re.IGNORECASE)
+
+
 def clip_prompt(job):
     spec = ACTIONS.get(job["action"])
     text = (job.get("text") or "").strip()
-    return text or (spec["prompt"] if spec else "")
+    prompt = text or (spec["prompt"] if spec else "")
+    if job["action"] == "animate" and not TALKING.search(text):
+        prompt = prompt.rstrip().rstrip(".") + "." + SOUND
+    return prompt
 
 
 def poster(d):

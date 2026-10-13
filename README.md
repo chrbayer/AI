@@ -2201,10 +2201,15 @@ write them: it sees the photo, takes a few words ("Oma's birthday") or none
 chosen length in [Verse] and [Chorus], for the chosen style — 2.5 s with the
 model up, 13 s while it loads.
 
-Asking *Animate* for silence does not hold: told nothing of the sound, LTX
-often lets the people babble words of no language, and a sentence for that
-("The person is silent, mouth closed … no speech, no voice") kept two clips of
-seven free of it — the rest babbled or hummed. So the prompt stays as it is.
+*Animate* names the sound: told nothing of it, LTX lets the people babble
+words of no language — for the short wish "Lächeln und mit den Flügeln
+schlagen" in all 6 seeds, the voice 99.9–100 % of the sound (HDemucs's vocals
+against the whole). " Audio: soft background music and the natural sounds of
+the scene." at its end took the voice out of 5 of 6 (one kept 36 %); asking for
+silence instead ("The person is silent, mouth closed … no speech, no voice")
+did it in 2 of 6, the words calling the voice up. The longer default text had
+no voice either way (beach and man, 3 seeds each). A wish that has someone
+speak, sing, call or whisper gets no such end.
 
 **Templates.** Next to each text field, *Templates* (*Vorlagen*) opens a library of
 prompts (`darkroom_prompts.json`, ~70, each in German and English): weather and light, seasons, tidying
