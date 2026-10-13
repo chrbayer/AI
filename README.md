@@ -936,7 +936,9 @@ prefill up a little (1149 / 1444 / 1404), the answers byte for byte the same;
 0.10.0 the same evening), 0.12.0 the prefill again (1108 / 1447 / 1386 against
 1031 / 1394 / 1301), the decode within its spread; 0.13.0 the code decode
 5 % down (53.3–53.8 against 56.1–56.6, two runs each), the rest the same;
-0.14.0 all of it the same as 0.13.0 (two runs each, the answers byte for byte).
+0.14.0 all of it the same as 0.13.0 (two runs each, the answers byte for byte);
+0.15.0 the long prefill 5 % up (1443–1491 / 1427–1484 against 1411–1424 /
+1359–1380), the rest the same.
 
 `flash-gufo-unc` is the uncensored Flash-Next on gufo: vmlinux's Q4 Mix of
 orcarouter's Qwen3.8-Flash-Next-Uncensored (one file, 110 GB), with the MTP
