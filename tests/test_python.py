@@ -1096,6 +1096,7 @@ class Darkroom(unittest.TestCase):
         self.assertTrue(form["prompt"].startswith("The person speaks"))
         self.assertEqual(self.post(action="talk", image=self.jpeg(64, 64)).status_code, 400)
 
+    @unittest.skipIf(shutil.which("ffmpeg") is None, "needs ffmpeg")
     def test_a_song_is_sung_in_ten_second_sections_and_joined_to_the_frame(self):
         import subprocess, wave
         from unittest import mock
