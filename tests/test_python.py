@@ -608,6 +608,13 @@ class Darkroom(unittest.TestCase):
             run.assert_not_called()
         darkroom.ARGS.expand_slot = 0
 
+    def test_animate_and_editing_further_can_spell_a_wish_out(self):
+        self.assertIn("animate", darkroom.EXPAND_TASKS)
+        self.assertNotIn("talk", darkroom.EXPAND_TASKS)        # its text is how it looks, the words are the voice
+        page = (ROOT / "darkroom.html").read_text()
+        cont = page[page.index("function continueWith()"):]
+        self.assertIn('$("text").value = ""', cont[:cont.index("\n}\n")])   # the wish was for the step before
+
     def test_entering_the_text_field_warms_the_expanding_model_in_the_background(self):
         from unittest import mock
         client = darkroom.app.test_client()
@@ -615,11 +622,23 @@ class Darkroom(unittest.TestCase):
         self.assertEqual(client.post("/darkroom/api/expand/warm").status_code, 501)
         darkroom.ARGS.expand_slot = 4
         started = threading.Event()
-        with mock.patch.object(darkroom, "ensure_expander", side_effect=started.set):
-            self.assertEqual(client.post("/darkroom/api/expand/warm").status_code, 202)
+        with mock.patch.object(darkroom, "ensure_expander", side_effect=started.set), \
+                mock.patch.object(darkroom, "expander_state", return_value=None):
+            r = client.post("/darkroom/api/expand/warm")
+            self.assertEqual((r.status_code, r.get_json()["up"]), (202, False))
             self.assertTrue(started.wait(5))
-        with mock.patch.object(darkroom, "ensure_expander", side_effect=darkroom.Refused("Nur 10 GiB")):
+        with mock.patch.object(darkroom, "ensure_expander", side_effect=darkroom.Refused("Nur 10 GiB")), \
+                mock.patch.object(darkroom, "expander_state", return_value=None):
             self.assertEqual(client.post("/darkroom/api/expand/warm").status_code, 202)   # quietly
+        for _ in range(50):
+            if not darkroom._expand["warming"]:
+                break
+            time.sleep(0.05)
+        # running already: nothing started, and the page is told so (no "starting" notice)
+        with mock.patch.object(darkroom, "ensure_expander") as ensure, \
+                mock.patch.object(darkroom, "expander_state", return_value=True):
+            r = client.post("/darkroom/api/expand/warm")
+        self.assertEqual((r.get_json()["up"], ensure.called), (True, False))
         for _ in range(50):
             if not darkroom._expand["warming"]:
                 break

@@ -556,6 +556,7 @@ const EN = {
   "Weiter bearbeiten": "Edit further", "Löschen": "Delete", "Stelle markieren": "Mark the spot", "Abbrechen": "Cancel",
   "✨ Ausbauen": "✨ Expand", "Jetzt ausbauen": "Expand it now",
   "Das Sprachmodell startet – beim ersten Mal etwa 15 Sekunden …": "The language model is starting – about 15 seconds the first time …",
+  "Formuliert aus …": "Spelling it out …",
   "Ausgebaut – lesen, anpassen, dann los": "Expanded – read it, change it, then go",
   "{n} von {m}": "{n} of {m}", "Die geteilten Fotos sind nicht mehr da.": "The shared photos are gone.", "Wartet auf den Schritt davor.": "Waits for the step before.", "Schritt {n} von {m}": "Step {n} of {m}", "Schritt {n}/{m}": "step {n}/{m}", "{n} Fotos": "{n} photos",
   "{n} Fotos – die Aktion läuft für jedes": "{n} photos – the action runs for each",
@@ -1222,7 +1223,11 @@ async function expandText(from) {
   if (from !== "generate" && S.source) appendPicture(fd, S.source, "image", "from");
   if (from !== "generate" && S.mask) fd.append("mask", S.mask.blob, "mask.png");
   E.busy = true; updateSave();
-  const slow = setTimeout(() => toast(t("Das Sprachmodell startet – beim ersten Mal etwa 15 Sekunden …"), 15000), 2500);
+  // Starting only when it does not run yet: describing the photo takes some seconds too.
+  let up = false;
+  try { up = (await api("/expand/warm", { method: "POST" })).up; } catch (e) {}
+  const slow = setTimeout(() => toast(up ? t("Formuliert aus …")
+                                         : t("Das Sprachmodell startet – beim ersten Mal etwa 15 Sekunden …"), 15000), 2500);
   try {
     const r = await api("/expand", { method: "POST", body: fd });
     E.before[from] = field.value; field.value = r.text;
@@ -1854,6 +1859,7 @@ function continueWith() {
   const job = S.jobs.find((x) => x.id === S.viewing.id);
   setSource({ from: job.id, url: `${API}/jobs/${job.id}/result`, w: job.result_size && job.result_size[0], h: job.result_size && job.result_size[1] });
   setMode("edit");
+  $("text").value = ""; E.before.edit = null; updateSave();     // the wish was for the step before
   closeViewer(); window.scrollTo({ top: 0, behavior: "smooth" });
   toast(t("Ergebnis ist jetzt das Ausgangsbild – nächste Aktion wählen."));
 }
@@ -2015,6 +2021,16 @@ for (const b of $("mode").children) b.onclick = () => setMode(b.dataset.mode);
 for (const b of $("quality").children) b.onclick = () => { if (!b.disabled) { S.quality = b.dataset.q; store("quality", S.quality); renderEdit(); } };
 for (const b of $("sides").children) b.onclick = () => { S.sides = b.dataset.v; renderEdit(); };
 for (const b of $("keep").children) b.onclick = () => { S.keep = b.dataset.v; renderEdit(); };
+// The start button above the keyboard: iOS leaves what is fixed at the bottom
+// where it was, behind the keyboard; the visual viewport says how far up to go.
+if (window.visualViewport) {
+  const lift = () => {
+    const vv = window.visualViewport, d = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    document.querySelector(".go").style.transform = d > 40 ? `translateY(${-d}px)` : "";
+  };
+  window.visualViewport.addEventListener("resize", lift);
+  window.visualViewport.addEventListener("scroll", lift);
+}
 $("recBtn").onclick = toggleRecording;
 $("speakOpen").onclick = toggleSpeak;
 $("speakBtn").onclick = speakText;

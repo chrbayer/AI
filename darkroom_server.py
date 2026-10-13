@@ -1160,6 +1160,9 @@ EXPAND_TASKS = {
             "photo's person and place are not kept. Describe who or what stands there and where, in full.",
     "expand": "The photo is continued beyond its edges. Describe the whole wider scene, the photo's part included.",
     "generate": "A picture is made from words alone. Describe the whole picture: subject, setting, light, style.",
+    "animate": "The photo comes to life as a clip of a few seconds with sound. Describe what happens in it: how "
+               "the people, animals and things move, their faces, what is heard; the camera holds still unless the "
+               "wish says otherwise. Only what fits into a few seconds.",
 }
 EXPAND_IDLE = 1800                   # s without a request, then the model is stopped again
 EXPAND_NEEDED_GIB = 32               # gemma-moe at Q8 with its mmproj
@@ -1259,7 +1262,11 @@ def warm_expander():
     ✨ Ausbauen answers at once; quietly nothing when it cannot (memory, slot)."""
     if not getattr(ARGS, "expand_slot", 0):
         return error("Ausbauen ist hier nicht eingerichtet", 501)
-    if not _expand["warming"]:
+    # up: it runs already — ✨ Ausbauen then does not say it is starting
+    up = not _expand["warming"] and expander_state() is True
+    if up:
+        _expand["used"] = time.time()
+    elif not _expand["warming"]:
         _expand["warming"] = True
 
         def warm():
@@ -1270,7 +1277,7 @@ def warm_expander():
             finally:
                 _expand["warming"] = False
         threading.Thread(target=warm, daemon=True).start()
-    return jsonify({"ok": True}), 202
+    return jsonify({"ok": True, "up": up}), 202
 
 
 @app.post("/darkroom/api/expand")
