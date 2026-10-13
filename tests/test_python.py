@@ -614,6 +614,7 @@ class Darkroom(unittest.TestCase):
         page = (ROOT / "darkroom.html").read_text()
         cont = page[page.index("function continueWith()"):]
         self.assertIn('$("text").value = ""', cont[:cont.index("\n}\n")])   # the wish was for the step before
+        self.assertIn("interactive-widget=resizes-content", page)   # Android: the start button over the keyboard
 
     def test_entering_the_text_field_warms_the_expanding_model_in_the_background(self):
         from unittest import mock

@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="theme-color" content="#161618">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -2021,8 +2021,10 @@ for (const b of $("mode").children) b.onclick = () => setMode(b.dataset.mode);
 for (const b of $("quality").children) b.onclick = () => { if (!b.disabled) { S.quality = b.dataset.q; store("quality", S.quality); renderEdit(); } };
 for (const b of $("sides").children) b.onclick = () => { S.sides = b.dataset.v; renderEdit(); };
 for (const b of $("keep").children) b.onclick = () => { S.keep = b.dataset.v; renderEdit(); };
-// The start button above the keyboard: iOS leaves what is fixed at the bottom
-// where it was, behind the keyboard; the visual viewport says how far up to go.
+// The start button above the keyboard. Chrome and Firefox on Android shrink the
+// page for it (interactive-widget=resizes-content in the viewport tag), so it
+// moves up by itself; iOS leaves what is fixed at the bottom behind the
+// keyboard, and the visual viewport says how far up to go.
 if (window.visualViewport) {
   const lift = () => {
     const vv = window.visualViewport, d = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
