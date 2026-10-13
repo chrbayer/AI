@@ -21,7 +21,7 @@
 #         Slots are not a fixed set — any N the ports have room for works.
 
 PROG=llmctl
-LLMCTL_VERSION="1.98.1"
+LLMCTL_VERSION=1.98.2
 LLMCTL_REPO="chrbayer/AI"          # its releases (vX.Y.Z) are what self-update and outdated follow
 
 # ── Where things live ───────────────────────────────────────
@@ -4880,7 +4880,7 @@ _self_source() {
     [[ -n "$src" && -d "$src/.git" && -f "$src/llmctl" ]] && echo "$src"
 }
 
-_version_of() { sed -n 's/^LLMCTL_VERSION=\([0-9.]*\).*/\1/p' "$1/llmctl" 2>/dev/null; }
+_version_of() { sed -n 's/^LLMCTL_VERSION=["'\'']\{0,1\}\([0-9.]*\).*/\1/p' "$1/llmctl" 2>/dev/null; }
 
 # newer A B: A is a later version than B
 _newer() { [[ "$1" != "$2" && "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" == "$1" ]]; }

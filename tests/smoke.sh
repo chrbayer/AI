@@ -75,6 +75,7 @@ echo "llmctl smoke tests (sandbox: $SANDBOX)"
 
 # ── the program answers at all ───────────────────────────────
 check "version prints one"              "llmctl 1."        -- "$L" version
+check "version line stays unquoted"     "LLMCTL_VERSION=1." -- grep -m1 "^LLMCTL_VERSION=[0-9]" "$L"
 check "help lists the speech backend"   "/v1/audio/speech" -- "$L" help
 check "list shows every backend"        "ComfyUI (images)" -- "$L" list
 check "list shows the speech model"     "Qwen3-TTS"        -- "$L" list
