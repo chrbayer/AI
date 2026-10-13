@@ -601,26 +601,56 @@ class Darkroom(unittest.TestCase):
         self.assertIn('data-expand="lyrics"', page)
         darkroom.ARGS.expand_slot = 0
 
-    def test_a_favourite_is_never_pruned_and_always_listed(self):
+    def test_nothing_is_deleted_by_itself_and_the_history_shows_the_newest_the_starred_and_the_running(self):
         from unittest import mock
         ids = []
         for i in range(5):
             j = darkroom.new_job({"action": "edit", "label": "Ändern", "text": str(i)})
             darkroom.update_job(j["id"], state="done", created=1000 + i)
             ids.append(j["id"])
+        darkroom.update_job(ids[1], state="running")
         client = darkroom.app.test_client()
         r = client.post(f"/darkroom/api/jobs/{ids[0]}/star", json={"on": True})
         self.assertTrue(r.get_json()["star"])
-        with mock.patch.object(darkroom, "KEEP_JOBS", 2):
-            darkroom.prune_jobs()
-        left = {j["id"] for j in darkroom.all_jobs()}
-        self.assertEqual(left, {ids[0], ids[3], ids[4]})                  # the newest two, and the star
-        with mock.patch.object(darkroom, "all_jobs", return_value=[{"id": str(i), "state": "done", "star": i == 99}
-                                                                     for i in range(100)]):
-            listed = [j["id"] for j in client.get("/darkroom/api/jobs").get_json()]
-        self.assertEqual(len(listed), 61)
-        self.assertEqual(listed[-1], "99")
+        self.assertFalse(hasattr(darkroom, "prune_jobs"))
+        with mock.patch.object(darkroom, "RECENT", 2):
+            r = client.get("/darkroom/api/jobs")
+        self.assertEqual([j["id"] for j in r.get_json()], [ids[4], ids[3], ids[1], ids[0]])   # newest 2, running, star
+        self.assertEqual(r.headers["X-Darkroom-Total"], str(len(darkroom.all_jobs())))
         self.assertFalse(client.post(f"/darkroom/api/jobs/{ids[0]}/star", json={"on": False}).get_json()["star"])
+
+    def test_the_archive_is_searched_and_filtered_on_the_server(self):
+        made = {}
+        for i, (action, label, text, video, created) in enumerate([
+                ("animate", "Animieren", "Lächeln und mit den Flügeln schlagen", True, 2000),
+                ("edit", "Ändern", "Als Fee mit Flügeln", False, 3000),
+                ("edit", "Ändern", "Winterlandschaft", False, 4000),
+                ("sing", "Singen lassen", "", True, 5000)]):
+            j = darkroom.new_job({"action": action, "label": label, "text": text, "video": video})
+            darkroom.update_job(j["id"], state="failed" if i == 2 else "done", created=created)
+            (darkroom.job_path(j["id"]) / "result.png").write_bytes(b"x" * 1000)
+            made[i] = j["id"]
+        client = darkroom.app.test_client()
+
+        def ids(**q):
+            r = client.get("/darkroom/api/archive", query_string=q).get_json()
+            return [j["id"] for j in r["items"] if j["id"] in made.values()], r
+        got, r = ids(q="flügeln")
+        self.assertEqual(got, [made[1], made[0]])                        # newest first
+        self.assertEqual({f["id"]: f["n"] for f in r["actions"]}, {"edit": 1, "animate": 1})
+        self.assertGreaterEqual(r["bytes"], 4000)
+        got, r = ids(q="flügeln", action="animate")
+        self.assertEqual((got, r["total"]), ([made[0]], 1))
+        self.assertEqual({f["id"]: f["n"] for f in r["actions"]}, {"edit": 1, "animate": 1})   # counts under the other filters
+        self.assertEqual(ids(kind="video", since=1500, until=5000)[0], [made[0]])
+        self.assertEqual(ids(failed=1)[0], [made[2]])
+        self.assertEqual(ids(q="singen")[0], [made[3]])                   # the action's name is searched too
+        got, r = ids(limit=1, offset=1, since=1500)
+        self.assertEqual((got, r["total"]), ([made[2]], 4))
+        self.assertEqual(client.get("/darkroom/api/archive?since=gestern").status_code, 400)
+        page = (ROOT / "darkroom.html").read_text()
+        self.assertIn('id="archive"', page)
+        self.assertIn("X-Darkroom-Total", page)
 
     def test_the_expanding_model_is_stopped_also_when_an_earlier_run_started_it(self):
         from unittest import mock

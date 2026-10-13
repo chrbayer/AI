@@ -2271,9 +2271,19 @@ with a frame to drag by its middle and its corners, free or held to 1:1, 4:3,
 source picture — in the browser, on a canvas, nothing goes to the server
 until the job.
 
-**Favourites.** ☆ in the viewer stars a result: the history keeps the last
-100 jobs and every starred one besides, and lists the starred ones also past
-the newest 60; *☆ Favourites* (*Favoriten*) over the history shows only them.
+**Favourites.** ☆ in the viewer stars a result: the history lists it beside
+the newest 25; *☆ Favourites* (*Favoriten*) over the history shows only them.
+
+**History and archive.** Nothing is deleted but by hand (🗑 in the viewer, or
+*Keep* among variants). The history on the page shows the newest 25 jobs, the
+starred ones and those still waiting or running; *Archive · n* (*Archiv*)
+below it opens all of them as a grid by month, searched on the server — words
+in the wish, the action's or the model's name — and filtered by time (today,
+7 or 30 days, this year, a period), by action (chips with their counts under
+the other filters), pictures or videos, favourites and failures, 60 at a time.
+It says what the whole archive takes on disk. The server reads a job.json
+again only when it changed and counts a job's size once, so a long archive
+stays quick.
 
 **Expand a short wish.** A few words often do little — "Als Almhütte" put
 mountains in the window, "rot" on a marked shirt made it white. *✨ Expand*
@@ -2380,7 +2390,7 @@ raised to the hard one.
 **Jobs run on the server.** The phone sends the picture once — scaled to
 2560 px in the browser, turned upright by its EXIF, iPhone HEIC as JPEG — and
 the server queues it, one at a time, sends it to the image API and keeps the
-result in `~/.local/share/llmctl/darkroom/jobs/` (the last 100). A locked screen
+result in `~/.local/share/llmctl/darkroom/jobs/` (all of them, until deleted). A locked screen
 or a lost connection costs nothing: the page finds the result in its list
 when it comes back. Results come as JPEG (quality 92), cut-outs as PNG.
 

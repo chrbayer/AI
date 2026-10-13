@@ -9,7 +9,8 @@
     POST /darkroom/api/prompts    {"title", "action", "text", "options"}: keep one of the user's own
     DELETE /darkroom/api/prompts/<id>
     POST /darkroom/api/jobs       multipart: image (or from=<job id>), action, quality, text, n
-    GET  /darkroom/api/jobs       the jobs, newest first
+    GET  /darkroom/api/jobs       the jobs of the history: the newest RECENT, the starred and the running
+    GET  /darkroom/api/archive    all jobs, searched and filtered: q, action, kind, star, failed, since, until, offset, limit
     GET  /darkroom/api/jobs/<id>  one job
     GET  /darkroom/api/jobs/<id>/<input|result>[?thumb=1][&download=1]
     POST /darkroom/api/jobs/<id>/cancel   stop a job that waits or runs
@@ -363,7 +364,8 @@ SIDES = {
     "all": {"left": 192, "right": 192, "top": 192, "bottom": 192},
     "top": {"left": 0, "right": 0, "top": 384, "bottom": 0},
 }
-KEEP_JOBS = 100
+RECENT = 25                                    # the history's newest jobs; the archive has them all
+ARCHIVE_PAGE = 60
 OWN_MAX = 200                                  # the user's own templates
 OWN_TOPIC = "Eigene"
 VARIANTS_MAX = 3                               # Varianten of an edit at once
@@ -455,6 +457,7 @@ EN = {
     "Die anderen Varianten laufen noch": "The other variants are still running",
     "Ausbauen ist hier nicht eingerichtet": "Expanding is not set up here",
     "Für diese Aktion gibt es kein Ausbauen": "This action has no expanding",
+    "ungültiger Filter": "invalid filter",
     "Erst ein paar Wörter schreiben": "Write a few words first",
     "Das Sprachmodell hat nichts geschrieben": "The language model wrote nothing",
     "Das Sprachmodell antwortet nicht": "The language model does not answer",
@@ -621,21 +624,38 @@ def update_job(jid, **fields):
         return job
 
 
+# Nothing is deleted but by hand, so the jobs only grow: each job.json is read
+# again only when it changed, and a job's size on disk only once it has ended.
+_job_cache = {}                                # job.json -> (mtime_ns, job, bytes or None)
+
+
 def all_jobs():
-    out = []
+    out, seen = [], set()
     for d in jobs_dir().glob("*/job.json"):
         try:
-            out.append(json.loads(d.read_text()))
+            m = d.stat().st_mtime_ns
+            hit = _job_cache.get(d)
+            if hit is None or hit[0] != m:
+                hit = _job_cache[d] = (m, json.loads(d.read_text()), None)
         except (OSError, ValueError):
             continue
+        seen.add(d)
+        out.append(dict(hit[1]))
+    for d in set(_job_cache) - seen:
+        _job_cache.pop(d, None)
     return sorted(out, key=lambda j: j["created"], reverse=True)
 
 
-def prune_jobs():
-    """The last KEEP_JOBS jobs stay, and every starred one besides."""
-    for job in [j for j in all_jobs() if not j.get("star")][KEEP_JOBS:]:
-        if job["state"] in ("done", "failed"):
-            shutil.rmtree(job_path(job["id"]), ignore_errors=True)
+def job_bytes(job):
+    """What a job takes on disk; counted once it has ended."""
+    d = job_path(job["id"]) / "job.json"
+    hit = _job_cache.get(d)
+    if hit is not None and hit[2] is not None:
+        return hit[2]
+    size = sum(f.stat().st_size for f in d.parent.iterdir() if f.is_file())
+    if hit is not None and job["state"] in ("done", "failed"):
+        _job_cache[d] = (hit[0], hit[1], size)
+    return size
 
 
 def public(job):
@@ -1061,7 +1081,6 @@ def worker():
             run_job(jid)
         except Exception:                                         # noqa: BLE001
             app.logger.exception("job %s", jid)
-        prune_jobs()
 
 
 def janitor():
@@ -1856,9 +1875,53 @@ def create_job():
 
 @app.get("/darkroom/api/jobs")
 def list_jobs():
-    """The newest 60, and the starred ones older than that."""
+    """The newest RECENT, and the starred and the unfinished ones older than
+    that; how many there are in all in X-Darkroom-Total, for the archive."""
     jobs = [j for j in all_jobs() if visible(j)]
-    return jsonify([public(j) for j in jobs[:60] + [j for j in jobs[60:] if j.get("star")]])
+    older = [j for j in jobs[RECENT:] if j.get("star") or j["state"] in ("queued", "running")]
+    r = jsonify([public(j) for j in jobs[:RECENT] + older])
+    r.headers["X-Darkroom-Total"] = str(len(jobs))
+    return r
+
+
+def archive_match(job, q, kind, star, failed, since, until):
+    if q and not all(w in " ".join(str(job.get(k) or "") for k in ("text", "label", "model_label", "style")).lower()
+                     + " " + tr(job.get("label") or "").lower() for w in q.split()):
+        return False
+    if kind == "video" and not job.get("video") or kind == "image" and job.get("video"):
+        return False
+    if star and not job.get("star") or failed and job["state"] != "failed":
+        return False
+    return (since is None or job["created"] >= since) and (until is None or job["created"] < until)
+
+
+@app.get("/darkroom/api/archive")
+def archive():
+    """All jobs, nothing deleted but by hand: searched (q, in the wish, the
+    action, the model), filtered (action, kind image|video, star, failed, since
+    and until in epoch seconds), a page from offset. With the count of each
+    action under the other filters, and what the whole archive takes on disk."""
+    a = request.args
+    try:
+        since = float(a["since"]) if a.get("since") else None
+        until = float(a["until"]) if a.get("until") else None
+        offset = max(0, int(a.get("offset") or 0))
+        limit = min(200, max(0, int(a.get("limit") or ARCHIVE_PAGE)))
+    except ValueError:
+        return error("ungültiger Filter")
+    jobs = [j for j in all_jobs() if visible(j)]
+    hits = [j for j in jobs if archive_match(j, (a.get("q") or "").strip().lower(), a.get("kind"), a.get("star") == "1",
+                                             a.get("failed") == "1", since, until)]
+    actions = {}
+    for j in hits:
+        n = actions.setdefault(j["action"], {"id": j["action"], "label": tr(j.get("label") or j["action"]), "n": 0})
+        n["n"] += 1
+    wanted = [x for x in (a.get("action") or "").split(",") if x]
+    if wanted:
+        hits = [j for j in hits if j["action"] in wanted]
+    return jsonify({"total": len(hits), "all": len(jobs), "bytes": sum(job_bytes(j) for j in jobs),
+                    "actions": sorted(actions.values(), key=lambda x: -x["n"]),
+                    "items": [public(j) for j in hits[offset:offset + limit]]})
 
 
 @app.post("/darkroom/api/jobs/<jid>/star")

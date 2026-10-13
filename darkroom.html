@@ -231,6 +231,30 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
          background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-size: 14px;
          z-index: 30; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100vw - 32px); }
 .toast.on { opacity: 1; }
+/* the archive: every job, searched and filtered, under the viewer */
+.arch { position: fixed; inset: 0; z-index: 15; background: var(--bg); display: none; flex-direction: column; }
+.arch.on { display: flex; }
+.arch .head { padding: calc(10px + env(safe-area-inset-top)) 16px 10px; display: flex; flex-direction: column; gap: 10px;
+              border-bottom: 1px solid var(--line); background: var(--panel); }
+.arch .head input[type=search], .arch .head input[type=date] { width: 100%; font: inherit; color: var(--text); background: var(--bg);
+              border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.arch .range { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.arch .range label { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+.arch .chips { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.arch .chips button { flex: none; min-height: 34px; padding: 5px 12px; font-size: 14px; }
+.arch .chips button small { color: var(--muted); margin-left: 4px; }
+.arch .body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 16px calc(20px + env(safe-area-inset-bottom)); }
+.arch .sum { font-size: 13px; color: var(--muted); }
+.arch h4 { font-size: 13px; color: var(--muted); margin: 16px 2px 8px; font-weight: 650; }
+.arch .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; }
+.arch .cell { position: relative; aspect-ratio: 1; border: none; padding: 0; border-radius: 10px; overflow: hidden; background: var(--panel); }
+.arch .cell img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.arch .cell .ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 24px; }
+.arch .cell .cap { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 6px 4px; font-size: 11px; color: #fff; text-align: left;
+                   background: linear-gradient(transparent, rgba(0,0,0,.65)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.arch .cell .mark { position: absolute; top: 4px; right: 5px; font-size: 13px; color: #fff; text-shadow: 0 0 3px #000; }
+.arch .cell.failed { outline: 2px solid var(--bad); outline-offset: -2px; }
+#archiveOpen { width: 100%; margin-top: 10px; }
 .sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 25; display: none; }
 .sheet-bg.on { display: block; }
 .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 26; background: var(--panel); border-radius: 18px 18px 0 0;
@@ -433,10 +457,40 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
   <section class="card">
     <div class="labelrow"><h2>Verlauf</h2><button class="link" type="button" id="starFilter" aria-pressed="false">☆ Favoriten</button></div>
     <div class="jobs" id="jobs"><p class="empty">Noch nichts bearbeitet.</p></div>
+    <button class="btn hidden" type="button" id="archiveOpen">Archiv</button>
   </section>
 </main>
 
 <div class="go"><button class="btn primary" id="goBtn" type="button" disabled>Bild wählen</button></div>
+
+<div class="arch" id="archive" role="dialog" aria-modal="true">
+  <div class="head">
+    <div class="labelrow"><h3 style="margin:0">Archiv</h3><button class="link" id="archiveClose" type="button">Schließen</button></div>
+    <input type="search" id="archQ" placeholder="Suchen: z. B. Fee, Geburtstag, Animieren" autocomplete="off" enterkeyhint="search">
+    <div class="chips" id="archTime">
+      <button type="button" data-v="all" aria-pressed="true">Alle</button>
+      <button type="button" data-v="today" aria-pressed="false">Heute</button>
+      <button type="button" data-v="7" aria-pressed="false">7 Tage</button>
+      <button type="button" data-v="30" aria-pressed="false">30 Tage</button>
+      <button type="button" data-v="year" aria-pressed="false">Dieses Jahr</button>
+      <button type="button" data-v="range" aria-pressed="false">Zeitraum …</button>
+    </div>
+    <div class="range hidden" id="archRange">
+      <label>Von<input type="date" id="archFrom"></label>
+      <label>Bis<input type="date" id="archTo"></label>
+    </div>
+    <div class="chips" id="archKind">
+      <button type="button" data-v="" aria-pressed="true">Bilder und Videos</button>
+      <button type="button" data-v="image" aria-pressed="false">Bilder</button>
+      <button type="button" data-v="video" aria-pressed="false">Videos</button>
+      <button type="button" data-f="star" aria-pressed="false">★ Favoriten</button>
+      <button type="button" data-f="failed" aria-pressed="false">Fehler</button>
+    </div>
+    <div class="chips" id="archActions"></div>
+    <div class="sum" id="archSum"></div>
+  </div>
+  <div class="body" id="archBody"></div>
+</div>
 
 <div class="layer" id="viewer" role="dialog" aria-modal="true">
   <div class="top"><b id="vTitle"></b>
@@ -563,7 +617,11 @@ const EN = {
   "Format": "Format", "Qualität": "Quality", "Anzahl": "Number",
   "Unzensiert": "Uncensored", "Modelle ohne Inhaltsfilter, wo es sie gibt": "Models without a content filter, where there are any",
   "Benachrichtigen, wenn fertig": "Notify me when done", "Auf diesem Gerät, auch bei gesperrtem Bildschirm": "On this device, also with the screen locked",
-  "Verlauf": "History", "Noch nichts bearbeitet.": "Nothing edited yet.", "Bild wählen": "Choose a picture",
+  "Verlauf": "History", "Archiv": "Archive", "Archiv · {n}": "Archive · {n}", "Suchen: z. B. Fee, Geburtstag, Animieren": "Search: e.g. fairy, birthday, animate",
+  "Heute": "Today", "7 Tage": "7 days", "30 Tage": "30 days", "Dieses Jahr": "This year", "Zeitraum …": "Period …",
+  "Von": "From", "Bis": "To", "Bilder und Videos": "Pictures and videos", "Bilder": "Pictures", "Videos": "Videos",
+  "Alle Aktionen": "All actions", "{n} von {all} · zusammen {size}": "{n} of {all} · {size} in all", "Mehr laden": "Load more",
+  "Nichts gefunden.": "Nothing found.", "★ Favoriten": "★ Favourites", "Noch nichts bearbeitet.": "Nothing edited yet.", "Bild wählen": "Choose a picture",
   "Schließen": "Close", "Sichern": "Save", "Fehler suchen": "Find flaws", "Reparieren": "Repair",
   "Weiter bearbeiten": "Edit further", "Löschen": "Delete", "Stelle markieren": "Mark the spot", "Abbrechen": "Cancel",
   "✨ Ausbauen": "✨ Expand", "✨ Text schreiben": "✨ Write lyrics", "Liedtext geschrieben – lesen, anpassen, dann Lied machen": "Lyrics written – read, adjust, then make the song", "Jetzt ausbauen": "Expand it now",
@@ -688,6 +746,7 @@ async function api(path, opts = {}) {
   opts.headers = Object.assign({ "X-Darkroom-Lang": LANG }, opts.headers || {});
   if (dev && !document.hidden) opts.headers["X-Darkroom-Device"] = dev;
   const r = await fetch(API + path, opts);
+  if (opts.onHeaders) opts.onHeaders(r.headers);
   let body = null;
   try { body = await r.json(); } catch (e) {}
   if (!r.ok) {
@@ -1587,7 +1646,7 @@ async function go() {
 
 // ── jobs ─────────────────────────────────────────────────
 async function refreshJobs() {
-  try { S.jobs = await api("/jobs"); } catch (e) { return; }
+  try { S.jobs = await api("/jobs", { onHeaders: (h) => { S.total = Number(h.get("X-Darkroom-Total")) || 0; } }); } catch (e) { return; }
   renderJobs();
   if (S.viewing) {
     const j = S.jobs.find((x) => x.id === S.viewing.id);
@@ -1613,7 +1672,13 @@ function stateText(job) {
   return t("Fehler");
 }
 
+// A job the page has: in the history, or one of the archive's.
+function jobById(id) { return S.jobs.find((x) => x.id === id) || A.items.find((x) => x.id === id); }
+function knownJobs() { return S.jobs.concat(A.items.filter((a) => !S.jobs.some((j) => j.id === a.id))); }
+
 function renderJobs() {
+  show("archiveOpen", S.total > 0);
+  $("archiveOpen").textContent = t("Archiv · {n}", { n: S.total });
   const box = $("jobs");
   const list = S.starsOnly ? S.jobs.filter((j) => j.star) : S.jobs;
   $("starFilter").textContent = (S.starsOnly ? "★ " : "☆ ") + t("Favoriten");
@@ -1653,7 +1718,7 @@ function renderJobs() {
 
 // ── viewer ───────────────────────────────────────────────
 function openViewer(id) {
-  const job = S.jobs.find((x) => x.id === id);
+  const job = jobById(id);
   if (!job) return;
   S.viewing = { id, state: job.state };
   if (location.hash !== "#job=" + id) history.replaceState(null, "", "#job=" + id);
@@ -1675,8 +1740,8 @@ function openViewer(id) {
   $("vStar").style.visibility = done ? "" : "hidden";
   // the variants of one request, or the steps of a recipe: from one to the next
   // (and of variants, keep the best)
-  const sib = job.group ? S.jobs.filter((x) => x.group === job.group).sort((x, y) => x.variant - y.variant)
-    : job.chain ? S.jobs.filter((x) => x.chain === job.chain).sort((x, y) => x.step - y.step) : [];
+  const sib = job.group ? knownJobs().filter((x) => x.group === job.group).sort((x, y) => x.variant - y.variant)
+    : job.chain ? knownJobs().filter((x) => x.chain === job.chain).sort((x, y) => x.step - y.step) : [];
   show("vNav", sib.length > 1);
   if (sib.length > 1) {
     const i = sib.findIndex((x) => x.id === job.id);
@@ -1933,7 +1998,7 @@ function closeViewer() {
 }
 
 async function save() {
-  const job = S.jobs.find((x) => x.id === S.viewing.id);
+  const job = jobById(S.viewing.id);
   const url = `${API}/jobs/${job.id}/result`;
   try {
     const r = await fetch(url); const blob = await r.blob();
@@ -1948,7 +2013,7 @@ async function save() {
 }
 
 function continueWith() {
-  const job = S.jobs.find((x) => x.id === S.viewing.id);
+  const job = jobById(S.viewing.id);
   setSource({ from: job.id, url: `${API}/jobs/${job.id}/result`, w: job.result_size && job.result_size[0], h: job.result_size && job.result_size[1] });
   setMode("edit");
   $("text").value = ""; E.before.edit = null; updateSave();     // the wish was for the step before
@@ -1958,12 +2023,13 @@ function continueWith() {
 
 const confirmDelete = {};
 async function toggleStar() {
-  const job = S.jobs.find((x) => x.id === S.viewing.id);
+  const job = jobById(S.viewing.id);
   try {
     const j = await api("/jobs/" + job.id + "/star", { method: "POST", headers: { "Content-Type": "application/json" },
                                                      body: JSON.stringify({ on: !job.star }) });
-    job.star = j.star; renderJobs(); openViewer(job.id);
-    toast(t(j.star ? "Favorit – wird nie automatisch gelöscht" : "Kein Favorit mehr"));
+    job.star = j.star; renderJobs(); openViewer(job.id); refreshJobs();
+    if (archiveOn()) renderArchive();
+    toast(t(j.star ? "Favorit" : "Kein Favorit mehr"));
   } catch (e) { toast(e.message); }
 }
 
@@ -1978,7 +2044,10 @@ async function keepVariant() {
     const r = await api("/jobs/" + id + "/keep", { method: "POST" });
     S.jobs = S.jobs.filter((j) => !r.deleted.includes(j.id))
       .map((j) => (j.id === id ? Object.assign(j, { group: null, variant: null, variants: null }) : j));
-    renderJobs(); openViewer(id); toast(t("Behalten – die anderen sind gelöscht"));
+    A.items = A.items.filter((j) => !r.deleted.includes(j.id))
+      .map((j) => (j.id === id ? Object.assign(j, { group: null, variant: null, variants: null }) : j));
+    renderJobs(); openViewer(id); refreshJobs();
+    if (archiveOn()) loadArchive(false); toast(t("Behalten – die anderen sind gelöscht"));
   } catch (e) { toast(e.message, 4000); }
 }
 async function cancelJob(id) {
@@ -1994,8 +2063,90 @@ async function removeJob() {
   }
   confirmDelete.armed = null;
   try { await api("/jobs/" + id, { method: "DELETE" }); } catch (e) { toast(e.message); return; }
-  S.jobs = S.jobs.filter((j) => j.id !== id); renderJobs(); closeViewer();
+  S.jobs = S.jobs.filter((j) => j.id !== id); renderJobs(); closeViewer(); refreshJobs();
+  if (archiveOn()) { A.items = A.items.filter((j) => j.id !== id); loadArchive(false); }
 }
+
+// ── archive ──────────────────────────────────────────────
+// Every job, nothing deleted but by hand: searched and filtered on the server,
+// a page at a time, grouped by month. A tap opens the viewer over it.
+const A = { items: [], total: 0, all: 0, bytes: 0, facets: [], time: "all", kind: "", star: false, failed: false, actions: [], seq: 0 };
+const archiveOn = () => $("archive").classList.contains("on");
+function archiveSpan() {
+  const day = new Date(); day.setHours(0, 0, 0, 0);
+  const sec = (d) => String(d.getTime() / 1000);
+  if (A.time === "today") return [sec(day), ""];
+  if (A.time === "7" || A.time === "30") { day.setDate(day.getDate() - Number(A.time) + 1); return [sec(day), ""]; }
+  if (A.time === "year") return [sec(new Date(day.getFullYear(), 0, 1)), ""];
+  if (A.time === "range") {
+    const at = (v, plus) => { if (!v) return ""; const [y, m, d] = v.split("-").map(Number); return sec(new Date(y, m - 1, d + plus)); };
+    return [at($("archFrom").value, 0), at($("archTo").value, 1)];      // the last day included
+  }
+  return ["", ""];
+}
+async function loadArchive(more) {
+  const q = new URLSearchParams({ offset: more ? A.items.length : 0, limit: 60 });
+  const text = $("archQ").value.trim();
+  const [since, until] = archiveSpan();
+  for (const [k, v] of [["q", text], ["kind", A.kind], ["star", A.star ? "1" : ""], ["failed", A.failed ? "1" : ""],
+                        ["action", A.actions.join(",")], ["since", since], ["until", until]]) if (v) q.set(k, v);
+  const seq = ++A.seq;
+  let r;
+  try { r = await api("/archive?" + q); } catch (e) { toast(e.message); return; }
+  if (seq !== A.seq) return;                                       // a newer filter came in between
+  A.items = more ? A.items.concat(r.items) : r.items;
+  Object.assign(A, { total: r.total, all: r.all, bytes: r.bytes, facets: r.actions });
+  renderArchive();
+}
+function fmtBytes(n) {
+  const [v, u] = n >= 1e9 ? [n / 1e9, "GB"] : [n / 1e6, "MB"];
+  return v.toLocaleString(LANG === "en" ? "en-GB" : "de-DE", { maximumFractionDigits: v < 10 ? 1 : 0 }) + " " + u;
+}
+function renderArchive() {
+  press("archTime", "v", A.time); show("archRange", A.time === "range");
+  for (const b of $("archKind").children) b.setAttribute("aria-pressed", String(b.dataset.f ? A[b.dataset.f] : b.dataset.v === A.kind));
+  const box = $("archActions"); box.innerHTML = "";
+  const chip = (label, n, on, onclick) => {
+    const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.setAttribute("aria-pressed", String(on));
+    if (n != null) { const c = document.createElement("small"); c.textContent = n; b.appendChild(c); }
+    b.onclick = onclick; box.appendChild(b);
+  };
+  chip(t("Alle Aktionen"), null, !A.actions.length, () => { A.actions = []; loadArchive(false); });
+  const facets = A.facets.concat(A.actions.filter((id) => !A.facets.some((f) => f.id === id)).map((id) => ({ id, label: actionLabel(id), n: 0 })));
+  for (const f of facets) chip(f.label, f.n, A.actions.includes(f.id), () => {
+    A.actions = A.actions.includes(f.id) ? A.actions.filter((x) => x !== f.id) : A.actions.concat(f.id); loadArchive(false);
+  });
+  $("archSum").textContent = t("{n} von {all} · zusammen {size}", { n: A.total, all: A.all, size: fmtBytes(A.bytes) });
+  const body = $("archBody"); body.innerHTML = "";
+  if (!A.items.length) { const e = document.createElement("p"); e.className = "empty"; e.textContent = t("Nichts gefunden."); body.appendChild(e); return; }
+  const locale = LANG === "en" ? "en-GB" : "de-DE";
+  let month = null, grid = null;
+  for (const j of A.items) {
+    const m = new Date(j.created * 1000).toLocaleDateString(locale, { month: "long", year: "numeric" });
+    if (m !== month) {
+      month = m; const h = document.createElement("h4"); h.textContent = m;
+      grid = document.createElement("div"); grid.className = "grid"; body.append(h, grid);
+    }
+    const c = document.createElement("button"); c.type = "button"; c.className = "cell" + (j.state === "failed" ? " failed" : "");
+    if (j.state === "done" || (j.action !== "generate" && !(j.after && j.state === "queued"))) {
+      const img = document.createElement("img"); img.loading = "lazy"; img.alt = "";
+      img.src = `${API}/jobs/${j.id}/${j.state === "done" ? "result" : "input"}?thumb=1`; c.appendChild(img);
+    } else { const ph = document.createElement("div"); ph.className = "ph"; ph.textContent = j.video ? "▶" : "✦"; c.appendChild(ph); }
+    const mark = (j.star ? "★" : "") + (j.video ? " ▶" : "");
+    if (mark.trim()) { const k = document.createElement("span"); k.className = "mark"; k.textContent = mark.trim(); c.appendChild(k); }
+    const cap = document.createElement("span"); cap.className = "cap";
+    cap.textContent = j.label + " · " + new Date(j.created * 1000).toLocaleDateString(locale, { day: "2-digit", month: "2-digit" });
+    c.title = j.text || j.label; c.appendChild(cap);
+    c.onclick = () => openViewer(j.id);
+    grid.appendChild(c);
+  }
+  if (A.items.length < A.total) {
+    const more = document.createElement("button"); more.type = "button"; more.className = "btn"; more.style.cssText = "width:100%;margin-top:14px";
+    more.textContent = t("Mehr laden"); more.onclick = () => { more.disabled = true; loadArchive(true); }; body.appendChild(more);
+  }
+}
+function openArchive() { $("archive").classList.add("on"); document.body.style.overflow = "hidden"; loadArchive(false); }
+function closeArchive() { $("archive").classList.remove("on"); document.body.style.overflow = ""; }
 
 // ── notifications ────────────────────────────────────────
 // Web Push: the service worker shows what the server sends when a job ends.
@@ -2102,6 +2253,7 @@ async function openFromHash() {
   const m = location.hash.match(/^#job=([0-9a-f-]+)$/);
   if (!m) return;
   if (!S.jobs.some((j) => j.id === m[1])) await refreshJobs();
+  if (!jobById(m[1])) { try { A.items.push(await api("/jobs/" + m[1])); } catch (e) { return; } }   // an older one, from the archive
   openViewer(m[1]);
 }
 
@@ -2183,8 +2335,18 @@ $("vDelete").onclick = removeJob;
 $("vKeep").onclick = keepVariant;
 $("vStar").onclick = toggleStar;
 $("starFilter").onclick = () => { S.starsOnly = !S.starsOnly; renderJobs(); };
+$("archiveOpen").onclick = openArchive;
+$("archiveClose").onclick = closeArchive;
+let archTyping = 0;
+$("archQ").addEventListener("input", () => { clearTimeout(archTyping); archTyping = setTimeout(() => loadArchive(false), 300); });
+for (const b of $("archTime").children) b.onclick = () => { A.time = b.dataset.v; renderArchive(); if (A.time !== "range") loadArchive(false); };
+for (const i of [$("archFrom"), $("archTo")]) i.onchange = () => loadArchive(false);
+for (const b of $("archKind").children) b.onclick = () => {
+  if (b.dataset.f) A[b.dataset.f] = !A[b.dataset.f]; else A.kind = b.dataset.v;
+  loadArchive(false);
+};
 document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
-window.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeViewer(); closeSheet(); closePainter(); closeTemplates(); closeCropper(); } });
+window.addEventListener("keydown", (e) => { if (e.key === "Escape") { if (!S.viewing) closeArchive(); closeViewer(); closeSheet(); closePainter(); closeTemplates(); closeCropper(); } });
 window.addEventListener("hashchange", openFromHash);
 
 translatePage();
