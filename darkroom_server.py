@@ -243,6 +243,21 @@ ACTIONS = {
         "text_placeholder": "z. B. Sie singt mit geschlossenen Augen, ganz gefühlvoll",
         "max_side": 1536, "seconds": (105, 380),
     },
+    # Singen lassen: a song made from the user's lyrics (ACE-Step, through the
+    # image API), sung by the picture in sections of SECTION s, each from the
+    # photo (LTX makes 10 s a clip at most), joined, the song underneath. LTX
+    # hears the voice alone (the Talking workflow's Gesang abtrennen): from the
+    # whole song the singer kept her mouth shut. seconds: for 5 s of song —
+    # 10 s took 210 s fast, 1444 s best (832×1088).
+    "sing": {
+        "label": "Singen lassen", "hint": "Das Foto singt ein Lied mit deinem Text",
+        "model": ("ltx-25-talking", "ltx-25-talking"), "video": True, "audio": True, "song": True,
+        "prompt": ("The person sings the song with feeling, lips moving exactly with the words, small natural "
+                   "head movements and facial expressions. The camera holds still."),
+        "text": "replace", "text_label": "Wie soll es wirken? (optional)",
+        "text_placeholder": "z. B. Er singt mit geschlossenen Augen und wiegt den Kopf",
+        "max_side": 1536, "seconds": (105, 720),
+    },
 }
 # How the page groups the actions.
 # Rezepte: several actions one after the other, each on the result of the one
@@ -260,7 +275,7 @@ RECIPES = {
 GROUPS = [("Verbessern", ["colorize", "restore", "sharpen", "glass", "detail", "upscale"]),
           ("Verändern", ["background", "cutout", "remove", "paint", "edit", "expand"]),
           ("Neu erschaffen", ["pose", "restyle", "art"]),
-          ("Video", ["animate", "talk"]),
+          ("Video", ["animate", "talk", "sing"]),
           ("Rezepte", list(RECIPES))]
 # Als Kunstwerk: the style, and the instruction it makes for Qwen-Image Edit.
 # Colour styles keep the photo's colours; the pencil drawing is grey.
@@ -287,6 +302,22 @@ VOICE_MAX = 10
 # (Qwen3-TTS on the ComfyUI already running, ~5 s for a sentence). About 15
 # characters a second: 150 fill the 10 s.
 SPEAK_MAX = 150
+# Singen lassen: how long a song may be, the sections it is sung in, and the
+# styles and voices offered — ACE-Step's tags, as the page names them.
+SONG_MAX = 30
+SECTION = 10
+FPS = 24                             # LTX-2.5's clips
+LYRICS_MAX = 600
+SONG_STYLES = {
+    "kinderlied": ("Kinderlied", "cheerful children's song, acoustic guitar, hand claps, glockenspiel"),
+    "pop": ("Pop", "upbeat modern pop, synths, catchy chorus"),
+    "ballade": ("Ballade", "emotional pop ballad, piano, soft strings"),
+    "schlager": ("Schlager", "German schlager, four-on-the-floor beat, accordion, sing-along chorus"),
+    "rock": ("Rock", "energetic rock, electric guitars, drums"),
+    "jazz": ("Jazz", "swinging jazz, upright bass, brushed drums, piano"),
+}
+SONG_VOICES = {"frau": ("Frauenstimme", "female vocals"), "mann": ("Männerstimme", "male vocals"),
+               "kind": ("Kinderstimme", "child vocals")}
 # Animieren with an end picture.
 FIRST_LAST = "ltx-25-first-last-frame"
 # Animieren and the video model of Erzeugen: how long a clip may be.
@@ -450,6 +481,12 @@ EN = {
     "kein Bild": "no picture", "bitte erst die Stelle markieren": "please mark the spot first",
     "bitte erst etwas aufnehmen oder eine Audiodatei wählen": "please record something or choose an audio file first",
     "Bitte erst einen Text eingeben": "Please enter a text first",
+    "Bitte erst einen Liedtext eingeben": "Please enter lyrics first",
+    "Wird zusammengesetzt …": "Putting it together …",
+    "Singen lassen": "Make it sing", "Das Foto singt ein Lied mit deinem Text": "The photo sings a song with your lyrics",
+    "z. B. Er singt mit geschlossenen Augen und wiegt den Kopf": "e.g. He sings with his eyes closed, swaying his head",
+    "Kinderlied": "Children's song", "Ballade": "Ballad", "Frauenstimme": "Female voice", "Männerstimme": "Male voice",
+    "Kinderstimme": "Child's voice",
     "ComfyUI läuft nicht – bitte erst starten": "ComfyUI is not running – please start it first",
     "ungültige Angabe": "invalid input", "Es läuft gerade eine Bearbeitung": "A job is running",
     "Der Text ist zu lang (höchstens 2000 Zeichen)": "The text is too long (2000 characters at most)",
@@ -466,6 +503,10 @@ EN = {
 # its parts (translated as well, where they are German).
 EN_PATTERNS = [
     (r"Stelle (\d+) von (\d+) …", "Spot {0} of {1} …"),
+    (r"Abschnitt (\d+) von (\d+) …", "Section {0} of {1} …"),
+    (r"Abschnitt (\d+): (.*)", "Section {0}: {1}"),
+    (r"Höchstens (\d+) Zeichen Liedtext", "At most {0} characters of lyrics"),
+    (r"Das Lied hat nicht geklappt: (.*)", "The song did not work: {0}"),
     (r"(\d+) Stelle\(n\) gefunden", "{0} spot(s) found"),
     (r"Fertig: (.*)", "Done: {0}"),
     (r"Fehlgeschlagen: (.*)", "Failed: {0}"),
@@ -790,6 +831,8 @@ def run_job(jid):
 
 def run_clip(job, d):
     """A video job: the clip from the image API, and a still of it for the list."""
+    if ACTIONS.get(job["action"], {}).get("song"):
+        return run_song(job, d)
     jid = job["id"]
     form = {"model": job["model"], "prompt": clip_prompt(job), "seconds": str(min(10, job["seconds"])),
             "quality": "full" if job.get("quality") == "best" else "fast"}
@@ -809,6 +852,59 @@ def run_clip(job, d):
     size = [int(v) for v in r.headers.get("X-Size", "0x0").split("x")]
     update_job(jid, state="done", finished=time.time(), result_size=size, seed=r.headers.get("X-Seed"))
     app.logger.info("job %s %s (%s): %.0f s", jid, job["action"], job["model"], time.time() - job["started"])
+
+
+def run_song(job, d):
+    """Singen lassen: the song in sections of SECTION s, each sung from the photo
+    (the same seed), each clip cut to exactly its frames, joined, and the song
+    as it came underneath — so the lips stay on it to the last frame."""
+    jid = job["id"]
+    with wave.open(str(d / "voice.wav")) as w:
+        rate, pcm = w.getframerate(), w.readframes(w.getnframes())
+    # a rest under a second (the MP3's padding: 20 s of song read 20.04) is cut,
+    # not sung as a section of its own
+    n = max(1, math.ceil((len(pcm) / (2 * rate) - 1) / SECTION))
+    length = min(len(pcm) / (2 * rate), n * SECTION)
+    form = {"model": job["model"], "prompt": clip_prompt(job), "seed": str(int.from_bytes(os.urandom(4), "big") >> 1),
+            "quality": "full" if job.get("quality") == "best" else "fast"}
+    picture = [f for f in edit_files(d) if f[0] != "audio"]
+    parts, size = [], [0, 0]
+    for i in range(n):
+        check_cancel(jid)
+        update_job(jid, phase=f"Abschnitt {i + 1} von {n} …")
+        a, b = i * SECTION, min(length, (i + 1) * SECTION)
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as w:
+            w.setnchannels(1); w.setsampwidth(2); w.setframerate(rate)
+            w.writeframes(pcm[round(a * rate) * 2:round(b * rate) * 2])
+        r = requests.post(f"{ARGS.api}/v1/video/clips", timeout=ARGS.timeout,
+                          data=dict(form, seconds=str(max(1, math.ceil(b - a - 1e-6)))),
+                          files=picture + [("audio", ("part.wav", buf.getvalue(), "audio/wav"))])
+        if r.status_code != 200:
+            raise RuntimeError(f"Abschnitt {i + 1}: " + api_error(r))
+        (d / f"part{i + 1}.mp4").write_bytes(r.content)
+        parts.append(round(b * FPS) - round(a * FPS))
+        size = [int(v) for v in r.headers.get("X-Size", "0x0").split("x")]
+    check_cancel(jid)
+    update_job(jid, phase="Wird zusammengesetzt …")
+    song = d / "song.audio" if (d / "song.audio").is_file() else d / "voice.wav"
+    cmd = ["ffmpeg", "-v", "error", "-y"]
+    for i in range(n):
+        cmd += ["-i", str(d / f"part{i + 1}.mp4")]
+    cmd += ["-i", str(song)]
+    trims = "".join(f"[{i}:v]trim=end_frame={f},setpts=PTS-STARTPTS[v{i}];" for i, f in enumerate(parts))
+    cmd += ["-filter_complex", trims + "".join(f"[v{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0[v]",
+            "-map", "[v]", "-map", f"{n}:a", "-t", f"{sum(parts) / FPS:.4f}",
+            "-c:v", "libx264", "-crf", "18", "-preset", "medium", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(d / "result.mp4")]
+    r = subprocess.run(cmd, capture_output=True, timeout=600)
+    if r.returncode != 0:
+        raise RuntimeError("ffmpeg: " + r.stderr.decode(errors="replace")[-300:])
+    for i in range(n):
+        (d / f"part{i + 1}.mp4").unlink(missing_ok=True)
+    poster(d)
+    update_job(jid, state="done", finished=time.time(), phase=None, result_size=size, seed=form["seed"], sections=n)
+    app.logger.info("job %s sing: %d section(s), %.0f s", jid, n, time.time() - job["started"])
 
 
 def vision_state():
@@ -1232,6 +1328,41 @@ def marked(data, mask_data):
     return buf.getvalue()
 
 
+@app.post("/darkroom/api/song")
+def song():
+    """Singen lassen: the song from the lyrics, a style and a voice (ACE-Step XL
+    through the image API, ~10 s), for the page to play and send on."""
+    body = request.get_json(silent=True) or {}
+    lyrics = (body.get("lyrics") or "").strip()
+    if not lyrics:
+        return error("Bitte erst einen Liedtext eingeben")
+    if len(lyrics) > LYRICS_MAX:
+        return error(f"Höchstens {LYRICS_MAX} Zeichen Liedtext")
+    style = SONG_STYLES.get(body.get("style")) or next(iter(SONG_STYLES.values()))
+    singer = SONG_VOICES.get(body.get("voice")) or next(iter(SONG_VOICES.values()))
+    try:
+        seconds = min(SONG_MAX, max(SECTION, int(body.get("seconds") or 20)))
+    except (TypeError, ValueError):
+        return error("ungültige Angabe")
+    # [Verse] when none is marked: ACE-Step sings what stands under a section
+    if not re.search(r"^\s*\[", lyrics, re.M):
+        lyrics = "[Verse]\n" + lyrics
+    try:
+        r = requests.post(f"{ARGS.api}/v1/audio/music", timeout=600,
+                          json={"model": "ace-step-15-xl-turbo", "prompt": f"{style[1]}, {singer[1]}",
+                                "lyrics": lyrics, "duration": seconds, "language": lang()})
+    except requests.RequestException:
+        return error("ComfyUI läuft nicht – bitte erst starten", 503)
+    if r.status_code != 200:
+        try:
+            msg = r.json()["error"]["message"]
+        except (ValueError, KeyError, TypeError):
+            msg = f"Fehler {r.status_code}"
+        app.logger.info("song: %s", msg)
+        return error("Das Lied hat nicht geklappt: " + msg, 502)
+    return Response(r.content, mimetype="audio/mpeg")
+
+
 @app.post("/darkroom/api/speak")
 def speak():
     """Sprechen lassen from a text: the voice as WAV, for the page to play and send on."""
@@ -1440,7 +1571,7 @@ def actions():
                     "models": bool(a.get("models")), "second": bool(a.get("second")),
                     "sides": bool(a.get("sides")), "mask": bool(a.get("mask")),
                     "video": bool(a.get("video")), "second_label": tr(a.get("second_label")),
-                    "audio": bool(a.get("audio")), "styles": bool(a.get("styles")),
+                    "audio": bool(a.get("audio")), "styles": bool(a.get("styles")), "song": bool(a.get("song")),
                     "keep": bool(a.get("keep")), "keep_available": avail(a["keep"][0]) if a.get("keep") else None,
                     "variants": bool(a.get("variants")),
                     "expand": key in EXPAND_TASKS and bool(getattr(ARGS, "expand_slot", 0)),
@@ -1466,7 +1597,9 @@ def actions():
 
     return jsonify({"actions": out, "edit_models": models(EDIT_MODELS), "gen_models": models(GEN_MODELS),
                     "aspects": list(ASPECTS), "clip_seconds": list(CLIP_SECONDS), "voice_max": VOICE_MAX,
-                    "voices": voices, "speak_max": SPEAK_MAX,
+                    "voices": voices, "speak_max": SPEAK_MAX, "song_max": SONG_MAX, "lyrics_max": LYRICS_MAX,
+                    "song_styles": [[k, tr(v[0])] for k, v in SONG_STYLES.items()],
+                    "song_voices": [[k, tr(v[0])] for k, v in SONG_VOICES.items()],
                     "variants_max": VARIANTS_MAX, "expand": bool(getattr(ARGS, "expand_slot", 0)),
                     "groups": [tr(g) for g, _ in GROUPS], "styles": [[k, tr(v[0])] for k, v in STYLES.items()]})
 
@@ -1550,12 +1683,12 @@ def take_step_input(job, d):
     update_job(job["id"], input_size=list(size))
 
 
-def voice(data):
-    """The recording as WAV, cut to VOICE_MAX seconds to the sample, and its
+def voice(data, longest=VOICE_MAX):
+    """The recording as WAV, cut to `longest` seconds to the sample, and its
     length. The phone records WebM/Opus or MP4/AAC; ffmpeg reads both."""
     r = subprocess.run(["ffmpeg", "-v", "error", "-i", "pipe:0", "-ac", "1", "-ar", "48000", "-f", "s16le", "pipe:1"],
                        input=data, capture_output=True, timeout=120)
-    pcm = r.stdout[:VOICE_MAX * 48000 * 2]
+    pcm = r.stdout[:longest * 48000 * 2]
     if r.returncode != 0 or len(pcm) < 48000:                     # under half a second
         raise Refused("die Aufnahme lässt sich nicht lesen" if r.returncode or not pcm else "die Aufnahme ist zu kurz")
     buf = io.BytesIO()
@@ -1664,8 +1797,11 @@ def create_job():
         if spec.get("audio"):
             if "audio" not in request.files:
                 raise Refused("bitte erst etwas aufnehmen oder eine Audiodatei wählen")
-            wav, length = voice(request.files["audio"].read())
+            data = request.files["audio"].read()
+            wav, length = voice(data, SONG_MAX if spec.get("song") else VOICE_MAX)
             files.append(("voice.wav", wav))
+            if spec.get("song"):                  # as it came, for the sound under the video
+                files.append(("song.audio", data))
             seconds = max(1, math.ceil(length - 1e-6))
         sides = f.get("sides") if f.get("sides") in SIDES else "wide"
         # Varianten: the same edit again, each with a seed of its own and a card of its own

@@ -150,6 +150,8 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
 .textactions { display: flex; gap: 16px; }
 .textactions .link { padding: 6px 0 2px; }
 /* full-screen layers: viewer and painter */
+.frame .unmute { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2;
+                 background: rgba(0,0,0,.6); color: #fff; border-color: rgba(255,255,255,.5); font-size: 17px; }
 .layer { position: fixed; inset: 0; z-index: 20; background: #000; color: #fff; display: none; flex-direction: column; }
 .layer.on { display: flex; }
 .layer .top { display: flex; align-items: center; gap: 8px; padding: calc(10px + env(safe-area-inset-top)) 12px 10px; }
@@ -330,9 +332,16 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
         </div>
         <p class="note" style="margin-top:6px">Form behalten: Schnitt, Falten und Kanten bleiben, z. B. derselbe Mantel in rotem Leder. Dafür das Ding ganz markieren.</p></div>
       <div class="field" id="stylesWrap"><label>Stil</label><div class="chips" id="styles"></div></div>
-      <div class="field" id="audioWrap"><label>Stimme (bis <span id="voiceMax">10</span> s) – das Video ist so lang wie die Aufnahme</label>
+      <div class="field" id="songWrap"><label>Liedtext</label>
+        <textarea id="lyrics" rows="5" maxlength="600" placeholder="z. B. Heute ist ein schöner Tag, weil ich dich so gerne mag. [Chorus] Alles Gute, hoch sollst du leben!"></textarea>
+        <p class="note" style="margin-top:6px">Etwa 2–3 Zeilen für 10 s – wo der Text endet, spielt nur noch die Musik, und das Foto singt nicht mehr. [Verse] und [Chorus] in eigenen Zeilen gliedern das Lied.</p></div>
+      <div class="field" id="songOpts"><label>Stil</label><div class="chips" id="songStyles"></div>
+        <label style="margin-top:12px">Stimme</label><div class="chips" id="songVoices"></div>
+        <label style="margin-top:12px">Länge</label><div class="chips" id="songSeconds"></div>
+        <button class="btn" id="songBtn" type="button" style="width:100%;margin-top:12px">Lied machen</button></div>
+      <div class="field" id="audioWrap"><label id="audioLabel">Stimme (bis <span id="voiceMax">10</span> s) – das Video ist so lang wie die Aufnahme</label>
         <div class="voice">
-          <div class="buttons">
+          <div class="buttons" id="voiceButtons">
             <button class="btn rec" id="recBtn" type="button">● Aufnehmen</button>
             <label class="btn"><input type="file" accept="audio/*" id="audioFile">Audiodatei</label>
             <button class="btn hidden" id="speakOpen" type="button" aria-pressed="false">Text tippen</button>
@@ -513,7 +522,8 @@ const S = {
   comfy: "down", message: "", mode: "edit", unc: false,
   actions: [], editModels: [], genModels: [], aspects: [],
   action: null, quality: "fast", editModel: "qwen-image-21-turbo", sides: "wide",
-  genModel: "z-image-turbo", aspect: "1:1", count: 1, variants: 1, clipSeconds: [], seconds: 5, style: "watercolour", keep: "0", voice: null, voiceMax: 10, voices: [], speakVoice: recall("speakVoice") || "", groups: [], styles: [], genSeconds: 5, genQuality: "fast",
+  genModel: "z-image-turbo", aspect: "1:1", count: 1, variants: 1, clipSeconds: [], seconds: 5, style: "watercolour", keep: "0", voice: null, voiceMax: 10, voices: [], songMax: 30, songStyles: [], songVoices: [],
+  songStyle: recall("songStyle") || "", songVoice: recall("songVoice") || "", songSeconds: 20, speakVoice: recall("speakVoice") || "", groups: [], styles: [], genSeconds: 5, genQuality: "fast",
   source: null, source2: null,   // {blob, url, w, h} | {from: jobId, url, w, h}
   mask: null,                    // {blob, preview} — transparent where to redraw
   jobs: [], viewing: null, pollTimer: null,
@@ -608,7 +618,14 @@ const EN = {
   "Was soll auf dem Bild sein? – bitte beschreiben.": "What should be in the picture? – please describe it.",
   "{what} – bitte ausfüllen.": "{what} – please fill in.", "Bitte erst die Stelle mit dem Finger markieren.": "Please mark the spot with a finger first.",
   "Bitte erst etwas aufnehmen oder eine Audiodatei wählen.": "Please record something or choose an audio file first.",
-  "Bitte erst einen Text eingeben": "Please enter a text first",
+  "Bitte erst einen Text eingeben": "Please enter a text first", "🔊 Ton an": "🔊 Sound on",
+  "Bitte erst einen Liedtext eingeben": "Please enter lyrics first", "Bitte erst ein Lied machen.": "Please make a song first.",
+  "Liedtext": "Lyrics", "Stimme": "Voice", "Lied machen": "Make the song", "Neues Lied machen": "Make another song",
+  "Komponiert … etwa 15 Sekunden, beim ersten Mal bis zu 2 Minuten": "Composing … about 15 seconds, up to 2 minutes the first time",
+  "Das Lied – das Video ist so lang wie das Lied": "The song – the video is as long as the song",
+  "Stimme (bis {n} s) – das Video ist so lang wie die Aufnahme": "Voice (up to {n} s) – the video is as long as the recording",
+  "Etwa 2–3 Zeilen für 10 s – wo der Text endet, spielt nur noch die Musik, und das Foto singt nicht mehr. [Verse] und [Chorus] in eigenen Zeilen gliedern das Lied.": "About 2–3 lines for 10 s – where the lyrics end only the music plays, and the photo stops singing. [Verse] and [Chorus] on lines of their own give the song its parts.",
+  "z. B. Heute ist ein schöner Tag, weil ich dich so gerne mag. [Chorus] Alles Gute, hoch sollst du leben!": "e.g. What a lovely day today, you are dear in every way. [Chorus] Happy birthday, many happy returns!",
   "Wird hochgeladen …": "Uploading …", "Darkroom ({n} läuft)": "Darkroom ({n} running)",
   "Abgebrochen": "Cancelled", "Wartet (#{n})": "Waiting (#{n})", "Wartet": "Waiting", "Läuft · {t}": "Running · {t}", "Fehler": "Failed",
   "Das hat nicht geklappt.": "That did not work.", "Abgebrochen.": "Cancelled.",
@@ -735,6 +752,8 @@ async function loadActions() {
   secondsChips("seconds", (n) => { S.seconds = n; renderEdit(); });
   secondsChips("genSeconds", (n) => { S.genSeconds = n; renderGen(); });
   S.groups = r.groups || []; S.styles = r.styles || []; S.voiceMax = r.voice_max || 10; S.voices = r.voices || [];
+  S.songMax = r.song_max || 30; S.songStyles = r.song_styles || []; S.songVoices = r.song_voices || [];
+  $("lyrics").maxLength = r.lyrics_max || 600; renderSong();
   $("speakText").maxLength = r.speak_max || 150; renderSpeak(); S.expand = !!r.expand;
   $("voiceMax").textContent = S.voiceMax;
   const box = $("actions"); box.innerHTML = "";
@@ -851,7 +870,13 @@ function renderEdit() {
   for (const b of $("actions").querySelectorAll(".action")) b.setAttribute("aria-pressed", String(b.dataset.id === a.id));
   show("keepWrap", a.keep && a.keep_available !== false); press("keep", "v", S.keep);
   show("stylesWrap", a.styles); press("styles", "v", S.style);
-  show("audioWrap", a.audio);
+  // Singen lassen: the song is made here, not recorded; one for the other does not carry over
+  if (S.voice && !!S.voice.song !== !!a.song) clearVoice();
+  show("songWrap", a.song); show("songOpts", a.song);
+  show("voiceButtons", !a.song); if (a.song) show("speakWrap", false);
+  $("audioLabel").textContent = a.song ? t("Das Lied – das Video ist so lang wie das Lied")
+                                       : t("Stimme (bis {n} s) – das Video ist so lang wie die Aufnahme", { n: S.voiceMax });
+  show("audioWrap", a.audio && (!a.song || !!S.voice));
   show("quality", a.qualities);
   if (a.best_available === false && S.quality === "best") S.quality = "fast";
   press("quality", "q", S.quality);
@@ -878,7 +903,7 @@ function renderEdit() {
   $("actionHelp").href = "/darkroom/help?lang=" + LANG + "#" + a.id;
   $("text").placeholder = a.text_placeholder || "";
   const secs = typical({ action: a.id, model_label: a.models && m ? m.label : null, quality: S.quality,
-                         seconds: a.audio ? (S.voice ? Math.max(1, Math.ceil(S.voice.seconds)) : 5) : S.seconds,
+                         seconds: a.audio ? (S.voice ? Math.max(1, Math.ceil(S.voice.seconds)) : a.song ? S.songSeconds : 5) : S.seconds,
                          two: a.video && !a.audio && !!S.source2 });
   const many = a.variants && S.variants > 1;
   $("estimate").textContent = (many ? t("{n} Varianten nacheinander, je {each} – zusammen {all}",
@@ -993,7 +1018,13 @@ function setSource2(src) {
 // ── the voice ────────────────────────────────────────────
 const R = { rec: null, chunks: [], timer: null, started: 0 };
 
-async function setVoice(blob, name) {
+function clearVoice() {
+  if (S.voice) URL.revokeObjectURL(S.voice.url);
+  S.voice = null; $("voicePlayer").removeAttribute("src"); show("voicePlayer", false); $("voiceInfo").textContent = "";
+  $("songBtn").textContent = t("Lied machen");
+}
+
+async function setVoice(blob, name, song) {
   if (S.voice) URL.revokeObjectURL(S.voice.url);
   const url = URL.createObjectURL(blob);
   // A recording's duration is often unknown (Infinity) to the browser: then the stopwatch's.
@@ -1003,9 +1034,10 @@ async function setVoice(blob, name) {
     a.onerror = () => ok(0); a.src = url;
   });
   const seconds = measured || (R.stopped - R.started) / 1000 || 0;
-  S.voice = { blob, name, url, seconds: Math.min(seconds, S.voiceMax) };
+  const max = song ? S.songMax : S.voiceMax;
+  S.voice = { blob, name, url, song: !!song, seconds: Math.min(seconds, max) };
   $("voicePlayer").src = url; show("voicePlayer", true);
-  $("voiceInfo").textContent = (seconds > S.voiceMax ? t("Wird nach {n} s abgeschnitten. ", { n: S.voiceMax }) : "")
+  $("voiceInfo").textContent = (seconds > max ? t("Wird nach {n} s abgeschnitten. ", { n: max }) : "")
     + (seconds ? t("Länge: {n} s", { n: S.voice.seconds.toFixed(1) }) : "");
   renderEdit();
 }
@@ -1053,6 +1085,51 @@ async function speakText() {
     btn.textContent = t("Neu sprechen");
   } catch (e) { $("formErr").textContent = e.message; btn.textContent = t("Sprechen"); }
   finally { clearTimeout(slow); btn.disabled = false; }
+}
+
+// ── Singen lassen: the song ──────────────────────────────
+// Lyrics, a style, a voice and a length; the server has ACE-Step make it
+// (~10 s), it plays here, and goes on as the voice — sung in 10 s sections.
+function renderSong() {
+  const chips = (box, list, key, onPick) => {
+    if ($(box).dataset.items !== JSON.stringify(list)) {
+      $(box).dataset.items = JSON.stringify(list);
+      $(box).replaceChildren(...list.map(([v, label]) => {
+        const b = document.createElement("button");
+        b.type = "button"; b.dataset.v = v; b.textContent = label; b.onclick = () => onPick(v);
+        return b;
+      }));
+    }
+    press(box, "v", S[key]);
+  };
+  if (!S.songStyles.some(([k]) => k === S.songStyle)) S.songStyle = (S.songStyles[0] || [""])[0];
+  if (!S.songVoices.some(([k]) => k === S.songVoice)) S.songVoice = (S.songVoices[0] || [""])[0];
+  const pick = (key) => (v) => { S[key] = v; store(key, v); renderSong(); };
+  chips("songStyles", S.songStyles, "songStyle", pick("songStyle"));
+  chips("songVoices", S.songVoices, "songVoice", pick("songVoice"));
+  const lengths = [];
+  for (let n = 10; n <= S.songMax; n += 10) lengths.push([String(n), n + " s"]);
+  S.songSeconds = Math.min(S.songSeconds, S.songMax);
+  chips("songSeconds", lengths, "songSeconds", (v) => { S.songSeconds = Number(v); renderSong(); renderEdit(); });
+  press("songSeconds", "v", String(S.songSeconds));
+}
+
+async function makeSong() {
+  const lyrics = $("lyrics").value.trim(), btn = $("songBtn");
+  $("formErr").textContent = "";
+  if (!lyrics) { $("formErr").textContent = t("Bitte erst einen Liedtext eingeben"); return; }
+  btn.disabled = true; btn.textContent = t("Komponiert … etwa 15 Sekunden, beim ersten Mal bis zu 2 Minuten");
+  try {
+    const r = await fetch(API + "/song", { method: "POST", headers: { "Content-Type": "application/json", "X-Darkroom-Lang": LANG },
+      body: JSON.stringify({ lyrics, style: S.songStyle, voice: S.songVoice, seconds: S.songSeconds }) });
+    if (!r.ok) {
+      let msg = ""; try { msg = (await r.json()).error; } catch (e) {}
+      throw new Error(msg || t("Fehler {n}", { n: r.status }));
+    }
+    await setVoice(await r.blob(), "lied.mp3", true);
+    btn.textContent = t("Neues Lied machen");
+  } catch (e) { $("formErr").textContent = e.message; btn.textContent = t("Lied machen"); }
+  finally { btn.disabled = false; }
 }
 
 async function toggleRecording() {
@@ -1474,7 +1551,7 @@ async function go() {
     if (a.keep) fd.append("keep", S.keep);
     if (a.variants) fd.append("n", String(S.variants));
     if (a.audio) {
-      if (!S.voice) { $("formErr").textContent = t("Bitte erst etwas aufnehmen oder eine Audiodatei wählen."); return; }
+      if (!S.voice) { $("formErr").textContent = t(a.song ? "Bitte erst ein Lied machen." : "Bitte erst etwas aufnehmen oder eine Audiodatei wählen."); return; }
       fd.append("audio", S.voice.blob, S.voice.name);
     }
     const m = S.editModels.find((x) => x.id === S.editModel);
@@ -1807,8 +1884,17 @@ function showVideo(job) {
   const frame = document.createElement("div"); frame.className = "frame";
   const v = document.createElement("video");
   v.src = `${API}/jobs/${job.id}/result`; v.poster = `${API}/jobs/${job.id}/poster`;
-  v.controls = true; v.loop = true; v.playsInline = true; v.autoplay = true; v.muted = true;   // autoplay: muted
+  v.controls = true; v.loop = true; v.playsInline = true;
   frame.appendChild(v); $("stage").appendChild(frame);
+  // With sound when the browser lets it (the viewer opened by a tap); otherwise
+  // muted — a browser starts a video only muted on its own — and a big button
+  // for the sound: the controls' small speaker went unnoticed, "no sound".
+  const loud = document.createElement("button");
+  loud.type = "button"; loud.className = "btn unmute hidden"; loud.textContent = t("🔊 Ton an");
+  loud.onclick = () => { v.muted = false; v.play().catch(() => {}); loud.classList.add("hidden"); };
+  v.addEventListener("volumechange", () => { if (!v.muted) loud.classList.add("hidden"); });
+  frame.appendChild(loud);
+  v.play().catch(() => { v.muted = true; loud.classList.remove("hidden"); v.play().catch(() => {}); });
 }
 
 function showCompare(job) {
@@ -2036,6 +2122,7 @@ if (window.visualViewport) {
 $("recBtn").onclick = toggleRecording;
 $("speakOpen").onclick = toggleSpeak;
 $("speakBtn").onclick = speakText;
+$("songBtn").onclick = makeSong;
 for (const b of document.querySelectorAll("[data-tpl]")) b.onclick = () => openTemplates(b.dataset.tpl);
 $("tplClose").onclick = closeTemplates; $("tplBg").onclick = closeTemplates;
 $("tplSearch").oninput = renderTemplates;

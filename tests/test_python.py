@@ -1096,6 +1096,63 @@ class Darkroom(unittest.TestCase):
         self.assertTrue(form["prompt"].startswith("The person speaks"))
         self.assertEqual(self.post(action="talk", image=self.jpeg(64, 64)).status_code, 400)
 
+    def test_a_song_is_sung_in_ten_second_sections_and_joined_to_the_frame(self):
+        import subprocess, wave
+        from unittest import mock
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as w:                       # 20.04 s: the MP3's padding is no section
+            w.setnchannels(1); w.setsampwidth(2); w.setframerate(48000)
+            w.writeframes(b"\0\0" * int(48000 * 20.04))
+        j = darkroom.new_job({"action": "sing", "label": "Singen lassen", "text": "", "quality": "fast",
+                              "model": "ltx-25-talking", "video": True, "seconds": 21},
+                             [("input.jpg", self.jpeg(64, 64)), ("voice.wav", buf.getvalue()), ("song.audio", buf.getvalue())])
+        while not darkroom._queue.empty():
+            darkroom._queue.get_nowait()
+        clip = Path(self.tmp.name) / "clip.mp4"                 # what the image API sends: 10 s, 24 fps
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=64x64:rate=24:duration=10",
+                        "-f", "lavfi", "-i", "anullsrc=r=48000:cl=mono", "-t", "10", "-c:v", "libx264",
+                        "-pix_fmt", "yuv420p", "-c:a", "aac", str(clip)], check=True)
+        reply = mock.Mock(status_code=200, content=clip.read_bytes(), headers={"X-Size": "64x64"})
+        darkroom.update_job(j["id"], state="running", started=time.time())
+        with mock.patch.object(darkroom.requests, "post", return_value=reply) as post:
+            darkroom.run_clip(darkroom.read_job(j["id"]), darkroom.job_path(j["id"]))
+        self.assertEqual(post.call_count, 2)
+        forms = [c.kwargs["data"] for c in post.call_args_list]
+        self.assertEqual([f["seconds"] for f in forms], ["10", "10"])
+        self.assertEqual(forms[0]["seed"], forms[1]["seed"])            # the same singer in each section
+        self.assertTrue(forms[0]["prompt"].startswith("The person sings"))
+        for c in post.call_args_list:
+            names = [f[0] for f in c.kwargs["files"]]
+            self.assertEqual(names.count("audio"), 1)
+            with wave.open(io.BytesIO(c.kwargs["files"][-1][1][1])) as w:
+                self.assertEqual(w.getnframes(), 480000)
+        out = darkroom.job_path(j["id"]) / "result.mp4"
+        frames = subprocess.run(["ffprobe", "-v", "error", "-count_frames", "-select_streams", "v",
+                                 "-show_entries", "stream=nb_read_frames", "-of", "csv=p=0", str(out)],
+                                capture_output=True, text=True).stdout.strip()
+        self.assertEqual(frames, "480")
+        job = darkroom.read_job(j["id"])
+        self.assertEqual((job["state"], job["sections"], job["phase"]), ("done", 2, None))
+        self.assertFalse(list(darkroom.job_path(j["id"]).glob("part*.mp4")))
+
+    def test_a_song_is_made_from_the_lyrics_a_style_and_a_voice(self):
+        from unittest import mock
+        client = darkroom.app.test_client()
+        self.assertEqual(client.post("/darkroom/api/song", json={"lyrics": " "}).status_code, 400)
+        reply = mock.Mock(status_code=200, content=b"ID3mp3")
+        with mock.patch.object(darkroom.requests, "post", return_value=reply) as post:
+            r = client.post("/darkroom/api/song", json={"lyrics": "Heute ist ein schöner Tag", "style": "rock",
+                                                        "voice": "mann", "seconds": 99})
+        self.assertEqual((r.status_code, r.mimetype, r.data), (200, "audio/mpeg", b"ID3mp3"))
+        body = post.call_args.kwargs["json"]
+        self.assertEqual(post.call_args.args[0], "http://api/v1/audio/music")
+        self.assertEqual((body["model"], body["duration"], body["language"]), ("ace-step-15-xl-turbo", 30, "de"))
+        self.assertEqual(body["prompt"], "energetic rock, electric guitars, drums, male vocals")
+        self.assertEqual(body["lyrics"], "[Verse]\nHeute ist ein schöner Tag")
+        with mock.patch.object(darkroom.requests, "post", return_value=reply) as post:
+            client.post("/darkroom/api/song", json={"lyrics": "[Chorus]\nla la"})
+        self.assertEqual(post.call_args.kwargs["json"]["lyrics"], "[Chorus]\nla la")   # marked: as it is
+
     def clip(self, **form):
         """A video job run against a mocked image API: (path, form, files, job)."""
         from unittest import mock

@@ -2047,7 +2047,8 @@ pick a photo from the gallery or take one, tap what should happen, look at
 the result with a before/after slider, and save it to the phone's photos
 through its share sheet — or switch to *Create* and make a picture from a
 prompt. *Animate* turns a photo into a short clip with sound, *Make it talk*
-makes it speak a voice recorded on the phone or a text typed in. The actions come in four
+makes it speak a voice recorded on the phone or a text typed in, *Make it
+sing* sing a song made from lyrics typed in. The actions come in four
 groups: Enhance, Change, Reimagine, Video. Big buttons, one column, dark
 mode; it can sit on the home screen like an app.
 
@@ -2098,6 +2099,7 @@ at `/darkroom`, and a home-screen icon for `/fotos` is best made anew.
 | Redesign (Neu gestalten) — the same room or landscape in another style | Qwen-Image 2.1 Depth Control Turbo / Depth Control | 27 s / 72 s |
 | As artwork (Als Kunstwerk) — watercolour, pencil, oil, comic, anime | Qwen-Image 2.1 Edit Turbo / Edit: "Turn this photo into …" | 45–75 s |
 | Animate (Animieren) — a clip of 3, 5 or 8 s with sound; with an end picture the clip runs to it | LTX-2.5 Video (first stage only / both) / First-Last Frame | 83 s / 375 s for 5 s |
+| Make it sing (Singen lassen) — a song from lyrics, style and voice (ACE-Step XL, 10–30 s), sung in 10 s sections | LTX-2.5 Talking (first stage only / both), per section | 369 s for 20 s fast |
 | Make it talk (Sprechen lassen) — the photo speaks or sings a recording of up to 10 s, or a typed text | LTX-2.5 Talking (first stage only / both) | 124 s for 6 s fast |
 
 *Create* (*Erzeugen*) takes a prompt, a model, a shape (1:1, 4:3, 3:4, 16:9, 9:16, about
@@ -2176,6 +2178,23 @@ which the button says after 15 s): a sentence of 5 s took 4–5 s, 8 s with
 the model loading. It plays back like a recording and goes on as one; a
 take that is not right is spoken again with another seed. Checked with the
 speech recognition: three German takes came back word for word.
+
+*Make it sing* (*Singen lassen*) takes lyrics (up to 600 characters), a
+style (children's song, pop, ballad, schlager, rock, jazz), a voice (woman,
+man, child) and a length (10, 20 or 30 s). *Make the song* has ACE-Step 1.5
+XL Turbo make it through the image API's `/v1/audio/music` (~10 s; up to
+1½ minutes right after ComfyUI started, while its models load); it plays
+first, *Make another song* makes a new take. The job sings it in sections of
+10 s — LTX makes 10 s a clip at most — each from the photo with the same
+seed, cuts each clip to exactly its frames, joins them and puts the song as
+it came underneath: 20 s of song came out 480 frames and 20.000 s, in 369 s
+(*fast*, 416×544); 10 s *best* (832×1088) took 1444 s. A rest under a second
+(an MP3's padding: 20 s read 20.04) is no section of its own. The card says
+which section runs. At each section the picture starts again from the photo,
+like a cut. LTX hears the voice alone (the Talking workflow's *Singing voice
+alone*): from the whole song the singer kept her mouth shut. Where the lyrics
+end, the music plays on and the photo stops singing — ACE-Step sang four short
+lines in about 12 of 20 s, so the page asks for 2–3 lines per 10 s.
 
 **Templates.** Next to each text field, *Templates* (*Vorlagen*) opens a library of
 prompts (`darkroom_prompts.json`, ~70, each in German and English): weather and light, seasons, tidying

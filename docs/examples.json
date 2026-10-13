@@ -1048,6 +1048,30 @@
           ]
         },
         {
+          "id": "sing",
+          "title": "Make it sing",
+          "public": true,
+          "text": "Lyrics, a style and a voice: ACE-Step makes the song (10–30 s, ~10 s), it plays first, then the photo sings it in 10 s sections from the same picture, joined to the frame with the song underneath — 20 s in 369 s, *Fast*. LTX hears the voice alone (Singing voice alone): with the whole song the mouth stayed shut. Where the lyrics end only the music plays: about 2–3 lines for 10 s.",
+          "de": {
+            "title": "Singen lassen",
+            "text": "Liedtext, Stil und Stimme: ACE-Step macht das Lied (10–30 s, ~10 s), es spielt erst zur Probe, dann singt das Foto es in 10-s-Abschnitten vom selben Bild, aufs Bild genau zusammengesetzt, das Lied darunter – 20 s in 369 s, *Schnell*. LTX hört nur die Stimme (Gesang abtrennen): mit dem ganzen Lied blieb der Mund zu. Wo der Text endet, spielt nur die Musik: etwa 2–3 Zeilen für 10 s."
+          },
+          "media": [
+            {
+              "file": "bench:darkroom/talk_input.jpg",
+              "caption": "The photo",
+              "caption_de": "Das Foto",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/sing_result.mp4",
+              "caption": "20 s of song, two sections",
+              "caption_de": "20 s Lied, zwei Abschnitte",
+              "public": true
+            }
+          ]
+        },
+        {
           "id": "create",
           "title": "Create",
           "public": true,
