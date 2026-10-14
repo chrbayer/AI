@@ -407,6 +407,37 @@ def remote_files(repo, rev, paths=None):
             for e in entries if e.get("type", "file") == "file"}
 
 
+CIVITAI_DL = re.compile(r"^https://civitai\.(?:com|red)/api/download/models/(\d+)(?:\?(.*))?$")
+
+
+def other_source(url):
+    """(size, sha256 or None, date) of a model file outside Hugging Face: from
+    Civitai's public API for its version (the file named by fileId, else the
+    primary one), from any other host by a HEAD request (size, Last-Modified)."""
+    import email.utils
+    m = CIVITAI_DL.match(url)
+    if m:
+        host = urllib.parse.urlsplit(url).hostname
+        req = urllib.request.Request(f"https://{host}/api/v1/model-versions/{m.group(1)}",
+                                     headers={"User-Agent": "llmctl"})      # no token: the version is public
+        with urllib.request.urlopen(req, timeout=60) as r:
+            v = json.load(r)
+        fid = (urllib.parse.parse_qs(m.group(2) or "").get("fileId") or [None])[0]
+        files = v.get("files") or []
+        f = next((f for f in files if str(f.get("id")) == fid), None) if fid else \
+            next((f for f in files if f.get("primary")), files[0] if files else None)
+        if not f:
+            raise OSError(f"no file {fid} in model version {m.group(1)}")
+        sha = ((f.get("hashes") or {}).get("SHA256") or "").lower() or None
+        return round(f["sizeKB"] * 1024) if f.get("sizeKB") else None, sha, (v.get("updatedAt") or "")[:10]
+    req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "llmctl"})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        size = r.headers.get("Content-Length")
+        lm = r.headers.get("Last-Modified")
+    date = email.utils.parsedate_to_datetime(lm).date().isoformat() if lm else ""
+    return int(size) if size else None, None, date
+
+
 def cmd_outdated(wf_dir, models_dir, sources=None, quick=False):
     """Which present models are no longer what their Hugging Face source holds.
     Each file is compared by SHA-256 with the one the repo holds now (read once,
@@ -421,7 +452,7 @@ def cmd_outdated(wf_dir, models_dir, sources=None, quick=False):
         recipes = {k for k in json.loads(Path(sources).read_text()) if not k.startswith("_")}
     models = Path(models_dir)
     # key -> candidates: [(repo, rev, [(local file, remote path)])]; any candidate matching = current
-    cands, unchecked = {}, []
+    cands, unchecked, others = {}, [], []
     wanted = {}                                   # (repo, rev) -> remote paths, or None for a whole tree
     for key, u in urls.items():
         dest = models / key
@@ -441,7 +472,9 @@ def cmd_outdated(wf_dir, models_dir, sources=None, quick=False):
                          if f.is_file() and ".cache" not in f.parts]
                 cands.setdefault(key, []).append((repo, rev or "main", files, "tree"))
                 wanted[(repo, rev or "main")] = None
-        if key not in cands:
+        if key not in cands and u and dest.is_file():
+            others.append((key, dest, u[0]))
+        elif key not in cands:
             unchecked.append(f"{key} ({urllib.parse.urlsplit(u[0]).hostname if u else 'no URL'})")
     remote, failed = {}, {}
     for (repo, rev), paths in wanted.items():
@@ -489,6 +522,25 @@ def cmd_outdated(wf_dir, models_dir, sources=None, quick=False):
             changed.append(f"{key}: {notes[-1]}")
         else:
             unchecked.append(f"{key} ({notes[0]})")
+    for key, dest, url in others:
+        host = urllib.parse.urlsplit(url).hostname
+        try:
+            size, sha, date = other_source(url)
+        except (OSError, ValueError, KeyError) as e:
+            unchecked.append(f"{key} ({host}: {e})"); continue
+        st = dest.stat()
+        here = datetime.date.fromtimestamp(st.st_mtime).isoformat()
+        if sha and not quick:
+            if sha256_files([dest]).get(dest) != sha:
+                changed.append(f"{key}: other content on {host} (changed {date}, here since {here})"); continue
+        elif size is not None and abs(size - st.st_size) > (1024 if sha else 0):
+            # Civitai gives the size in KB with fractions: alike within a KB
+            changed.append(f"{key}: {st.st_size:,} bytes here, {size:,} on {host} (changed {date})"); continue
+        elif size is None and not sha:
+            unchecked.append(f"{key} ({host}: says neither size nor hash)"); continue
+        elif not sha and date and date > here:
+            changed.append(f"{key}: changed on {host} on {date}, after this copy ({here}) — size alike"); continue
+        current += 1
     for c in changed:
         print(f"  changed   {c}")
     for u in unchecked:

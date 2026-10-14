@@ -3020,8 +3020,10 @@ and `update comfy --master` would bring — with the newest release beside it:
   at a time — and cached in `~/.local/state/llmctl/checksums.tsv` by size and
   mtime, so later runs take seconds; `--quick` compares size and the date of
   the repo's last change instead. The date is shown either way. Built models
-  (`comfyui/sources.json`) come from a pinned revision and cannot drift;
-  Civitai's cannot be asked.
+  (`comfyui/sources.json`) come from a pinned revision and cannot drift.
+  A model from Civitai is compared with the SHA-256 its public API gives for
+  that file (no key sent); one from another host (download.pytorch.org) by
+  the size and Last-Modified a HEAD request returns.
 
 A changed model is fetched again by deleting it and running `download`.
 

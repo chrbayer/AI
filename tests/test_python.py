@@ -114,6 +114,65 @@ class Urls(unittest.TestCase):
         self.assertIn("fileId=2", out)
 
 
+class OtherHosts(unittest.TestCase):
+    """outdated checks a model from Civitai or a plain download host too."""
+
+    def run_outdated(self, sources, quick=False):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d:
+            wf, models = Path(d) / "wf", Path(d) / "models"
+            wf.mkdir(); (models / "loras").mkdir(parents=True)
+            ms = [{"name": n, "url": u, "directory": "loras"} for n, u in
+                  (("c.safetensors", "https://civitai.com/api/download/models/7?fileId=8"),
+                   ("p.pt", "https://download.pytorch.org/m/p.pt"))]
+            (wf / "w.json").write_text(json.dumps(workflow(*ms)))
+            (models / "loras" / "c.safetensors").write_bytes(b"civitai")
+            (models / "loras" / "p.pt").write_bytes(b"pytorch")
+            out = io.StringIO()
+            with mock.patch.object(cm, "other_source", side_effect=lambda u: sources[u.split("/")[2]]), \
+                 mock.patch.dict(os.environ, {"LLMCTL_CHECKSUMS": str(Path(d) / "sums")}), \
+                 contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+                rc = cm.cmd_outdated(wf, models, quick=quick)
+            return rc, out.getvalue()
+
+    def test_civitai_by_its_hash_and_a_plain_host_by_size_and_date(self):
+        sha = hashlib.sha256(b"civitai").hexdigest()
+        ok = {"civitai.com": (7, sha, "2026-05-07"), "download.pytorch.org": (7, None, "2022-07-12")}
+        rc, out = self.run_outdated(ok)
+        self.assertEqual(rc, 0)
+        self.assertIn("2 models checked by SHA-256: 2 current, 0 changed", out)
+        self.assertNotIn("not checkable", out)
+        moved = {"civitai.com": (7, "0" * 64, "2026-11-01"), "download.pytorch.org": (9, None, "2022-07-12")}
+        rc, out = self.run_outdated(moved)
+        self.assertEqual(rc, 1)
+        self.assertIn("loras/c.safetensors: other content on civitai.com", out)
+        self.assertIn("loras/p.pt: 7 bytes here, 9 on download.pytorch.org", out)
+
+    def test_a_host_that_cannot_be_reached_leaves_the_file_unchecked(self):
+        def boom(u):
+            raise OSError("HTTP 503")
+        from unittest import mock
+        with mock.patch.object(cm, "other_source", side_effect=boom):
+            rc, out = self.run_outdated({})
+        self.assertEqual(rc, 0)
+        self.assertIn("2 not checkable", out)
+
+    def test_civitai_is_asked_for_the_files_hash_without_any_token(self):
+        from unittest import mock
+        seen = []
+        version = {"updatedAt": "2026-05-07T03:21:58Z", "files": [
+            {"id": 1, "primary": True, "sizeKB": 1.0, "hashes": {"SHA256": "AA"}},
+            {"id": 8, "sizeKB": 761914.7421875, "hashes": {"SHA256": "00DB"}}]}
+        def urlopen(req, timeout=None):
+            seen.append(req)
+            return contextlib.nullcontext(io.BytesIO(json.dumps(version).encode()))
+        with mock.patch.object(cm.urllib.request, "urlopen", urlopen):
+            got = cm.other_source("https://civitai.com/api/download/models/7?fileId=8")
+        self.assertEqual(got, (780200696, "00db", "2026-05-07"))
+        self.assertEqual(seen[0].full_url, "https://civitai.com/api/v1/model-versions/7")
+        self.assertIsNone(seen[0].get_header("Authorization"))
+
+
 class PresentAndSize(unittest.TestCase):
     def test_a_file_is_present_a_missing_one_is_not(self):
         with tempfile.TemporaryDirectory() as d:
