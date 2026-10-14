@@ -1993,7 +1993,14 @@ class ImageApi(unittest.TestCase):
         self.assertIn("native French speaker", images.design_graph("x", "fr", 1)["1"]["inputs"]["instruct"])
         self.assertIsNone(images.reference_voice({}, "de"))
         uploads = []
-        with mock.patch.object(images, "upload", side_effect=lambda d, sfx: uploads.append(d) or "llmctl-api/r.wav"):
+        def as_read(data):                      # voice_wav without ffmpeg (not on CI): it is WAV already
+            try:
+                with wave.open(io.BytesIO(data)) as w:
+                    return data, w.getnframes() / w.getframerate()
+            except (wave.Error, EOFError):
+                raise images.Refused("that is no audio ffmpeg can read") from None
+        with mock.patch.object(images, "upload", side_effect=lambda d, sfx: uploads.append(d) or "llmctl-api/r.wav"), \
+                mock.patch.object(images, "voice_wav", side_effect=as_read):
             self.assertEqual(images.reference_voice({"reference_audio": b64.b64encode(wav(4, 1000)).decode()}, "de"),
                              "llmctl-api/r.wav")
             with self.assertRaises(images.Refused):                  # too short to learn a voice from
