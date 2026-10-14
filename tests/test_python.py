@@ -765,13 +765,52 @@ class Darkroom(unittest.TestCase):
         self.assertTrue(darkroom.clip_prompt({"action": "animate", "text": ""}).endswith("holds still." + darkroom.SOUND))
         for wish in ("Sie sagt Hallo", "She sings softly", "Er ruft seinen Hund"):
             self.assertEqual(darkroom.clip_prompt({"action": "animate", "text": wish}), wish)
-        self.assertEqual(darkroom.clip_prompt({"action": "talk", "text": "Er lacht"}), "Er lacht")
+        self.assertEqual(darkroom.clip_prompt({"action": "talk", "text": "Er lacht"}),
+                         darkroom.ACTIONS["talk"]["prompt"] + " Er lacht.")
         self.assertEqual(darkroom.clip_prompt({"action": "animate", "text": "a red dress waves"}),
                          "a red dress waves." + darkroom.SOUND)
 
+    def test_a_wish_for_talk_or_sing_comes_after_the_lips_on_the_voice_instead_of_replacing_them(self):
+        sing = darkroom.ACTIONS["sing"]["prompt"]
+        self.assertEqual(darkroom.clip_prompt({"action": "sing", "text": "ganz gefühlvoll."}), sing + " ganz gefühlvoll.")
+        talk = darkroom.clip_prompt({"action": "talk", "text": "Die Kamera fährt langsam heran"})
+        self.assertTrue(talk.startswith("The person speaks the words clearly"))
+        self.assertNotIn("holds still", talk)                            # the wish moves the camera
+        self.assertTrue(talk.endswith(" Die Kamera fährt langsam heran."))
+        gaze = darkroom.clip_prompt({"action": "talk", "text": "Sie blickt sanft direkt in die Kamera"})
+        self.assertIn("holds still", gaze)                               # a look into it moves nothing
+        self.assertNotIn("holds still", darkroom.clip_prompt({"action": "sing", "text": "slow zoom in"}))
+        for action in ("talk", "sing"):                     # no wish: the action's own prompt, as before
+            self.assertEqual(darkroom.clip_prompt({"action": action, "text": ""}), darkroom.ACTIONS[action]["prompt"])
+
+    def test_talk_sing_and_colorize_are_spelled_out_even_from_the_photo_alone(self):
+        from unittest import mock
+        client = darkroom.app.test_client()
+        darkroom.ARGS.expand_slot, darkroom.ARGS.expand_port, darkroom.ARGS.expand_model = 4, 8004, "gemma-moe"
+        sent = []
+
+        def post(url, json=None, timeout=None):
+            sent.append(json)
+            return mock.Mock(json=lambda: {"choices": [{"message": {"content": "blue sky, red coat"}}]})
+        photo = lambda: (io.BytesIO(self.jpeg(64, 48)), "a.jpg")    # noqa: E731
+        with mock.patch.object(darkroom, "ensure_expander"), mock.patch.object(darkroom.requests, "post", side_effect=post):
+            for action in ("talk", "sing", "colorize"):
+                r = client.post("/darkroom/api/expand", data={"action": action, "text": "", "image": photo()},
+                                content_type="multipart/form-data")
+                self.assertEqual(r.status_code, 200, action)
+                self.assertIn("There is no wish", sent[-1]["messages"][1]["content"][1]["text"])
+            self.assertIn("Write in English", sent[-1]["messages"][0]["content"])     # colorize reads English only
+            self.assertIn("Write in German", sent[0]["messages"][0]["content"])       # talk: the page's language
+            r = client.post("/darkroom/api/expand", data={"action": "edit", "text": "", "image": photo()},
+                            content_type="multipart/form-data")
+            self.assertEqual(r.status_code, 400)                                       # edit still wants words
+        actions = {a["id"]: a for a in client.get("/darkroom/api/actions").get_json()["actions"]}
+        self.assertTrue(actions["talk"]["expand"] and actions["talk"]["expand_empty"])
+        self.assertFalse(actions["edit"]["expand_empty"])
+        darkroom.ARGS.expand_slot = 0
+
     def test_animate_and_editing_further_can_spell_a_wish_out(self):
         self.assertIn("animate", darkroom.EXPAND_TASKS)
-        self.assertNotIn("talk", darkroom.EXPAND_TASKS)        # its text is how it looks, the words are the voice
         page = (ROOT / "darkroom.html").read_text()
         cont = page[page.index("function continueWith()"):]
         self.assertIn('$("text").value = ""', cont[:cont.index("\n}\n")])   # the wish was for the step before

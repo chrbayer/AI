@@ -2313,7 +2313,21 @@ the service started it (a check failed for want of 84 GiB while it held 29). For
 *Edit*, *Copy pose*, *Expand*, *Animate* and *Create*. For *Animate* it writes
 what moves, the faces and what is heard ("sie winkt und lacht": the girl on the
 beach waves and laughs, the waves roll in, her laughter and the surf are heard),
-3.6 s. Whether the model is up already the page asks first: only when it is
+3.6 s. For *Make it talk*, *Make it sing* and *Colorize* it works with nothing
+typed as well, from the photo alone: how the person speaks or sings
+("ganz gefühlvoll": a soft, moved face, the head tilted a little, relaxed
+shoulders — expression, gaze, head and shoulders, never the words), and for
+*Colorize* a list of things with their colours, in English whatever the page's
+language, the only language Qwen-Image Colorize reads ("blue sky, green grass,
+brown wooden barn, red dress" from a grey farm photo and "das Kleid rot"). A
+wish for talking or singing no longer replaces the action's own prompt ("The
+person speaks the words clearly and naturally, lips moving exactly with the
+voice, …"): it follows it, and the prompt's "The camera holds still" goes only
+when the wish names the camera. Tried with one photo, 5 s of speech and one
+seed: the wish alone ("ganz gefühlvoll") kept the mouth shut throughout — also
+with "Lips move exactly with the voice." after it, also spelled out by ✨ —
+while after the prompt it talked as without a wish, the spelled-out one with
+the head tilted as written. Whether the model is up already the page asks first: only when it is
 not does it say the model is starting — describing a photo takes a few seconds
 too, and the notice came every time.
 

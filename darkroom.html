@@ -1342,7 +1342,8 @@ function updateSave() {
   $("textHintText").textContent = hint;
   show("textHint", words > 0 && words < below);
   // Ausbauen: for the actions whose text describes the picture, once there is a text
-  show("expandEdit", !!(a && a.expand) && words > 0 && !E.busy);
+  // (talk, sing and colorize: also from the photo alone)
+  show("expandEdit", !!(a && a.expand) && (words > 0 || !!a.expand_empty) && !E.busy);
   show("expandGen", S.expand && !!$("genText").value.trim() && !E.busy);
   show("undoEdit", E.before.edit != null); show("undoGen", E.before.generate != null);
   show("expandLyrics", S.expand && !E.busy); show("undoLyrics", E.before.lyrics != null);
@@ -1358,7 +1359,8 @@ const expandField = (from) => $({ generate: "genText", lyrics: "lyrics" }[from] 
 async function expandText(from) {
   const field = expandField(from), lyrics = from === "lyrics";
   const text = field.value.trim();
-  if ((!text && !lyrics) || E.busy) return;
+  const act = S.actions.find((x) => x.id === S.action);
+  if ((!text && !lyrics && !(from === "edit" && act && act.expand_empty)) || E.busy) return;
   const fd = new FormData();
   fd.append("action", from === "generate" ? "generate" : lyrics ? "lyrics" : S.action); fd.append("text", text);
   if (lyrics) { fd.append("style", S.songStyle); fd.append("seconds", S.songSeconds); }

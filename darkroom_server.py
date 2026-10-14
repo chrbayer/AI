@@ -241,7 +241,7 @@ ACTIONS = {
         "prompt": ("The person speaks the words clearly and naturally, lips moving exactly with the voice, "
                    "small natural head movements and facial expressions. The camera holds still."),
         "text": "replace", "text_label": "Wie soll es wirken? (optional)",
-        "text_placeholder": "z. B. Sie singt mit geschlossenen Augen, ganz gefühlvoll",
+        "text_placeholder": "z. B. Sie erzählt fröhlich und lacht zwischendurch",
         "max_side": 1536, "seconds": (105, 380),
     },
     # Singen lassen: a song made from the user's lyrics (ACE-Step, through the
@@ -439,7 +439,7 @@ EN = {
     "Endbild (optional) – das Video läuft dorthin": "End picture (optional) – the video runs towards it",
     "Sprechen lassen": "Make it talk", "Das Foto spricht deine Aufnahme oder deinen Text": "The photo speaks your recording or your text",
     "Wie soll es wirken? (optional)": "How should it come across? (optional)",
-    "z. B. Sie singt mit geschlossenen Augen, ganz gefühlvoll": "e.g. She sings with her eyes closed, full of feeling",
+    "z. B. Sie erzählt fröhlich und lacht zwischendurch": "e.g. She tells it cheerfully, laughing now and then",
     # groups, styles, models
     "Verbessern": "Enhance", "Verändern": "Change", "Neu erschaffen": "Reimagine", "Video": "Video",
     "Aquarell": "Watercolour", "Bleistift": "Pencil", "Ölgemälde": "Oil painting", "Comic": "Comic", "Anime": "Anime",
@@ -1056,12 +1056,27 @@ TALKING = re.compile(r"\b(sprech|sprich|spricht|sagt|sage|rede|redet|ruft|rufen|
                      r"speak|talk|say|sing|shout|whisper)", re.IGNORECASE)
 
 
+# Talk and sing: the wish comes after the action's own prompt, never in its place.
+# Tried with one photo, voice and seed: alone, "ganz gefühlvoll" — also with "Lips
+# move exactly with the voice." after it, also spelled out by ✨ — kept the mouth
+# shut through 5 s of speech; after the prompt it talked as without a wish. Its
+# still camera goes when the wish names the camera.
+# a camera that moves — "looks into the camera" is no reason to let it
+CAMERA = re.compile(r"\b(zoom\w*|schwenk\w*|kamerafahrt|dolly|orbit\w*|pans?|panning|"
+                    r"(kamera|camera)\s+(fährt|bewegt|schwenkt|zoomt|kreist|folgt|moves|pans|zooms|pushes|pulls|"
+                    r"tracks|follows|circles|dollies))", re.IGNORECASE)
+STILL = " The camera holds still."
+
+
 def clip_prompt(job):
     spec = ACTIONS.get(job["action"])
     text = (job.get("text") or "").strip()
     prompt = text or (spec["prompt"] if spec else "")
     if job["action"] == "animate" and not TALKING.search(text):
         prompt = prompt.rstrip().rstrip(".") + "." + SOUND
+    if job["action"] in ("talk", "sing") and text:
+        base = spec["prompt"].replace(STILL, "") if CAMERA.search(text) else spec["prompt"]
+        prompt = base + " " + text.rstrip().rstrip(".") + "."
     return prompt
 
 
@@ -1290,7 +1305,22 @@ EXPAND_TASKS = {
     "animate": "The photo comes to life as a clip of a few seconds with sound. Describe what happens in it: how "
                "the people, animals and things move, their faces, what is heard; the camera holds still unless the "
                "wish says otherwise. Only what fits into a few seconds.",
+    # The voice is the user's recording or typed words: only the performance is written.
+    "talk": "The person in the photo speaks along to a voice recording; the words are given and not written "
+            "here. Describe how they speak: expression, gaze, head and shoulders (hands only if the photo shows them), "
+            "the mood. Never write what they say. The camera holds still unless the wish says otherwise. At most 50 words.",
+    "sing": "The person in the photo sings a song along to its recording; the lyrics are given and not written "
+            "here. Describe how they sing: expression, eyes, head and shoulders (hands only if the photo shows them), "
+            "the mood. Never write lyrics. The camera holds still unless the wish says otherwise. At most 50 words.",
+    # Qwen-Image Colorize reads a list of colours, applied to the whole picture.
+    "colorize": "A black-and-white photo is coloured in. Name the main things in it with the colour each should "
+                "get, as a comma-separated list ('blue sky, green trees, red wool coat'); keep every colour the "
+                "wish names, choose natural ones for the rest. Only the list, at most 30 words.",
 }
+# Those that ✨ fills with no wish at all (from the photo), and those whose text
+# the model reads only in English.
+EXPAND_EMPTY = {"talk", "sing", "colorize"}
+EXPAND_LANG = {"colorize": "English"}
 # ✨ Text schreiben for Singen lassen: lyrics to fill the song, about the wish or the photo.
 LYRICS_SYSTEM = (
     "You write the lyrics of a short {style} song that the person in the photo sings. Write in {lang}: about "
@@ -1459,7 +1489,7 @@ def expand_text():
         lyrics = action == "lyrics"
         if action not in EXPAND_TASKS and not lyrics:
             raise Refused("Für diese Aktion gibt es kein Ausbauen")
-        if not text and not lyrics:
+        if not text and not lyrics and action not in EXPAND_EMPTY:
             raise Refused("Erst ein paar Wörter schreiben")
         if len(text) > 2000:
             raise Refused("der Text ist zu lang")
@@ -1473,8 +1503,9 @@ def expand_text():
             system = LYRICS_SYSTEM.format(style=style, lang=language, lines=round(seconds / SECTION * 3))
             content = [{"type": "text", "text": f"The wish: {text}" if text else "There is no wish."}]
         else:
-            system = EXPAND_SYSTEM.format(lang=language)
-            content = [{"type": "text", "text": f"{EXPAND_TASKS[action]}\nThe wish: {text}"}]
+            system = EXPAND_SYSTEM.format(lang=EXPAND_LANG.get(action, language))
+            wish = f"The wish: {text}" if text else "There is no wish: choose what fits the photo."
+            content = [{"type": "text", "text": f"{EXPAND_TASKS[action]}\n{wish}"}]
         data, _ = picture("image", "from") if action != "generate" else (None, None)
         if data:
             mask = request.files["mask"].read() if "mask" in request.files else None
@@ -1623,6 +1654,7 @@ def actions():
                     "keep": bool(a.get("keep")), "keep_available": avail(a["keep"][0]) if a.get("keep") else None,
                     "variants": bool(a.get("variants")),
                     "expand": key in EXPAND_TASKS and bool(getattr(ARGS, "expand_slot", 0)),
+                    "expand_empty": key in EXPAND_EMPTY,
                     "group": tr(next(g for g, ids in GROUPS for i in ids if i == key)),
                     "second_available": avail(FIRST_LAST) if a.get("video") else True,
                     "available": avail(fast), "best_available": avail(best),
