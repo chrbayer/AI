@@ -5211,12 +5211,23 @@ cmd_outdated() {
             # A release tag made after the pin is news (update comfy takes it); new
             # commits are only shown.
             gh_repo=$(sed -E 's#^https://github.com/##; s#\.git$##' <<< "$url")
-            local tag status
+            local tag status rel="" rel_v="" rel_d="" rel_s="" pack="$c_base/custom_nodes/$dir" rnote=""
             tag=$(_node_pack_tag "$url")
             status=""; [[ -n "$tag" ]] && status=$(_gh_json "repos/$gh_repo/compare/$pin...$tag" .status)
             behind=$(_gh_json "repos/$gh_repo/compare/$pin...HEAD" .ahead_by)
             [[ "$behind" =~ ^[1-9] ]] && behind=", $behind commits since the pin" || behind=""
-            if [[ "$status" == ahead ]]; then
+            # Its newest release on the Comfy Registry, through the installed checkout.
+            if [[ -d "$pack/.git" ]]; then
+                git -C "$pack" fetch -q origin 2>/dev/null
+                git -C "$pack" remote set-head origin --auto > /dev/null 2>&1
+                read -r rel rel_v rel_d rel_s < <(python3 "$COMFYUI_MODELS_SCRIPT" pack-release "$pack" 2>/dev/null)
+                [[ -n "$rel" ]] && rnote="; registry $rel_v ($rel_d${rel_s:+, $rel_s})"
+            fi
+            if [[ -n "$rel" && "$rel" != "$pin"* ]] && git -C "$pack" merge-base --is-ancestor "$pin" "$rel" 2>/dev/null &&
+               ! git -C "$pack" merge-base --is-ancestor "$rel" HEAD 2>/dev/null; then
+                echo "  custom nodes $dir (${pin:0:9}, pinned) — $rel_v released $rel_d${rel_s:+ ($rel_s on the registry)}, after the pin: $PROG update ${f[0]}"
+                _news "custom nodes $dir → $rel_v: $PROG update ${f[0]}"
+            elif [[ "$status" == ahead ]]; then
                 echo "  custom nodes $dir (${pin:0:9}, pinned) — $tag is out, after the pin: $PROG update ${f[0]}"
                 _news "custom nodes $dir → $tag: $PROG update ${f[0]}"
             elif [[ "$master" == true && -n "$behind" ]]; then
@@ -5224,7 +5235,7 @@ cmd_outdated() {
                 echo "  custom nodes $dir (${pin:0:9}, pinned) — behind its main branch${behind}: $PROG update ${f[0]} --master"
                 _news "custom nodes $dir → its main branch: $PROG update ${f[0]} --master"
             else
-                echo "  custom nodes $dir (${pin:0:9}, pinned) — current${tag:+: $tag, its newest release, is older}$behind"
+                echo "  custom nodes $dir (${pin:0:9}, pinned) — current${tag:+: tag $tag is older}$rnote$behind"
             fi
         done < "$COMFYUI_SHARE/custom_nodes.txt"
         echo "  models:"
@@ -6473,7 +6484,7 @@ _comfyui_sync_workflows() {
 }
 
 # Install the custom node packs comfyui/custom_nodes.txt names, each at its pinned
-# commit (or a release tag after it; with "master", its main branch), into --base-directory's custom_nodes/ (where ComfyUI looks), and their
+# commit (or a release after it, tagged or on the Comfy Registry; with "master", its main branch), into --base-directory's custom_nodes/ (where ComfyUI looks), and their
 # requirements into ComfyUI's venv with torch held to its ROCm build; "-name"
 # after the commit drops a requirement, "+name" adds one.
 # The newest version tag of a node pack's repo (local after a fetch, or remote
@@ -6496,11 +6507,14 @@ _comfyui_custom_nodes() {
         if [[ ! -d "$target/.git" ]]; then
             git clone -q "$url" "$target" || { echo "  custom nodes $dir: clone failed"; continue; }
         fi
-        # The pin, or a release tag of the pack made after it: tags count, commits
-        # do not. Most packs tag rarely, and their newest tag lies behind the pin.
+        # The pin, or a release of the pack made after it — a tag, or a version on
+        # the Comfy Registry (where most packs publish; mapped to the commit that
+        # set it in pyproject.toml): releases count, commits do not.
         git -C "$target" fetch -q --tags origin 2>/dev/null
-        local want="$commit" label="${commit:0:12}" tag
+        git -C "$target" remote set-head origin --auto > /dev/null 2>&1
+        local want="$commit" label="${commit:0:12}" tag rel="" rel_v="" rel_d="" rel_s=""
         tag=$(_node_pack_tag "$target")
+        read -r rel rel_v rel_d rel_s < <(python3 "$COMFYUI_MODELS_SCRIPT" pack-release "$target" 2>/dev/null)
         if [[ "${1:-}" == master ]]; then
             # update --master: the pack's main branch, tags or not.
             git -C "$target" remote set-head origin --auto > /dev/null 2>&1
@@ -6509,6 +6523,10 @@ _comfyui_custom_nodes() {
         elif [[ -n "$tag" ]] && ! git -C "$target" merge-base --is-ancestor "$tag" "$commit" 2>/dev/null &&
            git -C "$target" merge-base --is-ancestor "$commit" "$tag" 2>/dev/null; then
             want="$tag" label="$tag (released after the pin ${commit:0:12})"
+        fi
+        if [[ "${1:-}" != master && -n "$rel" ]] && ! git -C "$target" merge-base --is-ancestor "$rel" "$want" 2>/dev/null &&
+           git -C "$target" merge-base --is-ancestor "$want" "$rel" 2>/dev/null; then
+            want="$rel" label="$rel_v (${rel:0:12}, released $rel_d after the pin ${commit:0:12})"
         fi
         # Never backwards: past what it would get (a --master from before), it stays.
         if [[ "${1:-}" != master ]] && git -C "$target" merge-base --is-ancestor "$want" HEAD 2>/dev/null; then

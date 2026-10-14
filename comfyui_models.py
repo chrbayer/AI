@@ -16,6 +16,7 @@ the order they appear, and the disagreement is reported.
     comfyui_models.py list     WORKFLOWS_DIR MODELS_DIR
     comfyui_models.py sizes    WORKFLOWS_DIR MODELS_DIR
     comfyui_models.py download WORKFLOWS_DIR MODELS_DIR [PATTERN] [--sources FILE]
+    comfyui_models.py pack-release PACK_DIR [REF]
 
 PATTERN restricts download to the workflows whose file name contains it
 (case-insensitive). Files already present are never fetched again, and nothing
@@ -758,7 +759,59 @@ def cmd_download(wf_dir, models_dir, pattern=None, sources=None):
     return 1 if failed else 0
 
 
+REGISTRY = "https://api.comfy.org"
+
+
+def pack_release(pack, ref=None):
+    """The newest release of a custom node pack on the Comfy Registry, where packs
+    publish (ComfyUI-Manager installs from it), mapped to a commit of its git
+    checkout: (commit, version, date, status), or None. The registry names no
+    commit; a release is published from the pyproject.toml whose version it
+    carries, so its commit is the first on the branch (ref, else origin/HEAD)
+    with that version there. One the history does not show is None too."""
+    import tomllib
+
+    def git(*a):
+        r = subprocess.run(["git", "-C", str(pack), *a], capture_output=True, text=True)
+        return r.stdout if r.returncode == 0 else None
+
+    ref = ref or next((r for r in ("origin/HEAD", "origin/main", "origin/master")
+                       if git("rev-parse", "-q", "--verify", r + "^{commit}")), "HEAD")
+
+    def version_at(c):
+        text = git("show", f"{c}:pyproject.toml")
+        try:
+            return tomllib.loads(text or "").get("project", {}) if text else {}
+        except tomllib.TOMLDecodeError:
+            return {}
+    name = version_at(ref).get("name")
+    if not name:
+        return None
+    req = urllib.request.Request(f"{REGISTRY}/nodes/{urllib.parse.quote(name)}/versions",
+                                 headers={"User-Agent": "llmctl"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            versions = json.load(r)
+    except (OSError, ValueError):
+        return None
+    versions = [v for v in versions if isinstance(versions, list) and not v.get("deprecated")]
+    if not versions:
+        return None
+    v = max(versions, key=lambda v: v.get("createdAt") or "")
+    want = v.get("version")
+    for c in (git("log", "--reverse", "--format=%H", ref, "--", "pyproject.toml") or "").split():
+        if version_at(c).get("version") == want:
+            status = (v.get("status") or "").replace("NodeVersionStatus", "").lower()
+            return c, want, (v.get("createdAt") or "")[:10], status
+    return None
+
+
 def main(argv):
+    if argv[:1] == ["pack-release"] and len(argv) in (2, 3):
+        got = pack_release(argv[1], argv[2] if len(argv) == 3 else None)
+        if got:
+            print(" ".join(got))
+        return 0 if got else 1
     sources = None
     if "--sources" in argv:
         i = argv.index("--sources")

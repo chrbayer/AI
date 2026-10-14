@@ -1,8 +1,9 @@
 # Custom node packs llmctl installs into ComfyUI (download comfy / update comfy).
 # One pack per line:  <directory>  <git URL>  <commit>  [-<requirement to drop>|+<requirement to add> ...]
 # The commit is pinned: update moves a pack when this file names a new one, or
-# when the pack tags a release made after the pin (tags count, commits do not;
-# most packs tag rarely, and their newest tag lies behind the pin).
+# when the pack releases after the pin — a tag, or a version on the Comfy
+# Registry, mapped to the commit that set it in pyproject.toml. Releases count,
+# commits do not.
 # Requirements install into ComfyUI's venv with torch held to its ROCm build;
 # a "-name" drops that requirement, a "+name" adds one.
 
@@ -30,7 +31,7 @@ ComfyUI-Impact-Subpack  https://github.com/ltdrdata/ComfyUI-Impact-Subpack  50c7
 # rgthree: comfort in the ComfyUI UI — a progress bar, group bypass/mute,
 # seed control, an image comparer, context nodes, the power lora loader. No
 # models, no requirements. The bundled workflows use none of its nodes.
-rgthree-comfy  https://github.com/rgthree/rgthree-comfy  449c58fcdd612f7733e54c51f6758ead63fa180b
+rgthree-comfy  https://github.com/rgthree/rgthree-comfy  16e329820fadb08480dca27e060e8da7e8f432ed
 
 # Background removal and masks: BiRefNet (MIT) for the BiRefNet Background
 # Removal workflows, plus segmentation nodes. Its requirements name onnxruntime-gpu

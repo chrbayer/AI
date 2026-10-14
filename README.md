@@ -1041,10 +1041,15 @@ llmctl update comfy --master          # master instead of the releases (download
   only there (`download comfy --master` sets a new one up on master); a
   checkout on master is reported with its version (`v0.38.0+28, master`) and
   how far origin/master is ahead. The custom node packs stay on the commits
-  `comfyui/custom_nodes.txt` pins, unless a pack tags a release made after
-  its pin — `update` takes that and `outdated` reports it; new commits are
-  only shown. (Most packs tag rarely: Impact-Pack's newest tag, 8.28, lies
-  8 commits behind its pin, rgthree's 407.) With `--master` the packs follow
+  `comfyui/custom_nodes.txt` pins, unless a pack releases after its pin —
+  `update` takes that and `outdated` reports it; new commits are only shown.
+  A release is a tag, or a version on the [Comfy Registry](https://registry.comfy.org),
+  where most packs publish (ComfyUI-Manager installs from it) and tags are
+  rare — Impact-Pack's newest tag, 8.28, lies 8 commits behind its pin,
+  rgthree's 407. The registry names no commit: a version maps to the first
+  commit whose `pyproject.toml` carries it. `outdated` shows each pack's
+  registry version and its status there (*flagged* is the registry's own
+  automatic scan, which marks many; it does not stop an update). With `--master` the packs follow
   their main branch too, tags or not: `outdated --master` reports a pack
   whose branch is past its pin, `update --master` moves it there. A plain
   `update` never moves a pack back: past its pin, it stays.

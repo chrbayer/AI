@@ -173,6 +173,40 @@ class OtherHosts(unittest.TestCase):
         self.assertIsNone(seen[0].get_header("Authorization"))
 
 
+class PackRelease(unittest.TestCase):
+    """A custom node pack's newest Comfy Registry release, found as a commit."""
+
+    def test_the_release_is_the_first_commit_that_carries_its_version(self):
+        import subprocess
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d:
+            def git(*a):
+                return subprocess.run(["git", "-C", d, "-c", "user.name=t", "-c", "user.email=t@t", *a],
+                                      check=True, capture_output=True, text=True).stdout.strip()
+            git("init", "-q")
+            commits = []
+            for v, note in (("1.0", "a"), ("1.1", "b"), ("1.1", "c"), ("1.2", "d")):
+                Path(d, "pyproject.toml").write_text(f'[project]\nname = "my-pack"  # id\nversion = "{v}"\n')
+                Path(d, "note").write_text(note)
+                git("add", "-A"); git("commit", "-qm", note)
+                commits.append(git("rev-parse", "HEAD"))
+            seen = []
+            versions = [{"version": "1.2", "createdAt": "2026-10-05T00:00:00Z", "deprecated": True},
+                        {"version": "1.1", "createdAt": "2026-10-01T04:00:00Z", "status": "NodeVersionStatusFlagged"},
+                        {"version": "1.0", "createdAt": "2026-09-01T00:00:00Z", "status": "NodeVersionStatusActive"}]
+            def urlopen(req, timeout=None):
+                seen.append(req.full_url)
+                return contextlib.nullcontext(io.BytesIO(json.dumps(versions).encode()))
+            with mock.patch.object(cm.urllib.request, "urlopen", urlopen):
+                got = cm.pack_release(d, "HEAD")
+            self.assertEqual(seen, ["https://api.comfy.org/nodes/my-pack/versions"])
+            # 1.2 is withdrawn; 1.1 came with the second commit, not the third
+            self.assertEqual(got, (commits[1], "1.1", "2026-10-01", "flagged"))
+            versions[1]["version"] = "9.9"                    # in no commit: nothing to move to
+            with mock.patch.object(cm.urllib.request, "urlopen", urlopen):
+                self.assertIsNone(cm.pack_release(d, "HEAD"))
+
+
 class PresentAndSize(unittest.TestCase):
     def test_a_file_is_present_a_missing_one_is_not(self):
         with tempfile.TemporaryDirectory() as d:
