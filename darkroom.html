@@ -377,6 +377,10 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
             <div class="textactions"><button class="link hidden" type="button" data-expand="speech" id="expandSpeech">✨ Text vorschlagen</button>
               <button class="link hidden" type="button" data-undo="speech" id="undoSpeech">Rückgängig</button></div>
             <div class="chips" id="speakVoices"></div>
+            <p class="note hidden" id="speakRefNote">Spricht den Text in der Stimme der Aufnahme. Dafür reichen 5–10 s ruhiges, deutliches Sprechen.</p>
+            <div class="hidden" id="speakDescribeWrap">
+              <textarea id="speakDescribe" rows="2" maxlength="200" placeholder="z. B. Ältere Frau, warme, ruhige Stimme, etwas heiser"></textarea>
+              <p class="note" style="margin-top:6px">Wer spricht, wie die Stimme klingt. Eine neue Beschreibung dauert beim ersten Mal etwa 20 s länger, danach bleibt es dieselbe Stimme.</p></div>
             <button class="btn" id="speakBtn" type="button">Sprechen</button>
           </div>
           <audio id="voicePlayer" controls class="hidden"></audio>
@@ -581,7 +585,7 @@ const S = {
   actions: [], editModels: [], genModels: [], aspects: [],
   action: null, quality: "fast", editModel: "qwen-image-21-turbo", sides: "wide",
   genModel: "z-image-turbo", aspect: "1:1", count: 1, variants: 1, clipSeconds: [], seconds: 5, style: "watercolour", keep: "0", voice: null, voiceMax: 10, voices: [], songMax: 30, songStyles: [], songVoices: [],
-  songStyle: recall("songStyle") || "", songVoice: recall("songVoice") || "", songSeconds: 20, speakVoice: recall("speakVoice") || "", groups: [], styles: [], genSeconds: 5, genQuality: "fast",
+  songStyle: recall("songStyle") || "", songVoice: recall("songVoice") || "", songSeconds: 20, speakVoice: recall("speakVoice") || "", cloneRef: null, groups: [], styles: [], genSeconds: 5, genQuality: "fast",
   source: null, source2: null,   // {blob, url, w, h} | {from: jobId, url, w, h}
   mask: null,                    // {blob, preview} — transparent where to redraw
   jobs: [], viewing: null, pollTimer: null,
@@ -608,7 +612,14 @@ const EN = {
     "Keep shape: cut, folds and edges stay, e.g. the same coat in red leather. Mark all of the thing for it.",
   "Stil": "Style", "Stimme (bis": "Voice (up to", "s) – das Video ist so lang wie die Aufnahme": "s) – the video is as long as the recording",
   "● Aufnehmen": "● Record", "Audiodatei": "Audio file", "Text tippen": "Type text", "Sprechen": "Speak",
-  "Spricht …": "Speaking …", "Wartet, bis die laufende Bearbeitung fertig ist …": "Waiting for the job that is running …", "Neu sprechen": "Speak again",
+  "Spricht …": "Speaking …", "Diese Aufnahme": "This recording", "Beschreiben …": "Describe …",
+  "Die Stimme entsteht …": "Making the voice …", "Bitte erst die Stimme beschreiben": "Please describe the voice first",
+  "Die Aufnahme ist zu kurz für einen Klon – mindestens 2 s sprechen": "The recording is too short to clone – speak for at least 2 s",
+  "Spricht den Text in der Stimme der Aufnahme. Dafür reichen 5–10 s ruhiges, deutliches Sprechen.":
+    "Speaks the text in the voice of the recording. 5–10 s of calm, clear speech are enough.",
+  "z. B. Ältere Frau, warme, ruhige Stimme, etwas heiser": "e.g. Older woman, warm, calm voice, a little husky",
+  "Wer spricht, wie die Stimme klingt. Eine neue Beschreibung dauert beim ersten Mal etwa 20 s länger, danach bleibt es dieselbe Stimme.":
+    "Who speaks, how the voice sounds. A new description takes about 20 s longer the first time; after that it stays the same voice.", "Wartet, bis die laufende Bearbeitung fertig ist …": "Waiting for the job that is running …", "Neu sprechen": "Speak again",
   "z. B. Hallo Oma, alles Gute zum Geburtstag! Wir haben dich ganz doll lieb.": "e.g. Hi Grandma, happy birthday! We love you so much.", "Länge": "Length",
   "Varianten – jede mit anderem Zufall, die beste behalten": "Variants – each with another seed, keep the best",
   "Wo soll mehr Bild hin?": "Where should more picture go?", "Links und rechts": "Left and right", "Oben und unten": "Top and bottom",
@@ -1105,18 +1116,31 @@ async function setVoice(blob, name, song) {
   renderEdit();
 }
 
+// A recording or file is the voice — and, kept, the voice a typed text can be spoken in.
+async function keepReference(blob, name) {
+  await setVoice(blob, name);
+  S.cloneRef = { blob, name, seconds: S.voice.seconds };
+  renderSpeak();
+}
+
 // … or from a text: the server has it spoken in one of llmctl's voices, and it
 // is then the voice as if recorded — played back here first, sent on as it is.
+// Besides those: "@ref", the recording made or chosen here, cloned; and
+// "describe", a voice from a few words.
 function renderSpeak() {
   show("speakOpen", S.voices.length > 0);
   if (!S.voices.length) show("speakWrap", false);
-  if (!S.voices.includes(S.speakVoice)) S.speakVoice = S.voices.includes("frau") ? "frau" : S.voices[0] || "";
+  const all = S.voices.concat(S.cloneRef ? ["@ref"] : [], ["describe"]);
+  if (!all.includes(S.speakVoice)) S.speakVoice = S.voices.includes("frau") ? "frau" : S.voices[0] || "";
+  const label = (v) => v === "@ref" ? t("Diese Aufnahme") : v === "describe" ? t("Beschreiben …")
+    : v.charAt(0).toUpperCase() + v.slice(1);
+  show("speakRefNote", S.speakVoice === "@ref"); show("speakDescribeWrap", S.speakVoice === "describe");
   const box = $("speakVoices");
-  if (box.dataset.voices !== S.voices.join(",")) {
-    box.dataset.voices = S.voices.join(",");
-    box.replaceChildren(...S.voices.map((v) => {
+  if (box.dataset.voices !== all.join(",")) {
+    box.dataset.voices = all.join(",");
+    box.replaceChildren(...all.map((v) => {
       const b = document.createElement("button");
-      b.type = "button"; b.dataset.v = v; b.textContent = v.charAt(0).toUpperCase() + v.slice(1);
+      b.type = "button"; b.dataset.v = v; b.textContent = label(v);
       b.onclick = () => { S.speakVoice = v; store("speakVoice", v); renderSpeak(); };
       return b;
     }));
@@ -1134,12 +1158,24 @@ async function speakText() {
   const text = $("speakText").value.trim(), btn = $("speakBtn");
   $("formErr").textContent = "";
   if (!text) { $("formErr").textContent = t("Bitte erst einen Text eingeben"); return; }
-  btn.disabled = true; btn.textContent = t("Spricht …");
+  const v = S.speakVoice, description = $("speakDescribe").value.trim();
+  if (v === "describe" && !description) { $("formErr").textContent = t("Bitte erst die Stimme beschreiben"); return; }
+  if (v === "@ref" && S.cloneRef.seconds && S.cloneRef.seconds < 2) {
+    $("formErr").textContent = t("Die Aufnahme ist zu kurz für einen Klon – mindestens 2 s sprechen"); return;
+  }
+  // the recording goes along to be cloned; it stays the reference however often it is spoken again
+  let body = JSON.stringify({ text, voice: v }), headers = { "Content-Type": "application/json", "X-Darkroom-Lang": LANG };
+  if (v === "@ref" || v === "describe") {
+    body = new FormData(); body.append("text", text);
+    if (v === "@ref") body.append("reference", S.cloneRef.blob, S.cloneRef.name);
+    else body.append("description", description);
+    headers = { "X-Darkroom-Lang": LANG };
+  }
+  btn.disabled = true; btn.textContent = t(v === "describe" ? "Die Stimme entsteht …" : "Spricht …");
   // ComfyUI does one thing at a time: the voice goes first, after the job running
   const slow = setTimeout(() => { btn.textContent = t("Wartet, bis die laufende Bearbeitung fertig ist …"); }, 15000);
   try {
-    const r = await fetch(API + "/speak", { method: "POST", body: JSON.stringify({ text, voice: S.speakVoice }),
-                                            headers: { "Content-Type": "application/json", "X-Darkroom-Lang": LANG } });
+    const r = await fetch(API + "/speak", { method: "POST", body, headers });
     if (!r.ok) {
       let msg = ""; try { msg = (await r.json()).error; } catch (e) {}
       throw new Error(msg || t("Fehler {n}", { n: r.status }));
@@ -1209,7 +1245,7 @@ async function toggleRecording() {
     stream.getTracks().forEach((t) => t.stop()); clearInterval(R.timer);
     const blob = new Blob(R.chunks, { type: R.rec.mimeType || "audio/webm" });
     R.rec = null; $("recBtn").classList.remove("on"); $("recBtn").textContent = t("● Neu aufnehmen");
-    setVoice(blob, "stimme." + (blob.type.includes("mp4") ? "m4a" : "webm"));
+    keepReference(blob, "stimme." + (blob.type.includes("mp4") ? "m4a" : "webm"));
   };
   R.started = Date.now(); R.rec.start();
   $("recBtn").classList.add("on");
@@ -2312,9 +2348,11 @@ $("text").addEventListener("focus", () => warmExpander("edit"));
 $("genText").addEventListener("focus", () => warmExpander("generate"));
 $("lyrics").addEventListener("focus", () => warmExpander("lyrics"));
 $("speakText").addEventListener("focus", () => warmExpander("speech"));
+$("speakDescribe").value = recall("speakDescribe") || "";
+$("speakDescribe").addEventListener("change", () => store("speakDescribe", $("speakDescribe").value.trim()));
 for (const b of document.querySelectorAll("[data-undo]")) b.onclick = () => undoExpand(b.dataset.undo);
 for (const b of $("tplScope").children) b.onclick = () => { if (!b.disabled) { T.scope = b.dataset.v; renderTemplates(); } };
-$("audioFile").onchange = (e) => { const f = e.target.files[0]; if (f) setVoice(f, f.name); e.target.value = ""; };
+$("audioFile").onchange = (e) => { const f = e.target.files[0]; if (f) keepReference(f, f.name); e.target.value = ""; };
 for (const b of $("variants").children) b.onclick = () => { S.variants = Number(b.dataset.n); renderEdit(); };
 for (const b of $("count").children) b.onclick = () => { S.count = Number(b.dataset.n); renderGen(); };
 for (const b of $("genQuality").children) b.onclick = () => { S.genQuality = b.dataset.q; store("genQuality", S.genQuality); renderGen(); };

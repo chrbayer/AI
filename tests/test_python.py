@@ -894,6 +894,34 @@ class Darkroom(unittest.TestCase):
         self.assertEqual((r.status_code, r.mimetype, r.data), (200, "audio/wav", b"RIFFwav"))
         self.assertEqual(post.call_args.args[0], "http://api/v1/audio/speech")
         self.assertEqual(post.call_args.kwargs["json"], {"input": "Hallo Oma!", "voice": "mann", "language": "de"})
+        with mock.patch.object(darkroom.requests, "post", return_value=reply) as post:
+            r = client.post("/darkroom/api/speak", data={"text": "Hallo", "voice": "@ref",
+                                                         "reference": (io.BytesIO(b"REC"), "stimme.webm")})
+        self.assertEqual(post.call_args.kwargs["json"], {"input": "Hallo", "language": "de", "reference_audio": "UkVD"})
+        with mock.patch.object(darkroom.requests, "post", return_value=reply) as post:
+            r = client.post("/darkroom/api/speak", data={"text": "Hallo", "voice": "describe", "description": " alter Mann "})
+        self.assertEqual(post.call_args.kwargs["json"], {"input": "Hallo", "language": "de", "voice_description": "alter Mann"})
+        r = client.post("/darkroom/api/speak", data={"text": "Hallo", "voice": "describe", "description": ""})
+        self.assertEqual(r.get_json()["error"], "Bitte erst die Stimme beschreiben")
+        r = client.post("/darkroom/api/speak", data={"text": "Hallo", "description": "x" * 201})
+        self.assertEqual(r.status_code, 400)
+        # a description goes to VoiceDesign in English, translated once and then kept
+        darkroom.ARGS.expand_slot, darkroom.ARGS.expand_port = 4, 8004
+        said = mock.Mock(json=lambda: {"choices": [{"message": {"content": '"An elderly man with a deep voice."'}}]})
+        try:
+            with mock.patch.object(darkroom, "ensure_expander"), \
+                    mock.patch.object(darkroom.requests, "post", return_value=said) as ask:
+                self.assertEqual(darkroom.voice_in_english("Alter Mann,  tiefe Stimme"), "An elderly man with a deep voice.")
+                self.assertEqual(darkroom.voice_in_english("alter mann, tiefe stimme"), "An elderly man with a deep voice.")
+            self.assertEqual(ask.call_count, 1)
+            self.assertEqual(ask.call_args.kwargs["json"]["temperature"], 0)
+            with mock.patch.object(darkroom, "ensure_expander", side_effect=darkroom.Refused("busy")):
+                self.assertEqual(darkroom.voice_in_english("Oma"), "Oma")      # without the model: as it is
+        finally:
+            darkroom.ARGS.expand_slot = 0
+        page = (ROOT / "darkroom.html").read_text()
+        for word in ('id="speakDescribe"', '"@ref"', 'body.append("reference", S.cloneRef.blob'):
+            self.assertIn(word, page)
         bad = mock.Mock(status_code=400, json=lambda: {"error": {"message": "no voice 'nix'"}})
         with mock.patch.object(darkroom.requests, "post", return_value=bad):
             r = client.post("/darkroom/api/speak", json={"text": "Hallo", "voice": "nix"})
@@ -1940,6 +1968,52 @@ class ImageApi(unittest.TestCase):
             self.assertIsNone(images.speech_voices())
         finally:
             images.requests.get = old_get
+            images.ARGS.comfy = old_comfy
+
+    def test_a_voice_is_cloned_from_a_recording_or_designed_from_a_description(self):
+        import array as arr, base64 as b64, wave
+        from unittest import mock
+        def wav(seconds, amp):
+            buf = io.BytesIO()
+            with wave.open(buf, "wb") as w:
+                w.setnchannels(1); w.setsampwidth(2); w.setframerate(48000)
+                w.writeframes(arr.array("h", [amp if i % 2 else -amp for i in range(int(48000 * seconds))]).tobytes())
+            return buf.getvalue()
+        # leveled: quiet and loud recordings come out alike, cut to what a clone needs
+        for amp in (300, 20000):
+            with wave.open(io.BytesIO(images.leveled(wav(20, amp), keep=images.REFERENCE_KEEP))) as w:
+                x = arr.array("h", w.readframes(w.getnframes()))
+            self.assertEqual(len(x), 48000 * images.REFERENCE_KEEP)
+            self.assertAlmostEqual(max(x) / 32768, 10 ** (-20 / 20), delta=0.01)
+        g = images.design_graph("Ältere Frau, warm.", "de", 7)
+        i = g["1"]["inputs"]
+        self.assertEqual((g["1"]["class_type"], i["language"], i["seed"]), (images.DESIGN_NODE, "German", 7))
+        self.assertEqual(i["instruct"], "Ältere Frau, warm. A native German speaker, speaking standard German without an accent.")
+        self.assertEqual(i["text"], images.DESIGN_SAMPLES["de"])
+        self.assertIn("native French speaker", images.design_graph("x", "fr", 1)["1"]["inputs"]["instruct"])
+        self.assertIsNone(images.reference_voice({}, "de"))
+        uploads = []
+        with mock.patch.object(images, "upload", side_effect=lambda d, sfx: uploads.append(d) or "llmctl-api/r.wav"):
+            self.assertEqual(images.reference_voice({"reference_audio": b64.b64encode(wav(4, 1000)).decode()}, "de"),
+                             "llmctl-api/r.wav")
+            with self.assertRaises(images.Refused):                  # too short to learn a voice from
+                images.reference_voice({"reference_audio": b64.b64encode(wav(1, 1000)).decode()}, "de")
+            with self.assertRaises(images.Refused):
+                images.reference_voice({"reference_audio": "no base64!"}, "de")
+        self.assertEqual(len(uploads), 1)
+        # a description already designed is not designed again
+        old_comfy = getattr(images.ARGS, "comfy", None)
+        images.ARGS.comfy = "http://127.0.0.1:9"
+        try:
+            with mock.patch.object(images.requests, "get", return_value=mock.Mock(status_code=200)) as get, \
+                    mock.patch.object(images, "execute") as run:
+                name = images.reference_voice({"voice_description": " Ältere Frau "}, "de")
+                self.assertEqual(name, images.reference_voice({"voice_description": "ältere frau"}, "de"))
+                self.assertNotEqual(name, images.reference_voice({"voice_description": "ältere frau"}, "en"))
+            self.assertRegex(name, r"^llmctl-api/design-[0-9a-f]{24}\.wav$")
+            run.assert_not_called()
+            self.assertEqual(get.call_args.kwargs["params"]["type"], "input")
+        finally:
             images.ARGS.comfy = old_comfy
 
     def test_model_lists_in_both_object_info_formats(self):

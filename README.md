@@ -1937,6 +1937,11 @@ llmctl update comfy --master          # master instead of the releases (download
   `seed` and `response_format` (`wav`, `mp3`, `flac`) and answers with the
   audio. It runs the clone workflow's graph ahead of ComfyUI's queue — for
   Darkroom's *Make it talk* from a text, without a speech slot beside ComfyUI.
+  Instead of `voice`, `reference_audio` (base64, 2–30 s of anyone speaking)
+  is cloned, and `voice_description` (up to 300 characters, best in English)
+  is designed with Qwen3-TTS VoiceDesign once — a sample sentence kept in
+  ComfyUI's `input/llmctl-api/` under the description's hash — and then
+  cloned.
 - **Patches.** `comfyui/patches/qwen35-rocm-conv3d.patch` works around a
   segfault of PyTorch's Conv3d fallback on ROCm in the Qwen3-VL vision encoder
   (the Qwen-Image 2.1 edit workflow). `update` takes the patches out before
@@ -2186,6 +2191,29 @@ which the button says after 15 s): a sentence of 5 s took 4–5 s, 8 s with
 the model loading. It plays back like a recording and goes on as one; a
 take that is not right is spoken again with another seed. Checked with the
 speech recognition: three German takes came back word for word.
+
+Beside those voices, two more chips:
+
+- *This recording* (*Diese Aufnahme*), once something is recorded or an
+  audio file chosen: the text is spoken in that voice — the recording goes
+  along as the clone's reference (2–30 s, leveled to −20 dBFS like the voices
+  of `llmctl voice`, the first 15 s used) and stays the reference however
+  often the text is spoken again. A quiet WebM from the phone at −38 dBFS came
+  out at −20; a higher reference (151 Hz) gave a higher clone (174 Hz), a
+  lower one (113 Hz) a lower one (111 Hz).
+- *Describe …* (*Beschreiben …*): a few words — "Ältere Frau, warme, ruhige
+  Stimme, etwas heiser" — and Qwen3-TTS VoiceDesign makes the voice. It reads
+  English: "Alter Mann, tiefe Stimme" came out at 270 Hz, "Deep bass voice of
+  an old man" at 87 Hz. So Gemma (the ✨ model) translates the description
+  first, word for word ("An elderly man with a deep voice": 105 Hz) — asked to
+  sum up pitch, pace and mood it added a "high pitch" to a radio presenter —
+  and Darkroom keeps the translation in `voices.json`. The design speaks a
+  sample sentence once, as a native speaker of the page's language, and the
+  sample is cloned for the text: the next text, or the same one again, has the
+  same voice and needs only the clone. A new description took 16–20 s, again
+  under 1 s. An old man, an older woman, a girl of six and a radio presenter
+  came out at 105, 195, 296 and 146 Hz, and the speech recognition read all
+  four word for word.
 
 *Make it sing* (*Singen lassen*) takes lyrics (up to 600 characters), a
 style (children's song, pop, ballad, schlager, rock, jazz), a voice (woman,

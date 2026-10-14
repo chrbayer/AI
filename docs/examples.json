@@ -1027,10 +1027,10 @@
           "id": "talk",
           "title": "Make it talk",
           "public": true,
-          "text": "The photo speaks a recording made on the phone (up to 10 s) — or a typed text, spoken in a voice of `llmctl voice` — the clip as long as the voice: 153 s for 8.5 s, *Fast*. A face that fills the picture works best. *✨ Suggest words* writes the words to say from a few (\"Oma, Geburtstag\" became a birthday wish of two sentences) or about the photo alone, short enough for the 10 s.",
+          "text": "The photo speaks a recording made on the phone (up to 10 s) — or a typed text, spoken in a voice of `llmctl voice`, in the voice of the recording just made (*This recording*: cloned from 5–10 s of speech) or in one described (*Describe …*: \"older woman, warm, calm voice\"; about 20 s the first time, then the same voice) — the clip as long as the voice: 153 s for 8.5 s, *Fast*. A face that fills the picture works best. *✨ Suggest words* writes the words to say from a few (\"Oma, Geburtstag\" became a birthday wish of two sentences) or about the photo alone, short enough for the 10 s.",
           "de": {
             "title": "Sprechen lassen",
-            "text": "Das Foto spricht eine Aufnahme vom Handy (bis 10 s) – oder einen getippten Text, gesprochen mit einer Stimme aus `llmctl voice` –, der Clip so lang wie die Stimme: 153 s für 8,5 s, *Schnell*. Ein Gesicht, das das Bild füllt, klappt am besten. *✨ Text vorschlagen* schreibt die Worte aus ein paar Stichworten („Oma, Geburtstag“ wurde ein Geburtstagsgruß in zwei Sätzen) oder allein zum Foto, kurz genug für die 10 s."
+            "text": "Das Foto spricht eine Aufnahme vom Handy (bis 10 s) – oder einen getippten Text, gesprochen mit einer Stimme aus `llmctl voice`, in der Stimme der gerade gemachten Aufnahme (*Diese Aufnahme*: geklont aus 5–10 s Sprechen) oder in einer beschriebenen (*Beschreiben …*: „ältere Frau, warme, ruhige Stimme“; beim ersten Mal etwa 20 s, danach dieselbe Stimme) –, der Clip so lang wie die Stimme: 153 s für 8,5 s, *Schnell*. Ein Gesicht, das das Bild füllt, klappt am besten. *✨ Text vorschlagen* schreibt die Worte aus ein paar Stichworten („Oma, Geburtstag“ wurde ein Geburtstagsgruß in zwei Sätzen) oder allein zum Foto, kurz genug für die 10 s."
           },
           "media": [
             {

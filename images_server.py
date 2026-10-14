@@ -16,7 +16,9 @@
                                   instrumental from the music workflows (comfyui/api/audio/)
     POST /v1/audio/speech         {"input", "voice", "language" (de), "seed", "response_format":
                                   wav|mp3|flac}: the text spoken by Qwen3-TTS in a voice of
-                                  `llmctl voice`; GET /v1/audio/voices lists them
+                                  `llmctl voice`; GET /v1/audio/voices lists them. Instead of
+                                  "voice": "reference_audio" (base64, a few seconds of anyone
+                                  speaking: cloned) or "voice_description" (designed, then cloned)
     POST /v1/video/clips          multipart or JSON: "prompt", "image" (or two in image[]: first
                                   and last), "model", "seconds" (1-10), "size", "quality":
                                   fast|full, "seed": an MP4 with sound (LTX-2.5, api/video/);
@@ -41,6 +43,7 @@ output: the caller has them.
 Started by `llmctl start comfy N --proxy` on the slot's proxy port.
 """
 import argparse
+import array
 import base64
 import hashlib
 import io
@@ -1046,6 +1049,14 @@ def to_mp3(flac):
     return r.stdout
 
 
+def to_flac(wav):
+    r = subprocess.run(["ffmpeg", "-v", "error", "-i", "pipe:0", "-f", "flac", "pipe:1"],
+                       input=wav, capture_output=True, timeout=300)
+    if r.returncode != 0:
+        raise RuntimeError("ffmpeg: " + r.stderr.decode(errors="replace")[-300:])
+    return r.stdout
+
+
 @app.post("/v1/audio/music")
 def music():
     def go():
@@ -1106,6 +1117,108 @@ def speech_voices():
     return {m.group(1): f for f in files if (m := re.fullmatch(r"voice-(.+)\.(wav|mp3|flac)", f))}
 
 
+# A voice from a description: Qwen3-TTS VoiceDesign speaks a sample sentence in
+# it once (~1.5x real time), and that sample is then cloned like any voice — so
+# every text, and every new try, has the same voice, and only the first waits
+# for the design. The sample stays in ComfyUI's input under the description's
+# hash. Said as a native speaker of the language, or it has an accent (and the
+# clone keeps it), as `llmctl voice design` found. VoiceDesign reads English
+# descriptions best: Darkroom translates them first.
+DESIGN_NODE = "FB_Qwen3TTSVoiceDesign"
+DESIGN_SAMPLES = {
+    "de": "Guten Tag. Ich lese Ihnen gern etwas vor, ob kurze Ansagen oder längere Texte. "
+          "Heute ist es draußen grau, aber freundlich.",
+    "en": "Hello. I am happy to read to you, whether short announcements or longer texts. "
+          "It is grey outside today, but friendly.",
+}
+DESCRIPTION_MAX = 300
+REFERENCE_SECONDS = (2.0, 30.0)     # a clone wants a few seconds; past 15 s it learns no more
+REFERENCE_KEEP = 15.0
+
+
+def design_graph(description, language, seed):
+    lang = language if language in DESIGN_SAMPLES else "en"
+    name = SPEECH_LANGUAGES[language]
+    native = f"A native {name} speaker, speaking standard {name} without an accent."
+    return {"1": {"class_type": DESIGN_NODE, "inputs": {
+                "text": DESIGN_SAMPLES[lang], "instruct": f"{description.strip().rstrip('.')}. {native}",
+                "model_choice": "1.7B", "device": "auto", "precision": "bf16",
+                "language": SPEECH_LANGUAGES[language] if lang == language else "Auto", "seed": seed,
+                "max_new_tokens": 2048, "top_p": 1.0, "top_k": 50, "temperature": 0.9,
+                "repetition_penalty": 1.05, "attention": "sdpa", "unload_model_after_generate": True}},
+            "2": {"class_type": "PreviewAudio", "inputs": {"audio": ["1", 0]}}}
+
+
+def leveled(wav_bytes, dbfs=-20.0, keep=None):
+    """Mono 16-bit WAV at one loudness, peaks below -1 dBFS (as `llmctl voice`
+    stores its voices: a clone speaks as loud as its reference), cut to `keep` s."""
+    with wave.open(io.BytesIO(wav_bytes)) as w:
+        rate, frames = w.getframerate(), w.readframes(w.getnframes())
+    x = array.array("h", frames[:int((keep or 1e9) * rate) * 2])
+    if x:
+        rms = (sum(v * v for v in x) / len(x)) ** 0.5 / 32768
+        peak = max(max(x), -min(x)) / 32768
+        if rms > 1e-5:
+            g = min(10 ** (dbfs / 20) / rms, 10 ** (-1 / 20) / peak)
+            x = array.array("h", (max(-32768, min(32767, round(v * g))) for v in x))
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(rate)
+        w.writeframes(x.tobytes())
+    return buf.getvalue()
+
+
+def fetch_audio(outputs):
+    """The first audio a finished graph left, as WAV."""
+    clips = [a for out in outputs.values() for a in out.get("audio", [])]
+    if not clips:
+        raise RuntimeError("the workflow gave no audio")
+    q = {"filename": clips[0]["filename"], "subfolder": clips[0].get("subfolder", ""), "type": clips[0].get("type", "temp")}
+    v = requests.get(f"{ARGS.comfy}/view", params=q, timeout=120)
+    v.raise_for_status()
+    r = subprocess.run(["ffmpeg", "-v", "error", "-i", "pipe:0", "-f", "wav", "pipe:1"],
+                       input=v.content, capture_output=True, timeout=120)
+    if r.returncode != 0:
+        raise RuntimeError("ffmpeg: " + r.stderr.decode(errors="replace")[-300:])
+    return r.stdout
+
+
+def reference_voice(j, language):
+    """The LoadAudio file for a request's reference_audio or voice_description, or None."""
+    if j.get("reference_audio"):
+        try:
+            data = base64.b64decode(re.sub(r"^data:[^,]*,", "", j["reference_audio"]), validate=True)
+        except (ValueError, TypeError):
+            raise Refused("reference_audio is base64 audio") from None
+        wav, length = voice_wav(data)
+        if not REFERENCE_SECONDS[0] <= length <= REFERENCE_SECONDS[1]:
+            raise Refused(f"the reference is {length:.1f} s; it takes {REFERENCE_SECONDS[0]:g} to "
+                          f"{REFERENCE_SECONDS[1]:g} s of speech")
+        return upload(leveled(wav, keep=REFERENCE_KEEP), ".wav")
+    desc = j.get("voice_description")
+    if not desc:
+        return None
+    if not isinstance(desc, str) or len(desc.strip()) > DESCRIPTION_MAX:
+        raise Refused(f"voice_description is a text of at most {DESCRIPTION_MAX} characters")
+    key = hashlib.sha256(f"{language}\n{desc.strip().lower()}".encode()).hexdigest()[:24]
+    name = f"design-{key}.wav"
+    have = requests.get(f"{ARGS.comfy}/view", params={"filename": name, "subfolder": "llmctl-api", "type": "input"},
+                        timeout=30)
+    if have.status_code == 200:
+        return f"llmctl-api/{name}"
+    info = requests.get(f"{ARGS.comfy}/object_info/{DESIGN_NODE}", timeout=30).json()
+    if DESIGN_NODE not in info:
+        raise Unavailable("ComfyUI has no Qwen3-TTS VoiceDesign (ComfyUI-Qwen-TTS) — llmctl update comfy")
+    t0 = time.time()
+    # the seed from the description: asked again, the same voice
+    sample = leveled(fetch_audio(execute(design_graph(desc, language, int(key[:8], 16)), front=True)))
+    r = requests.post(f"{ARGS.comfy}/upload/image", files={"image": (name, sample)},
+                      data={"subfolder": "llmctl-api", "type": "input", "overwrite": "true"}, timeout=60)
+    r.raise_for_status()
+    app.logger.info("voice designed in %.1f s: %s", time.time() - t0, desc.strip())
+    return f"llmctl-api/{name}"
+
+
 def speech_graph(text, voice_file, language, seed):
     return {"1": {"class_type": "LoadAudio", "inputs": {"audio": voice_file}},
             "2": {"class_type": SPEECH_NODE, "inputs": {
@@ -1145,29 +1258,20 @@ def speech():
         found = speech_voices()
         if found is None:
             raise Unavailable("ComfyUI has no Qwen3-TTS (ComfyUI-Qwen-TTS) — llmctl update comfy")
-        voice = j.get("voice") or ("frau" if "frau" in found else next(iter(sorted(found)), ""))
-        if voice not in found:
-            raise Refused(f"no voice '{voice}' — there are: {', '.join(sorted(found)) or 'none (llmctl voice add)'}")
-        seed = random.randrange(2**32) if j.get("seed") in (None, "") else int(j["seed"])
         t0 = time.time()
-        graph = speech_graph(text.strip(), found[voice], SPEECH_LANGUAGES[lang], seed)
-        # ahead of the queue: someone is waiting to hear it, and it takes seconds
-        clips = [a for out in execute(graph, front=True).values() for a in out.get("audio", [])]
-        if not clips:
-            raise RuntimeError("the workflow gave no audio")
-        q = {"filename": clips[0]["filename"], "subfolder": clips[0].get("subfolder", ""), "type": clips[0].get("type", "temp")}
-        v = requests.get(f"{ARGS.comfy}/view", params=q, timeout=120)
-        v.raise_for_status()
-        if fmt == "mp3":
-            body = to_mp3(v.content)
-        elif fmt == "wav":
-            r = subprocess.run(["ffmpeg", "-v", "error", "-i", "pipe:0", "-f", "wav", "pipe:1"],
-                               input=v.content, capture_output=True, timeout=120)
-            if r.returncode != 0:
-                raise RuntimeError("ffmpeg: " + r.stderr.decode(errors="replace")[-300:])
-            body = r.stdout
+        voice_file = reference_voice(j, lang)
+        if voice_file:
+            voice = "reference" if j.get("reference_audio") else "described"
         else:
-            body = v.content
+            voice = j.get("voice") or ("frau" if "frau" in found else next(iter(sorted(found)), ""))
+            if voice not in found:
+                raise Refused(f"no voice '{voice}' — there are: {', '.join(sorted(found)) or 'none (llmctl voice add)'}")
+            voice_file = found[voice]
+        seed = random.randrange(2**32) if j.get("seed") in (None, "") else int(j["seed"])
+        graph = speech_graph(text.strip(), voice_file, SPEECH_LANGUAGES[lang], seed)
+        # ahead of the queue: someone is waiting to hear it, and it takes seconds
+        wav = fetch_audio(execute(graph, front=True))
+        body = to_mp3(wav) if fmt == "mp3" else wav if fmt == "wav" else to_flac(wav)
         app.logger.info("speech %s: %d characters in %.1f s, seed %d", voice, len(text), time.time() - t0, seed)
         return Response(body, mimetype={"wav": "audio/wav", "mp3": "audio/mpeg", "flac": "audio/flac"}[fmt],
                         headers={"X-Seed": str(seed), "X-Voice": voice})

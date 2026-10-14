@@ -303,6 +303,7 @@ VOICE_MAX = 10
 # (Qwen3-TTS on the ComfyUI already running, ~5 s for a sentence). About 15
 # characters a second: 150 fill the 10 s.
 SPEAK_MAX = 150
+DESCRIBE_MAX = 200                # a voice described for Sprechen lassen
 # Singen lassen: how long a song may be, the sections it is sung in, and the
 # styles and voices offered — ACE-Step's tags, as the page names them.
 SONG_MAX = 30
@@ -485,6 +486,7 @@ EN = {
     "kein Bild": "no picture", "bitte erst die Stelle markieren": "please mark the spot first",
     "bitte erst etwas aufnehmen oder eine Audiodatei wählen": "please record something or choose an audio file first",
     "Bitte erst einen Text eingeben": "Please enter a text first",
+    "Bitte erst die Stimme beschreiben": "Please describe the voice first",
     "Bitte erst einen Liedtext eingeben": "Please enter lyrics first",
     "Wird zusammengesetzt …": "Putting it together …",
     "Singen lassen": "Make it sing", "Das Foto singt ein Lied mit deinem Text": "The photo sings a song with your lyrics",
@@ -510,6 +512,7 @@ EN_PATTERNS = [
     (r"Abschnitt (\d+) von (\d+) …", "Section {0} of {1} …"),
     (r"Abschnitt (\d+): (.*)", "Section {0}: {1}"),
     (r"Höchstens (\d+) Zeichen Liedtext", "At most {0} characters of lyrics"),
+    (r"Die Beschreibung höchstens (\d+) Zeichen", "At most {0} characters for the description"),
     (r"Das Lied hat nicht geklappt: (.*)", "The song did not work: {0}"),
     (r"(\d+) Stelle\(n\) gefunden", "{0} spot(s) found"),
     (r"Fertig: (.*)", "Done: {0}"),
@@ -1336,6 +1339,47 @@ SPEECH_SYSTEM = (
     "fits the photo and who is in it. Natural spoken language, one to three sentences. Only the words: no stage "
     "directions, no emojis, no quotes, no preamble; never ask back or explain.")
 
+# A voice described in German is mostly not the voice asked for — "Alter Mann,
+# tiefe Stimme" came out a high voice at 270 Hz, "Deep voice of an old man" at
+# 87 Hz: Qwen3-TTS VoiceDesign reads English. So the description goes through
+# the model first, once: kept in voices.json, the same words are the same voice.
+VOICE_SYSTEM = (
+    "Translate this description of a voice, in any language, into English for a voice designer, as one short "
+    "sentence that begins with who speaks (e.g. \"An elderly man\"). Say only what it says: never add a pitch, "
+    "pace, mood or anything else it does not mention. Only the sentence, at most 40 words; never ask back or "
+    "explain.")
+
+
+def voice_in_english(description):
+    """The description in English, as VoiceDesign understands it; as it is without the model."""
+    key = " ".join(description.lower().split())
+    path = Path(ARGS.data) / "voices.json"
+    try:
+        known = json.loads(path.read_text())
+    except (OSError, ValueError):
+        known = {}
+    if key in known:
+        return known[key]
+    if not getattr(ARGS, "expand_slot", 0):
+        return description
+    try:
+        ensure_expander()
+        r = requests.post(f"{expander_url()}/v1/chat/completions", timeout=120, json={
+            "messages": [{"role": "system", "content": VOICE_SYSTEM}, {"role": "user", "content": description}],
+            "max_tokens": 80, "temperature": 0})
+        _expand["used"] = time.time()
+        out = r.json()["choices"][0]["message"]["content"].strip().strip('"„“”').strip()
+    except (Refused, requests.RequestException, ValueError, KeyError, IndexError) as e:
+        app.logger.info("voice description not translated: %s", e)
+        return description
+    if not out:
+        return description
+    known[key] = out[:300]
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(known, ensure_ascii=False, indent=1))
+    tmp.replace(path)
+    return known[key]
+
 
 def clip_words(text, limit):
     """At most limit characters, ended at a sentence where one ends, else at a word."""
@@ -1451,16 +1495,29 @@ def song():
 
 @app.post("/darkroom/api/speak")
 def speak():
-    """Sprechen lassen from a text: the voice as WAV, for the page to play and send on."""
-    body = request.get_json(silent=True) or {}
+    """Sprechen lassen from a text: the voice as WAV, for the page to play and send on.
+    In one of llmctl's voices; or the recording sent along as "reference", cloned;
+    or a voice from a "description" (designed once, then cloned)."""
+    body = request.form if request.form or request.files else (request.get_json(silent=True) or {})
     text = (body.get("text") or "").strip()
     if not text:
         return error("Bitte erst einen Text eingeben")
     if len(text) > SPEAK_MAX:
         return error(f"Höchstens {SPEAK_MAX} Zeichen – mehr passt nicht in {VOICE_MAX} Sekunden")
+    ask = {"input": text, "language": lang()}
+    ref, description = request.files.get("reference"), (body.get("description") or "").strip()
+    if ref:
+        ask["reference_audio"] = base64.b64encode(ref.read()).decode()
+    elif description:
+        if len(description) > DESCRIBE_MAX:
+            return error(f"Die Beschreibung höchstens {DESCRIBE_MAX} Zeichen")
+        ask["voice_description"] = voice_in_english(description)
+    elif body.get("voice") == "describe":
+        return error("Bitte erst die Stimme beschreiben")
+    else:
+        ask["voice"] = body.get("voice") or ""
     try:
-        r = requests.post(f"{ARGS.api}/v1/audio/speech", timeout=300,
-                          json={"input": text, "voice": body.get("voice") or "", "language": lang()})
+        r = requests.post(f"{ARGS.api}/v1/audio/speech", timeout=600, json=ask)
     except requests.RequestException:
         return error("ComfyUI läuft nicht – bitte erst starten", 503)
     if r.status_code != 200:
