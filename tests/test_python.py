@@ -920,7 +920,8 @@ class Darkroom(unittest.TestCase):
         finally:
             darkroom.ARGS.expand_slot = 0
         page = (ROOT / "darkroom.html").read_text()
-        for word in ('id="speakDescribe"', '"@ref"', 'body.append("reference", S.cloneRef.blob'):
+        for word in ('id="speakDescribe"', '"@ref"', 'body.append("reference", S.cloneRef.blob', 'id="cloneOpen"',
+                     '$("cloneOpen").onclick = cloneOpen'):         # after a recording, the way to its voice
             self.assertIn(word, page)
         bad = mock.Mock(status_code=400, json=lambda: {"error": {"message": "no voice 'nix'"}})
         with mock.patch.object(darkroom.requests, "post", return_value=bad):

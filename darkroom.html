@@ -385,6 +385,7 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
           </div>
           <audio id="voicePlayer" controls class="hidden"></audio>
           <p class="note" id="voiceInfo"></p>
+          <button class="link hidden" type="button" id="cloneOpen">Oder einen Text in dieser Stimme sprechen lassen ›</button>
         </div></div>
       <div class="field" id="secondsWrap"><label>Länge</label><div class="chips" id="seconds"></div></div>
       <div class="field" id="variantsWrap"><label>Varianten – jede mit anderem Zufall, die beste behalten</label>
@@ -612,7 +613,8 @@ const EN = {
     "Keep shape: cut, folds and edges stay, e.g. the same coat in red leather. Mark all of the thing for it.",
   "Stil": "Style", "Stimme (bis": "Voice (up to", "s) – das Video ist so lang wie die Aufnahme": "s) – the video is as long as the recording",
   "● Aufnehmen": "● Record", "Audiodatei": "Audio file", "Text tippen": "Type text", "Sprechen": "Speak",
-  "Spricht …": "Speaking …", "Diese Aufnahme": "This recording", "Beschreiben …": "Describe …",
+  "Spricht …": "Speaking …", "Diese Aufnahme": "This recording",
+  "Oder einen Text in dieser Stimme sprechen lassen ›": "Or have a text spoken in this voice ›", "Beschreiben …": "Describe …",
   "Die Stimme entsteht …": "Making the voice …", "Bitte erst die Stimme beschreiben": "Please describe the voice first",
   "Die Aufnahme ist zu kurz für einen Klon – mindestens 2 s sprechen": "The recording is too short to clone – speak for at least 2 s",
   "Spricht den Text in der Stimme der Aufnahme. Dafür reichen 5–10 s ruhiges, deutliches Sprechen.":
@@ -1134,7 +1136,10 @@ function renderSpeak() {
   if (!all.includes(S.speakVoice)) S.speakVoice = S.voices.includes("frau") ? "frau" : S.voices[0] || "";
   const label = (v) => v === "@ref" ? t("Diese Aufnahme") : v === "describe" ? t("Beschreiben …")
     : v.charAt(0).toUpperCase() + v.slice(1);
-  show("speakRefNote", S.speakVoice === "@ref"); show("speakDescribeWrap", S.speakVoice === "describe");
+  show("speakRefNote", S.speakVoice === "@ref");
+  // after a recording, the way to its voice for a typed text — the chip alone sat unseen behind "Text tippen"
+  show("cloneOpen", !!S.cloneRef && S.voices.length > 0
+       && !(S.speakVoice === "@ref" && !$("speakWrap").classList.contains("hidden"))); show("speakDescribeWrap", S.speakVoice === "describe");
   const box = $("speakVoices");
   if (box.dataset.voices !== all.join(",")) {
     box.dataset.voices = all.join(",");
@@ -1148,9 +1153,15 @@ function renderSpeak() {
   press("speakVoices", "v", S.speakVoice);
 }
 
+function cloneOpen() {
+  S.speakVoice = "@ref";
+  show("speakWrap", true); $("speakOpen").setAttribute("aria-pressed", "true");
+  renderSpeak(); $("speakText").focus();
+}
+
 function toggleSpeak() {
   const on = $("speakWrap").classList.contains("hidden");
-  show("speakWrap", on); $("speakOpen").setAttribute("aria-pressed", String(on));
+  show("speakWrap", on); $("speakOpen").setAttribute("aria-pressed", String(on)); renderSpeak();
   if (on) $("speakText").focus();
 }
 
@@ -2324,6 +2335,7 @@ if (window.visualViewport) {
 }
 $("recBtn").onclick = toggleRecording;
 $("speakOpen").onclick = toggleSpeak;
+$("cloneOpen").onclick = cloneOpen;
 $("speakBtn").onclick = speakText;
 $("songBtn").onclick = makeSong;
 for (const b of document.querySelectorAll("[data-tpl]")) b.onclick = () => openTemplates(b.dataset.tpl);

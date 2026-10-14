@@ -2198,7 +2198,9 @@ Beside those voices, two more chips:
   audio file chosen: the text is spoken in that voice — the recording goes
   along as the clone's reference (2–30 s, leveled to −20 dBFS like the voices
   of `llmctl voice`, the first 15 s used) and stays the reference however
-  often the text is spoken again. A quiet WebM from the phone at −38 dBFS came
+  often the text is spoken again. Right after a recording, *Or have a text
+  spoken in this voice ›* under it opens the text with this chip chosen — the
+  chip alone, behind *Type text*, went unseen. A quiet WebM from the phone at −38 dBFS came
   out at −20; a higher reference (151 Hz) gave a higher clone (174 Hz), a
   lower one (113 Hz) a lower one (111 Hz).
 - *Describe …* (*Beschreiben …*): a few words — "Ältere Frau, warme, ruhige
