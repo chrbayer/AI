@@ -4885,6 +4885,9 @@ _version_of() { sed -n 's/^LLMCTL_VERSION=["'\'']\{0,1\}\([0-9.]*\).*/\1/p' "$1/
 # newer A B: A is a later version than B
 _newer() { [[ "$1" != "$2" && "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" == "$1" ]]; }
 
+# One thing outdated names: counted, and listed again at the end of its report.
+_news() { newer=$(( newer + 1 )); news+=("$1"); }
+
 _outdated_self() {
     printf '\033[1mllmctl\033[0m\n'
     local latest lead src checkout
@@ -4905,7 +4908,7 @@ _outdated_self() {
             behind=$(_gh_json "repos/$LLMCTL_REPO/compare/v$LLMCTL_VERSION...master" .ahead_by)
         if [[ "$behind" =~ ^[1-9] ]]; then
             echo "  llmctl $LLMCTL_VERSION — $behind commits behind master: $PROG self-update --master ($latest is the newest release)"
-            newer=$(( newer + 1 ))
+            _news "llmctl $LLMCTL_VERSION → master ($behind commits): $PROG self-update --master"
         elif [[ -n "$behind" ]]; then
             echo "  llmctl $LLMCTL_VERSION — current with master ($latest is the newest release)"
         else
@@ -4915,7 +4918,7 @@ _outdated_self() {
     fi
     if _newer "$latest" "$LLMCTL_VERSION"; then
         echo "  llmctl $LLMCTL_VERSION — $latest is out: $PROG self-update$lead"
-        newer=$(( newer + 1 )); counted=true
+        _news "llmctl $LLMCTL_VERSION → $latest: $PROG self-update"; counted=true
         _gh_json "repos/$LLMCTL_REPO/releases/tags/v$latest" .body | grep -v '^\s*$' | head -4 | cut -c1-110 | sed 's/^/      /'
     else
         echo "  llmctl $LLMCTL_VERSION — current: $latest is the newest release$lead"
@@ -4925,7 +4928,7 @@ _outdated_self() {
         checkout=$(_version_of "$src")
         if [[ -n "$checkout" ]] && _newer "$checkout" "$LLMCTL_VERSION"; then
             echo "  the checkout in $src is at $checkout, newer than this installation: $PROG self-update"
-            [[ "$counted" == true ]] || newer=$(( newer + 1 ))     # one thing to do, said twice
+            [[ "$counted" == true ]] || _news "llmctl: the checkout is at $checkout: $PROG self-update"     # one thing to do, said twice
         fi
     fi
 }
@@ -5026,7 +5029,7 @@ cmd_outdated() {
         esac
     done
     local newer=0 entry name
-    local -a f
+    local -a f news=()
     _check_deps hf python3 || return 2
 
     _outdated_self
@@ -5047,7 +5050,7 @@ cmd_outdated() {
             echo "  $image:$tag — current"
         else
             echo "  $image:$tag — $latest is out"
-            newer=$(( newer + 1 ))
+            _news "${image##*/} $tag → $latest"
             # The changelog of a ghcr.io/<owner>/<repo> image, if GitHub has one;
             # gufo's image lives under toolboxes/, its changelog in the main repo.
             local gh_repo="${image#ghcr.io/}"
@@ -5091,7 +5094,7 @@ cmd_outdated() {
                 echo "  $path ($commit) — current: master's newest build ($build)${stable:+; $stable is the newest stable release}"
             else
                 echo "  $path ($commit) — master's newest build is $build${behind:+, $behind commits on}: $PROG update llama --master"
-                newer=$(( newer + 1 ))
+                _news "llama.cpp $path → master's build $build: $PROG update llama --master"
             fi
         elif [[ -z "$stable" || -z "${status:-}" ]]; then
             echo "  $path ($commit): cannot compare with a release${behind:+ ($behind commits behind master)}"
@@ -5099,7 +5102,7 @@ cmd_outdated() {
             echo "  $path ($commit) — current: $stable is the newest stable release${behind:+, master is $behind commits further}"
         else
             echo "  $path ($commit) — older than $stable, the newest stable release"
-            newer=$(( newer + 1 ))
+            _news "llama.cpp $path → $stable"
         fi
     done
 
@@ -5113,10 +5116,10 @@ cmd_outdated() {
         head=$(_gh_json "repos/ggml-org/llama.cpp/pulls/$pr" .head.sha)
         if [[ "$merged" == true ]]; then
             echo "  PR #$pr is merged — the ordinary llama-server has /tts now; build-tts-server.sh can go"
-            newer=$(( newer + 1 ))
+            _news "speech server: PR #$pr is merged, build-tts-server.sh can go"
         elif [[ -n "$head" && "$head" != "$pinned" ]]; then
             echo "  PR #$pr ($state) has commits past ours (${pinned:0:9} → ${head:0:9})"
-            newer=$(( newer + 1 ))
+            _news "speech server: PR #$pr has commits past ours"
         elif [[ -n "$head" ]]; then
             echo "  PR #$pr ($state), at ${pinned:0:9} — current"
         else
@@ -5134,7 +5137,7 @@ cmd_outdated() {
             echo "  cannot ask GitHub"
         elif grep -q '"kolibri1"' <<< "$master_arch"; then
             echo "  llama.cpp master knows kolibri1 now — point kolibri at the ordinary build; build-kolibri-server.sh can go"
-            newer=$(( newer + 1 ))
+            _news "Kolibri: llama.cpp master knows kolibri1, the patched build can go"
         else
             echo "  llama.cpp master does not know kolibri1 yet (#29922) — the patched build stays"
         fi
@@ -5155,13 +5158,13 @@ cmd_outdated() {
             else
                 local by; by=$(sed -E 's/.* ([0-9]+) commits.*/\1/' <<< "$lead")
                 echo "  audio.cpp (${built:0:9}) — ${by:+$by commits }behind main: $PROG download asr-live --master"
-                newer=$(( newer + 1 ))
+                _news "audio.cpp → main: $PROG download asr-live --master"
             fi
         elif git -C "$AUDIOCPP_DIR" merge-base --is-ancestor "$AC_SHA" "$built" 2>/dev/null; then
             echo "  audio.cpp (${at:-${built:0:9}}) — current: $AC_REF is the newest release$lead"
         else
             echo "  audio.cpp (${at:-${built:0:9}}) — $AC_REF is the newest release: $PROG download asr-live builds it$lead"
-            newer=$(( newer + 1 ))
+            _news "audio.cpp → $AC_REF: $PROG download asr-live"
         fi
     else
         echo "  not set up"
@@ -5193,14 +5196,14 @@ cmd_outdated() {
                 echo "  ComfyUI ($version$on_master) — current with master${newest:+ ($newest is the newest release)}"
             else
                 echo "  ComfyUI ($version$on_master) — behind master (${tip:0:9}): $PROG update ${f[0]} --master${newest:+ ($newest is the newest release)}"
-                newer=$(( newer + 1 ))
+                _news "ComfyUI $version → master: $PROG update ${f[0]} --master"
             fi
         elif [[ -z "$newest" ]]; then echo "  ComfyUI ($version$on_master): cannot list its releases"
         elif git -C "$c_app" merge-base --is-ancestor "$newest" HEAD 2>/dev/null; then
             echo "  ComfyUI ($version$on_master) — current: $newest is the newest release$lead"
         else
             echo "  ComfyUI ($version$on_master) — $newest is the newest release; $PROG update ${f[0]} moves onto it"
-            newer=$(( newer + 1 ))
+            _news "ComfyUI $version → $newest: $PROG update ${f[0]}"
         fi
         local dir url pin rest
         while read -r dir url pin rest; do
@@ -5215,11 +5218,11 @@ cmd_outdated() {
             [[ "$behind" =~ ^[1-9] ]] && behind=", $behind commits since the pin" || behind=""
             if [[ "$status" == ahead ]]; then
                 echo "  custom nodes $dir (${pin:0:9}, pinned) — $tag is out, after the pin: $PROG update ${f[0]}"
-                newer=$(( newer + 1 ))
+                _news "custom nodes $dir → $tag: $PROG update ${f[0]}"
             elif [[ "$master" == true && -n "$behind" ]]; then
                 # Against its main branch, tags or not.
                 echo "  custom nodes $dir (${pin:0:9}, pinned) — behind its main branch${behind}: $PROG update ${f[0]} --master"
-                newer=$(( newer + 1 ))
+                _news "custom nodes $dir → its main branch: $PROG update ${f[0]} --master"
             else
                 echo "  custom nodes $dir (${pin:0:9}, pinned) — current${tag:+: $tag, its newest release, is older}$behind"
             fi
@@ -5229,7 +5232,7 @@ cmd_outdated() {
         [[ "$quick" == true ]] && qflag=(--quick)
         python3 "$COMFYUI_MODELS_SCRIPT" outdated "$c_wf" "$c_models" --sources "$COMFYUI_SHARE/sources.json" \
             "${qflag[@]}" | sed 's/^/  /'
-        (( PIPESTATUS[0] == 1 )) && newer=$(( newer + 1 ))
+        (( PIPESTATUS[0] == 1 )) && _news "ComfyUI models: newer files"
     done
 
     # New model versions beyond the files in use, and the ComfyUI templates open
@@ -5241,7 +5244,7 @@ cmd_outdated() {
             _resolve_model "${e%%|*}" && [[ "$_r_backend" == comfyui ]] && { _comfyui_paths; break; }
         done
         [[ -n "${c_app:-}" ]] && tdir=$(ls -d "$c_app"/.venv/lib/python*/site-packages/comfyui_workflow_templates_json/templates 2>/dev/null | head -1)
-        python3 "$LIB_DIR/watch.py" "$COMFYUI_SHARE/watch.conf" "${tdir:-/nonexistent}" || newer=$(( newer + 1 ))
+        python3 "$LIB_DIR/watch.py" "$COMFYUI_SHARE/watch.conf" "${tdir:-/nonexistent}" || _news "Watch: new model versions or templates"
     fi
 
     printf '\n\033[1mModels\033[0m (installed ones, against their Hugging Face repos)\n'
@@ -5260,7 +5263,7 @@ cmd_outdated() {
         if grep -q 'to download' <<< "$report"; then
             echo "  ${f[0]}: newer files on Hugging Face"
             grep -E 'to download|^    ' <<< "$report" | sed 's/^/  /'
-            newer=$(( newer + 1 ))
+            _news "${f[0]}: newer files on Hugging Face"
         elif grep -q 'cannot tell' <<< "$report"; then
             echo "  ${f[0]}: $(grep -m1 'cannot tell' <<< "$report" | sed 's/^ *//')"
         else
@@ -5270,7 +5273,7 @@ cmd_outdated() {
     if [[ -f "$TTS_DESIGN_DIR/model.safetensors" ]]; then
         report=$(_download_model "$TTS_DESIGN_REPO" "$TTS_DESIGN_DIR" "" 2>&1)
         if grep -q 'to download' <<< "$report"; then
-            echo "  VoiceDesign: newer files on Hugging Face"; newer=$(( newer + 1 ))
+            echo "  VoiceDesign: newer files on Hugging Face"; _news "VoiceDesign: newer files on Hugging Face"
         else
             echo "  VoiceDesign — current"
         fi
@@ -5278,7 +5281,8 @@ cmd_outdated() {
 
     echo ""
     if (( newer )); then
-        echo "Newer: $newer item(s) above."
+        echo "Newer: $newer item(s) — the details above:"
+        printf '  - %s\n' "${news[@]}"
         return 1
     fi
     echo "Everything current."
