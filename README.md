@@ -2327,7 +2327,14 @@ when the wish names the camera. Tried with one photo, 5 s of speech and one
 seed: the wish alone ("ganz gefühlvoll") kept the mouth shut throughout — also
 with "Lips move exactly with the voice." after it, also spelled out by ✨ —
 while after the prompt it talked as without a wish, the spelled-out one with
-the head tilted as written. Whether the model is up already the page asks first: only when it is
+the head tilted as written. *Make it talk*'s typed words have
+*✨ Suggest words* (*✨ Text vorschlagen*), as the lyrics have *✨ Write lyrics*:
+the words to say, from a few ("Oma, Geburtstag": "Alles Liebe zum Geburtstag,
+liebe Oma! Ich wünsche dir einen wunderschönen Tag und ganz viel Gesundheit.
+Hab dich lieb!") or about the photo alone, at most 150 characters, cut at a
+sentence. With neither a photo nor a wish, lyrics and words take a cheerful
+general theme — asked about a photo it did not have, the model asked back for
+it, into the text field. Whether the model is up already the page asks first: only when it is
 not does it say the model is starting — describing a photo takes a few seconds
 too, and the notice came every time.
 

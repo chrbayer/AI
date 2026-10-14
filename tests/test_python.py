@@ -688,7 +688,8 @@ class Darkroom(unittest.TestCase):
             r = client.post("/darkroom/api/expand", data={"action": "lyrics", "text": "", "seconds": "99"})
             self.assertEqual(r.status_code, 200)                       # no words: a song about the photo
             self.assertIn("about 9 short lines", sent[1]["messages"][0]["content"])
-            self.assertEqual(sent[1]["messages"][1]["content"][0]["text"], "There is no wish.")
+            # no words and no photo either: a general theme, not a question back for the photo
+            self.assertIn("no photo: choose a cheerful, general theme", sent[1]["messages"][1]["content"][0]["text"])
         self.assertNotIn("lyrics", darkroom.EXPAND_TASKS)              # not the ✨ Ausbauen of the main text field
         page = (ROOT / "darkroom.html").read_text()
         self.assertIn('data-expand="lyrics"', page)
@@ -804,9 +805,36 @@ class Darkroom(unittest.TestCase):
             r = client.post("/darkroom/api/expand", data={"action": "edit", "text": "", "image": photo()},
                             content_type="multipart/form-data")
             self.assertEqual(r.status_code, 400)                                       # edit still wants words
+            r = client.post("/darkroom/api/expand", data={"action": "talk", "text": ""})
+            self.assertEqual(r.status_code, 400)                                       # nothing to go on at all
         actions = {a["id"]: a for a in client.get("/darkroom/api/actions").get_json()["actions"]}
         self.assertTrue(actions["talk"]["expand"] and actions["talk"]["expand_empty"])
         self.assertFalse(actions["edit"]["expand_empty"])
+        darkroom.ARGS.expand_slot = 0
+
+    def test_the_words_to_say_are_suggested_and_fit_the_voice(self):
+        from unittest import mock
+        client = darkroom.app.test_client()
+        darkroom.ARGS.expand_slot, darkroom.ARGS.expand_port, darkroom.ARGS.expand_model = 4, 8004, "gemma-moe"
+        sent, answer = [], ["Alles Liebe zum Geburtstag, liebe Oma! " * 6]
+
+        def post(url, json=None, timeout=None):
+            sent.append(json)
+            return mock.Mock(json=lambda: {"choices": [{"message": {"content": answer[0]}}]})
+        with mock.patch.object(darkroom, "ensure_expander"), mock.patch.object(darkroom.requests, "post", side_effect=post):
+            r = client.post("/darkroom/api/expand", data={"action": "speech", "text": "Oma, Geburtstag",
+                                                           "image": (io.BytesIO(self.jpeg(64, 48)), "a.jpg")},
+                            content_type="multipart/form-data")
+            out = r.get_json()["text"]
+            self.assertLessEqual(len(out), darkroom.SPEAK_MAX)
+            self.assertTrue(out.endswith("Oma!"))                    # cut where a sentence ends
+            self.assertIn(f"at most {darkroom.SPEAK_MAX} characters", sent[0]["messages"][0]["content"])
+            self.assertEqual(sent[0]["messages"][1]["content"][1]["text"], "The wish: Oma, Geburtstag")
+            answer[0] = "ein langer Satz ohne jedes Ende " * 8
+            out = client.post("/darkroom/api/expand", data={"action": "speech", "text": ""}).get_json()["text"]
+            self.assertTrue(out.endswith("…") and len(out) <= darkroom.SPEAK_MAX)   # else cut at a word
+        page = (ROOT / "darkroom.html").read_text()
+        self.assertIn('data-expand="speech"', page)
         darkroom.ARGS.expand_slot = 0
 
     def test_animate_and_editing_further_can_spell_a_wish_out(self):

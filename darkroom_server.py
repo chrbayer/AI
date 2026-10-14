@@ -459,6 +459,7 @@ EN = {
     "Für diese Aktion gibt es kein Ausbauen": "This action has no expanding",
     "ungültiger Filter": "invalid filter",
     "Erst ein paar Wörter schreiben": "Write a few words first",
+    "Erst ein Foto wählen oder ein paar Wörter schreiben": "Choose a photo or write a few words first",
     "Das Sprachmodell hat nichts geschrieben": "The language model wrote nothing",
     "Das Sprachmodell antwortet nicht": "The language model does not answer",
     "Die Hilfe ist nicht installiert (docs/help)": "The help is not installed (docs/help)",
@@ -1326,7 +1327,25 @@ LYRICS_SYSTEM = (
     "You write the lyrics of a short {style} song that the person in the photo sings. Write in {lang}: about "
     "{lines} short lines that rhyme and are easy to sing, about the wish — or, without one, about the photo and "
     "who is in it. Mark the parts with [Verse] and [Chorus], each on a line of its own. Only the lyrics: no "
-    "title, no preamble, no quotes, no explanation.")
+    "title, no preamble, no quotes, no explanation; never ask back.")
+# ✨ Text vorschlagen for Sprechen lassen: the words the photo says, short enough
+# for the voice's VOICE_MAX seconds.
+SPEECH_SYSTEM = (
+    "You write what the person in the photo says to the camera: a short spoken message in {lang}, at most "
+    "{chars} characters, about {seconds} seconds spoken — about the wish, or, without one, a warm message that "
+    "fits the photo and who is in it. Natural spoken language, one to three sentences. Only the words: no stage "
+    "directions, no emojis, no quotes, no preamble; never ask back or explain.")
+
+
+def clip_words(text, limit):
+    """At most limit characters, ended at a sentence where one ends, else at a word."""
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    end = max(cut.rfind(c) for c in ".!?")
+    return cut[:end + 1] if end >= limit // 3 else cut[:cut.rfind(" ")].rstrip(",;:–- ") + "…"
+
+
 EXPAND_IDLE = 1800                   # s without a request, then the model is stopped again
 EXPAND_NEEDED_GIB = 32               # gemma-moe at Q8 with its mmproj
 _expand = {"started": False, "used": 0.0, "warming": False}
@@ -1486,14 +1505,20 @@ def expand_text():
             return error("Ausbauen ist hier nicht eingerichtet", 501)
         f = request.form
         action, text = f.get("action", ""), (f.get("text") or "").strip()
-        lyrics = action == "lyrics"
-        if action not in EXPAND_TASKS and not lyrics:
+        lyrics, speech = action == "lyrics", action == "speech"
+        if action not in EXPAND_TASKS and not lyrics and not speech:
             raise Refused("Für diese Aktion gibt es kein Ausbauen")
-        if not text and not lyrics and action not in EXPAND_EMPTY:
+        if not text and not lyrics and not speech and action not in EXPAND_EMPTY:
             raise Refused("Erst ein paar Wörter schreiben")
         if len(text) > 2000:
             raise Refused("der Text ist zu lang")
         language = "German" if lang() == "de" else "English"
+        data, _ = picture("image", "from") if action != "generate" else (None, None)
+        if not text and not data and action in EXPAND_EMPTY:
+            raise Refused("Erst ein Foto wählen oder ein paar Wörter schreiben")
+        # Lyrics and words to say need neither: without them a cheerful, general theme —
+        # asked for the photo it lacked, the model asked back for it, into the text field.
+        none = "There is no wish." if data else "There is no wish and no photo: choose a cheerful, general theme."
         if lyrics:
             try:
                 seconds = min(SONG_MAX, max(SECTION, int(f.get("seconds") or 20)))
@@ -1501,12 +1526,14 @@ def expand_text():
                 seconds = 20
             style = SONG_STYLES.get(f.get("style"), ("", "pop"))[1].split(",")[0]
             system = LYRICS_SYSTEM.format(style=style, lang=language, lines=round(seconds / SECTION * 3))
-            content = [{"type": "text", "text": f"The wish: {text}" if text else "There is no wish."}]
+            content = [{"type": "text", "text": f"The wish: {text}" if text else none}]
+        elif speech:
+            system = SPEECH_SYSTEM.format(lang=language, chars=SPEAK_MAX, seconds=VOICE_MAX)
+            content = [{"type": "text", "text": f"The wish: {text}" if text else none}]
         else:
             system = EXPAND_SYSTEM.format(lang=EXPAND_LANG.get(action, language))
             wish = f"The wish: {text}" if text else "There is no wish: choose what fits the photo."
             content = [{"type": "text", "text": f"{EXPAND_TASKS[action]}\n{wish}"}]
-        data, _ = picture("image", "from") if action != "generate" else (None, None)
         if data:
             mask = request.files["mask"].read() if "mask" in request.files else None
             try:
@@ -1518,11 +1545,14 @@ def expand_text():
         ensure_expander()
         r = requests.post(f"{expander_url()}/v1/chat/completions", timeout=120, json={
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": content}],
-            "max_tokens": 400 if lyrics else 260, "temperature": 0.8 if lyrics else 0.3})
+            "max_tokens": 400 if lyrics else 120 if speech else 260,
+            "temperature": 0.8 if lyrics or speech else 0.3})
         _expand["used"] = time.time()
         out = r.json()["choices"][0]["message"]["content"].strip().strip('"„“”').strip()
         if not out:
             raise Refused("Das Sprachmodell hat nichts geschrieben")
+        if speech:
+            return jsonify({"text": clip_words(out, SPEAK_MAX)})
         return jsonify({"text": out[:LYRICS_MAX if lyrics else 2000]})
     except Refused as e:
         return error(str(e))

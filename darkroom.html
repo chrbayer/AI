@@ -374,6 +374,8 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
           </div>
           <div class="speak hidden" id="speakWrap">
             <textarea id="speakText" rows="2" maxlength="150" placeholder="z. B. Hallo Oma, alles Gute zum Geburtstag! Wir haben dich ganz doll lieb."></textarea>
+            <div class="textactions"><button class="link hidden" type="button" data-expand="speech" id="expandSpeech">✨ Text vorschlagen</button>
+              <button class="link hidden" type="button" data-undo="speech" id="undoSpeech">Rückgängig</button></div>
             <div class="chips" id="speakVoices"></div>
             <button class="btn" id="speakBtn" type="button">Sprechen</button>
           </div>
@@ -624,7 +626,7 @@ const EN = {
   "Nichts gefunden.": "Nothing found.", "★ Favoriten": "★ Favourites", "Noch nichts bearbeitet.": "Nothing edited yet.", "Bild wählen": "Choose a picture",
   "Schließen": "Close", "Sichern": "Save", "Fehler suchen": "Find flaws", "Reparieren": "Repair",
   "Weiter bearbeiten": "Edit further", "Löschen": "Delete", "Stelle markieren": "Mark the spot", "Abbrechen": "Cancel",
-  "✨ Ausbauen": "✨ Expand", "✨ Text schreiben": "✨ Write lyrics", "Liedtext geschrieben – lesen, anpassen, dann Lied machen": "Lyrics written – read, adjust, then make the song", "Jetzt ausbauen": "Expand it now",
+  "✨ Ausbauen": "✨ Expand", "✨ Text schreiben": "✨ Write lyrics", "Liedtext geschrieben – lesen, anpassen, dann Lied machen": "Lyrics written – read, adjust, then make the song", "✨ Text vorschlagen": "✨ Suggest words", "Text vorgeschlagen – lesen, anpassen, dann Sprechen": "Words suggested – read, adjust, then Speak", "Jetzt ausbauen": "Expand it now",
   "Das Sprachmodell startet – beim ersten Mal etwa 15 Sekunden …": "The language model is starting – about 15 seconds the first time …",
   "Formuliert aus …": "Spelling it out …",
   "Ausgebaut – lesen, anpassen, dann los": "Expanded – read it, change it, then go",
@@ -1347,6 +1349,7 @@ function updateSave() {
   show("expandGen", S.expand && !!$("genText").value.trim() && !E.busy);
   show("undoEdit", E.before.edit != null); show("undoGen", E.before.generate != null);
   show("expandLyrics", S.expand && !E.busy); show("undoLyrics", E.before.lyrics != null);
+  show("expandSpeech", S.expand && !E.busy); show("undoSpeech", E.before.speech != null);
 }
 
 // ── Ausbauen ───────────────────────────────────────────
@@ -1355,14 +1358,14 @@ function updateSave() {
 // text before can be had back.
 // ✨ Text schreiben: the lyrics for Singen lassen, from a few words or the photo alone.
 const E = { busy: false, before: { edit: null, generate: null, lyrics: null } };
-const expandField = (from) => $({ generate: "genText", lyrics: "lyrics" }[from] || "text");
+const expandField = (from) => $({ generate: "genText", lyrics: "lyrics", speech: "speakText" }[from] || "text");
 async function expandText(from) {
-  const field = expandField(from), lyrics = from === "lyrics";
+  const field = expandField(from), lyrics = from === "lyrics", speech = from === "speech";
   const text = field.value.trim();
   const act = S.actions.find((x) => x.id === S.action);
-  if ((!text && !lyrics && !(from === "edit" && act && act.expand_empty)) || E.busy) return;
+  if ((!text && !lyrics && !speech && !(from === "edit" && act && act.expand_empty)) || E.busy) return;
   const fd = new FormData();
-  fd.append("action", from === "generate" ? "generate" : lyrics ? "lyrics" : S.action); fd.append("text", text);
+  fd.append("action", from === "generate" ? "generate" : lyrics || speech ? from : S.action); fd.append("text", text);
   if (lyrics) { fd.append("style", S.songStyle); fd.append("seconds", S.songSeconds); }
   if (from !== "generate" && S.source) appendPicture(fd, S.source, "image", "from");
   if (from === "edit" && S.mask) fd.append("mask", S.mask.blob, "mask.png");
@@ -1375,7 +1378,8 @@ async function expandText(from) {
   try {
     const r = await api("/expand", { method: "POST", body: fd });
     E.before[from] = field.value; field.value = r.text;
-    toast(t(lyrics ? "Liedtext geschrieben – lesen, anpassen, dann Lied machen" : "Ausgebaut – lesen, anpassen, dann los"));
+    toast(t(lyrics ? "Liedtext geschrieben – lesen, anpassen, dann Lied machen"
+            : speech ? "Text vorgeschlagen – lesen, anpassen, dann Sprechen" : "Ausgebaut – lesen, anpassen, dann los"));
   } catch (e) { toast(e.message, 5000); }
   clearTimeout(slow); E.busy = false; updateSave();
 }
@@ -2304,6 +2308,7 @@ function warmExpander(from) {
 $("text").addEventListener("focus", () => warmExpander("edit"));
 $("genText").addEventListener("focus", () => warmExpander("generate"));
 $("lyrics").addEventListener("focus", () => warmExpander("lyrics"));
+$("speakText").addEventListener("focus", () => warmExpander("speech"));
 for (const b of document.querySelectorAll("[data-undo]")) b.onclick = () => undoExpand(b.dataset.undo);
 for (const b of $("tplScope").children) b.onclick = () => { if (!b.disabled) { T.scope = b.dataset.v; renderTemplates(); } };
 $("audioFile").onchange = (e) => { const f = e.target.files[0]; if (f) setVoice(f, f.name); e.target.value = ""; };
