@@ -1003,10 +1003,10 @@
           "id": "animate",
           "title": "Animate",
           "public": true,
-          "text": "A clip of 3, 5 or 8 s with sound: \"the waves roll onto the beach, the dog wags its tail\", 5 s in 114 s (*Fast*: LTX-2.5's first stage, half the size; *Thorough* both stages, about 6 min). With a second photo the clip runs from the first to it.",
+          "text": "A clip of 3, 5 or 8 s with sound: \"the waves roll onto the beach, the dog wags its tail\", 5 s in 114 s (*Fast*: LTX-2.5's first stage, half the size; *Thorough* both stages, about 6 min). With a second photo the clip runs from the first to it. The sound is soft music and the scene's own noises; someone speaks only when the wish asks for it (\"she says …\") — without that sentence LTX had someone babble in all six test clips, with it five stayed quiet.",
           "de": {
             "title": "Animieren",
-            "text": "Ein Clip von 3, 5 oder 8 s mit Ton: „die Wellen rollen an den Strand, der Hund wedelt mit dem Schwanz“, 5 s in 114 s (*Schnell*: die erste Stufe von LTX-2.5, halbe Größe; *Gründlich* beide Stufen, etwa 6 min). Mit einem zweiten Foto läuft der Clip vom ersten zu ihm."
+            "text": "Ein Clip von 3, 5 oder 8 s mit Ton: „die Wellen rollen an den Strand, der Hund wedelt mit dem Schwanz“, 5 s in 114 s (*Schnell*: die erste Stufe von LTX-2.5, halbe Größe; *Gründlich* beide Stufen, etwa 6 min). Mit einem zweiten Foto läuft der Clip vom ersten zu ihm. Der Ton ist leise Musik und was die Szene selbst klingt; gesprochen wird nur, wenn der Wunsch es verlangt („sie sagt …“) – ohne diesen Satz plapperte bei LTX in allen sechs Testclips jemand, mit ihm blieben fünf still."
           },
           "media": [
             {
@@ -1051,10 +1051,10 @@
           "id": "sing",
           "title": "Make it sing",
           "public": true,
-          "text": "Lyrics, a style and a voice: ACE-Step makes the song (10–30 s, ~10 s), it plays first, then the photo sings it in 10 s sections from the same picture, joined to the frame with the song underneath — 20 s in 369 s, *Fast*. LTX hears the voice alone (Singing voice alone): with the whole song the mouth stayed shut. Where the lyrics end only the music plays: about 2–3 lines for 10 s.",
+          "text": "Lyrics, a style and a voice: ACE-Step makes the song (10–30 s, ~10 s), it plays first, then the photo sings it in 10 s sections from the same picture, joined to the frame with the song underneath — 20 s in 369 s, *Fast*. LTX hears the voice alone (Singing voice alone): with the whole song the mouth stayed shut. Where the lyrics end only the music plays: about 2–3 lines for 10 s. *✨ Write lyrics* has a language model (Gemma-4 26B-A4B) write them from a few words, or about the photo alone, as long as the song and in its style — a few seconds.",
           "de": {
             "title": "Singen lassen",
-            "text": "Liedtext, Stil und Stimme: ACE-Step macht das Lied (10–30 s, ~10 s), es spielt erst zur Probe, dann singt das Foto es in 10-s-Abschnitten vom selben Bild, aufs Bild genau zusammengesetzt, das Lied darunter – 20 s in 369 s, *Schnell*. LTX hört nur die Stimme (Gesang abtrennen): mit dem ganzen Lied blieb der Mund zu. Wo der Text endet, spielt nur die Musik: etwa 2–3 Zeilen für 10 s."
+            "text": "Liedtext, Stil und Stimme: ACE-Step macht das Lied (10–30 s, ~10 s), es spielt erst zur Probe, dann singt das Foto es in 10-s-Abschnitten vom selben Bild, aufs Bild genau zusammengesetzt, das Lied darunter – 20 s in 369 s, *Schnell*. LTX hört nur die Stimme (Gesang abtrennen): mit dem ganzen Lied blieb der Mund zu. Wo der Text endet, spielt nur die Musik: etwa 2–3 Zeilen für 10 s. *✨ Text schreiben* lässt ein Sprachmodell (Gemma-4 26B-A4B) ihn aus ein paar Stichworten dichten, oder allein zum Foto, so lang wie das Lied und in seinem Stil – in wenigen Sekunden."
           },
           "media": [
             {
