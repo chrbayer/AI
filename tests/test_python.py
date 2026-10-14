@@ -844,6 +844,13 @@ class Darkroom(unittest.TestCase):
         self.assertIn('$("text").value = ""', cont[:cont.index("\n}\n")])   # the wish was for the step before
         self.assertIn("interactive-widget=resizes-content", page)   # Android: the start button over the keyboard
 
+    def test_closing_the_viewer_stops_a_playing_clip(self):
+        page = (ROOT / "darkroom.html").read_text()
+        close = page[page.index("function closeViewer()"):]
+        close = close[:close.index("\n}\n")]
+        self.assertIn(".pause()", close)               # hidden, it would loop on with its sound
+        self.assertIn('$("stage").innerHTML = ""', close)
+
     def test_entering_the_text_field_warms_the_expanding_model_in_the_background(self):
         from unittest import mock
         client = darkroom.app.test_client()

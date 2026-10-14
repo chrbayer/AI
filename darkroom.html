@@ -1999,6 +1999,9 @@ function showCompare(job) {
 }
 
 function closeViewer() {
+  // a clip keeps playing (and looping) hidden behind a closed viewer: stop it
+  for (const m of $("stage").querySelectorAll("video, audio")) { m.pause(); m.removeAttribute("src"); m.load(); }
+  $("stage").innerHTML = "";
   $("viewer").classList.remove("on", "checking"); show("vFound", false); document.body.style.overflow = ""; S.viewing = null;
   if (location.hash) history.replaceState(null, "", location.pathname);
 }
