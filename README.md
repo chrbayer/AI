@@ -2097,9 +2097,10 @@ at `/darkroom`, and a home-screen icon for `/fotos` is best made anew.
 | Action | Workflow (fast / thorough) | Measured here |
 |---|---|---|
 | Colorize (Kolorieren) — black and white to colour; colours can be named | Qwen-Image 2.1 Colorize Turbo / Colorize | 29 s / 65 s |
-| Restore (Restaurieren) — scratches, stains, noise | Qwen-Image 2.1 Edit Turbo / Edit, with a restoring prompt | 146 s (with loading) |
+| Restore (Restaurieren) — scratches, stains, noise | Qwen-Image 2.1 Edit Turbo / Edit, with a restoring prompt that names no people (a wedding couple and a farm family kept their faces as well without "Keep the people, their faces") | 146 s (with loading) |
+| Brighten (Aufhellen) — a photo taken in the dark; with variants | Qwen-Image 2.1 Edit Turbo / Edit: "Brighten this dark photo a lot, as if it had been taken in bright light … do not add, remove or redraw anything." — a park, a street and a room made five stops darker came back bright with their colours, nothing added; curves and CLAHE (OpenCV) left them grey and flat; asked only for "a good exposure" it kept an ice cave's gloom | 50–56 s |
 | Sharpen (Scharf machen) — a dim photo, shaken or someone moving; with variants | Qwen-Image 2.1 Edit Turbo / Edit: "Sharpen this photo and reduce its noise. Change nothing else: do not add, remove or redraw anything." — naming no people: the prompt that spoke of "the people's faces, hands and arms" drew people into an ice cave that had none, at three seeds of three | 72 s / 78 s |
-| Remove reflections (Spiegelung entfernen) — taken through a pane of glass; with variants; what stays, *Paint over* | Qwen-Image 2.1 Edit Turbo / Edit: "Remove the reflections of the glass pane … as if photographed without glass" — at a zoo window Turbo took the reflected hands out too, Edit did not | 70 s / 78 s |
+| Remove reflections (Spiegelung entfernen) — taken through a pane of glass; with variants; what stays, *Paint over* | Qwen-Image 2.1 Edit Turbo / Edit: "Remove the reflections of the glass pane … — whatever is mirrored in it … — add nothing", naming no subject, face or people — at a zoo window Turbo took the reflected hands out too, Edit did not | 70 s / 78 s |
 | Faces (Gesichter) — faces and hands redrawn | Qwen-Image 2.1 Detailer / FLUX.2 klein Detailer (small faces) | 136 s / 235 s |
 | Upscale (Vergrößern) — 4× | SeedVR2 7B (the picture brought to 1024 px first) | 103 s, 1024 → 4096 px |
 | Remove background (Freistellen) — background removed (PNG) | BiRefNet / BiRefNet Matting | 3 s |
@@ -2162,9 +2163,13 @@ red; one word gets the hint there.
 *Redesign* runs on Qwen-Image's Depth Turbo: Z-Image's turned an
 untidy garden into neon-green mush and a living room's windows into black
 panels, where Qwen-Image laid out lawn, beds and path and kept the windows.
-*As artwork* runs on Qwen-Image Edit, told "Turn this photo into a … ;
-keep the composition, the people and their features, the hair colour and
-the colours of the clothes" (the pencil drawing keeps no colours). It used
+*As artwork* runs on Qwen-Image Edit, told "Turn this photo into a … .
+Keep the composition and everything in it with its colours; add nothing"
+(the pencil drawing keeps no colours). Until 1.102 it said "Keep the
+composition, the people and their features, the hair colour and the colours
+of the clothes": an ice cave without anyone in it came back as a watercolour
+with three people walking in it; the new sentence painted none, and the man
+in the park came out as alike as before. It used
 to run on Canny, which sees only the photo's edges: a blonde girl in a grey
 hat came back red- or purple-haired in a yellow one with a stranger's face,
 and the old prompt without colour words ("clean line art") a pale line
@@ -2304,7 +2309,12 @@ an iPhone it is the gallery button as before.
 
 **Crop and turn.** *Crop* (*Zuschneiden*) beside the source picture opens it
 with a frame to drag by its middle and its corners, free or held to 1:1, 4:3,
-3:4, 16:9 or 9:16, and quarter turns either way; *Done* makes the cut-out the
+3:4, 16:9 or 9:16, and quarter turns either way. *Straighten* (*Gerade
+richten*), a slider from −15° to +15° in tenths, turns a picture that is a
+little askew over a grid to line it up by, and cuts it to the largest box of
+its shape without empty corners (2.5° keeps 94.6 % of each side). It is by
+hand: an automatic guess from straight edges (OpenCV, Hough) found none in an
+ice cave and took a picture frame for a 10° tilt. *Done* makes the cut-out the
 source picture — in the browser, on a canvas, nothing goes to the server
 until the job.
 

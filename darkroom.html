@@ -227,6 +227,13 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
 .ratios button[aria-pressed="true"] { background: #fff; color: #000; }
 .brush { display: flex; align-items: center; gap: 12px; padding: 4px 16px 0; color: #ddd; font-size: 14px; }
 .brush input { flex: 1; accent-color: #fff; }
+.brush .val { min-width: 3.2em; text-align: right; font-variant-numeric: tabular-nums; }
+.brush .link { color: #fff; }
+/* Gerade richten: a grid to line the picture up against, while the slider moves */
+.crop.leveling::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(to right, rgba(255,255,255,.45) 0 1px, transparent 1px 12.5%),
+              repeating-linear-gradient(to bottom, rgba(255,255,255,.45) 0 1px, transparent 1px 12.5%); }
+.crop.leveling { overflow: hidden; }
 .toast { position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom)); transform: translateX(-50%);
          background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-size: 14px;
          z-index: 30; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100vw - 32px); }
@@ -535,6 +542,8 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
     <button type="button" data-r="0" aria-pressed="true">Frei</button><button type="button" data-r="1">1:1</button>
     <button type="button" data-r="1.3333">4:3</button><button type="button" data-r="0.75">3:4</button>
     <button type="button" data-r="1.7778">16:9</button><button type="button" data-r="0.5625">9:16</button></div>
+  <div class="brush">Gerade richten <input type="range" id="kAngle" min="-15" max="15" step="0.1" value="0" aria-label="Gerade richten">
+    <span class="val" id="kAngleVal">0°</span><button type="button" class="link" id="kAngleReset" aria-label="Auf 0° zurück">↺</button></div>
   <div class="bar">
     <button type="button" id="kLeft"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9a8 8 0 1 1 2 7"/><path d="M4 4v5h5"/></svg>Links drehen</button>
     <button type="button" id="kRight"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 9a8 8 0 1 0-2 7"/><path d="M20 4v5h-5"/></svg>Rechts drehen</button>
@@ -648,7 +657,7 @@ const EN = {
   "Höchstens {n} Fotos auf einmal – die ersten {n} sind gewählt.": "At most {n} photos at once – the first {n} are chosen.",
   "Übermalen geht nur mit einem Foto – erst eins wählen.": "Paint over takes one photo only – choose one first.",
   "Wird hochgeladen … {i} von {n}": "Uploading … {i} of {n}", "{n} Aufträge in der Warteschlange": "{n} jobs in the queue", "Zuschneiden": "Crop", "Zuschneiden und drehen": "Crop and turn", "Frei": "Free",
-  "Links drehen": "Turn left", "Rechts drehen": "Turn right", "Favoriten": "Favourites", "Favorit": "Favourite",
+  "Links drehen": "Turn left", "Gerade richten": "Straighten", "Auf 0° zurück": "Back to 0°", "Rechts drehen": "Turn right", "Favoriten": "Favourites", "Favorit": "Favourite",
   "Noch keine Favoriten – im Ergebnis ☆ antippen.": "No favourites yet – tap ☆ on a result.",
   "Favorit – wird nie automatisch gelöscht": "Favourite – never deleted by itself", "Kein Favorit mehr": "No longer a favourite", "Behalten": "Keep", "Vorige Variante": "Previous variant", "Nächste Variante": "Next variant",
   "Nochmal tippen: diese behalten, die anderen Varianten löschen": "Tap again: keep this one, delete the other variants",
@@ -1467,7 +1476,10 @@ async function saveTemplate() {
 // ── cropping and turning ─────────────────────────────────
 // The source picture on a canvas, turned by quarters; the box in fractions of
 // it, moved by its middle, sized by its corners, held to a shape if one is chosen.
-const K = { canvas: null, rect: [0, 0, 1, 1], ratio: 0, drag: null };
+// Gerade richten turns it by a few degrees more and cuts it to the largest box
+// of its shape that has no empty corners: K.base is the picture turned by
+// quarters, K.canvas that, levelled.
+const K = { canvas: null, base: null, angle: 0, rect: [0, 0, 1, 1], ratio: 0, drag: null };
 
 async function openCropper() {
   if (!S.source) return;
@@ -1476,7 +1488,7 @@ async function openCropper() {
   catch (e) { toast(t("Das Bild lässt sich nicht öffnen.")); return; }
   const c = document.createElement("canvas"); c.width = img.naturalWidth; c.height = img.naturalHeight;
   c.getContext("2d").drawImage(img, 0, 0);
-  K.canvas = c; K.ratio = 0; press("kRatios", "r", "0");
+  K.base = K.canvas = c; K.ratio = 0; press("kRatios", "r", "0"); setAngle(0, false);
   showCrop(true);
   $("cropper").classList.add("on"); document.body.style.overflow = "hidden";
 }
@@ -1498,12 +1510,45 @@ function fitRatio(r) {
   const w = k <= 1 ? k : 1, h = k <= 1 ? 1 : 1 / k;
   return [(1 - w) / 2, (1 - h) / 2, w, h];
 }
+// how much of a w×h picture turned by a degrees is left, at its own shape, without corners
+function levelScale(w, h, a) {
+  const r = Math.abs(a) * Math.PI / 180, c = Math.cos(r), s = Math.sin(r);
+  return Math.min(w / (w * c + h * s), h / (w * s + h * c));
+}
+function leveled(base, a) {
+  if (!a) return base;
+  const w = base.width, h = base.height, k = levelScale(w, h, a);
+  const n = document.createElement("canvas"); n.width = Math.round(w * k); n.height = Math.round(h * k);
+  const ctx = n.getContext("2d"); ctx.imageSmoothingQuality = "high";
+  ctx.translate(n.width / 2, n.height / 2); ctx.rotate(a * Math.PI / 180); ctx.drawImage(base, -w / 2, -h / 2);
+  return n;
+}
+// While the slider moves, the shown picture turns (and grows to hide its corners)
+// over a grid; let go, and the levelled picture is made.
+function setAngle(a, preview) {
+  K.angle = Math.round(a * 10) / 10;
+  $("kAngle").value = String(K.angle);
+  $("kAngleVal").textContent = (K.angle > 0 ? "+" : "") + K.angle.toLocaleString(LANG === "en" ? "en" : "de") + "°";
+  const img = $("kImg");
+  if (preview) {
+    $("kWrap").classList.add("leveling"); show("kBox", false);
+    const done = K.canvas === K.base ? 0 : K.done || 0, d = K.angle - done;
+    img.style.transform = d ? `rotate(${d}deg) scale(${1 / levelScale(img.width, img.height, d)})` : "";
+  } else {
+    $("kWrap").classList.remove("leveling"); show("kBox", true); img.style.transform = "";
+  }
+}
+function commitAngle() {
+  K.canvas = leveled(K.base, K.angle); K.done = K.angle;
+  setAngle(K.angle, false); showCrop(true);
+}
+
 function turn(dir) {
-  const c = K.canvas, n = document.createElement("canvas");
+  const c = K.base, n = document.createElement("canvas");
   n.width = c.height; n.height = c.width;
   const ctx = n.getContext("2d");
   ctx.translate(n.width / 2, n.height / 2); ctx.rotate(dir * Math.PI / 2); ctx.drawImage(c, -c.width / 2, -c.height / 2);
-  K.canvas = n; showCrop(true);
+  K.base = K.canvas = n; K.done = 0; setAngle(0, false); showCrop(true);
 }
 {
   const box = $("kBox"), MIN = 0.06;
@@ -2377,6 +2422,9 @@ $("unc").onchange = (e) => setUnc(e.target.checked);
 $("push").onchange = (e) => setPush(e.target.checked);
 $("maskBtn").onclick = openPainter;
 $("sourceCrop").onclick = openCropper;
+$("kAngle").oninput = () => setAngle(Number($("kAngle").value), true);
+$("kAngle").onchange = commitAngle;
+$("kAngleReset").onclick = () => { setAngle(0, false); commitAngle(); };
 $("kCancel").onclick = closeCropper; $("kDone").onclick = finishCrop;
 $("kLeft").onclick = () => turn(-1); $("kRight").onclick = () => turn(1);
 for (const b of $("kRatios").children) b.onclick = () => { K.ratio = Number(b.dataset.r); press("kRatios", "r", b.dataset.r); K.rect = fitRatio(K.ratio); placeBox(); };

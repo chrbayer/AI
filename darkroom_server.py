@@ -77,12 +77,15 @@ ACTIONS = {
         "text_placeholder": "z. B. blue sky, green trees",
         "max_side": 2048, "seconds": (30, 90),
     },
+    # Naming no people, as Scharf machen learnt: the wedding couple and the farm
+    # family kept their faces as well as with "Keep the people, their faces"; an
+    # old room and the ice cave got nothing added, with either.
     "restore": {
         "label": "Restaurieren", "hint": "Kratzer, Flecken, Rauschen weg",
         "model": ("qwen-image-21-turbo", "qwen-image-21"),
         "prompt": ("Restore this old photograph: remove scratches, dust, stains, creases and noise, "
-                   "sharpen it gently. Keep the people, their faces, the composition and the colours "
-                   "exactly as they are."),
+                   "sharpen it gently. Change nothing else: do not add, remove or redraw anything; "
+                   "the composition and the colours stay exactly as they are."),
         "text": None, "max_pixels": EDIT_PIXELS, "seconds": (40, 120),
     },
     # A dim photo, shaken or someone moving. Tried on one (two girls dancing at
@@ -92,7 +95,7 @@ ACTIONS = {
     # time, so it offers variants to keep the best of. A hand that is only a
     # smear stays one: Übermalen for that.
     "sharpen": {
-        "label": "Scharf machen", "hint": "Verwackelt, bewegt, schlechtes Licht",
+        "label": "Scharf machen", "hint": "Verwackelt, bewegt, verrauscht",
         "model": ("qwen-image-21-turbo", "qwen-image-21"),
         # Naming no people: the prompt that spoke of "the people's faces, hands and arms" drew
         # people into a photo of an ice cave that had none, into its bright spot — at three
@@ -101,20 +104,37 @@ ACTIONS = {
         "prompt": "Sharpen this photo and reduce its noise. Change nothing else: do not add, remove or redraw anything.",
         "variants": True, "text": None, "max_pixels": EDIT_PIXELS, "seconds": (40, 120),
     },
+    # A photo taken in the dark — a cave, a room at night, a park at dusk. Tried
+    # on the ice cave and on a park, a street and a room made 5 stops darker
+    # with noise: lifted by curves and CLAHE (OpenCV) they came out grey and flat,
+    # smeared by the denoising; this asks Qwen-Image Edit, and they came back
+    # bright with their colours, the waving man as he was, nothing added. Asked
+    # only for "a good exposure", it lifted the cave a little and kept its gloom;
+    # "a lot, as if in bright light" made it bright too.
+    "brighten": {
+        "label": "Aufhellen", "hint": "Zu dunkel, Nacht, Höhle, Innenraum",
+        "model": ("qwen-image-21-turbo", "qwen-image-21"),
+        "prompt": ("Brighten this dark photo a lot, as if it had been taken in bright light: lift the shadows and "
+                   "the midtones so that everything in it is clearly visible, with natural contrast and colours. "
+                   "Change nothing else: do not add, remove or redraw anything."),
+        "variants": True, "text": None, "max_pixels": EDIT_PIXELS, "seconds": (40, 120),
+    },
     # Through a pane of glass: the haze and the light spots go, and with
     # luck the reflected photographer too. Tried on a monkey at a zoo window,
     # two variants each: the haze went and the contrast came back on both;
     # Turbo (70 s) took the reflected hands out as well, Edit (78 s) kept them;
     # the hoodie's cords on the fur stayed on all four — Übermalen for those.
     # Entfernen, told what the reflection showed, dressed the monkey in the
-    # red hoodie instead.
+    # red hoodie instead. It names nothing that may not be there: with "the
+    # subject, its face" and "reflected people" gone, the reflected hand still
+    # went and a room behind hazy glass came out clear, as before, with nothing added.
     "glass": {
         "label": "Spiegelung entfernen", "hint": "Durch eine Glasscheibe fotografiert",
         "model": ("qwen-image-21-turbo", "qwen-image-21"),
-        "prompt": ("Remove the reflections of the glass pane this photo was taken through: reflected people, "
-                   "hands, lights, the light spots and the milky haze over the whole picture. Keep everything "
-                   "behind the glass exactly as it is, the subject, its face, the background and the colours, "
-                   "now clear and with full contrast, as if photographed without glass."),
+        "prompt": ("Remove the reflections of the glass pane this photo was taken through — whatever is mirrored "
+                   "in it, the light spots — and the milky haze over the whole picture. Keep everything behind the "
+                   "glass exactly as it is, now clear and with full contrast, as if photographed without glass; "
+                   "add nothing."),
         "variants": True, "text": None, "max_pixels": EDIT_PIXELS, "seconds": (40, 120),
     },
     # Thorough: FLUX.2 klein's detailer, which redraws small faces (a group
@@ -280,15 +300,18 @@ RECIPES = {
     "recipe-blur": {"label": "Verwackeltes Foto retten", "hint": "Scharf machen → Vergrößern",
                     "steps": ["sharpen", "upscale"]},
 }
-GROUPS = [("Verbessern", ["colorize", "restore", "sharpen", "glass", "detail", "upscale"]),
+GROUPS = [("Verbessern", ["colorize", "restore", "brighten", "sharpen", "glass", "detail", "upscale"]),
           ("Verändern", ["background", "cutout", "remove", "paint", "edit", "expand"]),
           ("Neu erschaffen", ["pose", "restyle", "art"]),
           ("Video", ["animate", "talk", "sing"]),
           ("Rezepte", list(RECIPES))]
 # Als Kunstwerk: the style, and the instruction it makes for Qwen-Image Edit.
-# Colour styles keep the photo's colours; the pencil drawing is grey.
-KEEP_ALL = "Keep the composition, the people and their features, the hair colour and the colours of the clothes."
-KEEP_LINES = "Keep the composition and the people and their features."
+# Colour styles keep the photo's colours; the pencil drawing is grey. They name
+# no people: "Keep … the people and their features" painted three into an ice
+# cave as a watercolour; "everything in it … add nothing" none, and a man waving
+# came out as alike as before.
+KEEP_ALL = "Keep the composition and everything in it with its colours; add nothing."
+KEEP_LINES = "Keep the composition and everything in it; add nothing."
 STYLES = {
     "watercolour": ("Aquarell", "a delicate watercolour painting, soft washes of colour on textured paper", KEEP_ALL),
     "pencil": ("Bleistift", "a detailed pencil drawing, graphite on white paper, fine hatching", KEEP_LINES),
@@ -406,7 +429,8 @@ EN = {
     "Farben vorgeben (optional, englisch) — wirkt aufs ganze Bild": "Name colours (optional) — applies to the whole picture",
     "z. B. blue sky, green trees": "e.g. blue sky, green trees",
     "Restaurieren": "Restore", "Kratzer, Flecken, Rauschen weg": "Scratches, stains, noise gone",
-    "Scharf machen": "Sharpen", "Verwackelt, bewegt, schlechtes Licht": "Shaken, moving, dim light",
+    "Scharf machen": "Sharpen", "Verwackelt, bewegt, verrauscht": "Shaken, moving, noisy",
+    "Aufhellen": "Brighten", "Zu dunkel, Nacht, Höhle, Innenraum": "Too dark, night, cave, indoors",
     "Spiegelung entfernen": "Remove reflections", "Durch eine Glasscheibe fotografiert": "Taken through a pane of glass",
     "Gesichter": "Faces", "Gesichter und Hände nachzeichnen": "Redraw faces and hands",
     "Vergrößern": "Upscale", "4× größer und schärfer": "4× bigger and sharper",

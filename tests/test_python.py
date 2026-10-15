@@ -1333,11 +1333,30 @@ class Darkroom(unittest.TestCase):
         _, form, _ = self.sent(action="art", style="pencil", text="Wie in einem Skizzenbuch.")
         self.assertEqual(form["model"], "qwen-image-21-turbo")
         self.assertEqual(form["prompt"], "Turn this photo into a detailed pencil drawing, graphite on white paper,"
-                                         " fine hatching. Keep the composition and the people and their features."
+                                         " fine hatching. Keep the composition and everything in it; add nothing."
                                          " Wie in einem Skizzenbuch.")
         form = self.sent(action="art", style="nonsense")[1]
         self.assertTrue(form["prompt"].startswith("Turn this photo into a delicate watercolour"))
-        self.assertTrue(form["prompt"].endswith("the colours of the clothes."))
+        self.assertTrue(form["prompt"].endswith("with its colours; add nothing."))
+
+    def test_the_cropper_straightens_by_degrees_without_empty_corners(self):
+        page = (ROOT / "darkroom.html").read_text()
+        for word in ('id="kAngle" min="-15" max="15" step="0.1"', "function levelScale(", "function commitAngle(",
+                     '$("kAngle").onchange = commitAngle', ".crop.leveling::after"):
+            self.assertIn(word, page)
+        # the largest box of the picture's shape inside it turned: 3:4 at 2.5° keeps 94.6 %
+        import math
+        w, h, r = 3, 4, math.radians(2.5)
+        k = min(w / (w * math.cos(r) + h * math.sin(r)), h / (w * math.sin(r) + h * math.cos(r)))
+        self.assertAlmostEqual(k, 0.9459, places=3)
+
+    def test_fixed_prompts_name_no_people_that_may_not_be_there(self):
+        # named, people were drawn into an ice cave that had none (Scharf machen, Als Kunstwerk)
+        for key in ("restore", "sharpen", "glass"):
+            with self.subTest(key):
+                self.assertNotRegex(darkroom.ACTIONS[key]["prompt"], r"(?i)\b(people|person|faces?)\b")
+        for _, _, keep in darkroom.STYLES.values():
+            self.assertNotIn("people", keep)
 
     def test_paint_can_keep_the_shape(self):
         from PIL import Image
