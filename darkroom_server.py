@@ -94,9 +94,11 @@ ACTIONS = {
     "sharpen": {
         "label": "Scharf machen", "hint": "Verwackelt, bewegt, schlechtes Licht",
         "model": ("qwen-image-21-turbo", "qwen-image-21"),
-        "prompt": ("Make this photo sharp: remove the motion blur from the people's faces, hands and arms "
-                   "and the noise of the dim light, as if taken with a fast shutter. Keep the people, "
-                   "their faces, glasses, hair, clothes, pose, the room and the colours exactly as they are."),
+        # Naming no people: the prompt that spoke of "the people's faces, hands and arms" drew
+        # people into a photo of an ice cave that had none, into its bright spot — at three
+        # seeds of three, also told "add no people"; this one drew none (Turbo and Heretic),
+        # and still made a shaken person sharp and a snow leopard crisper.
+        "prompt": "Sharpen this photo and reduce its noise. Change nothing else: do not add, remove or redraw anything.",
         "variants": True, "text": None, "max_pixels": EDIT_PIXELS, "seconds": (40, 120),
     },
     # Through a pane of glass: the haze and the light spots go, and with
