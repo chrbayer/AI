@@ -473,7 +473,9 @@ class Darkroom(unittest.TestCase):
     def test_remove_tells_the_edit_model_what_goes(self):
         _, form, _ = self.sent(action="remove", text="den Mülleimer")
         self.assertEqual(form["model"], "qwen-image-21-turbo")
-        self.assertTrue(form["prompt"].startswith("Entferne den Mülleimer aus dem Foto."))
+        # all of it, and what is behind: told less, the model drew a half-seen person whole
+        self.assertTrue(form["prompt"].startswith("Entferne den Mülleimer vollständig aus dem Foto, so dass nichts "
+                                                  "davon übrig bleibt, und fülle die Stelle mit dem, was dahinter ist."))
 
     def test_a_free_edit_sends_the_words_and_the_chosen_model(self):
         _, form, _ = self.sent(action="edit", text="Mach den Himmel rot", model="flux2-klein-9b")
@@ -1280,7 +1282,8 @@ class Darkroom(unittest.TestCase):
         self.assertEqual(darkroom.message(done, "en")["body"], "Tap to see it")
         self.assertEqual(darkroom.message(done)["title"], "Fertig: Ändern · Qwen-Image Turbo · 20 s")
         form = darkroom.edit_form({"action": "remove", "model": "m", "text": "the bin", "lang": "en"})
-        self.assertEqual(form["prompt"], "Remove the bin from the photo. Everything else stays exactly as it is.")
+        self.assertEqual(form["prompt"], "Remove the bin completely from the photo, so that nothing of it is left, "
+                                         "and fill the spot with what is behind it. Everything else stays exactly as it is.")
         self.assertTrue(darkroom.edit_form({"action": "remove", "model": "m", "text": "x"})["prompt"].startswith("Entferne x"))
 
     def test_the_help_is_the_gallery_section_in_the_page_language(self):

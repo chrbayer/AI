@@ -138,8 +138,13 @@ ACTIONS = {
     "remove": {
         "label": "Entfernen", "hint": "Etwas aus dem Bild nehmen",
         "model": ("qwen-image-21-turbo", "qwen-image-21"),
-        "prompt": "Entferne {} aus dem Foto. Alles andere bleibt genau so, wie es ist.",
-        "prompt_en": "Remove {} from the photo. Everything else stays exactly as it is.",
+        # "Entferne Teile einer Person mit Lampe am linken Bildrand" alone completed
+        # the person, at two seeds of two; asked to leave nothing of it and fill in
+        # what is behind, it was gone at both (in German and in English alike).
+        "prompt": "Entferne {} vollständig aus dem Foto, so dass nichts davon übrig bleibt, und fülle die Stelle "
+                  "mit dem, was dahinter ist. Alles andere bleibt genau so, wie es ist.",
+        "prompt_en": "Remove {} completely from the photo, so that nothing of it is left, and fill the spot with "
+                     "what is behind it. Everything else stays exactly as it is.",
         "variants": True, "text": "fill", "text_label": "Was soll weg?",
         "text_placeholder": "z. B. die Person, den Mülleimer, die Stromleitungen",
         "max_pixels": EDIT_PIXELS, "seconds": (45, 120),

@@ -2103,7 +2103,7 @@ at `/darkroom`, and a home-screen icon for `/fotos` is best made anew.
 | Faces (Gesichter) — faces and hands redrawn | Qwen-Image 2.1 Detailer / FLUX.2 klein Detailer (small faces) | 136 s / 235 s |
 | Upscale (Vergrößern) — 4× | SeedVR2 7B (the picture brought to 1024 px first) | 103 s, 1024 → 4096 px |
 | Remove background (Freistellen) — background removed (PNG) | BiRefNet / BiRefNet Matting | 3 s |
-| Erase (Entfernen) — "the person", "the bin" | Qwen-Image 2.1 Edit Turbo / Edit: "Remove … from the photo" ("Entferne … aus dem Foto") | 45 s |
+| Erase (Entfernen) — "the person", "the bin" | Qwen-Image 2.1 Edit Turbo / Edit: "Remove … completely from the photo, so that nothing of it is left …" | 45 s |
 | Edit (Ändern) — in one's own words, with a second photo as "picture 2" | Qwen-Image Edit Turbo, Edit, FLUX.2 klein (one photo), FLUX.2 dev Turbo | 43–158 s |
 | Expand (Erweitern) — more picture left and right, above and below, or all round | Qwen-Image 2.1 Outpaint Turbo / Outpaint | 26 s |
 | Paint over (Übermalen) — a place marked with a finger, and what goes there; *Keep shape* (*Form behalten*) keeps cut and folds | Qwen-Image 2.1 Inpaint Crop Turbo / Inpaint Crop; Canny Inpaint Turbo / Canny Inpaint | 22 s; 29 s |
@@ -2423,8 +2423,12 @@ and *Restore* bring the photo to 1 MP first.
 *Erase* is an instruction edit, not Inpaint: a mask in the shape of a
 person, SAM 3's, had another person painted into it (both Inpaint Crop
 variants); told to remove her, Qwen-Image Edit filled in beach and waves —
-in German as well as in English; the page sends "Entferne … aus dem Foto" or
-"Remove … from the photo" in its language. A result can be taken on
+in German as well as in English. The page sends, in its language, "Remove …
+completely from the photo, so that nothing of it is left, and fill the spot
+with what is behind it": told only "Entferne Teile einer Person mit Lampe am
+linken Bildrand aus dem Foto", the model drew the half-seen person whole, at
+both of two seeds; the longer sentence, in German or English, took her away
+at both, and the help's power lines went as before. A result can be taken on
 (*Edit further*): coloured, then enlarged.
 
 **A service of its own.** The image API belongs to the ComfyUI slot and goes
