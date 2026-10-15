@@ -2347,6 +2347,17 @@ It says what the whole archive takes on disk. The server reads a job.json
 again only when it changed and counts a job's size once, so a long archive
 stays quick.
 
+**Again.** *Again* (*Nochmal*) in the viewer — also for a failed job — fills
+the form as the job ran: its picture (the one it started from, not the
+result) and a second one, the action, the wish, *Fast*/*Thorough*, the
+model, *Uncensored*, the style, the sides, *Keep shape*, the number of
+variants, a clip's length, *Paint over*'s marked spot, *Make it talk*'s
+voice and *Make it sing*'s song with its lyrics, style, voice and length;
+*Generate*'s text, model, format and length. Change a little, or tap *Go*
+as it is: each run draws a new seed. Jobs from before 1.104 do not know
+*Keep shape* nor a song's lyrics and settings; there the form keeps what
+it had. Of a recipe it takes the one step.
+
 **Expand a short wish.** A few words often do little — "Als Almhütte" put
 mountains in the window, "rot" on a marked shirt made it white. *✨ Expand*
 (*✨ Ausbauen*) under the text field sends the photo, the marked spot (drawn in

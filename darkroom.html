@@ -367,7 +367,7 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
         <textarea id="lyrics" rows="5" maxlength="600" placeholder="z. B. Heute ist ein schöner Tag, weil ich dich so gerne mag. [Chorus] Alles Gute, hoch sollst du leben!"></textarea>
         <div class="textactions"><button class="link hidden" type="button" data-expand="lyrics" id="expandLyrics">✨ Text schreiben</button>
           <button class="link hidden" type="button" data-undo="lyrics" id="undoLyrics">Rückgängig</button></div>
-        <p class="note" style="margin-top:6px">Etwa 3 kurze Zeilen für 10 s – wo der Text endet, spielt nur noch die Musik, und das Foto singt nicht mehr. ✨ Text schreiben dichtet sie aus ein paar Stichworten oder zum Foto. [Verse] und [Chorus] in eigenen Zeilen gliedern das Lied.</p></div>
+        <p class="note" style="margin-top:6px">Etwa 2 kurze Zeilen für 10 s, ab 30 s etwa 3 – wo der Text endet, spielt nur noch die Musik, und das Foto singt nicht mehr. ✨ Text schreiben dichtet sie aus ein paar Stichworten oder zum Foto. [Verse] und [Chorus] in eigenen Zeilen gliedern das Lied.</p></div>
       <div class="field" id="songOpts"><label>Stil</label><div class="chips" id="songStyles"></div>
         <label style="margin-top:12px">Stimme</label><div class="chips" id="songVoices"></div>
         <label style="margin-top:12px">Länge</label><div class="chips" id="songSeconds"></div>
@@ -519,6 +519,7 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
     <button type="button" id="vCheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="6"/><path d="m20 20-4.5-4.5M9 11h4M11 9v4"/></svg>Fehler&nbsp;suchen</button>
     <button type="button" class="primary hidden" id="vRepair"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>Reparieren</button>
     <button type="button" id="vMore"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>Weiter&nbsp;bearbeiten</button>
+    <button type="button" id="vAgain"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg>Nochmal</button>
     <button type="button" id="vDelete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13"/></svg>Löschen</button>
   </div>
 </div>
@@ -647,7 +648,7 @@ const EN = {
   "Alle Aktionen": "All actions", "{n} von {all} · zusammen {size}": "{n} of {all} · {size} in all", "Mehr laden": "Load more",
   "Nichts gefunden.": "Nothing found.", "★ Favoriten": "★ Favourites", "Noch nichts bearbeitet.": "Nothing edited yet.", "Bild wählen": "Choose a picture",
   "Schließen": "Close", "Sichern": "Save", "Fehler suchen": "Find flaws", "Reparieren": "Repair",
-  "Weiter bearbeiten": "Edit further", "Löschen": "Delete", "Stelle markieren": "Mark the spot", "Abbrechen": "Cancel",
+  "Weiter bearbeiten": "Edit further", "Nochmal": "Again", "Wie gelaufen – anpassen oder gleich los, mit neuem Seed.": "As it ran – adjust it or go right away, with a new seed.", "Das Ausgangsbild dieses Auftrags gibt es nicht mehr.": "This job's picture is no longer there.", "Löschen": "Delete", "Stelle markieren": "Mark the spot", "Abbrechen": "Cancel",
   "✨ Ausbauen": "✨ Expand", "✨ Text schreiben": "✨ Write lyrics", "Liedtext geschrieben – lesen, anpassen, dann Lied machen": "Lyrics written – read, adjust, then make the song", "✨ Text vorschlagen": "✨ Suggest words", "Text vorgeschlagen – lesen, anpassen, dann Sprechen": "Words suggested – read, adjust, then Speak", "Jetzt ausbauen": "Expand it now",
   "Das Sprachmodell startet – beim ersten Mal etwa 15 Sekunden …": "The language model is starting – about 15 seconds the first time …",
   "Formuliert aus …": "Spelling it out …",
@@ -708,7 +709,7 @@ const EN = {
   "Komponiert … etwa 15 Sekunden, beim ersten Mal bis zu 2 Minuten": "Composing … about 15 seconds, up to 2 minutes the first time",
   "Das Lied – das Video ist so lang wie das Lied": "The song – the video is as long as the song",
   "Stimme (bis {n} s) – das Video ist so lang wie die Aufnahme": "Voice (up to {n} s) – the video is as long as the recording",
-  "Etwa 3 kurze Zeilen für 10 s – wo der Text endet, spielt nur noch die Musik, und das Foto singt nicht mehr. ✨ Text schreiben dichtet sie aus ein paar Stichworten oder zum Foto. [Verse] und [Chorus] in eigenen Zeilen gliedern das Lied.": "About 3 short lines for 10 s – where the lyrics end only the music plays, and the photo stops singing. ✨ Write lyrics writes them from a few words or about the photo. [Verse] and [Chorus] on lines of their own give the song its parts.",
+  "Etwa 2 kurze Zeilen für 10 s, ab 30 s etwa 3 – wo der Text endet, spielt nur noch die Musik, und das Foto singt nicht mehr. ✨ Text schreiben dichtet sie aus ein paar Stichworten oder zum Foto. [Verse] und [Chorus] in eigenen Zeilen gliedern das Lied.": "About 2 short lines for 10 s, from 30 s about 3 – where the lyrics end only the music plays, and the photo stops singing. ✨ Write lyrics writes them from a few words or about the photo. [Verse] and [Chorus] on lines of their own give the song its parts.",
   "z. B. Heute ist ein schöner Tag, weil ich dich so gerne mag. [Chorus] Alles Gute, hoch sollst du leben!": "e.g. What a lovely day today, you are dear in every way. [Chorus] Happy birthday, many happy returns!",
   "Wird hochgeladen …": "Uploading …", "Darkroom ({n} läuft)": "Darkroom ({n} running)",
   "Abgebrochen": "Cancelled", "Wartet (#{n})": "Waiting (#{n})", "Wartet": "Waiting", "Läuft · {t}": "Running · {t}", "Fehler": "Failed",
@@ -1717,6 +1718,10 @@ async function go() {
     if (a.audio) {
       if (!S.voice) { $("formErr").textContent = t(a.song ? "Bitte erst ein Lied machen." : "Bitte erst etwas aufnehmen oder eine Audiodatei wählen."); return; }
       fd.append("audio", S.voice.blob, S.voice.name);
+      if (a.song) {                     // kept with the job, for Nochmal
+        fd.append("lyrics", $("lyrics").value.trim()); fd.append("song_style", S.songStyle);
+        fd.append("song_voice", S.songVoice); fd.append("song_seconds", String(S.songSeconds));
+      }
     }
     const m = S.editModels.find((x) => x.id === S.editModel);
     if (a.second && S.source2 && !S.batch && (a.video || !m || m.images > 1)) appendPicture(fd, S.source2, "image2", "from2");
@@ -1827,7 +1832,8 @@ function openViewer(id) {
   const stage = $("stage"); stage.innerHTML = ""; stage.classList.remove("zoomed");
   stage.onpointerdown = stage.onpointermove = stage.onpointerup = stage.onpointercancel = stage.onwheel = null;
   const done = job.state === "done";
-  for (const b of $("vBar").children) b.style.visibility = done || b.id === "vDelete" ? "" : "hidden";
+  for (const b of $("vBar").children) b.style.visibility = done || b.id === "vDelete" || b.id === "vAgain" ? "" : "hidden";
+  show("vAgain", job.action === "generate" || S.actions.some((x) => x.id === job.action));
   if (job.video) $("vMore").style.visibility = "hidden";        // a clip is no picture to edit on
   // Fehler suchen: for every picture a model made or changed — not a clip, not a check, not one cut out
   const checkable = done && !job.video && !job.png && job.action !== "check";
@@ -2121,6 +2127,76 @@ function continueWith() {
   $("text").value = ""; E.before.edit = null; updateSave();     // the wish was for the step before
   closeViewer(); window.scrollTo({ top: 0, behavior: "smooth" });
   toast(t("Ergebnis ist jetzt das Ausgangsbild – nächste Aktion wählen."));
+}
+
+// Nochmal: the form as the job ran — its picture (not the result), action,
+// wish and settings, the marked spot, the voice — to change a little, or just
+// to run again: every run draws a new seed.
+async function runAgain() {
+  const job = jobById(S.viewing.id);
+  const fetchBlob = async (which) => {
+    const r = await fetch(`${API}/jobs/${job.id}/${which}`);
+    if (!r.ok) throw new Error(t("Das Ausgangsbild dieses Auftrags gibt es nicht mehr."));
+    return r.blob();
+  };
+  try {
+    if (job.action === "generate") {
+      setMode("generate");
+      $("genText").value = job.text || ""; E.before.generate = null;
+      if (S.genModels.some((m) => m.id === job.choice)) { S.genModel = job.choice; store("genModel", job.choice); }
+      if (job.aspect) S.aspect = job.aspect;
+      if (job.video) { S.genSeconds = job.seconds; S.genQuality = job.quality === "best" ? "best" : "fast"; }
+    } else {
+      const a = S.actions.find((x) => x.id === job.action);
+      if (!a || a.available === false) { toast(t("Diese Aktion ist gerade nicht verfügbar.")); return; }
+      const blob = await fetchBlob("input");
+      setSource({ blob, url: URL.createObjectURL(blob), w: job.input_size && job.input_size[0], h: job.input_size && job.input_size[1] });
+      if (job.two && a.second) {
+        const b2 = await fetchBlob("input2");
+        setSource2({ blob: b2, url: URL.createObjectURL(b2) });
+      }
+      setMode("edit"); chooseAction(job.action, true);
+      $("text").value = job.text || ""; E.before.edit = null;
+      S.quality = job.quality === "best" ? "best" : "fast";
+      if (a.models && S.editModels.some((m) => m.id === job.choice)) S.editModel = job.choice;
+      if (job.sides) S.sides = job.sides;
+      if (job.style) S.style = job.style;
+      if (job.keep !== undefined && job.keep !== null) S.keep = job.keep ? "1" : "0";
+      S.variants = a.variants ? job.variants || 1 : 1;
+      if (job.video && !a.audio && job.seconds) S.seconds = job.seconds;
+      if (a.mask) S.mask = await maskFrom(await fetchBlob("mask"), S.source.url);
+      if (a.audio) await setVoice(await fetchBlob("audio"), a.song ? "lied.mp3" : "stimme.wav", !!a.song);
+      if (a.song && job.song) {
+        $("lyrics").value = job.song.lyrics || ""; E.before.lyrics = null;
+        if (job.song.style) S.songStyle = job.song.style;
+        if (job.song.voice) S.songVoice = job.song.voice;
+        if (job.song.seconds) S.songSeconds = job.song.seconds;
+        renderSong();
+        $("songBtn").textContent = t("Neues Lied machen");
+      }
+    }
+    setUnc(!!job.uncensored);
+    updateSave(); closeViewer();
+    // to the filled-in settings, below the actions
+    const at = job.action === "generate" ? $("genCard") : document.querySelector("#editAction .options");
+    window.scrollTo({ top: at.getBoundingClientRect().top + window.scrollY - 70, behavior: "smooth" });
+    toast(t("Wie gelaufen – anpassen oder gleich los, mit neuem Seed."));
+  } catch (e) { toast(e.message); }
+}
+
+// A stored mask as the painter leaves it: the PNG, and the small preview with the spot in red.
+async function maskFrom(blob, pictureUrl) {
+  const load = (url) => new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = url; });
+  const [m, pic] = [await load(URL.createObjectURL(blob)), await load(pictureUrl)];
+  const k = 112 / Math.max(m.width, m.height), w = Math.round(m.width * k), h = Math.round(m.height * k);
+  const red = document.createElement("canvas"); red.width = w; red.height = h;
+  const rc = red.getContext("2d");
+  rc.fillStyle = "#ff2d55"; rc.fillRect(0, 0, w, h);
+  rc.globalCompositeOperation = "destination-out"; rc.drawImage(m, 0, 0, w, h);   // red only where it is redrawn
+  const pv = document.createElement("canvas"); pv.width = w; pv.height = h;
+  const pc = pv.getContext("2d"); pc.drawImage(pic, 0, 0, w, h);
+  pc.globalAlpha = 0.5; pc.drawImage(red, 0, 0);
+  return { blob, preview: pv.toDataURL("image/jpeg", 0.8) };
 }
 
 const confirmDelete = {};
@@ -2443,6 +2519,7 @@ $("sheetForce").onclick = () => comfy("start", true);
 $("vClose").onclick = closeViewer;
 $("vSave").onclick = save;
 $("vMore").onclick = continueWith;
+$("vAgain").onclick = runAgain;
 $("vCheck").onclick = checkPicture;
 $("vRepair").onclick = repairPicture;
 $("vDelete").onclick = removeJob;

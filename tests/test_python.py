@@ -850,6 +850,41 @@ class Darkroom(unittest.TestCase):
         self.assertIn("interactive-widget=resizes-content", page)   # Android: the start button over the keyboard
         self.assertIn("typing() && d > 120", page)       # iOS: lifted for a keyboard, not for the address bar
 
+    def test_a_job_keeps_what_nochmal_fills_the_form_with(self):
+        from unittest import mock
+        from PIL import Image
+        client = darkroom.app.test_client()
+        buf = io.BytesIO()
+        m = Image.new("RGBA", (64, 64), (0, 0, 0, 255))
+        m.paste((0, 0, 0, 0), (16, 16, 48, 48))                       # the marked spot: transparent
+        m.save(buf, "PNG")
+        r = self.post(action="paint", text="eine rote Jacke", keep="1", quality="best", n="2",
+                      image=self.jpeg(64, 64), mask=buf.getvalue())
+        self.assertEqual(r.status_code, 200, r.get_json())
+        job = darkroom.read_job(r.get_json()[0]["id"])
+        self.assertEqual((job["keep"], job["variants"], job["quality"]), (True, 2, "best"))
+        m = client.get(f"/darkroom/api/jobs/{job['id']}/mask")
+        self.assertEqual((m.status_code, m.mimetype), (200, "image/png"))
+        self.assertEqual(client.get(f"/darkroom/api/jobs/{job['id']}/audio").status_code, 404)
+        r = self.post(action="edit", text="x", model="flux2-klein-9b", image=self.jpeg(64, 64))
+        self.assertEqual(darkroom.read_job(r.get_json()[0]["id"])["choice"], "flux2-klein-9b")
+        with mock.patch.object(darkroom, "voice", return_value=(b"RIFFwav", 20.0)):
+            r = self.post(action="sing", text="", image=self.jpeg(64, 64), audio=b"ID3song", lyrics="[Verse]\nla la",
+                          song_style="rock", song_voice="kind", song_seconds="20")
+        job = darkroom.read_job(r.get_json()[0]["id"])
+        self.assertEqual(job["song"], {"lyrics": "[Verse]\nla la", "style": "rock", "voice": "kind", "seconds": 20})
+        a = client.get(f"/darkroom/api/jobs/{job['id']}/audio")
+        self.assertEqual((a.mimetype, a.data), ("audio/mpeg", b"ID3song"))       # the song as it came
+        plain, unc = next(iter(darkroom.UNCENSORED.items()))
+        old = darkroom.new_job({"action": "edit", "label": "x", "text": "", "model": unc})
+        self.assertEqual(darkroom.public(old)["choice"], plain)                   # from before: as offered
+        page = (ROOT / "darkroom.html").read_text()
+        again = page[page.index("async function runAgain()"):]
+        again = again[:again.index("\n}\n")]
+        for part in ('fetchBlob("input")', 'fetchBlob("mask")', 'fetchBlob("audio")', "setUnc(", "job.song.lyrics"):
+            self.assertIn(part, again)
+        self.assertIn('$("vAgain").onclick = runAgain', page)
+
     def test_closing_the_viewer_stops_a_playing_clip(self):
         page = (ROOT / "darkroom.html").read_text()
         close = page[page.index("function closeViewer()"):]

@@ -700,6 +700,8 @@ def job_bytes(job):
 def public(job):
     """A job as the page sees it, with its place in the queue."""
     j = dict(job)
+    if "choice" not in j:                 # before 1.104: the model as offered, not its uncensored one
+        j["choice"] = next((k for k, v in UNCENSORED.items() if v == j.get("model")), j.get("model"))
     for k in ("label", "model_label", "phase", "error"):
         j[k] = tr(j.get(k))
     if j["state"] == "queued":
@@ -1951,7 +1953,7 @@ def create_job():
             fields = {"action": "generate", "label": "Erzeugt", "text": text, "aspect": aspect,
                       "size": (VIDEO_ASPECTS if video else ASPECTS)[aspect], "model": resolve(model, uncensored),
                       "model_label": GEN_MODELS[model]["label"],
-                      "uncensored": uncensored and model in UNCENSORED, "png": False}
+                      "uncensored": uncensored and model in UNCENSORED, "png": False, "choice": model}
             if video:
                 frame = GEN_MODELS[model]["frame_model"]
                 fields.update(video=True, label="Video", seconds=clip_seconds(f.get("seconds")),
@@ -2024,6 +2026,13 @@ def create_job():
                        "sides": sides if spec.get("sides") else None,
                        "input_size": list(size), "png": bool(spec.get("png")),
                        "style": style if spec.get("styles") else None,
+                       # for Nochmal: Form behalten, and the model as the page offered it
+                       "keep": f.get("keep") == "1" if spec.get("keep") else None,
+                       "choice": f.get("model") or spec["model"][0] if spec.get("models") else None,
+                       **({"song": {"lyrics": (f.get("lyrics") or "")[:LYRICS_MAX],
+                                    "style": f.get("song_style") if f.get("song_style") in SONG_STYLES else None,
+                                    "voice": f.get("song_voice") if f.get("song_voice") in SONG_VOICES else None,
+                                    "seconds": int(f.get("song_seconds") or 0) or None}} if spec.get("song") else {}),
                        **({"video": True, "seconds": seconds} if spec.get("video") else {})},
                         files) for i in range(n)]
         return jsonify([public(j) for j in jobs])
@@ -2113,8 +2122,15 @@ def job_image(jid, which):
     except Refused:
         return error("no such job", 404)
     job = read_job(jid)
-    if job is None or which not in ("input", "input2", "result", "poster"):
+    if job is None or which not in ("input", "input2", "result", "poster", "mask", "audio"):
         return error("no such job", 404)
+    if which in ("mask", "audio"):                  # for Nochmal: the marked spot, the voice or the song
+        src = d / "mask.png" if which == "mask" else next(
+            (p for p in (d / "song.audio", d / "voice.wav") if p.is_file()), d / "voice.wav")
+        if not src.is_file():
+            return error("not there", 404)
+        mime = "image/png" if which == "mask" else "audio/wav" if src.suffix == ".wav" else "audio/mpeg"
+        return send_file(src, mimetype=mime, max_age=86400)
     name = f"{job['label'].lower()}-{jid}"
     if job.get("video") and which in ("result", "poster"):
         # The clip as it came (Range requests for the phone's player), and its still.
