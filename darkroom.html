@@ -656,7 +656,7 @@ const EN = {
   "{n} Fotos – die Aktion läuft für jedes": "{n} photos – the action runs for each",
   "Höchstens {n} Fotos auf einmal – die ersten {n} sind gewählt.": "At most {n} photos at once – the first {n} are chosen.",
   "Übermalen geht nur mit einem Foto – erst eins wählen.": "Paint over takes one photo only – choose one first.",
-  "Wird hochgeladen … {i} von {n}": "Uploading … {i} of {n}", "{n} Aufträge in der Warteschlange": "{n} jobs in the queue", "Zuschneiden": "Crop", "Zuschneiden · Drehen": "Crop · Turn", "Zuschneiden und drehen": "Crop and turn", "Frei": "Free",
+  "Wird hochgeladen … {i} von {n}": "Uploading … {i} of {n}", "{n} Aufträge in der Warteschlange": "{n} jobs in the queue", "Zuschneiden": "Crop", " · Erst anhören: Fehlt der Gesang, einfach ein neues Lied machen.": " · Listen first: if the singing is missing, just make a new song.", "Zuschneiden · Drehen": "Crop · Turn", "Zuschneiden und drehen": "Crop and turn", "Frei": "Free",
   "Links drehen": "Turn left", "Gerade richten": "Straighten", "Auf 0° zurück": "Back to 0°", "Rechts drehen": "Turn right", "Favoriten": "Favourites", "Favorit": "Favourite",
   "Noch keine Favoriten – im Ergebnis ☆ antippen.": "No favourites yet – tap ☆ on a result.",
   "Favorit – wird nie automatisch gelöscht": "Favourite – never deleted by itself", "Kein Favorit mehr": "No longer a favourite", "Behalten": "Keep", "Vorige Variante": "Previous variant", "Nächste Variante": "Next variant",
@@ -837,7 +837,7 @@ async function loadActions() {
   secondsChips("seconds", (n) => { S.seconds = n; renderEdit(); });
   secondsChips("genSeconds", (n) => { S.genSeconds = n; renderGen(); });
   S.groups = r.groups || []; S.styles = r.styles || []; S.voiceMax = r.voice_max || 10; S.voices = r.voices || [];
-  S.songMax = r.song_max || 30; S.songStyles = r.song_styles || []; S.songVoices = r.song_voices || [];
+  S.songMax = r.song_max || 60; S.songStyles = r.song_styles || []; S.songVoices = r.song_voices || [];
   $("lyrics").maxLength = r.lyrics_max || 600; renderSong();
   $("speakText").maxLength = r.speak_max || 150; renderSpeak(); S.expand = !!r.expand;
   $("voiceMax").textContent = S.voiceMax;
@@ -1123,7 +1123,8 @@ async function setVoice(blob, name, song) {
   S.voice = { blob, name, url, song: !!song, seconds: Math.min(seconds, max) };
   $("voicePlayer").src = url; show("voicePlayer", true);
   $("voiceInfo").textContent = (seconds > max ? t("Wird nach {n} s abgeschnitten. ", { n: max }) : "")
-    + (seconds ? t("Länge: {n} s", { n: S.voice.seconds.toFixed(1) }) : "");
+    + (seconds ? t("Länge: {n} s", { n: S.voice.seconds.toFixed(1) }) : "")
+    + (song ? t(" · Erst anhören: Fehlt der Gesang, einfach ein neues Lied machen.") : "");
   renderEdit();
 }
 

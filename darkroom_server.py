@@ -336,10 +336,10 @@ SPEAK_MAX = 150
 DESCRIBE_MAX = 200                # a voice described for Sprechen lassen
 # Singen lassen: how long a song may be, the sections it is sung in, and the
 # styles and voices offered — ACE-Step's tags, as the page names them.
-SONG_MAX = 30
+SONG_MAX = 60
 SECTION = 10
 FPS = 24                             # LTX-2.5's clips
-LYRICS_MAX = 600
+LYRICS_MAX = 1200
 SONG_STYLES = {
     "kinderlied": ("Kinderlied", "cheerful children's song, acoustic guitar, hand claps, glockenspiel"),
     "pop": ("Pop", "upbeat modern pop, synths, catchy chorus"),
@@ -1505,13 +1505,15 @@ def song():
         seconds = min(SONG_MAX, max(SECTION, int(body.get("seconds") or 20)))
     except (TypeError, ValueError):
         return error("ungültige Angabe")
-    # [Verse] when none is marked: ACE-Step sings what stands under a section
+    # [Verse] when none is marked: ACE-Step sings what stands under a section.
+    # Under 30 s without its planning: planned, it left the singing out of half
+    # the 20-s songs; from 30 s on, planned, it sang every one.
     if not re.search(r"^\s*\[", lyrics, re.M):
         lyrics = "[Verse]\n" + lyrics
     try:
         r = requests.post(f"{ARGS.api}/v1/audio/music", timeout=600,
                           json={"model": "ace-step-15-xl-turbo", "prompt": f"{style[1]}, {singer[1]}",
-                                "lyrics": lyrics, "duration": seconds, "language": lang()})
+                                "lyrics": lyrics, "duration": seconds, "language": lang(), "plan": seconds >= 30})
     except requests.RequestException:
         return error("ComfyUI läuft nicht – bitte erst starten", 503)
     if r.status_code != 200:
@@ -1613,7 +1615,10 @@ def expand_text():
             except ValueError:
                 seconds = 20
             style = SONG_STYLES.get(f.get("style"), ("", "pop"))[1].split(",")[0]
-            system = LYRICS_SYSTEM.format(style=style, lang=language, lines=round(seconds / SECTION * 3))
+            # three lines a section; two in the songs made without ACE-Step's
+            # planning (under 30 s), which sang four lines in 20 s, six only in part
+            system = LYRICS_SYSTEM.format(style=style, lang=language,
+                                          lines=round(seconds / SECTION * (3 if seconds >= 30 else 2)))
             content = [{"type": "text", "text": f"The wish: {text}" if text else none}]
         elif speech:
             system = SPEECH_SYSTEM.format(lang=language, chars=SPEAK_MAX, seconds=VOICE_MAX)
@@ -1633,7 +1638,7 @@ def expand_text():
         ensure_expander()
         r = requests.post(f"{expander_url()}/v1/chat/completions", timeout=120, json={
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": content}],
-            "max_tokens": 400 if lyrics else 120 if speech else 260,
+            "max_tokens": 800 if lyrics else 120 if speech else 260,
             "temperature": 0.8 if lyrics or speech else 0.3})
         _expand["used"] = time.time()
         out = r.json()["choices"][0]["message"]["content"].strip().strip('"„“”').strip()

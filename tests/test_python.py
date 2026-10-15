@@ -690,7 +690,9 @@ class Darkroom(unittest.TestCase):
             self.assertEqual(user[1]["text"], "The wish: Geburtstag von Oma")
             r = client.post("/darkroom/api/expand", data={"action": "lyrics", "text": "", "seconds": "99"})
             self.assertEqual(r.status_code, 200)                       # no words: a song about the photo
-            self.assertIn("about 9 short lines", sent[1]["messages"][0]["content"])
+            self.assertIn("about 18 short lines", sent[1]["messages"][0]["content"])
+            client.post("/darkroom/api/expand", data={"action": "lyrics", "text": "", "seconds": "20"})
+            self.assertIn("about 4 short lines", sent[2]["messages"][0]["content"])   # unplanned: fewer
             # no words and no photo either: a general theme, not a question back for the photo
             self.assertIn("no photo: choose a cheerful, general theme", sent[1]["messages"][1]["content"][0]["text"])
         self.assertNotIn("lyrics", darkroom.EXPAND_TASKS)              # not the ✨ Ausbauen of the main text field
@@ -1435,12 +1437,14 @@ class Darkroom(unittest.TestCase):
         self.assertEqual((r.status_code, r.mimetype, r.data), (200, "audio/mpeg", b"ID3mp3"))
         body = post.call_args.kwargs["json"]
         self.assertEqual(post.call_args.args[0], "http://api/v1/audio/music")
-        self.assertEqual((body["model"], body["duration"], body["language"]), ("ace-step-15-xl-turbo", 30, "de"))
+        self.assertEqual((body["model"], body["duration"], body["language"], body["plan"]),
+                         ("ace-step-15-xl-turbo", 60, "de", True))           # long: planned
         self.assertEqual(body["prompt"], "energetic rock, electric guitars, drums, male vocals")
         self.assertEqual(body["lyrics"], "[Verse]\nHeute ist ein schöner Tag")
         with mock.patch.object(darkroom.requests, "post", return_value=reply) as post:
             client.post("/darkroom/api/song", json={"lyrics": "[Chorus]\nla la"})
         self.assertEqual(post.call_args.kwargs["json"]["lyrics"], "[Chorus]\nla la")   # marked: as it is
+        self.assertIs(post.call_args.kwargs["json"]["plan"], False)    # 20 s: the plan left the singing out
 
     def clip(self, **form):
         """A video job run against a mocked image API: (path, form, files, job)."""
@@ -1948,6 +1952,9 @@ class ImageApi(unittest.TestCase):
                          ("german pop ballad", "[Verse]\nla la", 90, 88, "C major", "de"))
         lat = next(n for n in g.values() if n["class_type"] == "EmptyAceStep1.5LatentAudio")["inputs"]
         self.assertTrue(isinstance(lat["seconds"], list) or lat["seconds"] == 90)
+        self.assertTrue(enc["generate_audio_codes"])                # planned unless asked not to
+        images.set_music(g, "pop", "[Verse]\nla", 20, plan=False)
+        self.assertFalse(enc["generate_audio_codes"])
         kinds = {n["class_type"] for n in g.values()}
         self.assertIn("PreviewAudio", kinds)                        # into temp, not the gallery
         self.assertFalse({k for k in kinds if k.startswith("SaveAudio")})

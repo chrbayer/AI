@@ -12,8 +12,9 @@
                                   Qwen-Image Layered without a prompt is described by Florence-2
     POST /v1/images/select        image + prompt: a box for each thing SAM 3 finds that the words name
     POST /v1/audio/music          {"model", "prompt" (style), "lyrics", "duration", "seed", "bpm",
-                                  "key", "language", "response_format": mp3|flac}: a song or an
-                                  instrumental from the music workflows (comfyui/api/audio/)
+                                  "key", "language", "plan", "response_format": mp3|flac}: a song
+                                  or an instrumental from the music workflows (comfyui/api/audio/);
+                                  "plan": false skips ACE-Step's planning language model
     POST /v1/audio/speech         {"input", "voice", "language" (de), "seed", "response_format":
                                   wav|mp3|flac}: the text spoken by Qwen3-TTS in a voice of
                                   `llmctl voice`; GET /v1/audio/voices lists them. Instead of
@@ -997,9 +998,13 @@ def repair_image():
 
 # ── music ────────────────────────────────────────────────────
 
-def set_music(graph, prompt, lyrics=None, duration=None, seed=None, bpm=None, key=None, language=None):
+def set_music(graph, prompt, lyrics=None, duration=None, seed=None, bpm=None, key=None, language=None,
+              plan=None):
     """The request into a music workflow: ACE-Step's text encoder, YuE2's style and
-    lyrics, Stable Audio's description; the length wherever a node holds it."""
+    lyrics, Stable Audio's description; the length wherever a node holds it.
+    plan=False: ACE-Step without the language model that first plans the song as
+    audio codes — in songs under 30 s that plan often left the singing out
+    (6 of 12 at 20 s), without it every one was sung, in half the time."""
     duration = DURATION_DEFAULT if duration in (None, "") else float(duration)
     if not DURATION_MIN <= duration <= DURATION_MAX:
         raise Refused(f"duration is {DURATION_MIN} to {DURATION_MAX} seconds")
@@ -1017,6 +1022,8 @@ def set_music(graph, prompt, lyrics=None, duration=None, seed=None, bpm=None, ke
                 i["keyscale"] = key
             if language:
                 i["language"] = language
+            if plan is not None:
+                i["generate_audio_codes"] = bool(plan)
         elif c == "EmptyAceStep1.5LatentAudio" and not isinstance(i.get("seconds"), list):
             i["seconds"] = duration
         elif c == "YuE2GenerateMusic":
@@ -1077,7 +1084,7 @@ def music():
                           f"— llmctl download comfy \"{known[name].stem}\"")
         seed = random.randrange(2**48) if j.get("seed") in (None, "") else int(j["seed"])
         set_music(graph, j["prompt"].strip(), j.get("lyrics"), j.get("duration"), seed,
-                  j.get("bpm"), j.get("key"), j.get("language"))
+                  j.get("bpm"), j.get("key"), j.get("language"), j.get("plan"))
         t0 = time.time()
         clips = [a for out in execute(graph).values() for a in out.get("audio", [])]
         if not clips:
