@@ -2324,12 +2324,17 @@ for (const b of $("keep").children) b.onclick = () => { S.keep = b.dataset.v; re
 // The start button above the keyboard. Chrome and Firefox on Android shrink the
 // page for it (interactive-widget=resizes-content in the viewport tag), so it
 // moves up by itself; iOS leaves what is fixed at the bottom behind the
-// keyboard, and the visual viewport says how far up to go.
+// keyboard, and the visual viewport says how far up to go. Only for a keyboard:
+// while scrolling, the address bar coming and going made the two heights
+// disagree for a moment, and the button jumped up and back.
 if (window.visualViewport) {
+  const typing = () => { const el = document.activeElement;
+    return !!el && (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && !["file", "range", "checkbox", "radio", "button"].includes(el.type))); };
   const lift = () => {
     const vv = window.visualViewport, d = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-    document.querySelector(".go").style.transform = d > 40 ? `translateY(${-d}px)` : "";
+    document.querySelector(".go").style.transform = typing() && d > 120 ? `translateY(${-d}px)` : "";
   };
+  document.addEventListener("focusout", () => setTimeout(lift, 50));
   window.visualViewport.addEventListener("resize", lift);
   window.visualViewport.addEventListener("scroll", lift);
 }

@@ -845,6 +845,7 @@ class Darkroom(unittest.TestCase):
         cont = page[page.index("function continueWith()"):]
         self.assertIn('$("text").value = ""', cont[:cont.index("\n}\n")])   # the wish was for the step before
         self.assertIn("interactive-widget=resizes-content", page)   # Android: the start button over the keyboard
+        self.assertIn("typing() && d > 120", page)       # iOS: lifted for a keyboard, not for the address bar
 
     def test_closing_the_viewer_stops_a_playing_clip(self):
         page = (ROOT / "darkroom.html").read_text()
