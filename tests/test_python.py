@@ -1411,6 +1411,8 @@ class Darkroom(unittest.TestCase):
         forms = [c.kwargs["data"] for c in post.call_args_list]
         self.assertEqual([f["seconds"] for f in forms], ["10", "10"])
         self.assertEqual(forms[0]["seed"], forms[1]["seed"])            # the same singer in each section
+        self.assertEqual((forms[0].get("end_strength"), forms[1].get("end_strength")),
+                         ("0.7", None))                                # back on the photo where they join
         self.assertTrue(forms[0]["prompt"].startswith("The person sings"))
         for c in post.call_args_list:
             names = [f[0] for f in c.kwargs["files"]]
@@ -2135,6 +2137,24 @@ class ImageApi(unittest.TestCase):
             for value in node["inputs"].values():
                 if isinstance(value, list) and len(value) == 2 and isinstance(value[0], str):
                     self.assertIn(value[0], g, f"{key} points at a node that is gone")
+
+    def test_a_talking_clip_can_end_on_its_picture_in_each_stage(self):
+        known = {p.stem: p for p in (ROOT / "comfyui" / "api" / "video").glob("*.json")}
+        g = json.loads(known["LTX-2.5 Talking (int8, distilled)"].read_text())
+        images.end_on_image(g, 0.7)
+        adds = [n for n in g.values() if n["class_type"] == "LTXVAddGuide"]
+        crops = {k for k, n in g.items() if n["class_type"] == "LTXVCropGuides"}
+        self.assertEqual(len(adds), 2)                                  # both stages
+        self.assertTrue(all(n["inputs"]["frame_idx"] == -1 and n["inputs"]["strength"] == 0.7 for n in adds))
+        self.assertTrue(all(n["inputs"]["image"][0] == "35" for n in adds))   # the photo, prepared once
+        seps = {k for k, n in g.items() if n["class_type"] == "LTXVSeparateAVLatent"}
+        for k, n in g.items():                          # the video latent goes on only with the guide cropped
+            if k not in crops:
+                self.assertFalse(any(v[0] in seps and v[1] == 0 for v in n["inputs"].values() if isinstance(v, list)), k)
+        v = json.loads(known["LTX-2.5 Video (int8, distilled)"].read_text())
+        if not any(n["class_type"] == "LTXVImgToVideoInplace" for n in v.values()):
+            with self.assertRaises(images.Refused):
+                images.end_on_image(v, 0.7)
 
     def test_a_missing_reference_drops_out_of_a_reference_chain(self):
         g = self._prepared("FLUX.2 dev Edit (fp8, 20 Schritte).json", 1)

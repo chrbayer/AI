@@ -2235,8 +2235,13 @@ seed, cuts each clip to exactly its frames, joins them and puts the song as
 it came underneath: 20 s of song came out 480 frames and 20.000 s, in 369 s
 (*fast*, 416×544); 10 s *best* (832×1088) took 1444 s. A rest under a second
 (an MP3's padding: 20 s read 20.04) is no section of its own. The card says
-which section runs. At each section the picture starts again from the photo,
-like a cut. LTX hears the voice alone (the Talking workflow's *Singing voice
+which section runs. Each section starts on the photo and — all but the last —
+ends on it again (the photo also as a guide at its last frame, strength 0.7,
+`"end_strength"` in `/v1/video/clips`), so the sections join without a jump:
+the singer sings to about half a second before the join, then is back in the
+photo's pose. Before 1.103.1 each section just started from the photo again,
+and the head jumped at every join; going on from each section's last frame
+instead joined smoothly but drifted — after 30 s it was another girl. LTX hears the voice alone (the Talking workflow's *Singing voice
 alone*): from the whole song the singer kept her mouth shut. Where the lyrics
 end, the music plays on and the photo stops singing — ACE-Step sang four short
 lines in about 12 of 20 s, so the page asks for about 3 lines per 10 s.

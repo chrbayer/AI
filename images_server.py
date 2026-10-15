@@ -24,7 +24,8 @@
                                   and last), "model", "seconds" (1-10), "size", "quality":
                                   fast|full, "seed": an MP4 with sound (LTX-2.5, api/video/);
                                   without an image from the prompt alone; with "audio" (up
-                                  to 10 s) the picture speaks or sings it (ltx-25-talking). It stays in
+                                  to 10 s) the picture speaks or sings it (ltx-25-talking), and with
+                                  "end_strength" (0.7) ends on the picture again. It stays in
                                   ComfyUI's output/llmctl-api/: there is no temp node for video
     POST /v1/images/check         image (+ prompt, max_area): the artifacts a vision model sees,
                                   with boxes to repaint and a prompt for each (needs --vision)
@@ -1365,7 +1366,40 @@ def voice_wav(data):
     return buf.getvalue(), len(r.stdout) / (2 * 48000)
 
 
-def set_clip(graph, name, prompt, images, seconds, size, fast, seed, audio=None):
+def end_on_image(graph, strength):
+    """The talking clip back on its picture at the last frame: the picture also
+    as a guide there (LTXVAddGuide, as First-Last Frame does), in each stage, the
+    guide frames cropped off again before the latent goes on. Songs sung in
+    sections join without a jump — each starts and ends on the photo."""
+    starts = [k for k, n in graph.items() if n["class_type"] == "LTXVImgToVideoInplace"]
+    if not starts:
+        raise Refused("this workflow cannot end on its picture")
+    fresh = iter(range(max(int(k) for k in graph if k.isdigit()) + 1, 10**6))
+    for start in starts:
+        concat = next(k for k, n in graph.items() if n["class_type"] == "LTXVConcatAVLatent"
+                      and n["inputs"]["video_latent"][0] == start)
+        sampler = next(k for k, n in graph.items() if n["class_type"] == "SamplerCustomAdvanced"
+                       and n["inputs"]["latent_image"][0] == concat)
+        guider = graph[graph[sampler]["inputs"]["guider"][0]]["inputs"]
+        sep = next(k for k, n in graph.items() if n["class_type"] == "LTXVSeparateAVLatent"
+                   and n["inputs"]["av_latent"][0] == sampler)
+        i = graph[start]["inputs"]
+        add, crop = str(next(fresh)), str(next(fresh))
+        graph[add] = {"class_type": "LTXVAddGuide", "inputs": {
+            "positive": guider["positive"], "negative": guider["negative"], "vae": i["vae"],
+            "latent": [start, 0], "image": i["image"], "frame_idx": -1, "strength": strength}}
+        graph[crop] = {"class_type": "LTXVCropGuides", "inputs": {
+            "positive": [add, 0], "negative": [add, 1], "latent": [sep, 0]}}
+        guider["positive"], guider["negative"] = [add, 0], [add, 1]
+        graph[concat]["inputs"]["video_latent"] = [add, 2]
+        for k, n in graph.items():
+            if k != crop:
+                for key, v in n["inputs"].items():
+                    if v == [sep, 0]:
+                        n["inputs"][key] = [crop, 2]
+
+
+def set_clip(graph, name, prompt, images, seconds, size, fast, seed, audio=None, end=None):
     """The request into a clip workflow; returns the clip's (width, height)."""
     for key in [k for k, n in graph.items() if n["class_type"] in UI_ONLY]:
         del graph[key]
@@ -1413,6 +1447,10 @@ def set_clip(graph, name, prompt, images, seconds, size, fast, seed, audio=None)
         w, h = out = clip_size(f"{w}x{h}", pixels=CLIP_PIXELS * FAST_SHARE)
     clip_node(graph, "PrimitiveInt", "Width")["inputs"]["value"] = w
     clip_node(graph, "PrimitiveInt", "Height")["inputs"]["value"] = h
+    if end:
+        if not talks:
+            raise Refused("only the talking clip ends on its picture")
+        end_on_image(graph, float(end))
     set_seed(graph, seed)
     for node in graph.values():
         if node["class_type"] == "SaveVideo":     # no temp node for videos: output/llmctl-api/
@@ -1429,6 +1467,7 @@ def clips():
             prompt, model, size, seconds = f.get("prompt", ""), f.get("model"), f.get("size"), f.get("seconds")
             quality, seed = f.get("quality"), f.get("seed")
             audio = request.files["audio"].read() if "audio" in request.files else None
+            end = f.get("end_strength")
         else:
             j = request.get_json(silent=True) or {}
             raw = j.get("images") or j.get("image") or []
@@ -1436,6 +1475,7 @@ def clips():
             prompt, model, size, seconds = j.get("prompt", ""), j.get("model"), j.get("size"), j.get("seconds")
             quality, seed = j.get("quality"), j.get("seed")
             audio = data_url(j["audio"]) if j.get("audio") else None
+            end = j.get("end_strength")
         if not isinstance(prompt, str) or not prompt.strip():
             raise Refused("prompt is required: what happens in the clip")
         if quality not in (None, "", "fast", "full"):
@@ -1452,7 +1492,8 @@ def clips():
                           f"— llmctl download comfy \"{known[name].stem}\"")
         seed = random.randrange(2**48) if seed in (None, "") else int(seed)
         t0 = time.time()
-        w, h = set_clip(graph, name, prompt.strip(), images, seconds, size, quality == "fast", seed, audio)
+        w, h = set_clip(graph, name, prompt.strip(), images, seconds, size, quality == "fast", seed, audio,
+                        end)
         made = [v for out in execute(graph).values() for v in out.get("images", []) + out.get("videos", [])
                 if str(v.get("filename", "")).endswith((".mp4", ".webm", ".mkv"))]
         if not made:

@@ -338,6 +338,10 @@ DESCRIBE_MAX = 200                # a voice described for Sprechen lassen
 # styles and voices offered — ACE-Step's tags, as the page names them.
 SONG_MAX = 60
 SECTION = 10
+# Each section but the last ends on the photo again (a guide at its last frame,
+# this strong), as the next starts on it: no jump where they join. Going on
+# from the last frame instead drifted — after 30 s another girl, mirrored glasses.
+SECTION_END = 0.7
 FPS = 24                             # LTX-2.5's clips
 LYRICS_MAX = 1200
 SONG_STYLES = {
@@ -933,7 +937,8 @@ def run_song(job, d):
             w.setnchannels(1); w.setsampwidth(2); w.setframerate(rate)
             w.writeframes(pcm[round(a * rate) * 2:round(b * rate) * 2])
         r = requests.post(f"{ARGS.api}/v1/video/clips", timeout=ARGS.timeout,
-                          data=dict(form, seconds=str(max(1, math.ceil(b - a - 1e-6)))),
+                          data=dict(form, seconds=str(max(1, math.ceil(b - a - 1e-6))),
+                                    **({"end_strength": str(SECTION_END)} if i + 1 < n else {})),
                           files=picture + [("audio", ("part.wav", buf.getvalue(), "audio/wav"))])
         if r.status_code != 200:
             raise RuntimeError(f"Abschnitt {i + 1}: " + api_error(r))
