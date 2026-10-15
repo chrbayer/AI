@@ -2307,7 +2307,7 @@ with `#share=<ids>`, and the page takes them as source pictures — several as
 for *several photos at once*. Apple offers no share target to web apps, so on
 an iPhone it is the gallery button as before.
 
-**Crop and turn.** *Crop* (*Zuschneiden*) beside the source picture opens it
+**Crop and turn.** *Crop · Turn* (*Zuschneiden · Drehen*) beside the source picture opens it
 with a frame to drag by its middle and its corners, free or held to 1:1, 4:3,
 3:4, 16:9 or 9:16, and quarter turns either way. *Straighten* (*Gerade
 richten*), a slider from −15° to +15° in tenths, turns a picture that is a
