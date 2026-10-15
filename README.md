@@ -1572,7 +1572,9 @@ llmctl update comfy --master          # master instead of the releases (download
   `ltx-25-first-last-frame`, `ltx-25-talking` with `audio`): a prompt, none,
   one or two pictures, `seconds`
   1–10, `size` (else the picture's shape at ~0.9 MP), `quality` `fast` (the
-  first stage alone, half the size) or `full`; back comes the MP4. ComfyUI
+  first stage alone, half the size) or `full`; the talking clip also
+  `end_strength` (0.7: it ends on its picture again, see *Make it sing*);
+  back comes the MP4. ComfyUI
   has no temp node for video, so the clip stays in `output/llmctl-api/`.
 - **Talking and singing pictures** (#43). `LTX-2.5 Talking (int8, distilled)`
   makes a picture speak or sing along to an audio file: the voice is encoded
@@ -2241,10 +2243,12 @@ ends on it again (the photo also as a guide at its last frame, strength 0.7,
 the singer sings to about half a second before the join, then is back in the
 photo's pose. Before 1.103.1 each section just started from the photo again,
 and the head jumped at every join; going on from each section's last frame
-instead joined smoothly but drifted — after 30 s it was another girl. LTX hears the voice alone (the Talking workflow's *Singing voice
+instead joined smoothly but drifted — after 30 s it was another girl.
+LTX hears the voice alone (the Talking workflow's *Singing voice
 alone*): from the whole song the singer kept her mouth shut. Where the lyrics
 end, the music plays on and the photo stops singing — ACE-Step sang four short
-lines in about 12 of 20 s, so the page asks for about 3 lines per 10 s.
+lines in about 12 of 20 s, so the page asks for about 3 lines per 10 s —
+2 under 30 s, see below.
 Songs under 30 s are made without ACE-Step's planning (`"plan": false`, the
 language model that first lays the song out as audio codes): planned, half
 the 20-s songs came back without any singing — the lyrics all there, ACE-Step
@@ -2336,7 +2340,9 @@ until the job.
 **Favourites.** ☆ in the viewer stars a result: the history lists it beside
 the newest 25; *☆ Favourites* (*Favoriten*) over the history shows only them.
 
-**History and archive.** Nothing is deleted but by hand (🗑 in the viewer, or
+**History and archive.** On a card a red **U** marks a job run *Uncensored*,
+a grey *2/4* its variant, *Schritt 1/3* (*Step*) its step of a recipe.
+Nothing is deleted but by hand (🗑 in the viewer, or
 *Keep* among variants). The history on the page shows the newest 25 jobs, the
 starred ones and those still waiting or running; *Archive · n* (*Archiv*)
 below it opens all of them as a grid by month, searched on the server — words
