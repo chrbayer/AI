@@ -1110,6 +1110,8 @@ def run_repair(job, d):
 # sound that is no voice keeps them quiet (5 of 6); forbidding speech does not,
 # the words "voice" and "speech" call it up. Not where the wish wants a voice.
 SOUND = " Audio: soft background music and the natural sounds of the scene."
+# ✨ writes the sound itself, as such a line in English: then it is not added a second time
+AUDIO_LINE = re.compile(r"\baudio\s*:", re.IGNORECASE)
 TALKING = re.compile(r"\b(sprech|sprich|spricht|sagt|sage|rede|redet|ruft|rufen|singt|singen|sang|erzähl|flüster|"
                      r"speak|talk|say|sing|shout|whisper)", re.IGNORECASE)
 
@@ -1130,7 +1132,7 @@ def clip_prompt(job):
     spec = ACTIONS.get(job["action"])
     text = (job.get("text") or "").strip()
     prompt = text or (spec["prompt"] if spec else "")
-    if job["action"] == "animate" and not TALKING.search(text):
+    if job["action"] == "animate" and not TALKING.search(text) and not AUDIO_LINE.search(text):
         prompt = prompt.rstrip().rstrip(".") + "." + SOUND
     if job["action"] in ("talk", "sing") and text:
         base = spec["prompt"].replace(STILL, "") if CAMERA.search(text) else spec["prompt"]
@@ -1360,9 +1362,15 @@ EXPAND_TASKS = {
             "photo's person and place are not kept. Describe who or what stands there and where, in full.",
     "expand": "The photo is continued beyond its edges. Describe the whole wider scene, the photo's part included.",
     "generate": "A picture is made from words alone. Describe the whole picture: subject, setting, light, style.",
+    # LTX makes its sound from an English "Audio:" line only: an eagle's scream
+    # described in German came out silent, with the line "Audio: … eagle scream,
+    # rustle of flapping wings" loud wing beats (three seeds of three).
     "animate": "The photo comes to life as a clip of a few seconds with sound. Describe what happens in it: how "
-               "the people, animals and things move, their faces, what is heard; the camera holds still unless the "
-               "wish says otherwise. Only what fits into a few seconds.",
+               "the people, animals and things move, their faces; the camera holds still unless the wish says "
+               "otherwise. Only what fits into a few seconds. End with one more line, always in English whatever "
+               "the language of the rest, that begins with 'Audio:' and names what is heard: the sounds the wish "
+               "asks for, else the natural sounds of the scene and soft background music; a voice only when the "
+               "wish wants someone to speak or sing.",
     # The voice is the user's recording or typed words: only the performance is written.
     "talk": "The person in the photo speaks along to a voice recording; the words are given and not written "
             "here. Describe how they speak: expression, gaze, head and shoulders (hands only if the photo shows them), "
@@ -1378,6 +1386,8 @@ EXPAND_TASKS = {
 # Those that ✨ fills with no wish at all (from the photo), and those whose text
 # the model reads only in English.
 EXPAND_EMPTY = {"talk", "sing", "colorize"}
+# Asked for in the task only, the Audio line came in German, as the system said.
+EXPAND_SYSTEM_MORE = {"animate": " Exception: the last line, which begins with 'Audio:', is always in English."}
 EXPAND_LANG = {"colorize": "English"}
 # ✨ Text schreiben for Singen lassen: lyrics to fill the song, about the wish or the photo.
 LYRICS_SYSTEM = (
@@ -1647,7 +1657,7 @@ def expand_text():
             system = SPEECH_SYSTEM.format(lang=language, chars=SPEAK_MAX, seconds=VOICE_MAX)
             content = [{"type": "text", "text": f"The wish: {text}" if text else none}]
         else:
-            system = EXPAND_SYSTEM.format(lang=EXPAND_LANG.get(action, language))
+            system = EXPAND_SYSTEM.format(lang=EXPAND_LANG.get(action, language)) + EXPAND_SYSTEM_MORE.get(action, "")
             wish = f"The wish: {text}" if text else "There is no wish: choose what fits the photo."
             content = [{"type": "text", "text": f"{EXPAND_TASKS[action]}\n{wish}"}]
         if data:

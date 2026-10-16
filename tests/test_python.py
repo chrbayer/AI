@@ -775,6 +775,9 @@ class Darkroom(unittest.TestCase):
                          darkroom.ACTIONS["talk"]["prompt"] + " Er lacht.")
         self.assertEqual(darkroom.clip_prompt({"action": "animate", "text": "a red dress waves"}),
                          "a red dress waves." + darkroom.SOUND)
+        # ✨ wrote the sound as its own line: not a second, generic one after it
+        wings = "Der Adler schlägt mit den Flügeln.\nAudio: the rustle of flapping wings, a sharp eagle cry."
+        self.assertEqual(darkroom.clip_prompt({"action": "animate", "text": wings}), wings)
 
     def test_a_wish_for_talk_or_sing_comes_after_the_lips_on_the_voice_instead_of_replacing_them(self):
         sing = darkroom.ACTIONS["sing"]["prompt"]

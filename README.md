@@ -2275,7 +2275,14 @@ the scene." at its end took the voice out of 5 of 6 (one kept 36 %); asking for
 silence instead ("The person is silent, mouth closed … no speech, no voice")
 did it in 2 of 6, the words calling the voice up. The longer default text had
 no voice either way (beach and man, 3 seeds each). A wish that has someone
-speak, sing, call or whisper gets no such end.
+speak, sing, call or whisper gets no such end. LTX hears the sound only in
+English, in such an "Audio:" line: an eagle beating its wings and screaming,
+described in German, came out silent; with the generic end, a hum of music;
+with "Audio: … eagle scream, … flapping wings" loud wing beats (3 seeds of 3,
+the scream itself in none). So ✨ ends an *Animate* text with an English
+"Audio:" line naming what the wish wants heard (in German too, by an exception
+in its system prompt: asked in the task alone, it wrote the line in German), and
+a text with that line gets no generic end.
 
 **Templates.** Next to each text field, *Templates* (*Vorlagen*) opens a library of
 prompts (`darkroom_prompts.json`, ~70, each in German and English): weather and light, seasons, tidying
