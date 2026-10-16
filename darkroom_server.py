@@ -119,6 +119,20 @@ ACTIONS = {
                    "Change nothing else: do not add, remove or redraw anything."),
         "variants": True, "text": None, "max_pixels": EDIT_PIXELS, "seconds": (40, 120),
     },
+    # Hard shadows cast on a face, a page, people: blinds' stripes across a man,
+    # face and wall; the photographer's head and arm on a book; a tree's long
+    # shadow over a family on a lawn (generated pictures, seed 1). Turbo and
+    # Edit took all three out, the faces kept and the head over the book left
+    # dark — a thing, not a shadow; 50-54 s each.
+    "shadow": {
+        "label": "Schatten entfernen", "hint": "Harte Schatten auf Gesicht, Seite, Leuten",
+        "model": ("qwen-image-21-turbo", "qwen-image-21"),
+        "prompt": ("Remove the shadows from this photo: the hard shadows cast on faces, people, objects and "
+                   "surfaces disappear, as if the scene had been lit by soft, even light from all sides. Keep the "
+                   "colours, textures and all details of the shadowed areas, and change nothing else: do not add, "
+                   "remove or redraw anything."),
+        "variants": True, "text": None, "max_pixels": EDIT_PIXELS, "seconds": (55, 120),
+    },
     # Through a pane of glass: the haze and the light spots go, and with
     # luck the reflected photographer too. Tried on a monkey at a zoo window,
     # two variants each: the haze went and the contrast came back on both;
@@ -301,7 +315,7 @@ RECIPES = {
     "recipe-blur": {"label": "Verwackeltes Foto retten", "hint": "Scharf machen → Vergrößern",
                     "steps": ["sharpen", "upscale"]},
 }
-GROUPS = [("Verbessern", ["colorize", "restore", "brighten", "sharpen", "glass", "detail", "upscale"]),
+GROUPS = [("Verbessern", ["colorize", "restore", "brighten", "shadow", "sharpen", "glass", "detail", "upscale"]),
           ("Verändern", ["background", "cutout", "remove", "paint", "edit", "expand"]),
           ("Neu erschaffen", ["pose", "restyle", "art"]),
           ("Video", ["animate", "talk", "sing"]),
@@ -436,6 +450,7 @@ EN = {
     "Restaurieren": "Restore", "Kratzer, Flecken, Rauschen weg": "Scratches, stains, noise gone",
     "Scharf machen": "Sharpen", "Verwackelt, bewegt, verrauscht": "Shaken, moving, noisy",
     "Aufhellen": "Brighten", "Zu dunkel, Nacht, Höhle, Innenraum": "Too dark, night, cave, indoors",
+    "Schatten entfernen": "Remove shadows", "Harte Schatten auf Gesicht, Seite, Leuten": "Hard shadows on faces, pages, people",
     "Spiegelung entfernen": "Remove reflections", "Durch eine Glasscheibe fotografiert": "Taken through a pane of glass",
     "Gesichter": "Faces", "Gesichter und Hände nachzeichnen": "Redraw faces and hands",
     "Vergrößern": "Upscale", "4× größer und schärfer": "4× bigger and sharper",

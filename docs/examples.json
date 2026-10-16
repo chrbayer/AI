@@ -646,6 +646,30 @@
           ]
         },
         {
+          "id": "shadow",
+          "title": "Remove shadows",
+          "public": true,
+          "text": "Hard shadows cast on a face, a page or people — the stripes of blinds, your own head over a book, a tree's long shadow over the family — taken out, as if the light had been soft and even: Qwen-Image Edit, about 55 s. The man by the window kept his face, the stripes went from it, his shirt and the wall. What casts the shadow stays: the head over the book is still there, only its shadow on the pages went. *Variants* keep the best.",
+          "de": {
+            "title": "Schatten entfernen",
+            "text": "Harte Schatten auf Gesicht, Buchseite oder Leuten – Jalousie-Streifen, der eigene Kopf über dem Buch, der lange Schatten eines Baums über der Familie – herausgenommen, als wäre das Licht weich und gleichmäßig gewesen: Qwen-Image Edit, etwa 55 s. Der Mann am Fenster behielt sein Gesicht, die Streifen verschwanden von ihm, dem Hemd und der Wand. Was den Schatten wirft, bleibt: Der Kopf über dem Buch ist noch da, nur sein Schatten auf den Seiten ist weg. Mit *Varianten* den besten behalten."
+          },
+          "media": [
+            {
+              "file": "bench:darkroom/shadow_input.jpg",
+              "caption": "Hard shadows",
+              "caption_de": "Harte Schatten",
+              "public": true
+            },
+            {
+              "file": "bench:darkroom/shadow_result.jpg",
+              "caption": "Shadows removed",
+              "caption_de": "Schatten entfernt",
+              "public": true
+            }
+          ]
+        },
+        {
           "id": "detail",
           "title": "Faces",
           "public": true,

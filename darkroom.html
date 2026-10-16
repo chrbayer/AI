@@ -2078,9 +2078,12 @@ function showCompare(job) {
   const frame = document.createElement("div"); frame.className = "frame" + (job.png ? " checker" : "");
   const after = document.createElement("img"); after.alt = t("nachher");
   after.src = `${API}/jobs/${job.id}/result`;
-  const before = document.createElement("img"); before.alt = t("vorher"); before.className = "before";
+  const before = document.createElement("img"); before.alt = t("vorher");
+  // A picture cut out already: its own checkerboard, not the result shining through
+  // where it is transparent. An extended picture: the original sits smaller in the
+  // middle of the new one, with the new one around it.
+  before.className = "before" + (job.action === "expand" ? "" : " checker");
   before.src = `${API}/jobs/${job.id}/input`;
-  // An extended picture: the original sits smaller in the middle of the new one.
   before.style.objectFit = job.action === "expand" ? "contain" : "fill";
   const line = document.createElement("div"); line.className = "line";
   const tl = document.createElement("div"); tl.className = "tag l"; tl.textContent = t("vorher");

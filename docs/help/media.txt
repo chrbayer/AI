@@ -40,6 +40,8 @@ restore2_input-bde2ceca299a.jpg
 restore2_result-7f6323a90573.jpg
 restyle_input-f65b3066e257.jpg
 restyle_result-3ccb06b62dd6.jpg
+shadow_input-ed2ba151f630.jpg
+shadow_result-e5ee0548eb51.jpg
 sing_result-a9bc67e00a5b.mp4
 talk_input-208273e50bc0.jpg
 talk_result-f91a23fc350b.mp4
