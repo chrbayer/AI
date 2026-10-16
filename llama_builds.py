@@ -151,7 +151,7 @@ def main(argv):
         return 0
     tag, sha, published = stable()
     out = {"tag": tag, "commit": sha, "vulkan": vulkan_build(sha, published),
-           "rocm": rocm_build(tag, sha, target) if target else None}
+           "rocm": rocm_build(tag, sha, target) if target else None, "gfx": target or None}
     print(json.dumps(out, indent=1))
     return 0
 

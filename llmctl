@@ -5100,6 +5100,11 @@ cmd_outdated() {
             echo "  $path ($commit): cannot compare with a release${behind:+ ($behind commits behind master)}"
         elif [[ "$status" == identical || "$status" == ahead ]]; then
             echo "  $path ($commit) — current: $stable is the newest stable release${behind:+, master is $behind commits further}"
+        elif [[ "$(readlink -f "$path")" == */rocm/* ]] &&
+             { [[ -n "$builds" ]] || builds=$(python3 "$LLAMA_BUILDS_SCRIPT" resolve 2>/dev/null); } &&
+             [[ "$(jq -r '.rocm // empty' <<< "$builds")" == "" && "$(jq -r '.gfx // empty' <<< "$builds")" ]]; then
+            # nothing to update to until lemonade builds the release
+            echo "  $path ($commit) — older than $stable, but lemonade has no $(jq -r .gfx <<< "$builds") build of it yet"
         else
             echo "  $path ($commit) — older than $stable, the newest stable release"
             _news "llama.cpp $path → $stable"
@@ -7061,6 +7066,10 @@ _llama_setup() {
     _llama_install vulkan "$info" "$check" || rc=1
     if [[ "$(jq -r '.rocm.gfx // empty' <<< "$info")" ]]; then
         _llama_install rocm "$info" "$check" || rc=1
+    elif [[ "$(jq -r '.gfx // empty' <<< "$info")" ]]; then
+        # lemonade builds a release a day or two after it is out
+        local cur; cur=$(basename "$(readlink "$LLAMA_DIR/rocm/current" 2>/dev/null)" 2>/dev/null)
+        echo "  rocm: lemonade has no $(jq -r .gfx <<< "$info") build of $(jq -r .tag <<< "$info") yet${cur:+ — $cur stays}; try again in a day or two"
     else
         echo "  rocm: no AMD GPU target found (KFD) — skipped"
     fi
