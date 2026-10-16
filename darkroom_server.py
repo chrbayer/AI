@@ -147,7 +147,8 @@ ACTIONS = {
     "upscale": {
         "label": "Vergrößern", "hint": "4× größer und schärfer",
         "model": ("seedvr2-7b-upscale", "seedvr2-7b-upscale"),
-        "prompt": "", "text": None, "max_side": 1024, "seconds": (40, 40),
+        # 4x of a 1024 side to 4096: 142-145 s each, the 7B's ~20 s setup included
+        "prompt": "", "text": None, "max_side": 1024, "seconds": (145, 145),
     },
     "background": {
         "label": "Freistellen", "hint": "Hintergrund entfernen",

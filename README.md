@@ -2109,7 +2109,7 @@ at `/darkroom`, and a home-screen icon for `/fotos` is best made anew.
 | Sharpen (Scharf machen) — a dim photo, shaken or someone moving; with variants | Qwen-Image 2.1 Edit Turbo / Edit: "Sharpen this photo and reduce its noise. Change nothing else: do not add, remove or redraw anything." — naming no people: the prompt that spoke of "the people's faces, hands and arms" drew people into an ice cave that had none, at three seeds of three | 72 s / 78 s |
 | Remove reflections (Spiegelung entfernen) — taken through a pane of glass; with variants; what stays, *Paint over* | Qwen-Image 2.1 Edit Turbo / Edit: "Remove the reflections of the glass pane … — whatever is mirrored in it … — add nothing", naming no subject, face or people — at a zoo window Turbo took the reflected hands out too, Edit did not | 70 s / 78 s |
 | Faces (Gesichter) — faces and hands redrawn | Qwen-Image 2.1 Detailer / FLUX.2 klein Detailer (small faces) | 136 s / 235 s |
-| Upscale (Vergrößern) — 4× | SeedVR2 7B (the picture brought to 1024 px first) | 103 s, 1024 → 4096 px |
+| Upscale (Vergrößern) — 4× | SeedVR2 7B (the picture brought to 1024 px first) | 142–145 s, 1024 → 4096 px |
 | Remove background (Freistellen) — background removed (PNG) | BiRefNet / BiRefNet Matting | 3 s |
 | Erase (Entfernen) — "the person", "the bin" | Qwen-Image 2.1 Edit Turbo / Edit: "Remove … completely from the photo, so that nothing of it is left …" | 45 s |
 | Edit (Ändern) — in one's own words, with a second photo as "picture 2" | Qwen-Image Edit Turbo, Edit, FLUX.2 klein (one photo), FLUX.2 dev Turbo | 43–158 s |
