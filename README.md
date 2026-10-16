@@ -941,7 +941,13 @@ prefill up a little (1149 / 1444 / 1404), the answers byte for byte the same;
 1359–1380), the rest the same; 0.15.1 all of it the same (two runs each, the
 answers byte for byte), and halogen 0.18.5 beside it the decode up (prose
 54.3 against 51.2–52.1, code 83.7–86.0 against 75.8–76.2 t/s), the prefill
-3–5 % up, its answers byte for byte too.
+3–5 % up, its answers byte for byte too. gufo 0.16.0 (`/health` answers 503
+while loading, where it was unreachable) the same again, qwen-gufo's prose
+decode at most 6 % up (16.3–17.2 against 15.8–16.2); halogen 0.18.6 beside it
+greedy the same and sampled code 6–10 % faster (T 0.7: 80.0–85.5 against
+74.3–76.0 t/s), sampled prose 1–5 % slower. Without its draft gate
+(`HALOGEN_SAMPLED_GATE=0`) sampled prose fell to 32–36 t/s, so the defaults
+stay. Claude Code sends no temperature and runs greedy.
 
 `flash-gufo-unc` is the uncensored Flash-Next on gufo: vmlinux's Q4 Mix of
 orcarouter's Qwen3.8-Flash-Next-Uncensored (one file, 110 GB), with the MTP
