@@ -791,6 +791,15 @@ Qwen3.8-27B. The slot model stays the same — `start`, `stop`,
   `--similarity`, `--gpu-priority`, `--verbose` and `--spec off` have no
   equivalent and are refused. The MTP draft is always on; it is byte-identical
   to plain decoding.
+- **`flash` samples by default** (1.105.3): its `extra_args` set Qwen's
+  thinking-mode settings, temperature 1.0, top-p 0.95, top-k 20, for requests
+  that send none. Claude Code sends none and ran greedy before, which Qwen
+  advises against with thinking on. A request that sends `temperature: 0`
+  stays greedy and byte-identical. One coding task through Claude Code, two
+  runs each: greedy 300 / 382 s with 19.1K / 24.3K tokens generated at
+  71.1 / 69.3 t/s, sampled 299 / 301 s with 18.5K / 17.9K tokens at
+  69.4 / 65.8 t/s (prompt lookup only drafts for greedy requests); all four
+  finished with their tests passing.
 - **`--compact`** (any model, but made for this one) has the kernel defragment
   free memory before the start (`sudo`). The server needs its ~30 GiB in 2 MiB
   pieces; with fewer free, the kernel compacts on the fly and startup and
@@ -947,7 +956,7 @@ decode at most 6 % up (16.3–17.2 against 15.8–16.2); halogen 0.18.6 beside i
 greedy the same and sampled code 6–10 % faster (T 0.7: 80.0–85.5 against
 74.3–76.0 t/s), sampled prose 1–5 % slower. Without its draft gate
 (`HALOGEN_SAMPLED_GATE=0`) sampled prose fell to 32–36 t/s, so the defaults
-stay. Claude Code sends no temperature and runs greedy.
+stay.
 
 `flash-gufo-unc` is the uncensored Flash-Next on gufo: vmlinux's Q4 Mix of
 orcarouter's Qwen3.8-Flash-Next-Uncensored (one file, 110 GB), with the MTP

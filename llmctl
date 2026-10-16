@@ -1762,7 +1762,14 @@ _start_halogen() {
                 echo "Reasoning: server default (thinking on, effort xhigh; requests may override)"
             fi
             echo "Speculative: on (MTP head, byte-identical to plain decoding)"
-            [[ -n "$temp$top_p" ]] && echo "Samplers: ${temp:+temp $temp}${temp:+${top_p:+, }}${top_p:+top-p $top_p} (server defaults; requests may override)"
+            local smp="${val[HALOGEN_TEMPERATURE]:+temp ${val[HALOGEN_TEMPERATURE]}}"
+            smp+="${val[HALOGEN_TOP_P]:+${smp:+, }top-p ${val[HALOGEN_TOP_P]}}"
+            smp+="${val[HALOGEN_TOP_K]:+${smp:+, }top-k ${val[HALOGEN_TOP_K]}}"
+            if [[ -n "$smp" ]]; then
+                echo "Samplers: $smp (server defaults; a request's own values win, temperature 0 stays greedy)"
+            else
+                echo "Samplers: greedy unless a request sends a temperature"
+            fi
         fi
         echo "----- effective config -----"
         echo "Command:"
@@ -4187,6 +4194,11 @@ _describe_halogen() {
     local joined="" p
     for p in "${params[@]}"; do joined+="${joined:+, }$p"; done
     echo "${indent}Params:    $joined"
+    local smp=""
+    v=$(_argv_env HALOGEN_TEMPERATURE) && smp+="temp $v"
+    v=$(_argv_env HALOGEN_TOP_P) && smp+="${smp:+, }top-p $v"
+    v=$(_argv_env HALOGEN_TOP_K) && smp+="${smp:+, }top-k $v"
+    echo "${indent}Samplers:  ${smp:-greedy} by default"
     if [[ "$(_argv_env HALOGEN_ENABLE_THINKING)" == "0" ]]; then
         echo "${indent}Reasoning: off by default"
     elif v=$(_argv_env HALOGEN_REASONING_EFFORT); then
