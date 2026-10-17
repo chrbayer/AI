@@ -970,7 +970,14 @@ byte for byte; greedy prose 3 % lower (53.0–53.2 against 54.8–55.1 t/s). hal
 (`HALOGEN_KV8=1`, `/health` says `kv_cache: int8`) took 16.6 GiB GTT instead
 of 19.7 at flash's 262144-position pool, with prefill, greedy and sampled
 decode and short replies the same; its answers at temperature 0 are worded
-differently (the same in both runs) and just as right. Not switched on.
+differently (the same in both runs) and just as right. Since 1.106.2
+flash runs it with the pool doubled to 524288 positions (GTT 20.6 GiB): two
+256K sessions, or one with its subagents, fit without pushing each other out
+of the prompt cache; the coding task through Claude Code 292 / 332 s with its
+tests passing, a fact in the middle of 163K tokens found. `--ctx 524288`
+(YaRN x2) on the same pool found the fact at 10, 50 and 90 % of 343K tokens
+(~230 s prefill each) and passed the coding task too, slower (485 / 357 s,
+more tokens); it stays opt-in.
 
 `flash-gufo-unc` is the uncensored Flash-Next on gufo: vmlinux's Q4 Mix of
 orcarouter's Qwen3.8-Flash-Next-Uncensored (one file, 110 GB), with the MTP
