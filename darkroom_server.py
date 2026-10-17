@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Photo editing for the phone — a page in front of llmctl's image API.
 
-    GET  /darkroom                the page (darkroom.html), made for a phone
+    GET  /darkroom                the page (darkroom.html), made for a phone, two columns on a desk
     GET  /darkroom/api/status     ComfyUI and the image API: up, down, starting, stopping
     POST /darkroom/api/comfy      {"action": "start"|"stop"}: llmctl starts or stops ComfyUI
     GET  /darkroom/api/actions    what the page offers, and which of it ComfyUI can do now

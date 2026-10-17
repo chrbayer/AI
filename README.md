@@ -2096,6 +2096,16 @@ sing* sing a song made from lyrics typed in. The actions come in four
 groups: Enhance, Change, Reimagine, Video. Big buttons, one column, dark
 mode; it can sit on the home screen like an app.
 
+**On a desk.** In a browser at least 1100 px wide with a mouse, the page
+spreads out: the form on the left with the actions three abreast, the
+history beside it as a grid of large thumbnails that scrolls on its own. A
+picture comes from a file, dragged onto the page (onto *Second photo* for
+that one) or pasted with Ctrl+V; *Take a photo* is gone. In the result ←
+and → step through the history (or the archive it was opened from), the
+mouse wheel zooms; the sheets that slide up on a phone open as dialogs in
+the middle. A phone, and a tablet held by its touch screen, keep the
+one-column page.
+
 **German and English.** The page speaks the browser's language, German or
 English; *DE*/*EN* at the top switches and is remembered. The server answers
 in it as well (`X-Darkroom-Lang`): actions, hints, templates, errors, the
