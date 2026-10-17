@@ -956,7 +956,9 @@ decode at most 6 % up (16.3–17.2 against 15.8–16.2); halogen 0.18.6 beside i
 greedy the same and sampled code 6–10 % faster (T 0.7: 80.0–85.5 against
 74.3–76.0 t/s), sampled prose 1–5 % slower. Without its draft gate
 (`HALOGEN_SAMPLED_GATE=0`) sampled prose fell to 32–36 t/s, so the defaults
-stay.
+stay. halogen 0.18.7 (the draft chain ends at the end of the turn) made short
+replies faster: ten one-word answers, greedy, 176–182 ms each against 208–213
+on 0.18.6; the bench, sampled decode and the answers the same.
 
 `flash-gufo-unc` is the uncensored Flash-Next on gufo: vmlinux's Q4 Mix of
 orcarouter's Qwen3.8-Flash-Next-Uncensored (one file, 110 GB), with the MTP
