@@ -965,7 +965,12 @@ the second (flash-gufo 8.8–9.4 against 6.1–6.8 s, qwen-gufo 21.0–21.5 agai
 16.4 s). halogen 0.18.8 (a long conversation keeps its prompt cache when many
 short ones come between, subagents reuse their parent's context) the same:
 prefill, code and sampled decode, short replies (173–176 ms) and the answers
-byte for byte; greedy prose 3 % lower (53.0–53.2 against 54.8–55.1 t/s).
+byte for byte; greedy prose 3 % lower (53.0–53.2 against 54.8–55.1 t/s). halogen 0.18.9 the same as
+0.18.8 (two runs each, the answers byte for byte). Its opt-in 8-bit KV cache
+(`HALOGEN_KV8=1`, `/health` says `kv_cache: int8`) took 16.6 GiB GTT instead
+of 19.7 at flash's 262144-position pool, with prefill, greedy and sampled
+decode and short replies the same; its answers at temperature 0 are worded
+differently (the same in both runs) and just as right. Not switched on.
 
 `flash-gufo-unc` is the uncensored Flash-Next on gufo: vmlinux's Q4 Mix of
 orcarouter's Qwen3.8-Flash-Next-Uncensored (one file, 110 GB), with the MTP
