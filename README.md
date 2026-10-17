@@ -962,7 +962,10 @@ on 0.18.6; the bench, sampled decode and the answers the same. gufo 0.17.0
 the same as 0.16.0 for both models (two runs each), the answers and two image
 descriptions each byte for byte; the first image still takes ~3 s longer than
 the second (flash-gufo 8.8–9.4 against 6.1–6.8 s, qwen-gufo 21.0–21.5 against
-16.4 s).
+16.4 s). halogen 0.18.8 (a long conversation keeps its prompt cache when many
+short ones come between, subagents reuse their parent's context) the same:
+prefill, code and sampled decode, short replies (173–176 ms) and the answers
+byte for byte; greedy prose 3 % lower (53.0–53.2 against 54.8–55.1 t/s).
 
 `flash-gufo-unc` is the uncensored Flash-Next on gufo: vmlinux's Q4 Mix of
 orcarouter's Qwen3.8-Flash-Next-Uncensored (one file, 110 GB), with the MTP
