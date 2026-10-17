@@ -5144,20 +5144,24 @@ cmd_outdated() {
         fi
     fi
 
-    # Kolibri-1 (models.conf "kolibri") runs on a patched build until llama.cpp
-    # knows its architecture; once master does, build-kolibri-server.sh can go.
-    if [[ -x "$DATA_DIR/llama.cpp-kolibri/build/bin/llama-server" ]]; then
-        printf '\n\033[1mKolibri build (patched llama.cpp)\033[0m\n'
-        local master_arch
-        master_arch=$(curl -fsSL --max-time 20 https://raw.githubusercontent.com/ggml-org/llama.cpp/master/src/llama-arch.cpp 2>/dev/null)
-        if [[ -z "$master_arch" ]]; then
-            echo "  cannot ask GitHub"
-        elif grep -q '"kolibri1"' <<< "$master_arch"; then
-            echo "  llama.cpp master knows kolibri1 now — point kolibri at the ordinary build; build-kolibri-server.sh can go"
-            _news "Kolibri: llama.cpp master knows kolibri1, the patched build can go"
-        else
-            echo "  llama.cpp master does not know kolibri1 yet (#29922) — the patched build stays"
-        fi
+    # Kolibri-1 (models.conf "kolibri") runs on a master build of its own
+    # (get-kolibri-server.sh) until a stable release has PR #30673; then it
+    # moves to LLAMA_DEFAULT_BIN and the script goes.
+    if [[ -x "$DATA_DIR/llama.cpp-kolibri/current/llama-server" ]]; then
+        printf '\n\033[1mKolibri build (llama.cpp master)\033[0m\n'
+        local kmerge=62318cd57dc63900ecb153272c0b10f78550855d kstable kstatus kbuild
+        kbuild=$(basename "$(readlink "$DATA_DIR/llama.cpp-kolibri/current")")
+        kstable=$(_gh_json "repos/ggml-org/llama.cpp/releases/latest" .tag_name)
+        [[ -n "$kstable" ]] && kstatus=$(_gh_json "repos/ggml-org/llama.cpp/compare/$kmerge...$kstable" .status)
+        case "${kstatus:-}" in
+            ahead|identical)
+                echo "  $kstable has Kolibri-1 (#30673) — point kolibri at LLAMA_DEFAULT_BIN (keep its --override-kv),"
+                echo "  then get-kolibri-server.sh and $DATA_DIR/llama.cpp-kolibri can go"
+                _news "Kolibri: llama.cpp $kstable has kolibri1, the master build ($kbuild) can go" ;;
+            behind|diverged)
+                echo "  $kbuild in use; $kstable, the newest release, does not have Kolibri-1 (#30673) yet" ;;
+            *)  echo "  $kbuild in use; cannot ask GitHub whether a release has Kolibri-1" ;;
+        esac
     fi
 
     printf '\n\033[1maudio.cpp\033[0m\n'
@@ -5945,6 +5949,13 @@ bench_model() {
     fi
 
     echo "  $m_label"
+    # llama-bench reads the GGUF as it is: it takes no --override-kv, so a model
+    # that needs one to load (a GGUF with keys spelled its own way) is not for it.
+    if [[ " ${_r_args[*]} " == *" --override-kv "* ]]; then
+        echo "    skipped: it loads only with --override-kv, which llama-bench does not take —"
+        echo "    start it and measure the server: halogen_bench.py --url http://127.0.0.1:<port>"
+        return
+    fi
     # A model on a build of its own (a patched llama.cpp, an architecture the
     # ordinary builds cannot load yet) is measured with that build's llama-bench.
     local own_server="${_r_binary//\~/$HOME}" own_bench=""

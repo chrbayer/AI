@@ -3230,17 +3230,23 @@ The sources are deleted once the file is made.
 ### A model the ordinary llama.cpp cannot load yet
 
 Aleph Alpha's **Kolibri-1** (`kolibri`; German and English, 78B total and
-3.46B active per token, Apache-2.0) has an architecture llama.cpp does not
-know yet (feature request #29922). It runs on a build of its own:
-`patches/build-kolibri-server.sh` puts llama.cpp at the commit the community
-patch was made on into a worktree (`~/.local/share/llmctl/llama.cpp-kolibri`),
-applies `patches/llama.cpp-kolibri1.patch` (MIT, Hob-forge/Seraphiel102,
-checked against a PyTorch reference of Aleph Alpha's own code) and builds
-`llama-server` and `llama-bench` with Vulkan, in ~1.5 min. The entry names
-that `llama-server` as its binary, and `llmctl bench` measures a model on its
-own build with that build's `llama-bench`. `outdated` asks whether llama.cpp
-master knows `kolibri1`; when it does, the entry can go back to the ordinary
-build and the script can go.
+3.46B active per token, Apache-2.0) came into llama.cpp master with PR #30673
+(2026-10-17), after v0.7.0. Until a stable release has it, it runs on
+ggml-org's prebuilt master build b11710: `patches/get-kolibri-server.sh` puts it
+into `~/.local/share/llmctl/llama.cpp-kolibri/` (apart from the builds
+`download llama` keeps), and the entry names that `llama-server`. `outdated`
+asks whether the newest release has the merge; when it does, the entry goes
+back to the ordinary build and the script goes. Before, it ran on a patched
+llama.cpp (836d571 + Hob-forge/Seraphiel102's MIT patch).
+
+The Q8_0 is that patch's conversion, which spells two keys its own way: the
+entry translates them with `--override-kv` (pre-tokenizer `kolibri1` → `qwen2`,
+the same split; gating function 5 → upstream's sigmoid, 2, with the expert
+bias). llama-bench takes no `--override-kv`, so `llmctl bench` skips such a
+model and says to measure the server with `halogen_bench.py --url`. Against the
+patched build, two runs each: prefill 1006–1072 / 1194–1202 / 902 t/s at
+866 / 6.6K / 26K tokens (1059–1069 / 1126–1137 / 735–741), decode 46.4–46.5
+(46.9–47.0), five answers at temperature 0 as sound.
 
 Measured with Q8_0 (83.1 GB): prefill 1324 t/s (pp512), decode 50.1 t/s. On
 six German prompts at reasoning `low`, against `llama3.3` (Llama 3.3 70B, the
