@@ -1989,11 +1989,12 @@ function showSingle(job) {
 // one finger is what it was before: the before/after slider (slide), or a tap
 // on a box.
 const ZOOM_MAX = 4;
+// slide: the before/after slider, { to(e), get(), set(p) } — one finger moves it.
 function zoomable(frame, slide) {
   const stage = $("stage");
   const Z = { s: 1, x: 0, y: 0 };
   const pts = new Map();
-  let pinch = null, pan = null, sliding = false, lastTap = 0;
+  let pinch = null, pan = null, sliding = false, slideFrom = null, lastTap = 0;
   const centre = () => { const r = stage.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
   const clamp = () => {
     const mx = (Z.s - 1) * frame.offsetWidth / 2, my = (Z.s - 1) * frame.offsetHeight / 2;
@@ -2018,7 +2019,10 @@ function zoomable(frame, slide) {
   stage.onpointerdown = (e) => {
     pts.set(e.pointerId, [e.clientX, e.clientY]);
     if (pts.size === 2) {
-      const t = two(); pinch = { d: t.d, m: t.m, s: Z.s, x: Z.x, y: Z.y }; pan = null; sliding = false;
+      const t = two(); pinch = { d: t.d, m: t.m, s: Z.s, x: Z.x, y: Z.y }; pan = null;
+      // the first finger moved the slider before the second made it a pinch: undo that
+      if (sliding && slideFrom != null) slide.set(slideFrom);
+      sliding = false; slideFrom = null;
       for (const id of pts.keys()) try { stage.setPointerCapture(id); } catch (err) {}
       return;
     }
@@ -2031,7 +2035,11 @@ function zoomable(frame, slide) {
     }
     lastTap = now;
     if (Z.s > 1) pan = { px: e.clientX, py: e.clientY, x: Z.x, y: Z.y, moved: false };
-    else if (slide) { sliding = true; try { stage.setPointerCapture(e.pointerId); } catch (err) {} slide(e); }
+    else if (slide) {
+      sliding = true; slideFrom = slide.get();
+      try { stage.setPointerCapture(e.pointerId); } catch (err) {}
+      slide.to(e);
+    }
   };
   stage.onpointermove = (e) => {
     if (!pts.has(e.pointerId)) return;
@@ -2045,7 +2053,7 @@ function zoomable(frame, slide) {
       if (!pan.moved && Math.hypot(dx, dy) < 5) return;
       if (!pan.moved) { pan.moved = true; lastTap = 0; try { stage.setPointerCapture(e.pointerId); } catch (err) {} }
       Z.x = pan.x + dx; Z.y = pan.y + dy; apply();
-    } else if (sliding) slide(e);
+    } else if (sliding) slide.to(e);
   };
   stage.onpointerup = stage.onpointercancel = (e) => {
     pts.delete(e.pointerId);
@@ -2054,7 +2062,7 @@ function zoomable(frame, slide) {
       const rest = [...pts.values()][0];        // one finger left: it moves the picture on
       if (rest && Z.s > 1) pan = { px: rest[0], py: rest[1], x: Z.x, y: Z.y, moved: true };
     }
-    if (!pts.size) { pan = null; sliding = false; }
+    if (!pts.size) { pan = null; sliding = false; slideFrom = null; }
   };
   stage.onwheel = (e) => { e.preventDefault(); zoomAt(e.clientX, e.clientY, Z.s * (e.deltaY < 0 ? 1.2 : 1 / 1.2)); };
 }
@@ -2164,14 +2172,16 @@ function showCompare(job) {
   const tr = document.createElement("div"); tr.className = "tag r"; tr.textContent = t("nachher");
   frame.append(after, before, line, tl, tr);
   stage.appendChild(frame);
+  let pos = 0.5;
   const set = (p) => {
-    p = Math.min(1, Math.max(0, p));
+    p = pos = Math.min(1, Math.max(0, p));
     before.style.clipPath = `inset(0 ${100 - p * 100}% 0 0)`;
     line.style.left = `calc(${p * 100}% - 1px)`;
   };
   set(0.5);
   // the frame's box on screen, zoomed or not: the slider stays under the finger
-  zoomable(frame, (e) => { const r = frame.getBoundingClientRect(); set((e.clientX - r.left) / r.width); });
+  zoomable(frame, { to: (e) => { const r = frame.getBoundingClientRect(); set((e.clientX - r.left) / r.width); },
+                    get: () => pos, set });
 }
 
 function closeViewer() {
