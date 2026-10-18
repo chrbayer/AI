@@ -721,9 +721,13 @@ def public(job):
     for k in ("label", "model_label", "phase", "error"):
         j[k] = tr(j.get(k))
     if j["state"] == "queued":
-        waiting = [x for x in all_jobs() if x["state"] == "queued"]
-        waiting.sort(key=lambda x: x["created"])
+        jobs = all_jobs()
+        waiting = sorted((x for x in jobs if x["state"] == "queued"), key=lambda x: x["created"])
         j["position"] = next((i + 1 for i, x in enumerate(waiting) if x["id"] == j["id"]), None)
+        # What really comes first: running jobs and the older waiting ones. 0 —
+        # every new job is queued until the worker claims it — means it is only
+        # being picked up, nothing to wait for.
+        j["ahead"] = sum(x["state"] == "running" for x in jobs) + (j["position"] or 1) - 1
     return j
 
 

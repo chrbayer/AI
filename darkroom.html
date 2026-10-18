@@ -776,7 +776,7 @@ const EN = {
   " — Mausrad zum Zoomen, ← → blättert": " — mouse wheel to zoom, ← → for the next",
   " — Regler ziehen für vorher/nachher, Mausrad zum Zoomen, ← → blättert": " — drag the slider for before/after, mouse wheel to zoom, ← → for the next",
   "Wird abgebrochen …": "Cancelling …", "ComfyUI hält nach dem laufenden Schritt an.": "ComfyUI stops after the current step.",
-  "Vorher ist noch etwas anderes dran.": "Something else comes first.",
+  "Vorher ist noch etwas anderes dran.": "Something else comes first.", "Wird vorbereitet …": "Getting ready …",
   "Du kannst die Seite schließen – das Ergebnis kommt in den Verlauf.": "You can close the page – the result goes into the history.",
   "Üblich sind {d}. ": "Usually {d}. ", "Ergebnis": "Result", "Das Vision-Modell hat nichts gefunden.": "The vision model found nothing.",
   " Hinweise zum ganzen Bild: ": " Notes on the whole picture: ",
@@ -1827,6 +1827,7 @@ function elapsed(job) {
 
 function stateText(job) {
   if (job.cancelled) return t("Abgebrochen");
+  if (job.state === "queued" && !job.after && !job.ahead) return t("Wird vorbereitet …");   // only being picked up
   if (job.state === "queued") return job.position > 1 ? t("Wartet (#{n})", { n: job.position }) : t("Wartet");
   if (job.state === "running") return t("Läuft · {t}", { t: elapsed(job) });
   if (job.state === "done") return t("Fertig");
@@ -1957,7 +1958,9 @@ function updateWaiting(job) {
   const typ = typical(job);
   const later = t("Du kannst die Seite schließen – das Ergebnis kommt in den Verlauf.");
   $("vHint").textContent = stopping ? t("ComfyUI hält nach dem laufenden Schritt an.")
-    : job.state === "queued" ? t(job.after ? "Wartet auf den Schritt davor." : "Vorher ist noch etwas anderes dran.")
+    : job.state === "queued" && job.after ? t("Wartet auf den Schritt davor.")
+    : job.state === "queued" && job.ahead ? t("Vorher ist noch etwas anderes dran.")
+    : job.state === "queued" ? later
     : job.phase ? job.phase + " " + later
     : (typ ? t("Üblich sind {d}. ", { d: duration(typ) }) : "") + later;
 }

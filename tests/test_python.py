@@ -440,6 +440,20 @@ class Darkroom(unittest.TestCase):
         Image.new("RGB", (w, h), (90, 90, 90)).save(buf, "JPEG", exif=exif)
         return buf.getvalue()
 
+    def test_a_new_job_waits_only_for_what_really_comes_first(self):
+        # Every job starts queued; until the worker claims it there is nothing
+        # ahead of it, and the page says "getting ready", not "something else".
+        def job(jid, state, created):
+            darkroom.job_path(jid).mkdir()
+            darkroom.write_job({"id": jid, "state": state, "created": created})
+            return darkroom.read_job(jid)
+        first = job("a1", "queued", 1)
+        self.assertEqual(darkroom.public(first)["ahead"], 0)
+        job("b2", "running", 0)
+        self.assertEqual(darkroom.public(first)["ahead"], 1)
+        second = job("c3", "queued", 2)
+        self.assertEqual((darkroom.public(second)["position"], darkroom.public(second)["ahead"]), (2, 2))
+
     def test_a_phone_photo_is_turned_upright_by_its_exif(self):
         _, name, size = darkroom.fit(self.jpeg(400, 300, orientation=6), "background")
         self.assertEqual((name, size), ("input.jpg", (300, 400)))
