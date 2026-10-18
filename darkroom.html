@@ -171,7 +171,18 @@ textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg)
 .stage .tag.l { left: 8px; } .stage .tag.r { right: 8px; }
 .checker { background: repeating-conic-gradient(#bbb 0 25%, #ddd 0 50%) 0 0 / 18px 18px; }
 .layer .info { font-size: 13px; color: #bbb; padding: 6px 16px 0; text-align: center; min-height: 22px; }
-.layer .bar { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; padding: 10px 12px calc(12px + env(safe-area-inset-bottom)); }
+/* Too many buttons for a narrow phone: each keeps its width and the bar scrolls
+   sideways; a fading edge tells where more are (fadeBars). */
+.layer .bar { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(max-content, 1fr); gap: 8px;
+              padding: 10px 12px calc(12px + env(safe-area-inset-bottom));
+              overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
+              scroll-snap-type: x proximity; scroll-padding-inline: 12px; }
+.layer .bar::-webkit-scrollbar { display: none; }
+.layer .bar.more-r { -webkit-mask-image: linear-gradient(to right, #000 82%, transparent); mask-image: linear-gradient(to right, #000 82%, transparent); }
+.layer .bar.more-l { -webkit-mask-image: linear-gradient(to left, #000 82%, transparent); mask-image: linear-gradient(to left, #000 82%, transparent); }
+.layer .bar.more-l.more-r { -webkit-mask-image: linear-gradient(to right, transparent, #000 18%, #000 82%, transparent);
+                            mask-image: linear-gradient(to right, transparent, #000 18%, #000 82%, transparent); }
+.layer .bar button { padding: 0 12px; scroll-snap-align: start; }
 .layer .bar button { background: rgba(255,255,255,.14); border: none; color: #fff; border-radius: 12px; min-height: 52px;
                      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 13px; }
 .layer .bar button svg { width: 22px; height: 22px; }
@@ -1891,6 +1902,7 @@ function openViewer(id) {
   stage.onpointerdown = stage.onpointermove = stage.onpointerup = stage.onpointercancel = stage.onwheel = null;
   const done = job.state === "done";
   for (const b of $("vBar").children) b.style.visibility = done || b.id === "vDelete" || b.id === "vAgain" ? "" : "hidden";
+  $("vBar").scrollLeft = 0;
   show("vAgain", job.action === "generate" || S.actions.some((x) => x.id === job.action));
   if (job.video) $("vMore").style.visibility = "hidden";        // a clip is no picture to edit on
   // Fehler suchen: for every picture a model made or changed — not a clip, not a check, not one cut out
@@ -2630,6 +2642,20 @@ document.addEventListener("paste", (e) => {
   e.preventDefault(); takePictures(files, 1);
 });
 // ← → in the viewer: the result before or after in the list it was opened from
+// A bar wider than the screen scrolls; the edge fades where more buttons are.
+function fadeBar(bar) {
+  const rest = bar.scrollWidth - bar.clientWidth - bar.scrollLeft;
+  bar.classList.toggle("more-r", rest > 4);
+  bar.classList.toggle("more-l", bar.scrollLeft > 4);
+}
+for (const bar of document.querySelectorAll(".layer .bar")) {
+  const fade = () => fadeBar(bar);
+  bar.addEventListener("scroll", fade, { passive: true });
+  new ResizeObserver(fade).observe(bar);                       // also when its layer opens
+  new MutationObserver(fade).observe(bar, { attributes: true, subtree: true, childList: true,
+                                            attributeFilter: ["class", "style"] });
+}
+
 function stepViewer(d) {
   const list = archiveOn() ? A.items : S.starsOnly ? S.jobs.filter((j) => j.star) : S.jobs;
   const i = list.findIndex((x) => x.id === S.viewing.id);
