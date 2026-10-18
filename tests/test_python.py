@@ -440,6 +440,25 @@ class Darkroom(unittest.TestCase):
         Image.new("RGB", (w, h), (90, 90, 90)).save(buf, "JPEG", exif=exif)
         return buf.getvalue()
 
+    def test_keep_tones_undoes_the_lift_but_not_the_shadow_removal(self):
+        from PIL import Image, ImageDraw, ImageEnhance
+        # A warm table, a hard shadow over its left third; the "model" takes the
+        # shadow out and lifts and greys everything, as Qwen-Image Edit does.
+        original = Image.new("RGB", (300, 200), (200, 140, 80))
+        ImageDraw.Draw(original).rectangle((0, 0, 99, 199), fill=(80, 56, 32))
+        lifted = Image.new("RGB", (300, 200), (200, 140, 80)).point(lambda v: round(255 * (v / 255) ** 0.7))
+        lifted = ImageEnhance.Color(lifted).enhance(0.7)
+        kept = darkroom.keep_tones(original, lifted)
+        lit, shade = kept.getpixel((250, 100)), kept.getpixel((40, 100))
+        for got, want in zip(lit, (200, 140, 80)):
+            self.assertLess(abs(got - want), 12)                  # brightness and colour back
+        self.assertGreater(sum(shade), sum((80, 56, 32)) + 200)    # the shadow stays gone
+
+    def test_keep_tones_leaves_a_result_alone_that_was_not_lifted(self):
+        from PIL import Image
+        picture = Image.new("RGB", (120, 80), (120, 90, 60))
+        self.assertEqual(darkroom.keep_tones(picture, picture.copy()).tobytes(), picture.tobytes())
+
     def test_a_new_job_waits_only_for_what_really_comes_first(self):
         # Every job starts queued; until the worker claims it there is nothing
         # ahead of it, and the page says "getting ready", not "something else".

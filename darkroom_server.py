@@ -46,7 +46,7 @@ from pathlib import Path
 import requests
 from flask import Flask, Response, jsonify, request, send_file
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageChops, ImageEnhance, ImageFilter, ImageOps
 
 try:
     import webpush                      # needs `cryptography`; without it, no notifications
@@ -124,6 +124,12 @@ ACTIONS = {
     # shadow over a family on a lawn (generated pictures, seed 1). Turbo and
     # Edit took all three out, the faces kept and the head over the book left
     # dark — a thing, not a shadow; 50-54 s each.
+    # But they lift the whole picture with it: a doll half in shade on a table
+    # came back at mean brightness 146 instead of 99, its saturation 134 down
+    # to 95, the man behind the blinds lost a quarter of his colour. Asking to
+    # keep brightness and saturation made it brighter still (160) on all four
+    # pictures and both models, so the prompt stays and keep_tones() puts the
+    # tones back afterwards (1.107.2).
     "shadow": {
         "label": "Schatten entfernen", "hint": "Harte Schatten auf Gesicht, Seite, Leuten",
         "model": ("qwen-image-21-turbo", "qwen-image-21"),
@@ -132,6 +138,7 @@ ACTIONS = {
                    "colours, textures and all details of the shadowed areas, and change nothing else: do not add, "
                    "remove or redraw anything."),
         "variants": True, "text": None, "max_pixels": EDIT_PIXELS, "seconds": (55, 120),
+        "keep_tones": True,
     },
     # Through a pane of glass: the haze and the light spots go, and with
     # luck the reflected photographer too. Tried on a monkey at a zoo window,
@@ -732,6 +739,52 @@ def public(job):
 
 
 # ── the picture ──────────────────────────────────────────────
+def keep_tones(original, result):
+    """The result with the original's brightness and colour where the model only
+    shifted them: one gamma (darker only, black and white stay) and one
+    saturation factor (up only, at most 1.3 and the original's), measured where the original was
+    already lit and the model did not darken it — so lifted shadows and evened
+    out highlights keep their change. Bounded on purpose: free tone curves
+    fitted the same way came out too dark and orange."""
+    result = result.convert("RGB")
+    original = original.convert("RGB").resize(result.size, Image.LANCZOS)
+    la = original.convert("L").filter(ImageFilter.GaussianBlur(6))
+    lb = result.convert("L").filter(ImageFilter.GaussianBlur(6))
+
+    def median(img, mask):
+        hist, half, n = img.histogram(mask), sum(img.histogram(mask)) / 2, 0
+        for v, c in enumerate(hist):
+            n += c
+            if n >= half:
+                return v
+        return 0
+
+    hist, total, n = la.histogram(), la.width * la.height, 0
+    p60 = next(v for v, c in enumerate(hist) if (n := n + c) >= 0.6 * total)
+    lit = la.point(lambda v: 255 if p60 <= v and 20 < v < 247 else 0)
+    darkened = ImageChops.subtract(la, lb).point(lambda v: 255 if v > 10 else 0)
+    lit = ImageChops.subtract(lit, darkened).convert("1")
+    if sum(lit.convert("L").histogram()[255:]) < 0.05 * total:
+        return result
+    ma, mb = median(la, lit), median(lb, lit)
+    if not (0 < ma < mb < 255):
+        return result                                     # not lifted: nothing to undo
+    gamma = min(1.8, math.log(ma / 255) / math.log(mb / 255))
+    out = result.point([round(255 * (v / 255) ** gamma) for v in range(256)] * 3)
+
+    def chroma(img):            # how far from its own grey, as ImageEnhance.Color scales it
+        grey = img.convert("L")
+        r, g, b = (ImageChops.difference(c, grey) for c in img.split())
+        return ImageChops.lighter(r, ImageChops.lighter(g, b))
+    # Darker alone already saturates (HSV), so the factor also stops where the
+    # original's saturation is reached.
+    ca, co = median(chroma(original), lit), median(chroma(out), lit)
+    sa, so = (median(img.convert("HSV").getchannel("S"), lit) for img in (original, out))
+    if co > 0 and so > 0 and ca > co and sa > so:
+        out = ImageEnhance.Color(out).enhance(min(1.3, ca / co, sa / so))
+    return out
+
+
 
 def fit(data, action, name="input"):
     """The upload as the workflow should get it: turned upright by its EXIF,
@@ -892,6 +945,11 @@ def run_job(jid):
         if r.status_code != 200:
             raise RuntimeError(api_error(r))
         png = base64.b64decode(r.json()["data"][0]["b64_json"])
+        if ACTIONS.get(job["action"], {}).get("keep_tones") and input_file(d) is not None:
+            (d / "result.raw.png").write_bytes(png)          # the model's own, kept
+            buf = io.BytesIO()
+            keep_tones(Image.open(input_file(d)), Image.open(io.BytesIO(png))).save(buf, "PNG")
+            png = buf.getvalue()
         (d / "result.png").write_bytes(png)
         size = Image.open(io.BytesIO(png)).size
         update_job(jid, state="done", finished=time.time(), result_size=list(size),
