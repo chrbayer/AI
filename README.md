@@ -160,6 +160,17 @@ itself — public hosts only, redirects included — and passes them on inline:
 llama-server would otherwise fetch any URL a token holder names, `127.0.0.1` and
 the LAN included. That covers the proxied path; the direct one is not.
 
+It also checks the model a request names. Ports belong to slots, not models, so
+a client set up for `qwen` on `:8081` reaches flash once `preset flash` runs
+there — and without the check it would get flash's answers without a word. A
+request naming a model from models.conf (its name, client name or alias) that
+the slot does not serve gets a 400, *wrong port: :8081 serves
+'halogen-qwen3.8-flash-next' (llmctl model 'flash'), the request asks for
+'qwen'*, in the client's own API shape. Entries that share a name count as one
+(`qwen` and `qwen-gufo`: same weights, same alias). A name llmctl does not know,
+or none, passes as before; so a client's model ids should be llmctl names for
+the check to see them. The direct path is not checked.
+
 `env` follows suit: it points at the proxy when one is listening for that slot,
 at llama-server otherwise. `--proxy` / `--direct` force the choice, e.g. when
 setting the env before starting the slot.

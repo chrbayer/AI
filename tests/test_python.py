@@ -365,6 +365,57 @@ class TranslateImages(unittest.TestCase):
         self.assertFalse(proxy.translates("v1/messages", self.body(self.IMAGE)))
 
 
+@unittest.skipIf(proxy is None, "proxy.py needs flask and requests")
+class WrongModel(unittest.TestCase):
+    """Ports belong to slots: a request naming a model llmctl knows but the slot
+    does not run went to the wrong port and is refused; unknown names pass."""
+    KNOWN = {"flash": ["halogen-qwen3.8-flash-next", "halogen-qwen3.8-flash-next"],
+             "qwen": ["qwen", "HauhauCS/Qwen3.8-27B"],
+             "qwen-gufo": ["qwen-gufo", "HauhauCS/Qwen3.8-27B"],
+             "comfy": ["comfy", ""]}
+
+    def setUp(self):
+        self.saved = proxy.KNOWN_MODELS, proxy._served_ids
+        proxy.KNOWN_MODELS = self.KNOWN
+        self.serving, self.asked = {"halogen-qwen3.8-flash-next"}, []
+        proxy._served_ids = lambda refresh=False: self.asked.append(refresh) or self.serving
+
+    def tearDown(self):
+        proxy.KNOWN_MODELS, proxy._served_ids = self.saved
+
+    def test_another_known_model_is_refused(self):
+        self.assertEqual(proxy.wrong_model({"model": "qwen"}), "halogen-qwen3.8-flash-next")
+        self.assertEqual(self.asked, [False, True])     # asked again before refusing
+
+    def test_any_name_of_the_served_entry_passes(self):
+        for name in ("flash", "halogen-qwen3.8-flash-next"):
+            self.assertIsNone(proxy.wrong_model({"model": name}))
+
+    def test_entries_sharing_an_alias_count_as_one(self):
+        self.serving = {"qwen-gufo"}
+        self.assertIsNone(proxy.wrong_model({"model": "HauhauCS/Qwen3.8-27B"}))
+        self.assertIsNone(proxy.wrong_model({"model": "qwen"}))
+
+    def test_unknown_or_missing_names_pass(self):
+        for body in ({"model": "qwen3.8"}, {"model": ""}, {}, {"model": 3}, None):
+            self.assertIsNone(proxy.wrong_model(body))
+
+    def test_no_say_when_the_backend_serves_nothing_known(self):
+        self.serving = set()
+        self.assertIsNone(proxy.wrong_model({"model": "qwen"}))
+        self.serving = {"something-else"}
+        self.assertIsNone(proxy.wrong_model({"model": "qwen"}))
+
+    def test_the_refusal_speaks_the_clients_api(self):
+        with proxy.app.app_context():
+            r = proxy._wrong_model_response("v1/messages", "qwen", "halogen-qwen3.8-flash-next")
+            self.assertEqual(r.status_code, 400)
+            self.assertEqual(json.loads(r.get_data())["error"]["type"], "invalid_request_error")
+            self.assertIn("'flash'", json.loads(r.get_data())["error"]["message"])
+            r = proxy._wrong_model_response("v1/chat/completions", "qwen", "halogen-qwen3.8-flash-next")
+            self.assertEqual(json.loads(r.get_data())["error"]["code"], "model_not_found")
+
+
 @unittest.skipIf(darkroom is None, "darkroom_server.py needs flask, requests and pillow")
 class Darkroom(unittest.TestCase):
     """The phone page's server: what a picture becomes before the image API sees

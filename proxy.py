@@ -53,6 +53,17 @@ IMAGE_FETCH_TIMEOUT = 20
 # While the backend prefills, a streamed Messages answer sends a ping this often,
 # so neither the client nor anything in between takes the silence for a hang.
 PING_INTERVAL = 10
+# Every model llmctl knows, as JSON {entry name: [its other names]} — the
+# client name it serves under and its alias. Ports belong to
+# slots, not models, so a client set up for one model may reach a slot that now
+# runs another — and would get its answers without a word. A request naming a
+# known model this slot does not serve is refused instead; a name llmctl does
+# not know, or none at all, passes as before.
+KNOWN_MODELS = json.loads(os.environ.get('LLM_KNOWN_MODELS', '') or '{}')
+MODEL_CHECKED_PATHS = frozenset([
+    "v1/chat/completions", "v1/completions", "v1/responses",
+    "v1/messages", "v1/messages/count_tokens",
+])
 
 # Hardened mode. llmctl sets LLM_TOKEN_FILE only for `start --tunnel`; when it is
 # set, every request must carry a known token and may only reach an allowlisted
@@ -219,6 +230,71 @@ def clamp_max_tokens(data):
     for key in ("max_tokens", "max_completion_tokens", "max_output_tokens"):
         if isinstance(data.get(key), int) and data[key] > MAX_TOKENS_CAP:
             data[key] = MAX_TOKENS_CAP
+
+
+_served = {"ids": None}
+
+
+def _served_ids(refresh=False):
+    """The names the backend answers to (/v1/models), cached until a request
+    names something else. Empty when it cannot be asked."""
+    if refresh or _served["ids"] is None:
+        try:
+            r = requests.get(f"{TARGET_URL}/v1/models", timeout=5)
+            body = r.json()
+            models = (body.get("data") or []) + (body.get("models") or [])
+            _served["ids"] = {m[k] for m in models if isinstance(m, dict)
+                              for k in ("id", "name", "model") if isinstance(m.get(k), str)}
+        except (requests.RequestException, ValueError, AttributeError, TypeError):
+            return set()
+    return _served["ids"]
+
+
+def _names(entry):
+    return {entry, *KNOWN_MODELS[entry]} - {""}
+
+
+def _same_model(name):
+    """Every name of the models.conf entries `name` is a name of, and of the
+    entries sharing one of those (qwen and qwen-gufo: the same weights, one
+    alias). Empty for a name llmctl does not know."""
+    out, grown = {name}, True
+    while grown:
+        grown = False
+        for entry in KNOWN_MODELS:
+            if _names(entry) & out and not _names(entry) <= out:
+                out |= _names(entry)
+                grown = True
+    return out if len(out) > 1 or name in KNOWN_MODELS else set()
+
+
+def wrong_model(data):
+    """What this slot serves, when the request names another model llmctl knows;
+    None when it may pass."""
+    name = data.get("model") if isinstance(data, dict) else None
+    if not KNOWN_MODELS or not isinstance(name, str):
+        return None
+    want = _same_model(name)
+    if not want:
+        return None
+    served = set()
+    for refresh in (False, True):       # the slot may have changed models since
+        served = _served_ids(refresh)
+        if want & served:
+            return None
+    known = sorted(served & set().union(*map(_names, KNOWN_MODELS)))
+    return known[0] if known else None   # serving nothing llmctl knows: no say
+
+
+def _wrong_model_response(path, name, served):
+    entry = next((e for e in KNOWN_MODELS if served in _names(e)), served)
+    message = (f"wrong port: :{PROXY_PORT} serves '{served}' (llmctl model '{entry}'), "
+               f"the request asks for '{name}' — start that model, or use its slot's port")
+    if path.startswith("v1/messages"):
+        return _json_response(400, ac.error_body(400, message))
+    return Response(json.dumps({"error": {"message": message, "type": "invalid_request_error",
+                                          "code": "model_not_found"}}),
+                    status=400, content_type="application/json")
 
 
 def _relay(resp):
@@ -532,6 +608,13 @@ def proxy(path):
         if REQUEST_DEFAULTS and request.method == "POST" and path == "v1/chat/completions":
             apply_defaults(data)
 
+    if request.method == "POST" and path in MODEL_CHECKED_PATHS:
+        served = wrong_model(data)
+        if served:
+            log.warning("Rejected request from %s: asks for '%s', this slot serves '%s'",
+                        _client_addr(), data.get("model"), served)
+            return _wrong_model_response(path, data.get("model"), served)
+
     headers = _filter_headers(request.headers)
 
     # One generation can occupy the GPU for minutes, so the cap is on concurrent
@@ -599,6 +682,8 @@ if __name__ == '__main__':
     if INLINE_IMAGE_URLS:
         log.info("Fetching http(s) image URLs and passing them on inline%s",
                  " (public hosts only)" if TOKENS else "")
+    if KNOWN_MODELS:
+        log.info("Requests naming another of %d known models are refused", len(KNOWN_MODELS))
     if TOKENS:
         log.info("Public mode: %d token(s) from %s, max %d concurrent requests, "
                  "body limit %d MiB, %d allowlisted paths",

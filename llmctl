@@ -1461,6 +1461,18 @@ _halogen_server_proxy_env() {
     return 0
 }
 
+# Every models.conf entry as JSON {name: [client name, alias]}: what proxy.py
+# checks a request's model against (LLM_KNOWN_MODELS).
+_known_models_json() {
+    local entry sep="" out="{"
+    local -a f
+    for entry in "${_MODELS[@]}"; do
+        IFS='|' read -r -a f <<< "$entry"
+        out+="$sep\"${f[0]}\":[\"${f[7]:-${f[0]}}\",\"${f[4]}\"]"; sep=","
+    done
+    echo "$out}"
+}
+
 # Start proxy.py for one slot and wait until it listens. Its own function so
 # `preset` can add a missing proxy to a slot whose model already matches —
 # reloading 70B of weights for a process that starts in a second would be absurd.
@@ -1524,6 +1536,7 @@ _start_proxy() {
             LLM_PROXY_HOST="${host:-127.0.0.1}" \
             LLM_PROXY_PORT="${port_proxy}" \
             LLM_TOKEN_FILE="$([[ "$token_mode" == true ]] && echo "$TOKEN_FILE")" \
+            LLM_KNOWN_MODELS="$(_known_models_json)" \
             "${backend_env[@]}" \
             python3 -u "$PROXY_SCRIPT")
     if [[ -z "$proxy_pid" ]]; then
