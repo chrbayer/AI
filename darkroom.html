@@ -838,6 +838,8 @@ async function api(path, opts = {}) {
   const dev = recall("pushId");
   opts.headers = Object.assign({ "X-Darkroom-Lang": LANG }, opts.headers || {});
   if (dev && !document.hidden) opts.headers["X-Darkroom-Device"] = dev;
+  // each submit named: one sent twice over a shaky connection makes one job
+  if (path === "/jobs" && opts.method === "POST") opts.headers["X-Darkroom-Request"] = Math.random().toString(36).slice(2) + Date.now().toString(36);
   const r = await fetch(API + path, opts);
   if (opts.onHeaders) opts.onHeaders(r.headers);
   let body = null;

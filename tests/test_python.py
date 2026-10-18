@@ -1102,6 +1102,28 @@ class Darkroom(unittest.TestCase):
         self.assertEqual(acts["recipe-alive"]["steps"], ["restore", "colorize", "animate"])
         self.assertTrue(acts["recipe-alive"]["video"])
 
+    def test_a_submit_sent_twice_makes_one_job(self):
+        import threading
+        client = darkroom.app.test_client()
+        post = lambda name, out: out.append(client.post(
+            "/darkroom/api/jobs", data={"action": "edit", "text": "x", "image": (io.BytesIO(self.jpeg(64, 64)), "a.jpg")},
+            headers={"X-Darkroom-Request": name} if name else {}, content_type="multipart/form-data"))
+        before = len(darkroom.all_jobs())
+        out = []
+        ts = [threading.Thread(target=post, args=("one", out)) for _ in range(3)]   # at once, as a resend comes
+        for t in ts:
+            t.start()
+        for t in ts:
+            t.join()
+        post("one", out)                                                            # and later
+        self.assertEqual({r.status_code for r in out}, {200})
+        self.assertEqual(len({r.get_json()[0]["id"] for r in out}), 1)
+        self.assertEqual(len(darkroom.all_jobs()), before + 1)
+        post("two", out); post(None, out); post(None, out)                         # another submit, or no name: new jobs
+        self.assertEqual(len(darkroom.all_jobs()), before + 4)
+        while not darkroom._queue.empty():
+            darkroom._queue.get_nowait()
+
     def test_each_login_has_its_own_history_templates_and_pushes(self):
         from unittest import mock
         client = darkroom.app.test_client()

@@ -2019,8 +2019,41 @@ def picture(field, from_field):
     return None, None
 
 
+# A shaky connection can deliver one submit twice — the browser or the tunnel
+# sends the upload again when the first answer does not come through (two equal
+# jobs 0.2 s apart, the second waiting for the first). The page names each
+# submit (X-Darkroom-Request); the same name again gets the first answer.
+_submits = {}                                  # (user, name) → {"done": Event, "answer": (body, status), "at": t}
+_submits_lock = threading.Lock()
+SUBMIT_KEEP = 600                              # seconds a submit's answer is kept for a repeat
+
+
 @app.post("/darkroom/api/jobs")
 def create_job():
+    name = (request.headers.get("X-Darkroom-Request") or "")[:64]
+    if not name:
+        return make_jobs()
+    key, now = (current_user(), name), time.time()
+    with _submits_lock:
+        for k in [k for k, v in _submits.items() if now - v["at"] > SUBMIT_KEEP]:
+            del _submits[k]
+        first = _submits.get(key)
+        if first is None:
+            _submits[key] = mine = {"done": threading.Event(), "answer": None, "at": now}
+    if first is not None:                      # a repeat: the first one's answer
+        first["done"].wait(300)
+        if first["answer"] is None:
+            return error("der Auftrag wird noch angenommen", 503)
+        return Response(first["answer"][0], status=first["answer"][1], mimetype="application/json")
+    try:
+        r = app.make_response(make_jobs())
+        mine["answer"] = (r.get_data(), r.status_code)    # a refusal too: the page asks anew with a new name
+        return r
+    finally:
+        mine["done"].set()
+
+
+def make_jobs():
     try:
         f = request.form
         action = f.get("action", "")
