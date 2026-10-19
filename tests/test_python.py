@@ -207,6 +207,47 @@ class PackRelease(unittest.TestCase):
                 self.assertIsNone(cm.pack_release(d, "HEAD"))
 
 
+class NodePackLabel(unittest.TestCase):
+    """update comfy: what it says about a pack at, past or before its release."""
+
+    def test_at_the_release_it_says_the_release_not_past_the_pin(self):
+        import subprocess
+        src = (ROOT / "llmctl").read_text()
+        fns = "\n".join(re.search(rf"^{f}\(\) {{\n.*?^}}$", src, re.M | re.S)[0]
+                        for f in ("_node_pack_tag", "_comfyui_custom_nodes"))
+        with tempfile.TemporaryDirectory() as d:
+            origin, share, base = Path(d, "origin"), Path(d, "share"), Path(d, "base")
+            def git(where, *a):
+                return subprocess.run(["git", "-C", str(where), "-c", "user.name=t", "-c", "user.email=t@t", *a],
+                                      check=True, capture_output=True, text=True).stdout.strip()
+            origin.mkdir(); git(origin, "init", "-q")
+            commits = []
+            for note in ("pin", "fix", "release", "later"):
+                Path(origin, "note").write_text(note)
+                git(origin, "add", "-A"); git(origin, "commit", "-qm", note)
+                commits.append(git(origin, "rev-parse", "HEAD"))
+            pin, _, release, later = commits
+            share.mkdir(); (share / "custom_nodes.txt").write_text(f"pack  {origin}  {pin}\n")
+            script = Path(d, "release.py"); script.write_text(f"print('{release} 3.0.18 2026-10-18 active')\n")
+            git(d, "clone", "-q", str(origin), str(base / "custom_nodes" / "pack"))
+            def run(head):
+                git(base / "custom_nodes" / "pack", "checkout", "-q", head)
+                out = subprocess.run(["bash", "-c", fns + "\n_comfyui_pip() { :; }\n_comfyui_custom_nodes"],
+                                     env=dict(os.environ, COMFYUI_SHARE=str(share), c_base=str(base),
+                                              COMFYUI_TMP=d, COMFYUI_MODELS_SCRIPT=str(script)),
+                                     capture_output=True, text=True, check=True).stdout
+                return out.strip(), git(base / "custom_nodes" / "pack", "rev-parse", "HEAD")
+            out, head = run(release)
+            self.assertEqual(head, release)
+            self.assertIn("at 3.0.18 (", out); self.assertIn("(unchanged)", out); self.assertNotIn("past the pin", out)
+            out, head = run(later)
+            self.assertEqual(head, later)
+            self.assertIn("past the pin", out)
+            out, head = run(pin)
+            self.assertEqual(head, release)
+            self.assertIn("at 3.0.18 (", out); self.assertNotIn("unchanged", out)
+
+
 class PresentAndSize(unittest.TestCase):
     def test_a_file_is_present_a_missing_one_is_not(self):
         with tempfile.TemporaryDirectory() as d:

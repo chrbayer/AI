@@ -6570,7 +6570,10 @@ _comfyui_custom_nodes() {
             want="$rel" label="$rel_v (${rel:0:12}, released $rel_d after the pin ${commit:0:12})"
         fi
         # Never backwards: past what it would get (a --master from before), it stays.
-        if [[ "${1:-}" != master ]] && git -C "$target" merge-base --is-ancestor "$want" HEAD 2>/dev/null; then
+        # At it, the label stays the release's.
+        if [[ "${1:-}" != master ]] &&
+           [[ "$(git -C "$target" rev-parse HEAD 2>/dev/null)" != "$(git -C "$target" rev-parse "$want^{commit}" 2>/dev/null)" ]] &&
+           git -C "$target" merge-base --is-ancestor "$want" HEAD 2>/dev/null; then
             want=$(git -C "$target" rev-parse HEAD)
             [[ "$want" != "$(git -C "$target" rev-parse "$commit^{commit}" 2>/dev/null)" ]] &&
                 label="${want:0:12} (past the pin ${commit:0:12}; staying put)"
