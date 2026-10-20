@@ -4881,6 +4881,35 @@ cmd_prune() {
 # and halogen through hf's own record of each file's SHA-256, ComfyUI's models
 # by SHA-256 read once and cached, --quick: by size and date).
 # Usage: outdated [--quick]   exit 0: all current, 1: something newer
+# How many of PR $1's own commits come after commit $2: those GitHub lists for
+# the PR that are not merges (master's commits merged in are not listed). "?"
+# when $2 is not among them or GitHub does not answer.
+_pr_own_commits_since() {
+    local page json="" j
+    for page in 1 2 3; do
+        if command -v gh > /dev/null && gh auth status > /dev/null 2>&1; then
+            j=$(gh api "repos/ggml-org/llama.cpp/pulls/$1/commits?per_page=100&page=$page" 2>/dev/null)
+        else
+            j=$(curl -sf "https://api.github.com/repos/ggml-org/llama.cpp/pulls/$1/commits?per_page=100&page=$page")
+        fi
+        [[ -z "$j" || "$j" == "[]" ]] && break
+        json+="$j"$'\n'
+    done
+    printf '%s' "$json" | python3 -c '
+import json, sys
+text, dec, commits, i = sys.stdin.read(), json.JSONDecoder(), [], 0
+while text[i:].strip():                   # one array per page, however printed
+    i += len(text[i:]) - len(text[i:].lstrip())
+    page, i = dec.raw_decode(text, i)
+    commits += page
+shas = [c["sha"] for c in commits]
+if sys.argv[1] not in shas:
+    print("?")
+else:
+    print(sum(len(c["parents"]) == 1 for c in commits[shas.index(sys.argv[1]) + 1:]))
+' "$2" 2>/dev/null || echo "?"
+}
+
 _gh_json() {   # path jq-filter: GitHub API, through gh when it is logged in
     if command -v gh > /dev/null && gh auth status > /dev/null 2>&1; then
         gh api "$1" -q "$2" 2>/dev/null
@@ -5148,8 +5177,17 @@ cmd_outdated() {
             echo "  PR #$pr is merged — the ordinary llama-server has /tts now; build-tts-server.sh can go"
             _news "speech server: PR #$pr is merged, build-tts-server.sh can go"
         elif [[ -n "$head" && "$head" != "$pinned" ]]; then
-            echo "  PR #$pr ($state) has commits past ours (${pinned:0:9} → ${head:0:9})"
-            _news "speech server: PR #$pr has commits past ours"
+            # The PR's own commits since ours; merges of llama.cpp master into
+            # it (its author does that often) change nothing of /tts.
+            local own
+            own=$(_pr_own_commits_since "$pr" "$pinned")
+            if [[ "$own" == 0 ]]; then
+                echo "  PR #$pr ($state), at ${pinned:0:9} — current (since then only llama.cpp master merged in, now ${head:0:9})"
+            else
+                [[ "$own" == "?" ]] && own="new" || own="$own new"
+                echo "  PR #$pr ($state) has $own commit(s) of its own past ours (${pinned:0:9} → ${head:0:9})"
+                _news "speech server: PR #$pr has commits past ours"
+            fi
         elif [[ -n "$head" ]]; then
             echo "  PR #$pr ($state), at ${pinned:0:9} — current"
         else
