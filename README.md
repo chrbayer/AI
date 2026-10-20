@@ -990,6 +990,18 @@ tests passing, a fact in the middle of 163K tokens found. `--ctx 524288`
 (~230 s prefill each) and passed the coding task too, slower (485 / 357 s,
 more tokens); it stays opt-in.
 
+On that pool, two runs each, the answers byte for byte unless said: halogen
+0.18.10 prefill 2–12 % up (1429–1436 / 1818–1832 / 1736–1742 against
+1272–1371 / 1718–1793 / 1666–1695 t/s), decode the same; 0.18.11 (three or four
+requests at once decode faster, which two slots do not use) and 0.18.12 the
+same again, 0.18.12's long prefill 1–3 % up (1746–1789 against 1728 t/s). gufo
+0.17.1 and 0.18.0 the same as before for both models, qwen-gufo's prefill under
+0.18.0 1–2 % down (360–381 against 365–387 t/s). gufo 0.19.0 (a fix to
+Flash-Next's 8-bit block sums) changed flash-gufo's answers, all five as right
+as before, and its image description lost a stray Chinese word ("同样" for
+"ebenfalls"); its code decode 58–59 against 54–57 t/s, images 6 % faster (8.0 /
+5.6 against 8.5–8.7 / 6.0 s); qwen-gufo the same, byte for byte.
+
 `flash-gufo-unc` is the uncensored Flash-Next on gufo: vmlinux's Q4 Mix of
 orcarouter's Qwen3.8-Flash-Next-Uncensored (one file, 110 GB), with the MTP
 predictor from jcbtc's CIRU Orca release. Its speed and memory are those of
