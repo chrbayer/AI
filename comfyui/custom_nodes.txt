@@ -40,11 +40,11 @@ rgthree-comfy  https://github.com/rgthree/rgthree-comfy  16e329820fadb08480dca27
 # albumentationsx; decord, which its bundled SAM 3 imports at load, has no build
 # for this Python — eva-decord, the maintained fork, has. Its models come from
 # Hugging Face on first use, or from download comfy, into models/RMBG/.
-ComfyUI-RMBG  https://github.com/1038lab/ComfyUI-RMBG  229529e0ea63fb7085848225d74f91f6dc164956  -onnxruntime-gpu  -transparent-background  -decord  +eva-decord
+ComfyUI-RMBG  https://github.com/1038lab/ComfyUI-RMBG  a66a5e641a54988d80ed6aad18946081c85f309e  -onnxruntime-gpu  -transparent-background  -decord  +eva-decord
 
 # Inpaint on a crop around the mask, stitched back (the Inpaint Crop workflows).
 # No requirements.
-ComfyUI-Inpaint-CropAndStitch  https://github.com/lquesada/ComfyUI-Inpaint-CropAndStitch  348a8bbaad1a9000523e42dd3eaf6ab34a8fe62f
+ComfyUI-Inpaint-CropAndStitch  https://github.com/lquesada/ComfyUI-Inpaint-CropAndStitch  a645e22e0670f275b3f31a3a5c366577679ef297
 
 # Florence-2: a detailed caption of a picture (the prompt Qwen-Image Layered
 # wants), in the Florence-2 Caption workflow. Brings its own model code.
