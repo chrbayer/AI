@@ -2903,9 +2903,9 @@ curl -s localhost:8005/v1/audio/speech -H 'Content-Type: application/json' \
   and otherwise clones llama.cpp into `~/.local/share/llmctl/llama.cpp`. From
   there it makes a git worktree in `~/.local/share/llmctl/llama.cpp-tts` —
   where models.conf looks — at a pinned llama.cpp commit that is known to work,
-  merges the pinned PR commit, applies the fixes in
-  `patches/llama.cpp-pr26603-*.patch` (an API change since; the audio RNG's
-  reseeding) and builds `llama-server`
+  merges the pinned PR commit, applies the fix in
+  `patches/llama.cpp-pr26603-*.patch` (the audio RNG's reseeding) and builds
+  `llama-server`
   and `llama-tts` with Vulkan. Nothing is installed, and a checkout it uses is
   left as it is: the worktree shares only its git objects. It checks for git,
   cmake, a C++ compiler and glslc first. `LLAMA_BASE=HEAD` builds on the
@@ -2929,7 +2929,14 @@ curl -s localhost:8005/v1/audio/speech -H 'Content-Type: application/json' \
   over — drop that patch file), or the build fails on an API that moved
   (adjust the call and regenerate the patch with `git -C
   ~/.local/share/llmctl/llama.cpp-tts diff`). After building, restart the
-  speech slot: it runs the binary it started with.
+  speech slot: it runs the binary it started with. Do not move a built
+  worktree: the binaries find their libraries by the build's absolute path,
+  and moved, `llama-server` quietly loads whatever `libllama` the system has.
+  Last moved 2026-10-21, to the PR as it merged llama.cpp of 2026-10-20 (the
+  API patch dropped: the PR took that over): two runs each, old against new,
+  the same — first sound 1.6–1.9 s (2.1–2.2 on the first request after a
+  start), 1.6x real time, and every one of six requests byte for byte the
+  same audio as the old build's.
 - **Voices.** Qwen3-TTS Base speaks in the voice of a short reference recording,
   kept in `~/.local/share/llmctl/tts/voices/`, one file per voice, named by
   the file. The clone keeps the timbre and speaks accent-free German. Qwen3-TTS'

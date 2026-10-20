@@ -8,8 +8,7 @@
 # No llama.cpp checkout needed. It uses ~/src/llama.cpp (or $LLAMA_SRC) when
 # that is one, and otherwise clones llama.cpp into ~/.local/share/llmctl/llama.cpp.
 # From there it makes a git worktree at a pinned, tested llama.cpp commit, merges
-# the pinned PR commit, applies the llama.cpp-pr26603-*.patch fixes (the PR
-# predates an extra argument to mtmd_helper_bitmap_init_from_buf; its audio RNG
+# the pinned PR commit, applies the llama.cpp-pr26603-*.patch fix (its audio RNG
 # kept running instead of reseeding when a generation reused a seed) and builds
 # llama-server and llama-tts with Vulkan. Nothing is installed, and a checkout
 # it uses is not changed: the worktree has files of its own and shares only the
@@ -23,8 +22,8 @@
 set -euo pipefail
 
 PR=26603
-PR_COMMIT=435d4116eda2abbcdc3d63d85204470070f32705
-BASE_COMMIT=b29c606e28a01b1bc8c1351026a0fa6e616bf6c4    # 2026-09-14, llama.cpp 0.4.1: tested
+PR_COMMIT=575c94c8b792a13ddc8cef3dfae75892065393dc
+BASE_COMMIT=b684b498b6c36876b9b18ede7df5b3d1d347bff2    # 2026-10-20, the master the PR last merged: tested
 REPO=https://github.com/ggml-org/llama.cpp.git
 
 PATCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

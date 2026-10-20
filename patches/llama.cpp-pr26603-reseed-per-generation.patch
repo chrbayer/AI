@@ -1,8 +1,8 @@
 diff --git a/tools/mtmd/clip.cpp b/tools/mtmd/clip.cpp
-index 7990bdeab..ec8ae5d87 100644
+index 841b5e1ce..356a1a0e5 100644
 --- a/tools/mtmd/clip.cpp
 +++ b/tools/mtmd/clip.cpp
-@@ -6070,3 +6070,7 @@ std::map<ggml_backend_dev_t, size_t> clip_get_mem_usage(const struct clip_ctx *
+@@ -6499,3 +6499,7 @@ std::map<ggml_backend_dev_t, size_t> clip_get_mem_usage(const struct clip_ctx *
  void clip_set_debug_output_embeddings(clip_ctx * ctx, bool enable) {
      ctx->debug_output_embeddings = enable;
  }
@@ -11,12 +11,12 @@ index 7990bdeab..ec8ae5d87 100644
 +    ctx->rng_seed = UINT32_MAX; // any fixed seed differs from it, so the next call reseeds
 +}
 diff --git a/tools/mtmd/clip.h b/tools/mtmd/clip.h
-index 25712fe20..ad7391b1f 100644
+index cdbaeae0d..597463505 100644
 --- a/tools/mtmd/clip.h
 +++ b/tools/mtmd/clip.h
-@@ -119,6 +119,9 @@ struct clip_encode_params {
- };
- bool clip_encode(struct clip_ctx * ctx, struct clip_encode_params * params);
+@@ -132,6 +132,9 @@ bool clip_encode(struct clip_ctx * ctx, struct clip_encode_params * params);
+ struct clip_enc_state * clip_enc_state_init(struct clip_ctx * ctx, int32_t n_frames_max);
+ void                    clip_enc_state_free(struct clip_enc_state * state);
  
 +// audio gen: forget the RNG's seed, so the next clip_encode reseeds even when the seed is the same
 +void clip_gen_reset_rng(struct clip_ctx * ctx);
@@ -25,7 +25,7 @@ index 25712fe20..ad7391b1f 100644
  // note for contributor: this clip_is_(model) pattern is deprecated
  //                       do NOT add new functions like this
 diff --git a/tools/mtmd/mtmd-helper-gen.cpp b/tools/mtmd/mtmd-helper-gen.cpp
-index 1baac9a66..690287ab4 100644
+index 47493d906..0edcf50cf 100644
 --- a/tools/mtmd/mtmd-helper-gen.cpp
 +++ b/tools/mtmd/mtmd-helper-gen.cpp
 @@ -221,6 +221,7 @@ public:
@@ -36,7 +36,7 @@ index 1baac9a66..690287ab4 100644
          out_type = inp->out_type;
          stream = inp->stream;
  
-@@ -625,6 +626,7 @@ public:
+@@ -624,6 +625,7 @@ public:
          prompt_pos = 0;
  
          seed     = inp->seed;
@@ -45,10 +45,10 @@ index 1baac9a66..690287ab4 100644
          stream   = inp->stream;
  
 diff --git a/tools/mtmd/mtmd.cpp b/tools/mtmd/mtmd.cpp
-index 037886797..62ecbc77a 100644
+index f27aa8025..4a26378ca 100644
 --- a/tools/mtmd/mtmd.cpp
 +++ b/tools/mtmd/mtmd.cpp
-@@ -2030,6 +2030,12 @@ static int32_t mtmd_gen_audio_process_impl(mtmd_context * ctx, const mtmd_gen_in
+@@ -2211,6 +2211,12 @@ static int32_t mtmd_gen_audio_process_impl(mtmd_context * ctx, const mtmd_gen_in
      return 0;
  }
  
@@ -62,10 +62,10 @@ index 037886797..62ecbc77a 100644
      try {
          return mtmd_gen_audio_process_impl(ctx, inp, out);
 diff --git a/tools/mtmd/mtmd.h b/tools/mtmd/mtmd.h
-index 744db06a2..8ba76cc77 100644
+index c740f1e9f..9cb9f7ebe 100644
 --- a/tools/mtmd/mtmd.h
 +++ b/tools/mtmd/mtmd.h
-@@ -434,6 +434,9 @@ struct mtmd_gen_out {
+@@ -479,6 +479,9 @@ struct mtmd_gen_out {
  MTMD_API struct mtmd_gen_inp mtmd_gen_inp_default(const mtmd_context * ctx);
  
  // note: this API is stateless, caller must handle state management and audio frame accumulation
