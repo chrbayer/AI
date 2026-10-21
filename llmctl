@@ -4910,6 +4910,13 @@ else:
 ' "$2" 2>/dev/null || echo "?"
 }
 
+# True when the llama.cpp release $2 has commit $1 (the release is at or past it).
+_release_has() {
+    local status
+    status=$(_gh_json "repos/ggml-org/llama.cpp/compare/$2...$1" .status)
+    [[ "$status" == behind || "$status" == identical ]]
+}
+
 _gh_json() {   # path jq-filter: GitHub API, through gh when it is logged in
     if command -v gh > /dev/null && gh auth status > /dev/null 2>&1; then
         gh api "$1" -q "$2" 2>/dev/null
@@ -5174,8 +5181,17 @@ cmd_outdated() {
         state=$(_gh_json "repos/ggml-org/llama.cpp/pulls/$pr" .state)
         head=$(_gh_json "repos/ggml-org/llama.cpp/pulls/$pr" .head.sha)
         if [[ "$merged" == true ]]; then
-            echo "  PR #$pr is merged — the ordinary llama-server has /tts now; build-tts-server.sh can go"
-            _news "speech server: PR #$pr is merged, build-tts-server.sh can go"
+            # Only a stable release brings /tts to the ordinary llama-server;
+            # till then the build stays. The reseed patch is not in the PR.
+            local merge on
+            merge=$(_gh_json "repos/ggml-org/llama.cpp/pulls/$pr" .merge_commit_sha)
+            on=$(_gh_json "repos/ggml-org/llama.cpp/pulls/$pr" .merged_at); on=${on%%T*}
+            if [[ -n "$stable" && -n "$merge" ]] && _release_has "$merge" "$stable"; then
+                echo "  PR #$pr is merged and in $stable — build-tts-server.sh can go (the reseed patch is still needed)"
+                _news "speech server: PR #$pr is in $stable, build-tts-server.sh can go"
+            else
+                echo "  PR #$pr merged into master${on:+ on $on}, not yet in ${stable:-a stable release} — keep build-tts-server.sh"
+            fi
         elif [[ -n "$head" && "$head" != "$pinned" ]]; then
             # The PR's own commits since ours; merges of llama.cpp master into
             # it (its author does that often) change nothing of /tts.

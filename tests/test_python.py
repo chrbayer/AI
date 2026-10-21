@@ -274,6 +274,26 @@ case "$2" in *page=1) cat {d}/page1 ;; *page=2) cat {d}/page2 ;; *) echo '[]' ;;
             self.assertEqual(count("own"), "0")
             self.assertEqual(count("gone"), "?")
 
+    def test_a_merge_counts_only_once_a_release_has_it(self):
+        import subprocess
+        src = (ROOT / "llmctl").read_text()
+        fns = "\n".join(re.search(rf"^{f}\(\) \{{[^\n]*\n.*?^\}}$", src, re.M | re.S)[0]
+                        for f in ("_gh_json", "_release_has"))
+        with tempfile.TemporaryDirectory() as d:
+            gh = Path(d, "gh")
+            gh.write_text("""#!/bin/sh
+[ "$1" = auth ] && exit 0
+case "$2" in */v1...m) echo ahead ;; */v2...m) echo behind ;; */v3...m) echo identical ;; esac
+""")
+            gh.chmod(0o755)
+            has = lambda release: subprocess.run(["bash", "-c", fns + f"\n_release_has m {release}"],
+                                                 env=dict(os.environ, PATH=f"{d}:{os.environ['PATH']}"),
+                                                 capture_output=True).returncode == 0
+            self.assertFalse(has("v1"))     # the merge is past the release
+            self.assertTrue(has("v2"))
+            self.assertTrue(has("v3"))
+            self.assertFalse(has("v4"))     # GitHub does not answer
+
 
 class PresentAndSize(unittest.TestCase):
     def test_a_file_is_present_a_missing_one_is_not(self):
