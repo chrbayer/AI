@@ -994,7 +994,9 @@ On that pool, two runs each, the answers byte for byte unless said: halogen
 0.18.10 prefill 2–12 % up (1429–1436 / 1818–1832 / 1736–1742 against
 1272–1371 / 1718–1793 / 1666–1695 t/s), decode the same; 0.18.11 (three or four
 requests at once decode faster, which two slots do not use) and 0.18.12 the
-same again, 0.18.12's long prefill 1–3 % up (1746–1789 against 1728 t/s). gufo
+same again, 0.18.12's long prefill 1–3 % up (1746–1789 against 1728 t/s);
+0.18.13 the same speed, and a short request sent while a 26 k-token prompt is
+read in answers after 5.5 s instead of 23 s (the long one 0.4 s later). gufo
 0.17.1 and 0.18.0 the same as before for both models, qwen-gufo's prefill under
 0.18.0 1–2 % down (360–381 against 365–387 t/s). gufo 0.19.0 (a fix to
 Flash-Next's 8-bit block sums) changed flash-gufo's answers, all five as right
