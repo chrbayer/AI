@@ -1002,7 +1002,10 @@ read in answers after 5.5 s instead of 23 s (the long one 0.4 s later). gufo
 Flash-Next's 8-bit block sums) changed flash-gufo's answers, all five as right
 as before, and its image description lost a stray Chinese word ("同样" for
 "ebenfalls"); its code decode 58–59 against 54–57 t/s, images 6 % faster (8.0 /
-5.6 against 8.5–8.7 / 6.0 s); qwen-gufo the same, byte for byte.
+5.6 against 8.5–8.7 / 6.0 s); qwen-gufo the same, byte for byte. gufo 0.20.0
+the same answers and image descriptions for both, byte for byte; flash-gufo's
+short prefill 11 % up (1320–1328 against 1176–1199 t/s), its prose decode
+37 against 35.5 t/s, the rest unchanged.
 
 `flash-gufo-unc` is the uncensored Flash-Next on gufo: vmlinux's Q4 Mix of
 orcarouter's Qwen3.8-Flash-Next-Uncensored (one file, 110 GB), with the MTP
