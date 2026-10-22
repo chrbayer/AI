@@ -1005,7 +1005,9 @@ as before, and its image description lost a stray Chinese word ("同样" for
 5.6 against 8.5–8.7 / 6.0 s); qwen-gufo the same, byte for byte. gufo 0.20.0
 the same answers and image descriptions for both, byte for byte; flash-gufo's
 short prefill 11 % up (1320–1328 against 1176–1199 t/s), its prose decode
-37 against 35.5 t/s, the rest unchanged.
+37 against 35.5 t/s, the rest unchanged. halogen 0.18.14 and gufo 0.21.0 the same
+answers and image descriptions again, byte for byte, at the same speed (flash's
+code decode 89–90 against 87–88 t/s).
 
 `flash-gufo-unc` is the uncensored Flash-Next on gufo: vmlinux's Q4 Mix of
 orcarouter's Qwen3.8-Flash-Next-Uncensored (one file, 110 GB), with the MTP
