@@ -44,7 +44,7 @@ ComfyUI-RMBG  https://github.com/1038lab/ComfyUI-RMBG  a66a5e641a54988d80ed6aad1
 
 # Inpaint on a crop around the mask, stitched back (the Inpaint Crop workflows).
 # No requirements.
-ComfyUI-Inpaint-CropAndStitch  https://github.com/lquesada/ComfyUI-Inpaint-CropAndStitch  a645e22e0670f275b3f31a3a5c366577679ef297
+ComfyUI-Inpaint-CropAndStitch  https://github.com/lquesada/ComfyUI-Inpaint-CropAndStitch  6005efc02f7745649118edd89cdd084c2b9bd3ae
 
 # Florence-2: a detailed caption of a picture (the prompt Qwen-Image Layered
 # wants), in the Florence-2 Caption workflow. Brings its own model code.
