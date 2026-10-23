@@ -1941,6 +1941,34 @@ class Checksums(unittest.TestCase):
             del os.environ["LLMCTL_CHECKSUMS"]
 
 
+class HfApiRedirect(unittest.TestCase):
+    def test_a_renamed_repo_is_followed_for_a_post_too(self):
+        import http.server, threading
+        seen = []
+        class Hub(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *a): pass
+            def do_POST(self):
+                body = self.rfile.read(int(self.headers["Content-Length"]))
+                seen.append((self.path, json.loads(body)))
+                if self.path.startswith("/api/models/Org/old_name/"):      # the Hub's answer for a renamed repo
+                    self.send_response(307)
+                    self.send_header("Location", self.path.replace("old_name", "New-Name"))
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(json.dumps([{"path": "a.safetensors", "size": 3}]).encode())
+        srv = http.server.HTTPServer(("127.0.0.1", 0), Hub)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            url = f"http://127.0.0.1:{srv.server_port}/api/models/Org/old_name/paths-info/main"
+            self.assertEqual(cm.hf_api(url, {"paths": ["a.safetensors"]}), [{"path": "a.safetensors", "size": 3}])
+            self.assertEqual(seen, [("/api/models/Org/old_name/paths-info/main", {"paths": ["a.safetensors"]}),
+                                    ("/api/models/Org/New-Name/paths-info/main", {"paths": ["a.safetensors"]})])
+        finally:
+            srv.shutdown()
+
+
 API = ROOT / "comfyui" / "api"
 
 

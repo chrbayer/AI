@@ -37,6 +37,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -353,9 +354,18 @@ def hf_api(url, body=None):
     if body is not None:
         data = json.dumps(body).encode()
         headers["Content-Type"] = "application/json"
-    req = urllib.request.Request(url, data=data, headers=headers)
-    with urllib.request.urlopen(req, timeout=60) as r:
-        return json.load(r)
+    # A renamed repo answers 307 to its new name; urllib follows that only for
+    # GET, so a POST (paths-info) is sent on by hand, body and all.
+    for _ in range(5):
+        req = urllib.request.Request(url, data=data, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as e:
+            if e.code not in (307, 308) or not e.headers.get("Location"):
+                raise
+            url = urllib.parse.urljoin(url, e.headers["Location"])
+    raise urllib.error.URLError(f"too many redirects for {url}")
 
 
 def checksum_cache():
