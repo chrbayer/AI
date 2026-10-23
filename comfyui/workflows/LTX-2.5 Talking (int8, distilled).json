@@ -4413,7 +4413,7 @@
      {
       "name": "film_net_fp16.safetensors",
       "directory": "frame_interpolation",
-      "url": "https://huggingface.co/Comfy-Org/frame_interpolation/resolve/main/frame_interpolation/film_net_fp16.safetensors"
+      "url": "https://huggingface.co/Comfy-Org/Frame-Interpolation/resolve/main/frame_interpolation/film_net_fp16.safetensors"
      }
     ]
    },

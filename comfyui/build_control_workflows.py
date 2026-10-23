@@ -59,11 +59,11 @@ MODELS = {   # file -> (directory, url), for the loader nodes' download entries
     # Z-Image Turbo (Comfy-Org's repack, pinned) and alibaba-pai's Union 2.1 for it,
     # 2602 8-step: canny, depth, pose, mlsd, hed, scribble, gray, and inpaint.
     "z_image_turbo_bf16.safetensors": ("diffusion_models",
-        f"{HF}/Comfy-Org/z_image_turbo/resolve/6fc90a3b1b653e935a0d175e260736de25b84df5/split_files/diffusion_models/z_image_turbo_bf16.safetensors"),
+        f"{HF}/Comfy-Org/Z-Image-Turbo/resolve/6fc90a3b1b653e935a0d175e260736de25b84df5/split_files/diffusion_models/z_image_turbo_bf16.safetensors"),
     "qwen_3_4b.safetensors": ("text_encoders",
-        f"{HF}/Comfy-Org/z_image_turbo/resolve/6fc90a3b1b653e935a0d175e260736de25b84df5/split_files/text_encoders/qwen_3_4b.safetensors"),
+        f"{HF}/Comfy-Org/Z-Image-Turbo/resolve/6fc90a3b1b653e935a0d175e260736de25b84df5/split_files/text_encoders/qwen_3_4b.safetensors"),
     "ae.safetensors": ("vae",
-        f"{HF}/Comfy-Org/z_image_turbo/resolve/6fc90a3b1b653e935a0d175e260736de25b84df5/split_files/vae/ae.safetensors"),
+        f"{HF}/Comfy-Org/Z-Image-Turbo/resolve/6fc90a3b1b653e935a0d175e260736de25b84df5/split_files/vae/ae.safetensors"),
     "Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors": ("model_patches",
         f"{HF}/alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union-2.1/resolve/"
         "5155fc56d17821007d6f62ac192c09e0f0e72016/Z-Image-Turbo-Fun-Controlnet-Union-2.1-2602-8steps.safetensors"),

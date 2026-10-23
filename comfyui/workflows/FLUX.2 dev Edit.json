@@ -327,7 +327,7 @@
      {
       "name": "flux2-vae.safetensors",
       "directory": "vae",
-      "url": "https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/vae/flux2-vae.safetensors"
+      "url": "https://huggingface.co/Comfy-Org/Flux-2-Dev/resolve/main/split_files/vae/flux2-vae.safetensors"
      }
     ]
    },
@@ -836,7 +836,7 @@
      {
       "name": "flux2_dev_fp8mixed.safetensors",
       "directory": "diffusion_models",
-      "url": "https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/diffusion_models/flux2_dev_fp8mixed.safetensors"
+      "url": "https://huggingface.co/Comfy-Org/Flux-2-Dev/resolve/main/split_files/diffusion_models/flux2_dev_fp8mixed.safetensors"
      }
     ]
    },
@@ -1201,7 +1201,7 @@
      {
       "name": "mistral_3_small_flux2_fp8.safetensors",
       "directory": "text_encoders",
-      "url": "https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/text_encoders/mistral_3_small_flux2_fp8.safetensors"
+      "url": "https://huggingface.co/Comfy-Org/Flux-2-Dev/resolve/main/split_files/text_encoders/mistral_3_small_flux2_fp8.safetensors"
      }
     ]
    },
@@ -1272,7 +1272,7 @@
      {
       "name": "Flux_2-Turbo-LoRA_comfyui.safetensors",
       "directory": "loras",
-      "url": "https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/loras/Flux_2-Turbo-LoRA_comfyui.safetensors"
+      "url": "https://huggingface.co/Comfy-Org/Flux-2-Dev/resolve/main/split_files/loras/Flux_2-Turbo-LoRA_comfyui.safetensors"
      },
      {
       "name": "Flux_2-Turbo-LoRA_comfyui.safetensors",

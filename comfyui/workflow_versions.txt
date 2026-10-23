@@ -12,3 +12,23 @@ ceff25e725d3acbd38c8a1df427adea2bff6258881c455c568058899e0399a75  LTX-2.5 Talkin
 03b136ba0ad752c1e91e496a23fa4f4826ef881777d591dc9129c459922e7dac  LTX-2.5 Video (int8, distilled).json
 f44cefeb0ff4313b9557df55d751893ccab6159f2c59ff2b8877a9a116e783af  Pixal3D TRELLIS.2 Image to Model (int8).json
 3a074bf6560add4e3841d8c841f91e6554cd6a191815f5e5f04ddc6d695c0923  Qwen-Image 2.1 Detailer (bf16, dpmpp_2m 14).json
+28d839f11abe3001745d7d7008cdf25da7eec6080a695a8ab5df6f20911c62f2  ACE-Step 1.5.json
+63a72271c840d649d0ceb19ed450bb545fbe0480881ec524a5d071406a5f280a  FLUX.2 dev Edit.json
+fd045bb363876842f05f26698ef2acd729872d2af0ebe159f804619b8e4f6488  FLUX.2 dev T2I.json
+716488f9cca3e6f0d40bc1a46e523a4f99ffd0639e37e66a5fa9e09ce751b78b  FLUX.2 klein 9B Detailer (bf16, 4 Schritte).json
+3e451021b3ccf70c02c62b6d2a9dbd62c3725aa369c460d723dbad7cac77c562  FLUX.2 klein 9B Edit.json
+feab59fff1a56e04ffaba3e064db682535e7a0f39d7e4dc204fc13a53ba1513f  FLUX.2 klein 9B T2I.json
+5864febd758b931cb2a30bb9dfae5953a222b910b94568171edb621871577cc3  LTX-2.5 Chain (int8, distilled, 4 clips).json
+54c7c28736fb7e49e8aac9cc56c7368ea685688ff57f7b8893dff882651f5991  LTX-2.5 Chain Keyframes (int8, distilled, 4 clips).json
+4eeab59569e7b57da5bb28a0f34c78aa2a6fd0e79f05d7b617813fc04e47431a  LTX-2.5 First-Last Frame (int8, distilled).json
+2b2c46ae88278612c038ca151526c4ef642524a43aa505dbb6dd68d531164a2e  LTX-2.5 Talking (int8, distilled).json
+729a00e84ab04b842cd0efc639066bd87ecd6c9c6c0f6be86d550f6348806b0a  LTX-2.5 Video (int8, distilled).json
+3067ed4b8dea6d092e54f425e089e5c65df9b2f15254c61d67e6be99d5021472  Qwen-Image Layered (bf16, 20 Schritte).json
+45e9655a3b508df7e58586da779b7acf9ffcae5cbd9a78296c2ab1fa699a10c4  Qwen-Image Layered Control (bf16, 20 Schritte).json
+d7d790eb45ac6ed0e0f1c33fe74f7798c2ab260f2261c7ad8ce765529fcb1ec5  Video Frame Interpolation (FILM).json
+3652efd1401cd5944bbdd86820031b36270c62425dcf2062adb514532e53a40b  Z-Image T2I (bf16, 25 Schritte).json
+61d8a0ad834659fe4c402824428fee123d4f9360ae41373403552275ca749bc3  Z-Image Turbo 2K Upscale (bf16, 5 Schritte).json
+189678d2109fae3a68cc9b4adc3d518c5f962855af6296eca3179702f9194ad5  Z-Image Turbo Colorize (bf16, 8 Schritte).json
+35c2044b0ee298a208952297fe438661b70e9497129710c2b6af7eda2a24b7ab  Z-Image Turbo Control.json
+4f1361a1ab99295ca1719ac486c86f163f6224fb2a0a4653d57dd97a5abf27c4  Z-Image Turbo Inpaint.json
+d5bf505b50f8e616c570cb9d7a25706d59a486f1084d22627f938c9fe7758c44  Z-Image Turbo T2I.json
