@@ -1941,6 +1941,36 @@ class Checksums(unittest.TestCase):
             del os.environ["LLMCTL_CHECKSUMS"]
 
 
+class WaitForSlot(unittest.TestCase):
+    """preset: a model counts as loaded once its fresh log says 'listening'."""
+
+    def wait(self, log_text, limit=2):
+        import subprocess
+        src = (ROOT / "llmctl").read_text()
+        fn = re.search(r"^_wait_for_slot\(\) \{\n.*?^\}$", src, re.M | re.S)[0]
+        with tempfile.TemporaryDirectory() as d:
+            Path(d, "server-3.log").write_text(log_text)
+            return subprocess.run(["bash", "-c", f"PORT_BASE_SERVER=8000 LOG_DIR={d} PID_DIR={d}\n{fn}\n"
+                                   f"_wait_for_slot 3 {limit}"], capture_output=True, text=True)
+
+    def test_the_line_counts_wherever_it_is_in_a_short_log(self):
+        # qwen-vl: a 3 KB log, the line early in it — once read past and missed
+        header = "config\n" * 300
+        r = self.wait(header + "0.02.920.013 I srv  llama_server: listening on http://127.0.0.1:8003\n" + "x\n" * 900)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("loaded after 0s", r.stdout)
+
+    def test_another_port_does_not_count(self):
+        r = self.wait("0.02.920.013 I srv  llama_server: listening on http://127.0.0.1:80031\n", limit=1)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("not loaded after 1s", r.stderr)
+
+    def test_an_error_ends_the_wait(self):
+        r = self.wait("0.01.000.000 E srv  llama_server: exiting due to model loading error\n", limit=30)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("reported an error", r.stderr)
+
+
 class HfApiRedirect(unittest.TestCase):
     def test_a_renamed_repo_is_followed_for_a_post_too(self):
         import http.server, threading
