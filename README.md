@@ -1008,7 +1008,10 @@ the same answers and image descriptions for both, byte for byte; flash-gufo's
 short prefill 11 % up (1320–1328 against 1176–1199 t/s), its prose decode
 37 against 35.5 t/s, the rest unchanged. halogen 0.18.14 and gufo 0.21.0 the same
 answers and image descriptions again, byte for byte, at the same speed (flash's
-code decode 89–90 against 87–88 t/s).
+code decode 89–90 against 87–88 t/s). gufo 0.23.0 the same answers and image
+descriptions for both, byte for byte, at the same speed (flash-gufo's code
+decode 63–66 against 58–63 t/s). halogen 0.18.15 stays out: the same answers
+and speed, but every short reply 25 ms later (165–186 against 135–163 ms).
 
 `flash-gufo-unc` is the uncensored Flash-Next on gufo: vmlinux's Q4 Mix of
 orcarouter's Qwen3.8-Flash-Next-Uncensored (one file, 110 GB), with the MTP
