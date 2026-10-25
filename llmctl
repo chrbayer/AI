@@ -3169,7 +3169,7 @@ cmd_preset() {
         echo ""
         printf "\033[1m[%d/%d] %s → slot %s\033[0m\n" "$n" "$(( start_n + restart_n ))" "$m" "$sl"
         # In a subshell: cmd_start ends a failed start with `exit`, which would
-        # otherwise take the preset — and the rollback below — down with it.
+        # otherwise take the preset — and the report below — down with it.
         # --ignore-memory: the whole set was weighed above, before anything stopped.
         if ( cmd_start "$m" "$sl" "${flags[@]}" --ignore-memory ) && _wait_for_slot "$sl" "$wait_limit"; then
             _record_footprint "$sl"
@@ -3178,25 +3178,24 @@ cmd_preset() {
             continue
         fi
 
-        # Rolling back what this run started: a half-loaded preset is a
-        # configuration nobody asked for, and its slots hold GPU memory the next
-        # attempt needs. Slots that were already running and matched are left
-        # alone — stopping a good model to tidy up would help no one.
+        # Only the slot that failed is stopped. The ones that came up before it
+        # stay: they may already be answering, and running the preset again
+        # keeps them (they match) and starts only what is missing — stopping
+        # them would cut off requests to free memory nobody needs freed.
         echo ""
-        echo "Preset '$_p_name' failed at $m (slot $sl) — rolling back this run."
+        echo "Preset '$_p_name' failed at $m (slot $sl) — stopping that slot, the rest stays."
         _stop_slot "$sl" > /dev/null 2>&1 || true
-        local r
-        for r in "${started[@]}"; do
-            _stop_slot "$r" || true
+        local r now_up="" now_missing=""
+        for (( r=0; r<total; r++ )); do
+            if [[ "${e_action[r]}" == "keep" || " ${started[*]} " == *" ${e_slot[r]} "* ]]; then
+                now_up+="${e_model[r]} (slot ${e_slot[r]}) "
+            else
+                now_missing+="${e_model[r]} (slot ${e_slot[r]}) "
+            fi
         done
-        if (( keep_n > 0 )); then
-            echo "Still running from before: $(
-                for (( r=0; r<total; r++ )); do
-                    [[ "${e_action[r]}" == "keep" ]] && printf '%s (slot %s) ' "${e_model[r]}" "${e_slot[r]}"
-                done)"
-        else
-            echo "Nothing of preset '$_p_name' is running."
-        fi
+        echo "Running: ${now_up:-nothing of preset '$_p_name'}"
+        echo "Missing: $now_missing"
+        echo "Once the cause is fixed, '$PROG preset $_p_name' starts only what is missing."
         exit 1
     done
 
@@ -3547,7 +3546,7 @@ _preset_memory_check() {
         return 1
     elif (( sum > budget )); then
         echo "  WARNING: this set needs more than the GPU has free — a model will likely fail"
-        echo "           to load. Loading anyway; what fails is rolled back."
+        echo "           to load. Loading anyway; what fails is stopped."
     elif (( estimated )); then
         echo "  (estimates are lower bounds: KV cache and buffers come on top)"
     fi

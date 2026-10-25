@@ -327,7 +327,8 @@ counts with the size of the files it loads — a lower bound, and marked as one;
 halogen counts ~98 GiB until measured. The budget is the GTT pool minus what
 other programs hold on the GPU and 2 GiB of headroom. When the set does not fit,
 `preset` warns and loads anyway: an estimate can be off, and a model that fails
-to load is rolled back as before. With ComfyUI in the set it also says which
+to load is stopped, while the slots that came up before it keep running
+(running the preset again starts only what is missing). With ComfyUI in the set it also says which
 workflows fit into what is left, by the size of their weights (ComfyUI's models
 are unloaded before each LLM start, see [the comfyui backend](#the-comfyui-backend)).
 

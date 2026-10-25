@@ -1971,6 +1971,54 @@ class WaitForSlot(unittest.TestCase):
         self.assertIn("reported an error", r.stderr)
 
 
+class PresetFailure(unittest.TestCase):
+    """preset: a slot that fails is stopped, the ones up before it stay."""
+
+    def test_a_failed_slot_does_not_take_the_healthy_one_down(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            for sub in ("config", "data", "state", "models", "xdg"):
+                (d / sub).mkdir()
+            conf = (ROOT / "examples" / "models.conf").read_text()
+            (d / "config" / "models.conf").write_text(conf)
+            for f in set(re.findall(r'\$MODELS_DIR/[^"]*\.gguf', conf)):
+                p = d / "models" / f[len("$MODELS_DIR/"):]
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.touch()
+            add = re.search(r"^add_preset\(\) \{\n.*?^\}$", (ROOT / "examples" / "presets.conf").read_text(),
+                            re.M | re.S)[0]
+            (d / "config" / "presets.conf").write_text(add + '\n_preset_name="two"\n_preset_label="test"\n'
+                                                       '_preset_entries=(\n  "qwen 71"\n  "qwen-vl 72"\n)\nadd_preset\n')
+            # qwen comes up (and answers on its port), qwen-vl fails to load
+            stub = d / "data" / "llama.cpp" / "vulkan" / "current" / "llama-server"
+            stub.parent.mkdir(parents=True)
+            stub.write_text("""#!/bin/bash
+while [ $# -gt 0 ]; do case "$1" in --port) port=$2; shift ;; --alias) alias=$2; shift ;; esac; shift; done
+if [ "$alias" = qwen-vl ]; then echo "0.01.000.000 E srv  llama_server: exiting due to model loading error"; exit 1; fi
+echo "0.02.920.013 I srv  llama_server: listening on http://127.0.0.1:$port"
+exec python3 -m http.server --bind 127.0.0.1 "$port" > /dev/null 2>&1
+""")
+            stub.chmod(0o755)
+            env = dict(os.environ, LLMCTL_CONFIG_DIR=str(d / "config"), LLMCTL_DATA_DIR=str(d / "data"),
+                       LLMCTL_STATE_DIR=str(d / "state"), LLMCTL_MODELS_DIR=str(d / "models"),
+                       XDG_CONFIG_HOME=str(d / "xdg"), LLMCTL_PORT_BASE_SERVER="29000",
+                       LLMCTL_PORT_BASE_PROXY="29100")
+            llmctl = lambda *a: subprocess.run([str(ROOT / "llmctl"), *a], env=env, capture_output=True,
+                                               text=True, timeout=120)
+            try:
+                r = llmctl("preset", "two", "--wait", "10")
+                self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+                self.assertIn("Running: qwen (slot 71)", r.stdout)
+                self.assertIn("Missing: qwen-vl (slot 72)", r.stdout)
+                status = llmctl("status").stdout
+                self.assertIn("Slot 71:", status)
+                self.assertNotIn("Slot 72:", status)
+            finally:
+                llmctl("stop", "71")
+                llmctl("stop", "72")
+
+
 class HfApiRedirect(unittest.TestCase):
     def test_a_renamed_repo_is_followed_for_a_post_too(self):
         import http.server, threading
