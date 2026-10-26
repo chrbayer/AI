@@ -1012,7 +1012,9 @@ code decode 89–90 against 87–88 t/s). gufo 0.23.0 the same answers and image
 descriptions for both, byte for byte, at the same speed (flash-gufo's code
 decode 63–66 against 58–63 t/s). halogen 0.18.15 the same answers and speed;
 it keeps where each reply ends, so a follow-up after a ~1,000-token reply
-answers after 0.11 instead of 0.79 s, for ~20 ms more on every request.
+answers after 0.11 instead of 0.79 s, for ~20 ms more on every request — but
+that keep can stall a request for minutes and hand a conversation another's
+text (halogen #207, #208), so it is off (`HALOGEN_FORK=0`), as in 0.18.14.
 
 `flash-gufo-unc` is the uncensored Flash-Next on gufo: vmlinux's Q4 Mix of
 orcarouter's Qwen3.8-Flash-Next-Uncensored (one file, 110 GB), with the MTP
