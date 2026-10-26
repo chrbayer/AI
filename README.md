@@ -1017,6 +1017,7 @@ that keep can stall a request for minutes and hand a conversation another's
 text (halogen #207, #208), so it is off (`HALOGEN_FORK=0`), as in 0.18.14.
 halogen 0.18.16 (that keep off by default) and gufo 0.24.0 the same answers
 and image descriptions, byte for byte, at the same speed.
+gufo 0.25.0 again the same, byte for byte, at the same speed.
 
 `flash-gufo-unc` is the uncensored Flash-Next on gufo: vmlinux's Q4 Mix of
 orcarouter's Qwen3.8-Flash-Next-Uncensored (one file, 110 GB), with the MTP
@@ -3039,7 +3040,7 @@ with tts.audio.speech.with_streaming_response.create(
   clones audio.cpp at its newest release tag and builds it with Vulkan and only
   the model families `models.conf` names (85 s, 1.8 GB); when a newer release
   is out, `outdated` says so and `download asr-live` rebuilds at it
-  (`--master`: at main; v0.9.1 is the fallback when GitHub cannot be asked).
+  (`--master`: at main; v0.9.3 is the fallback when GitHub cannot be asked).
   New commits on main are only shown. The server takes its models from a JSON file llmctl writes
   per slot under `~/.local/state/llmctl/audiocpp/`.
 

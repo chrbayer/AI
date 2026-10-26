@@ -633,8 +633,8 @@ AUDIOCPP_GIT="https://github.com/0xShug0/audio.cpp.git"
 # audio.cpp follows its release tags, not main; outdated says when a new one is out.
 # audio.cpp follows its newest release tag (download --master: main). This one,
 # tried here, is what it falls back to when GitHub cannot be asked.
-AUDIOCPP_TAG=v0.9.1
-AUDIOCPP_COMMIT=cf124a67cc55d8f65a9a15eec69edbff0fb212c8
+AUDIOCPP_TAG=v0.9.3
+AUDIOCPP_COMMIT=41c1f8ffa0d13a1b7e366e30ea5fe5ab8d169d48
 AUDIOCPP_DIR="$DATA_DIR/audio.cpp"
 AUDIOCPP_CONF_DIR="$STATE_DIR/audiocpp"
 
