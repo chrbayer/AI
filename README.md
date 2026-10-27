@@ -1018,6 +1018,9 @@ text (halogen #207, #208), so it is off (`HALOGEN_FORK=0`), as in 0.18.14.
 halogen 0.18.16 (that keep off by default) and gufo 0.24.0 the same answers
 and image descriptions, byte for byte, at the same speed.
 gufo 0.25.0 again the same, byte for byte, at the same speed.
+halogen 0.18.17 (tool-call arguments holding tool-call markup arrive whole,
+Claude Code's MCP tool search on /v1/messages) the same answers, follow-ups
+and short replies, byte for byte, at the same speed.
 
 `flash-gufo-unc` is the uncensored Flash-Next on gufo: vmlinux's Q4 Mix of
 orcarouter's Qwen3.8-Flash-Next-Uncensored (one file, 110 GB), with the MTP
