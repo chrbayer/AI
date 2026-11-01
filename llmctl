@@ -5195,7 +5195,7 @@ cmd_outdated() {
             # A release tag made after the pin is news (update comfy takes it); new
             # commits are only shown.
             gh_repo=$(sed -E 's#^https://github.com/##; s#\.git$##' <<< "$url")
-            local tag status rel="" rel_v="" rel_d="" rel_s="" pack="$c_base/custom_nodes/$dir" rnote=""
+            local tag status rel="" rel_v="" rel_d="" rel_s="" pack="$c_base/custom_nodes/$dir" rnote="" at="" head=""
             tag=$(_node_pack_tag "$url")
             status=""; [[ -n "$tag" ]] && status=$(_gh_json "repos/$gh_repo/compare/$pin...$tag" .status)
             behind=$(_gh_json "repos/$gh_repo/compare/$pin...HEAD" .ahead_by)
@@ -5206,12 +5206,20 @@ cmd_outdated() {
                 git -C "$pack" remote set-head origin --auto > /dev/null 2>&1
                 read -r rel rel_v rel_d rel_s < <(python3 "$COMFYUI_MODELS_SCRIPT" pack-release "$pack" 2>/dev/null)
                 [[ -n "$rel" ]] && rnote="; registry $rel_v ($rel_d${rel_s:+, $rel_s})"
+                # Where update left it, when that is past the pin: a release it took.
+                head=$(git -C "$pack" rev-parse HEAD 2>/dev/null)
+                if [[ -n "$head" && "$head" != "$pin"* ]]; then
+                    if [[ -n "$tag" && "$head" == "$(git -C "$pack" rev-parse "$tag^{commit}" 2>/dev/null)" ]]; then at="$tag"
+                    elif [[ -n "$rel" && "$head" == "$rel"* ]]; then at="$rel_v"
+                    else at="${head:0:9}"; fi
+                    at=", at $at"
+                fi
             fi
             if [[ -n "$rel" && "$rel" != "$pin"* ]] && git -C "$pack" merge-base --is-ancestor "$pin" "$rel" 2>/dev/null &&
                ! git -C "$pack" merge-base --is-ancestor "$rel" HEAD 2>/dev/null; then
                 echo "  custom nodes $dir (${pin:0:9}, pinned) — $rel_v released $rel_d${rel_s:+ ($rel_s on the registry)}, after the pin: $PROG update ${f[0]}"
                 _news "custom nodes $dir → $rel_v: $PROG update ${f[0]}"
-            elif [[ "$status" == ahead ]]; then
+            elif [[ "$status" == ahead ]] && ! git -C "$pack" merge-base --is-ancestor "$tag^{commit}" HEAD 2>/dev/null; then
                 echo "  custom nodes $dir (${pin:0:9}, pinned) — $tag is out, after the pin: $PROG update ${f[0]}"
                 _news "custom nodes $dir → $tag: $PROG update ${f[0]}"
             elif [[ "$master" == true && -n "$behind" ]]; then
@@ -5219,7 +5227,11 @@ cmd_outdated() {
                 echo "  custom nodes $dir (${pin:0:9}, pinned) — behind its main branch${behind}: $PROG update ${f[0]} --master"
                 _news "custom nodes $dir → its main branch: $PROG update ${f[0]} --master"
             else
-                echo "  custom nodes $dir (${pin:0:9}, pinned) — current${tag:+: tag $tag is older}$rnote$behind"
+                if [[ "$status" == ahead ]]; then
+                    echo "  custom nodes $dir (${pin:0:9}, pinned$at) — current: $tag is in it$rnote$behind"
+                else
+                    echo "  custom nodes $dir (${pin:0:9}, pinned$at) — current${tag:+: tag $tag is older}$rnote$behind"
+                fi
             fi
         done < "$COMFYUI_SHARE/custom_nodes.txt"
         echo "  models:"
