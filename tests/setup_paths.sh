@@ -26,9 +26,6 @@ REAL_DATA="${XDG_DATA_HOME:-$HOME/.local/share}/llmctl"
 export LLMCTL_MODELS_DIR="${LLMCTL_MODELS_DIR:-$REAL_DATA/models}"
 export LLMCTL_DATA_DIR="$T/data"
 export LLMCTL_STATE_DIR="$T/state"
-# build-tts-server.sh then clones llama.cpp into the scratch data directory
-# instead of adding a worktree to a checkout of yours.
-export LLAMA_SRC="$T/no-llama-checkout"
 
 pass=0 fail=0
 ok()   { printf '  ok    %s\n' "$1"; pass=$(( pass + 1 )); }
@@ -107,9 +104,9 @@ for part in "${PARTS[@]}"; do
         ls "$T/data/tts/voices/"*.wav > /dev/null 2>&1 && ok "starter voices copied" || bad "no starter voices"
         room
 
-        step "Speech: build the streaming server (llama.cpp PR #26603)"
-        if "$ROOT/patches/build-tts-server.sh" 2>&1 | tail -4; then ok "build-tts-server.sh"; else bad "build-tts-server.sh"; fi
-        [[ -x "$T/data/llama.cpp-tts/build/bin/llama-server" ]] && ok "llama-server with /tts built" || bad "no llama-server built"
+        step "Speech: the llama.cpp builds, whose llama-server has /tts (v0.8.0+)"
+        if "$L" download llama 2>&1 | tail -4; then ok "download llama"; else bad "download llama"; fi
+        [[ -x "$T/data/llama.cpp/vulkan/current/llama-server" ]] && ok "llama-server in place" || bad "no llama-server"
         room
 
         step "Speech: design a voice with the new venv"
@@ -130,7 +127,7 @@ for part in "${PARTS[@]}"; do
         [[ "${heard,,}" == *"spaziergang"* && "${heard,,}" == *"meer"* ]] && ok "asr hears what speech said" || bad "asr heard something else"
         "$L" stop 5 > /dev/null 2>&1; "$L" stop 6 > /dev/null 2>&1
         room
-        rm -rf "$T/data/tts" "$T/data/llama.cpp-tts" "$T/data/llama.cpp"
+        rm -rf "$T/data/tts" "$T/data/llama.cpp"
         ;;
     *) echo "Unknown part: $part (comfy, speech)"; exit 1 ;;
     esac

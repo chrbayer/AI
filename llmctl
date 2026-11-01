@@ -867,10 +867,10 @@ _start_tts() {
     fi
 
     local model="${_r_model//\~/$HOME}" mm="${_r_mmproj//\~/$HOME}"
-    # The streaming llama-server is a separate build (patches/build-tts-server.sh);
+    # The streaming llama-server (llama.cpp v0.8.0 or newer, `download llama`);
     # without it, llama-tts does the same job slower.
     if [[ "$(basename "$_r_binary")" == llama-server* && ! -x "${_r_binary//\~/$HOME}" ]]; then
-        [[ "$print_cmd" == true ]] || echo "Note: $_r_binary is not built — using llama-tts (no streaming). Build it: $SHARE_DIR/patches/build-tts-server.sh"
+        [[ "$print_cmd" == true ]] || echo "Note: $_r_binary is not there — using llama-tts (no streaming). Get it: $PROG download llama"
         _r_binary="llama-tts"
     fi
     # The interpreter's own path, as Python rewrites argv[0] to it — and preset
@@ -4867,47 +4867,11 @@ cmd_prune() {
 }
 
 # What has moved on since it was installed — reported, nothing changed:
-# halogen images, the llama.cpp builds, the speech server's PR, ComfyUI and its
+# halogen images, the llama.cpp builds, audio.cpp, ComfyUI and its
 # custom nodes, and every installed model against its Hugging Face repo (GGUFs
 # and halogen through hf's own record of each file's SHA-256, ComfyUI's models
 # by SHA-256 read once and cached, --quick: by size and date).
 # Usage: outdated [--quick]   exit 0: all current, 1: something newer
-# How many of PR $1's own commits come after commit $2: those GitHub lists for
-# the PR that are not merges (master's commits merged in are not listed). "?"
-# when $2 is not among them or GitHub does not answer.
-_pr_own_commits_since() {
-    local page json="" j
-    for page in 1 2 3; do
-        if command -v gh > /dev/null && gh auth status > /dev/null 2>&1; then
-            j=$(gh api "repos/ggml-org/llama.cpp/pulls/$1/commits?per_page=100&page=$page" 2>/dev/null)
-        else
-            j=$(curl -sf "https://api.github.com/repos/ggml-org/llama.cpp/pulls/$1/commits?per_page=100&page=$page")
-        fi
-        [[ -z "$j" || "$j" == "[]" ]] && break
-        json+="$j"$'\n'
-    done
-    printf '%s' "$json" | python3 -c '
-import json, sys
-text, dec, commits, i = sys.stdin.read(), json.JSONDecoder(), [], 0
-while text[i:].strip():                   # one array per page, however printed
-    i += len(text[i:]) - len(text[i:].lstrip())
-    page, i = dec.raw_decode(text, i)
-    commits += page
-shas = [c["sha"] for c in commits]
-if sys.argv[1] not in shas:
-    print("?")
-else:
-    print(sum(len(c["parents"]) == 1 for c in commits[shas.index(sys.argv[1]) + 1:]))
-' "$2" 2>/dev/null || echo "?"
-}
-
-# True when the llama.cpp release $2 has commit $1 (the release is at or past it).
-_release_has() {
-    local status
-    status=$(_gh_json "repos/ggml-org/llama.cpp/compare/$2...$1" .status)
-    [[ "$status" == behind || "$status" == identical ]]
-}
-
 _gh_json() {   # path jq-filter: GitHub API, through gh when it is logged in
     if command -v gh > /dev/null && gh auth status > /dev/null 2>&1; then
         gh api "$1" -q "$2" 2>/dev/null
@@ -5162,65 +5126,6 @@ cmd_outdated() {
             _news "llama.cpp $path → $stable"
         fi
     done
-
-    printf '\n\033[1mspeech server (llama.cpp PR)\033[0m\n'
-    local script="$SHARE_DIR/patches/build-tts-server.sh" pr pinned
-    pr=$(sed -n 's/^PR=//p' "$script" 2>/dev/null); pinned=$(sed -n 's/^PR_COMMIT=//p' "$script" 2>/dev/null)
-    if [[ -n "$pr" ]]; then
-        local merged state head
-        merged=$(_gh_json "repos/ggml-org/llama.cpp/pulls/$pr" .merged)
-        state=$(_gh_json "repos/ggml-org/llama.cpp/pulls/$pr" .state)
-        head=$(_gh_json "repos/ggml-org/llama.cpp/pulls/$pr" .head.sha)
-        if [[ "$merged" == true ]]; then
-            # Only a stable release brings /tts to the ordinary llama-server;
-            # till then the build stays. The reseed patch is not in the PR.
-            local merge on
-            merge=$(_gh_json "repos/ggml-org/llama.cpp/pulls/$pr" .merge_commit_sha)
-            on=$(_gh_json "repos/ggml-org/llama.cpp/pulls/$pr" .merged_at); on=${on%%T*}
-            if [[ -n "$stable" && -n "$merge" ]] && _release_has "$merge" "$stable"; then
-                echo "  PR #$pr is merged and in $stable — build-tts-server.sh can go (the reseed patch is still needed)"
-                _news "speech server: PR #$pr is in $stable, build-tts-server.sh can go"
-            else
-                echo "  PR #$pr merged into master${on:+ on $on}, not yet in ${stable:-a stable release} — keep build-tts-server.sh"
-            fi
-        elif [[ -n "$head" && "$head" != "$pinned" ]]; then
-            # The PR's own commits since ours; merges of llama.cpp master into
-            # it (its author does that often) change nothing of /tts.
-            local own
-            own=$(_pr_own_commits_since "$pr" "$pinned")
-            if [[ "$own" == 0 ]]; then
-                echo "  PR #$pr ($state), at ${pinned:0:9} — current (since then only llama.cpp master merged in, now ${head:0:9})"
-            else
-                [[ "$own" == "?" ]] && own="new" || own="$own new"
-                echo "  PR #$pr ($state) has $own commit(s) of its own past ours (${pinned:0:9} → ${head:0:9})"
-                _news "speech server: PR #$pr has commits past ours"
-            fi
-        elif [[ -n "$head" ]]; then
-            echo "  PR #$pr ($state), at ${pinned:0:9} — current"
-        else
-            echo "  PR #$pr: cannot ask GitHub"
-        fi
-    fi
-
-    # Kolibri-1 (models.conf "kolibri") runs on a master build of its own
-    # (get-kolibri-server.sh) until a stable release has PR #30673; then it
-    # moves to LLAMA_DEFAULT_BIN and the script goes.
-    if [[ -x "$DATA_DIR/llama.cpp-kolibri/current/llama-server" ]]; then
-        printf '\n\033[1mKolibri build (llama.cpp master)\033[0m\n'
-        local kmerge=62318cd57dc63900ecb153272c0b10f78550855d kstable kstatus kbuild
-        kbuild=$(basename "$(readlink "$DATA_DIR/llama.cpp-kolibri/current")")
-        kstable=$(_gh_json "repos/ggml-org/llama.cpp/releases/latest" .tag_name)
-        [[ -n "$kstable" ]] && kstatus=$(_gh_json "repos/ggml-org/llama.cpp/compare/$kmerge...$kstable" .status)
-        case "${kstatus:-}" in
-            ahead|identical)
-                echo "  $kstable has Kolibri-1 (#30673) — point kolibri at LLAMA_DEFAULT_BIN (keep its --override-kv),"
-                echo "  then get-kolibri-server.sh and $DATA_DIR/llama.cpp-kolibri can go"
-                _news "Kolibri: llama.cpp $kstable has kolibri1, the master build ($kbuild) can go" ;;
-            behind|diverged)
-                echo "  $kbuild in use; $kstable, the newest release, does not have Kolibri-1 (#30673) yet" ;;
-            *)  echo "  $kbuild in use; cannot ask GitHub whether a release has Kolibri-1" ;;
-        esac
-    fi
 
     printf '\n\033[1maudio.cpp\033[0m\n'
     if [[ -d "$AUDIOCPP_DIR/.git" ]]; then
@@ -6220,7 +6125,7 @@ cmd_help() {
     printf "  %-20s %s\n" ""                      "  service start / stop (now) / disable / status"
     printf "  %-20s %s\n" "darkroom enable"        "photo editing from the phone (/darkroom): a user service with its own tunnel that"
     printf "  %-20s %s\n" ""                      "  starts and stops ComfyUI on slot \$LLMCTL_DARKROOM_SLOT (9); darkroom key / status / disable"
-    printf "  %-20s %s\n" "outdated [--quick]"     "what has a newer version: halogen image, llama.cpp builds, the speech PR, ComfyUI,"
+    printf "  %-20s %s\n" "outdated [--quick]"     "what has a newer version: halogen image, llama.cpp builds, audio.cpp, ComfyUI,"
     printf "  %-20s %s\n" ""                      "  custom nodes, installed models (by SHA-256; --quick: size and date); changes nothing"
     printf "  %-20s %s\n" ""                      "  --master: llmctl, llama.cpp, audio.cpp, ComfyUI and its node packs against master, not their releases"
     printf "  %-20s %s\n" "prune [--dry-run]"      "list the models nothing names any more, with what deleting them frees; asks first"
@@ -6905,8 +6810,8 @@ _tts_setup() {
     fi
     echo "  VoiceDesign model in $TTS_DESIGN_DIR"
     if [[ "$(basename "$_r_binary")" == llama-server* && ! -x "${_r_binary//\~/$HOME}" ]]; then
-        echo "  Streaming needs a llama-server with /tts (llama.cpp PR #26603), not built yet:"
-        echo "    $SHARE_DIR/patches/build-tts-server.sh"
+        echo "  Streaming needs a llama-server with /tts (llama.cpp v0.8.0 or newer), not there yet:"
+        echo "    $PROG download llama"
         echo "  Until then the slot speaks through llama-tts, without streaming."
     fi
 }

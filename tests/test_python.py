@@ -248,53 +248,6 @@ class NodePackLabel(unittest.TestCase):
             self.assertIn("at 3.0.18 (", out); self.assertNotIn("unchanged", out)
 
 
-class SpeechPrCommits(unittest.TestCase):
-    """outdated: the speech PR's own commits count, master merged into it not."""
-
-    def test_only_commits_that_are_not_merges_count(self):
-        import subprocess
-        src = (ROOT / "llmctl").read_text()
-        fn = re.search(r"^_pr_own_commits_since\(\) \{\n.*?^\}$", src, re.M | re.S)[0]
-        one = lambda sha: {"sha": sha, "parents": [{}]}
-        merge = lambda sha: {"sha": sha, "parents": [{}, {}]}
-        pages = [[one("a"), one("ours"), merge("m1")], [one("own"), merge("m2")]]
-        with tempfile.TemporaryDirectory() as d:
-            for i, page in enumerate(pages, 1):
-                Path(d, f"page{i}").write_text(json.dumps(page, indent=2))     # printed over many lines
-            gh = Path(d, "gh")
-            gh.write_text(f"""#!/bin/sh
-[ "$1" = auth ] && exit 0
-case "$2" in *page=1) cat {d}/page1 ;; *page=2) cat {d}/page2 ;; *) echo '[]' ;; esac
-""")
-            gh.chmod(0o755)
-            count = lambda since: subprocess.run(["bash", "-c", fn + f"\n_pr_own_commits_since 1 {since}"],
-                                                 env=dict(os.environ, PATH=f"{d}:{os.environ['PATH']}"),
-                                                 capture_output=True, text=True).stdout.strip()
-            self.assertEqual(count("ours"), "1")       # "own"; m1 and m2 only bring master in
-            self.assertEqual(count("own"), "0")
-            self.assertEqual(count("gone"), "?")
-
-    def test_a_merge_counts_only_once_a_release_has_it(self):
-        import subprocess
-        src = (ROOT / "llmctl").read_text()
-        fns = "\n".join(re.search(rf"^{f}\(\) \{{[^\n]*\n.*?^\}}$", src, re.M | re.S)[0]
-                        for f in ("_gh_json", "_release_has"))
-        with tempfile.TemporaryDirectory() as d:
-            gh = Path(d, "gh")
-            gh.write_text("""#!/bin/sh
-[ "$1" = auth ] && exit 0
-case "$2" in */v1...m) echo ahead ;; */v2...m) echo behind ;; */v3...m) echo identical ;; esac
-""")
-            gh.chmod(0o755)
-            has = lambda release: subprocess.run(["bash", "-c", fns + f"\n_release_has m {release}"],
-                                                 env=dict(os.environ, PATH=f"{d}:{os.environ['PATH']}"),
-                                                 capture_output=True).returncode == 0
-            self.assertFalse(has("v1"))     # the merge is past the release
-            self.assertTrue(has("v2"))
-            self.assertTrue(has("v3"))
-            self.assertFalse(has("v4"))     # GitHub does not answer
-
-
 class PresentAndSize(unittest.TestCase):
     def test_a_file_is_present_a_missing_one_is_not(self):
         with tempfile.TemporaryDirectory() as d:

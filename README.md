@@ -1021,6 +1021,13 @@ gufo 0.25.0 again the same, byte for byte, at the same speed.
 halogen 0.18.17 (tool-call arguments holding tool-call markup arrive whole,
 Claude Code's MCP tool search on /v1/messages) the same answers, follow-ups
 and short replies, byte for byte, at the same speed.
+halogen 0.18.22 (fixes; decoding faster only with several requests at once)
+the same answers, follow-ups and short replies, byte for byte, at the same
+speed. gufo 0.28.1 (Flash-Next's prefill and MTP drafts reworked): qwen-gufo
+the same answers and image descriptions, byte for byte, its prefill 1–6 %
+lower (365–384 against 386–396 t/s); flash-gufo's answers worded differently,
+all five as right, its decode 4–11 % up (prose 39.0–39.2 against 35.1–37.7,
+code 69 against 64–68 t/s), image descriptions and prefill the same.
 
 `flash-gufo-unc` is the uncensored Flash-Next on gufo: vmlinux's Q4 Mix of
 orcarouter's Qwen3.8-Flash-Next-Uncensored (one file, 110 GB), with the MTP
@@ -2870,8 +2877,9 @@ curl -s localhost:8005/v1/audio/speech -H 'Content-Type: application/json' \
   to be a below-average one), and a "best seed per voice" does not carry over
   — the seeds best for one text were no better, or worse, for the next. The
   streaming engine is also only reproducible as a sequence: some state inside
-  the PR's server outlives a request, one cause of which, the audio RNG not
-  reseeding, `patches/llama.cpp-pr26603-reseed-per-generation.patch` fixes.
+  the server outlives a request: the same seed twice in a row gives two
+  different draws, the same sequence after a restart the same audio again
+  (measured on the PR build with its reseed fix and on v0.8.0 alike).
   Qwen3-TTS' cloning with the reference's transcript (ICL, PyTorch only) was
   no closer than the speaker embedding llama.cpp uses: 0.842 against 0.851.
   What helps is the reference itself: 10–15 s of clean speech. Replacing a
@@ -2905,58 +2913,19 @@ curl -s localhost:8005/v1/audio/speech -H 'Content-Type: application/json' \
   (or the slot server's `--no-chunking`) speaks groups of sentences up to
   ~280 characters instead — smoother, but the first sound waits for the whole
   first group: 3.3 s instead of 1.5 s for two sentences here.
-- **Engine.** Streaming needs llama-server with a `/tts` endpoint, which is
-  llama.cpp PR #26603, not merged yet. `tts_server.py` starts it as a child on
-  a private port that dies with it; the model stays loaded (5.0 GiB with one
-  slot of 4096 tokens). Without it, llmctl falls back to `llama-tts`, run once
-  per request: ~1.5 s of loading each time, no streaming, the model on the GPU
-  only while it speaks. For comparison, the same model in PyTorch ran at 1.56×
-  real time — slower than real time, bound by 90,000 kernel launches per
-  sentence.
-- **Building that llama-server.** No llama.cpp checkout is needed:
-
-  ```bash
-  /usr/local/share/llmctl/patches/build-tts-server.sh    # or patches/ in a checkout of this repo
-  ```
-
-  It uses `~/src/llama.cpp` (or `$LLAMA_SRC`) if that is a llama.cpp checkout
-  and otherwise clones llama.cpp into `~/.local/share/llmctl/llama.cpp`. From
-  there it makes a git worktree in `~/.local/share/llmctl/llama.cpp-tts` —
-  where models.conf looks — at a pinned llama.cpp commit that is known to work,
-  merges the pinned PR commit, applies the fix in
-  `patches/llama.cpp-pr26603-*.patch` (the audio RNG's reseeding) and builds
-  `llama-server`
-  and `llama-tts` with Vulkan. Nothing is installed, and a checkout it uses is
-  left as it is: the worktree shares only its git objects. It checks for git,
-  cmake, a C++ compiler and glslc first. `LLAMA_BASE=HEAD` builds on the
-  checkout's current commit instead, which may no longer merge with the PR. To
-  rebuild, remove the worktree (`git worktree remove --force
-  ~/.local/share/llmctl/llama.cpp-tts`) and run it again; once the PR is
-  merged, the ordinary llama-server does all this.
-- **Moving to a newer PR or llama.cpp.** Both commits are pinned in
-  `patches/build-tts-server.sh` (`PR_COMMIT`, `BASE_COMMIT`), so a rebuild
-  reproduces the same thing until they are changed. To follow the PR:
-
-  ```bash
-  gh pr view 26603 -R ggml-org/llama.cpp --json headRefOid -q .headRefOid   # its commit now
-  git -C ~/src/llama.cpp log -1 --format=%H                                 # a llama.cpp to build on
-  ```
-
-  Put them into the script, remove the worktree and run it. Three things can
-  go wrong, each with an obvious answer: the merge conflicts (the PR is too
-  far behind that llama.cpp — pin an older `BASE_COMMIT`, e.g. the merge
-  base), a `llama.cpp-pr26603-*.patch` no longer applies (the PR took the fix
-  over — drop that patch file), or the build fails on an API that moved
-  (adjust the call and regenerate the patch with `git -C
-  ~/.local/share/llmctl/llama.cpp-tts diff`). After building, restart the
-  speech slot: it runs the binary it started with. Do not move a built
-  worktree: the binaries find their libraries by the build's absolute path,
-  and moved, `llama-server` quietly loads whatever `libllama` the system has.
-  Last moved 2026-10-21, to the PR as it merged llama.cpp of 2026-10-20 (the
-  API patch dropped: the PR took that over): two runs each, old against new,
-  the same — first sound 1.6–1.9 s (2.1–2.2 on the first request after a
-  start), 1.6x real time, and every one of six requests byte for byte the
-  same audio as the old build's.
+- **Engine.** Streaming needs llama-server with a `/tts` endpoint, which the
+  ordinary llama-server has since llama.cpp v0.8.0 (PR #26603; `download
+  llama` brings it). `tts_server.py` starts it as a child on a private port
+  that dies with it; the model stays loaded (5.0 GiB with one slot of 4096
+  tokens). Without it, llmctl falls back to `llama-tts`, run once per request:
+  ~1.5 s of loading each time, no streaming, the model on the GPU only while
+  it speaks. For comparison, the same model in PyTorch ran at 1.56× real time
+  — slower than real time, bound by 90,000 kernel launches per sentence.
+  Until 1.107.21 it ran on a build of the PR (patches/build-tts-server.sh);
+  v0.8.0 against that build, 2026-11-01, two runs each: first sound 1.6–1.7 s
+  (2.1–2.2 on the first request after a start), 1.6x real time, the same.
+  After a llama.cpp update, restart the speech slot: it runs the binary it
+  started with.
 - **Voices.** Qwen3-TTS Base speaks in the voice of a short reference recording,
   kept in `~/.local/share/llmctl/tts/voices/`, one file per voice, named by
   the file. The clone keeps the timbre and speaks accent-free German. Qwen3-TTS'
@@ -3221,7 +3190,6 @@ and `update comfy --master` would bring — with the newest release beside it:
 - **llama.cpp**: the commit each installed llama-server reports in `--version`
   against the newest stable release (a `v` tag, e.g. v0.5.0) — at or past it
   is current; how far `master` has moved on is only shown;
-- **the speech server's PR**: merged yet, or commits past the one we build;
 - **ComfyUI** against its newest release tag (not master), and each custom node's pinned commit;
 - **installed models against their Hugging Face repos, by content.** GGUFs and
   halogen through hf's own record of each file's SHA-256, taken at download.
@@ -3302,17 +3270,17 @@ sources' names, sizes and SHA-256 in place of parts, and the recipe. So
 Hub, and when they change, `download` fetches them and makes the file again.
 The sources are deleted once the file is made.
 
-### A model the ordinary llama.cpp cannot load yet
+### Kolibri-1
 
 Aleph Alpha's **Kolibri-1** (`kolibri`; German and English, 78B total and
 3.46B active per token, Apache-2.0) came into llama.cpp master with PR #30673
-(2026-10-17), after v0.7.0. Until a stable release has it, it runs on
-ggml-org's prebuilt master build b11710: `patches/get-kolibri-server.sh` puts it
-into `~/.local/share/llmctl/llama.cpp-kolibri/` (apart from the builds
-`download llama` keeps), and the entry names that `llama-server`. `outdated`
-asks whether the newest release has the merge; when it does, the entry goes
-back to the ordinary build and the script goes. Before, it ran on a patched
-llama.cpp (836d571 + Hob-forge/Seraphiel102's MIT patch).
+(2026-10-17) and into a release with v0.8.0; it runs on the ordinary build.
+Before, it ran on ggml-org's prebuilt master build b11710, and before that on
+a patched llama.cpp (836d571 + Hob-forge/Seraphiel102's MIT patch). v0.8.0
+against b11710, 2026-11-01, two runs each: prefill 3 % lower (1207–1218 / 920–923
+t/s at 6.6K / 26K against 1245–1251 / 945–948), decode the same (47.4–47.5),
+the answers at temperature 0 worded differently, no worse (Faust's plot
+muddled on both builds, in different places).
 
 The Q8_0 is that patch's conversion, which spells two keys its own way: the
 entry translates them with `--override-kv` (pre-tokenizer `kolibri1` → `qwen2`,
