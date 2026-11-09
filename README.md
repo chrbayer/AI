@@ -1028,6 +1028,12 @@ the same answers and image descriptions, byte for byte, its prefill 1–6 %
 lower (365–384 against 386–396 t/s); flash-gufo's answers worded differently,
 all five as right, its decode 4–11 % up (prose 39.0–39.2 against 35.1–37.7,
 code 69 against 64–68 t/s), image descriptions and prefill the same.
+halogen 0.20.0 (ROCm 10.1, which may move the last bits at temperature 0):
+answers worded differently in three of five, as right, the same in both runs;
+prefill 2–8 % up (2010–2040 against 1862–1933 t/s at 6.6K), code decode 5 %
+(94–96 against 90–91 t/s), prose and short replies the same. gufo 0.32.0: both
+models the same answers and image descriptions, byte for byte; flash-gufo's
+prefill 4–18 % up (1764–1767 against 1489–1653 t/s at 6.6K), the rest the same.
 
 `flash-gufo-unc` is the uncensored Flash-Next on gufo: vmlinux's Q4 Mix of
 orcarouter's Qwen3.8-Flash-Next-Uncensored (one file, 110 GB), with the MTP
@@ -2924,6 +2930,7 @@ curl -s localhost:8005/v1/audio/speech -H 'Content-Type: application/json' \
   Until 1.107.21 it ran on a build of the PR (patches/build-tts-server.sh);
   v0.8.0 against that build, 2026-11-01, two runs each: first sound 1.6–1.7 s
   (2.1–2.2 on the first request after a start), 1.6x real time, the same.
+  v0.9.0 (2026-11-09) the same again: first sound 1.5–1.7 s, 1.6x real time.
   After a llama.cpp update, restart the speech slot: it runs the binary it
   started with.
 - **Voices.** Qwen3-TTS Base speaks in the voice of a short reference recording,
@@ -3012,7 +3019,9 @@ with tts.audio.speech.with_streaming_response.create(
   clones audio.cpp at its newest release tag and builds it with Vulkan and only
   the model families `models.conf` names (85 s, 1.8 GB); when a newer release
   is out, `outdated` says so and `download asr-live` rebuilds at it
-  (`--master`: at main; v0.9.3 is the fallback when GitHub cannot be asked).
+  (`--master`: at main; v0.9.4 is the fallback when GitHub cannot be asked).
+  v0.9.4 against v0.9.3 (2026-11-09, two runs): the same transcripts, offline
+  and live, at the same speed.
   New commits on main are only shown. The server takes its models from a JSON file llmctl writes
   per slot under `~/.local/state/llmctl/audiocpp/`.
 
