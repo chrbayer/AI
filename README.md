@@ -1034,6 +1034,16 @@ prefill 2–8 % up (2010–2040 against 1862–1933 t/s at 6.6K), code decode 5 
 (94–96 against 90–91 t/s), prose and short replies the same. gufo 0.32.0: both
 models the same answers and image descriptions, byte for byte; flash-gufo's
 prefill 4–18 % up (1764–1767 against 1489–1653 t/s at 6.6K), the rest the same.
+halogen 0.20.4 (follow-up turns sooner): the first token of a follow-up after
+207 instead of 478 ms on average; four of five answers byte for byte as on
+0.20.0, the fifth quotes the cities' own registers (München 1.62 against 1.51
+million), prefill and decode the same. gufo 0.34.0: all three gufo models the
+same answers and image descriptions, byte for byte, at the same speed. unsloth's
+re-upload of the UD-Q4_K_XL (2026-11-04) holds the same 1224 tensors in the same
+types, only split differently over its four files: the same answers byte for
+byte and the same speed (six runs each). Fedora 45 (kernel 7.3, 2026-11-14):
+every answer byte for byte as on Fedora 44; flash 3 % slower in decode (91.8
+against 94.8 t/s code), the llama.cpp models within 1 %.
 
 `flash-gufo-unc` is the uncensored Flash-Next on gufo: vmlinux's Q4 Mix of
 orcarouter's Qwen3.8-Flash-Next-Uncensored (one file, 110 GB), with the MTP
@@ -2930,7 +2940,8 @@ curl -s localhost:8005/v1/audio/speech -H 'Content-Type: application/json' \
   Until 1.107.21 it ran on a build of the PR (patches/build-tts-server.sh);
   v0.8.0 against that build, 2026-11-01, two runs each: first sound 1.6–1.7 s
   (2.1–2.2 on the first request after a start), 1.6x real time, the same.
-  v0.9.0 (2026-11-09) the same again: first sound 1.5–1.7 s, 1.6x real time.
+  v0.9.0 (2026-11-09) the same again: first sound 1.5–1.7 s, 1.6x real time;
+  v1.0.0 (2026-11-14) too, 1.6–1.8 s and 1.6x.
   After a llama.cpp update, restart the speech slot: it runs the binary it
   started with.
 - **Voices.** Qwen3-TTS Base speaks in the voice of a short reference recording,
