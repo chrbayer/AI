@@ -1044,6 +1044,14 @@ types, only split differently over its four files: the same answers byte for
 byte and the same speed (six runs each). Fedora 45 (kernel 7.3, 2026-11-14):
 every answer byte for byte as on Fedora 44; flash 3 % slower in decode (91.8
 against 94.8 t/s code), the llama.cpp models within 1 %.
+halogen 0.20.6 (with 0.20.5; a new draft head, `qwen38-flash-next-drafter-r2.hgn`
+beside the checkpoint): decoding 3–4 % faster (prose 60.4–62.5 against 57.8–60.6,
+code 98.5–99.3 against 94.2–95.5 t/s), short replies 165 against 174–180 ms,
+follow-ups 196 against 206–210 ms, prefill the same; without the new head the
+decode is 0.20.4's. Three of five answers worded differently (0.20.5's numerics,
+the same with either head), as right. With `--mmproj` an image is described in
+3.5 instead of 4.7 s the first time and 2.3 instead of 2.7 s after, the
+description as right.
 
 `flash-gufo-unc` is the uncensored Flash-Next on gufo: vmlinux's Q4 Mix of
 orcarouter's Qwen3.8-Flash-Next-Uncensored (one file, 110 GB), with the MTP
