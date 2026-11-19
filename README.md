@@ -1052,6 +1052,14 @@ decode is 0.20.4's. Three of five answers worded differently (0.20.5's numerics,
 the same with either head), as right. With `--mmproj` an image is described in
 3.5 instead of 4.7 s the first time and 2.3 instead of 2.7 s after, the
 description as right.
+halogen 0.20.7 (concurrency mode by default; a faster draft head,
+`qwen38-flash-next-drafter-r2-ht4.hgn`): code decoding 5 % faster (100.5–102.5
+against 94.6–97.4 t/s), prose 1–2 % (61.6–63.7 against 60.6–62.8), prefill,
+short replies, follow-ups and images the same or a little sooner; all five
+answers worded differently, as right. gufo 0.35.0: all three gufo models the
+same answers, byte for byte; image descriptions worded a little differently
+(the vision encoder's attention is fused now), as right; code decoding 2–4 %
+faster on flash-gufo and flash-gufo-unc, the rest the same.
 
 `flash-gufo-unc` is the uncensored Flash-Next on gufo: vmlinux's Q4 Mix of
 orcarouter's Qwen3.8-Flash-Next-Uncensored (one file, 110 GB), with the MTP
