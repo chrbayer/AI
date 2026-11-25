@@ -1060,6 +1060,16 @@ answers worded differently, as right. gufo 0.35.0: all three gufo models the
 same answers, byte for byte; image descriptions worded a little differently
 (the vision encoder's attention is fused now), as right; code decoding 2–4 %
 faster on flash-gufo and flash-gufo-unc, the rest the same.
+The draft head's re-upload of 2026-11-24 (`qwen38-flash-next-drafter-r2-ht4.hgn`,
+only the model identity in its header renamed): halogen 0.20.7 loads it, every
+answer and image description byte for byte as before, at the same speed.
+gufo 0.36.0 (JPEG decoded in Rust): all three gufo models the same answers
+and PNG descriptions, byte for byte. A JPEG now reads to slightly other pixels
+than libjpeg's (the same JPEG turned into a PNG by ImageMagick is described
+as 0.35.0 described the JPEG), so JPEG descriptions are worded differently —
+as right, but flash-gufo's slips one Chinese word ("同样") into the German.
+flash-gufo reads a JPEG 1 s sooner, as fast as a PNG now; its prose decoding
+is 6 % slower (38.5–39.0 against 40.9–41.9 t/s), the rest the same.
 
 `flash-gufo-unc` is the uncensored Flash-Next on gufo: vmlinux's Q4 Mix of
 orcarouter's Qwen3.8-Flash-Next-Uncensored (one file, 110 GB), with the MTP
