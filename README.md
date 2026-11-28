@@ -743,9 +743,8 @@ A models.conf entry with `_model_backend="halogen"` runs
 [halogen-flash-server](https://github.com/peonist-ai/halogen-flash-server)
 instead of llama-server: a closed-source engine for one model family
 (Qwen3.8-Flash-Next, 125B MoE) on Strix Halo, shipped as a container and
-reading its own `.hgn` weights. The same backend also runs
-[halogen-server](#halogen-server-qwen38-27b), its sibling for the dense
-Qwen3.8-27B. The slot model stays the same — `start`, `stop`,
+reading its own `.hgn` weights. Since 0.21 the same image also runs the dense
+[Qwen3.8-27B](#qwen38-27b-on-halogen-qwen-halogen). The slot model stays the same — `start`, `stop`,
 `status`, `env`, `preset`, `preset-save` all work — with these differences:
 
 - **It runs in podman.** The server PID is the `podman run` client (its argv is
@@ -880,40 +879,31 @@ with fragmented memory managed 8–370 t/s of prefill, most requests stalling
 40–200 s in kernel compaction. Keep `vm.compaction_proactiveness` at the kernel
 default (20) — 0 does not prevent the stalls.
 
-### halogen-server (Qwen3.8-27B)
+### Qwen3.8-27B on halogen (`qwen-halogen`)
 
-`qwen-halogen` runs [halogen-server](https://github.com/peonist-ai/halogen-server)
-(image `ghcr.io/peonist-ai/halogen`) with
-[peonist-ai/halogen-qwen3.8-27b](https://huggingface.co/peonist-ai/halogen-qwen3.8-27b):
-the stock (not uncensored) Qwen3.8-27B, FFN in 4 bit for prefill (unsloth's
-NVFP4 values), the rest FP8, with an MTP head and a DFlash2 block drafter. Text
-only. llmctl tells it from halogen-flash-server by the image and handles it like
-the above, except:
+`qwen-halogen` runs the stock (not uncensored) Qwen3.8-27B from
+[peonist-ai/halogen-qwen3.8-27b-ht4](https://huggingface.co/peonist-ai/halogen-qwen3.8-27b-ht4)
+on halogen-flash-server 0.21, the image `flash` runs: the server picks the
+engine from the checkpoint it is given. About 4 bits a weight (12.8 GiB) with
+the model's MTP draft head; `--mmproj` loads the vision tower beside it. The
+options are the ones above. Two requests at once run without drafting (the
+server has not measured its concurrency mode on this engine yet).
 
-| Option | halogen-server |
-| --- | --- |
-| `--ctx N` | `HALOGEN_SLOT_CTX`, at most 262144 (no YaRN) |
-| `--parallel N` | `HALOGEN_KV_SLOTS`; each slot holds its full context (64 KiB per position), and more than one turns speculation off |
-| `--cache-ram N` | `HALOGEN_CACHE_MB` (MiB, 0 = off): the prompt cache, in host memory at ~70 KB per token. Unset, the server takes most of what is free; models.conf sets 20000 |
-| `--reasoning off\|level`, `--temp`, `--top-p` | request defaults: the server has no setting for them, so the container carries them (label `llmctl.defaults`) and the proxy fills them into chat requests that set none themselves. A thinking budget does not exist. Without, the template thinks at effort xhigh |
-| `--mmproj` | refused |
+Up to llmctl 1.107.28 this entry ran halogen-server 0.1.4 (image
+`ghcr.io/peonist-ai/halogen`) with an FP8/4-bit checkpoint of 33.4 GiB, text
+only. llmctl no longer starts that image; 0.21 does not load its checkpoint.
+Measured 2026-11-28, two runs each, greedy, thinking off:
 
-The checkpoint's `tokenizer/` is mounted as `/tokenizer`. The server has no
-Messages API, so the proxy translates `/v1/messages`, and since it ignores
-`thinking`, Claude Code's "thinking off" goes out as `reasoning_effort: none`.
-The default drafter is DFlash2 (`HALOGEN_DRAFTER=2`), which suits code; a
-request may pick another (`"drafter"`). `status` shows GPU memory and the
-container's RAM (the mapped checkpoint and the prompt cache); `outdated` reads
-the changelog of halogen-server.
+| | 0.21 ht4 | 0.1.4 | qwen-gufo | qwen |
+| --- | --- | --- | --- | --- |
+| prefill 850 / 6.6K / 26K tokens | 582 / 661 / 561 | **696 / 674 / 577** | 382 / 390 / 369 | 298 / 283 / 245 |
+| decode prose / code (t/s) | **28.7 / 52.3** | 14.5 / 46.6 | 16.9 / 38.7 | 11.9 / 18.7 |
+| short replies / follow-ups' first token | **382 / 373 ms** | 728 / 1661 ms | | |
+| vision | yes | no | yes | yes |
+| memory | **45.2 GiB** (13.7 pinned weights, 18.3 KV, 13.2 working) | ~54 GiB, ~74 with its prompt cache full | 44.1 GiB GPU + 31.4 GiB RAM | ~47 GiB |
 
-Measured against `qwen` (llama.cpp) and `qwen-gufo` (both HauhauCS Q8), greedy,
-thinking off:
-
-| | qwen-halogen | qwen-gufo | qwen |
-| --- | --- | --- | --- |
-| prefill 850 / 6.6K / 26K / 53K tokens | **690 / 677 / 580 / 491** | 380 / 378 / 366 / 343 | 298 / 283 / 245 / 204 |
-| decode prose / code (t/s) | 14.6 / **45.3** (DFlash2), **17.0** / 38.1 (MTP) | 15.3 / 37.2 | 11.9 / 18.7 |
-| memory | 20.5 GiB GPU + 33.4 GiB checkpoint + prompt cache | 44.1 GiB GPU + 31.4 GiB RAM | ~47 GiB |
+The five test answers came out as right, Faust I's ending right where 0.1.4
+had it wrong; sampled decoding (T 0.7 / 1.0) 26–28 t/s prose, 40–51 code.
 
 ## The gufo backend
 
@@ -1070,6 +1060,14 @@ as 0.35.0 described the JPEG), so JPEG descriptions are worded differently —
 as right, but flash-gufo's slips one Chinese word ("同样") into the German.
 flash-gufo reads a JPEG 1 s sooner, as fast as a PNG now; its prose decoding
 is 6 % slower (38.5–39.0 against 40.9–41.9 t/s), the rest the same.
+halogen 0.21.0 (Qwen3.8-27B in the same image, see `qwen-halogen`): flash's
+answers, follow-ups and image description byte for byte as on 0.20.7, at the
+same speed (prose 63.0–64.6 against 63.0–65.4, code 100.8–105.2 against
+102.1–105.0 t/s). gufo 0.37.0 (HTTP served by hyper, PNG encoded in Rust): all
+three gufo models the same answers and image descriptions, byte for byte,
+streamed `/v1/messages` through the proxy the same, at the same speed; measured
+again beside it (three runs, two benches each), 0.36.0's flash-gufo decoded
+prose at 39.6–43.5 t/s, so the 6 % above was the machine's, not gufo's.
 
 `flash-gufo-unc` is the uncensored Flash-Next on gufo: vmlinux's Q4 Mix of
 orcarouter's Qwen3.8-Flash-Next-Uncensored (one file, 110 GB), with the MTP
@@ -3189,7 +3187,7 @@ them are served by the Vulkan build — the ROCm build is opt-in per model
 - **diamond** — L3.3-70B Magnum Diamond, i1-Q5_K_M, 32K ctx; drafted by the same Llama-3.2-1B (~2.0×)
 - **magnum** — Magnum-v4-72B, Q6_K, 32K ctx; a Qwen2.5-72B fulltune, drafted by Qwen2.5-1.5B-Instruct Q4_K_M (~2.0×)
 - **qwen-gufo** — the same Qwen3.8-27B uncensored Q8 on the [gufo backend](#the-gufo-backend), DFlash2 draft, 64K per session (256K in preset `qwen-gufo-256k`), vision via `--mmproj`; prefill 30–55 % and code decoding ~2× faster than `qwen`
-- **qwen-halogen** — Qwen3.8-27B stock (not uncensored) on [halogen-server](#halogen-server-qwen38-27b), ~6.3 bpw, DFlash2 draft, 256K ctx, text only; prefill ~1.8× `qwen-gufo`, code decoding 45 t/s — meant for code
+- **qwen-halogen** — Qwen3.8-27B stock (not uncensored) on [halogen](#qwen38-27b-on-halogen-qwen-halogen) 0.21, ht4 (~4 bpw, 12.8 GiB), MTP draft, 256K ctx, vision via `--mmproj`; prose 28.7 / code 52 t/s, prefill ~1.6× `qwen-gufo`, 45 GiB in all
 - **flash** — Qwen3.8-Flash-Next 125B MoE on the [halogen backend](#the-halogen-backend), 4-bit `.hgn`, 256K ctx (512K with YaRN via `--ctx 524288`), vision via `--mmproj` (on in preset `flash`); ~82 GiB, other slots beside it only as they fit
 - **flash-gufo** — the same Flash-Next on the [gufo backend](#the-gufo-backend), unsloth UD-Q4_K_XL (111 GB, its 26.8 GiB n-gram table read from the SSD), MTP, 2 × 128K, vision via `--mmproj`; ~94 GiB GTT. Kept to follow gufo: decoding ~35 % slower than `flash` (32 / 50 t/s prose / code against 50 / 72)
 - **flash-gufo-unc** — the uncensored Flash-Next on gufo (vmlinux's Q4 Mix, 110 GB, MTP from jcbtc's CIRU Orca), otherwise as `flash-gufo`; refuses none of the borderline requests the others decline

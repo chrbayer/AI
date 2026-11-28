@@ -120,13 +120,15 @@ check "halogen start maps --mmproj"     "HALOGEN_VISION_TOWER=1"                
 check "--tunnel hardens a llama slot"   "--no-webui --no-slots"                  -- env LLMCTL_TUNNEL_HOST=u@h "$L" start qwen 1 --tunnel --print-cmd
 check "--tunnel caps a llama slot"      "--n-predict 8192"                        -- env LLMCTL_TUNNEL_HOST=u@h "$L" start qwen 1 --tunnel --print-cmd
 check "--public is gone"                "--tunnel is the way out"                -- "$L" start qwen 1 --public --print-cmd
-check "halogen-server mounts its tokenizer" "tokenizer:/tokenizer:ro"             -- "$L" start qwen-halogen 1 --print-cmd
-check "halogen-server sets its slot context" "HALOGEN_SLOT_CTX=131072"             -- "$L" start qwen-halogen 1 --ctx 131072 --print-cmd
-check "halogen-server sizes its prompt cache" "HALOGEN_CACHE_MB=4096"              -- "$L" start qwen-halogen 1 --cache-ram 4096 --print-cmd
-check "halogen-server takes reasoning as a request default" 'llmctl.defaults={"reasoning_effort":"none"}' -- "$L" start qwen-halogen 1 --reasoning off --print-cmd
-check "halogen-server refuses YaRN"     "at most 262144"                          -- "$L" start qwen-halogen 1 --ctx 524288 --print-cmd
-check "halogen-server refuses --mmproj" "text only"                               -- "$L" start qwen-halogen 1 --mmproj --print-cmd
-check "halogen-server refuses a thinking budget" "no thinking budget"             -- "$L" start qwen-halogen 1 --reasoning 2000 --print-cmd
+check "qwen-halogen runs on halogen-flash-server" "halogen-flash-server:"        -- "$L" start qwen-halogen 1 --print-cmd
+check "qwen-halogen names its ht4 checkpoint" "HALOGEN_CHECKPOINT=/models/qwen38-27b-ht4.hgn" -- "$L" start qwen-halogen 1 --print-cmd
+check "qwen-halogen maps --mmproj"      "HALOGEN_VISION_TOWER=1"                  -- "$L" start qwen-halogen 1 --mmproj --print-cmd
+cat >> "$LLMCTL_CONFIG_DIR/models.conf" <<'CONF'
+_model_name="old-halogen"; _model_backend="halogen"; _model_binary="ghcr.io/peonist-ai/halogen:0.1.4"
+_model_model="$MODELS_DIR/x/qwen3.8-27b-p1w4d-d2.hgn"; _model_alias="old-halogen"; _model_client_name="old-halogen"
+add_model
+CONF
+check "halogen-server (0.1.x) is refused" "no longer supported"                -- "$L" start old-halogen 1 --print-cmd
 
 # ── comfyui backend ──────────────────────────────────────────
 check "comfyui start names its dirs"    "--base-directory"       -- "$L" start comfy 9 --print-cmd

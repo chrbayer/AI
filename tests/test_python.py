@@ -343,35 +343,6 @@ class Transcripts(unittest.TestCase):
 
 
 @unittest.skipIf(proxy is None, "proxy.py needs flask and requests")
-class RequestDefaults(unittest.TestCase):
-    """halogen-server has no server-wide reasoning or sampler setting: the proxy
-    fills them into requests that say nothing themselves."""
-    def setUp(self):
-        self.saved = proxy.REQUEST_DEFAULTS
-        proxy.REQUEST_DEFAULTS = {"reasoning_effort": "medium", "temperature": 0.6}
-
-    def tearDown(self):
-        proxy.REQUEST_DEFAULTS = self.saved
-
-    def test_a_silent_request_gets_them(self):
-        chat = {"messages": []}
-        proxy.apply_defaults(chat)
-        self.assertEqual(chat, {"messages": [], "reasoning_effort": "medium", "temperature": 0.6})
-
-    def test_a_request_keeps_its_own(self):
-        chat = {"reasoning_effort": "low", "temperature": 0}
-        proxy.apply_defaults(chat)
-        self.assertEqual(chat, {"reasoning_effort": "low", "temperature": 0})
-
-    def test_thinking_set_another_way_takes_no_effort(self):
-        # The server refuses two thinking controls that disagree.
-        for chat in ({"enable_thinking": False}, {"chat_template_kwargs": {"reasoning_effort": "high"}}):
-            proxy.apply_defaults(chat)
-            self.assertNotIn("reasoning_effort", chat)
-            self.assertEqual(chat["temperature"], 0.6)
-
-
-@unittest.skipIf(proxy is None, "proxy.py needs flask and requests")
 class TranslateImages(unittest.TestCase):
     """gufo speaks the Messages API but refuses images there and has no
     count_tokens: with LLM_TRANSLATE_MESSAGES=images only those are translated."""
@@ -1763,14 +1734,9 @@ class ThinkingOff(unittest.TestCase):
         self.assertEqual(chat["thinking"], {"type": "disabled"})
         self.assertNotIn("reasoning_effort", chat)
 
-    def test_halogen_server_gets_an_effort_instead(self):
-        chat = ac.messages_to_chat(self.BODY, None, "none")
-        self.assertNotIn("thinking", chat)
-        self.assertEqual(chat["reasoning_effort"], "none")
-
     def test_an_effort_still_passes_with_thinking_on(self):
         body = dict(self.BODY, thinking={"type": "enabled"})
-        self.assertEqual(ac.messages_to_chat(body, None, "none")["reasoning_effort"], "high")
+        self.assertEqual(ac.messages_to_chat(body)["reasoning_effort"], "high")
 
 
 try:

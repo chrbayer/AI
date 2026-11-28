@@ -38,13 +38,6 @@ TRANSLATE_IMAGES = _TRANSLATE == 'images'
 # cap outright (HTTP 400) instead of shortening it, and Claude Code asks for
 # 32000 as a matter of course; clamping here keeps such requests alive.
 MAX_TOKENS_CAP = int(os.environ.get('LLM_MAX_TOKENS_CAP', '0')) or None
-# halogen-server ignores `thinking`; a translated "thinking off" becomes this
-# reasoning_effort instead ("none").
-THINKING_OFF_EFFORT = os.environ.get('LLM_THINKING_OFF_EFFORT', '') or None
-# Fields a chat request gets when it does not set them itself, as JSON — for a
-# backend with no server-wide setting for them (halogen-server: reasoning effort,
-# samplers). A request that controls thinking any other way keeps its own.
-REQUEST_DEFAULTS = json.loads(os.environ.get('LLM_REQUEST_DEFAULTS', '') or '{}')
 # Backends that take images only inline (halogen refuses http(s) URLs): fetch
 # such images here and pass them on as data: URLs.
 INLINE_IMAGE_URLS = os.environ.get('LLM_INLINE_IMAGE_URLS', '') == '1'
@@ -212,16 +205,6 @@ def translates(path, data):
         return False
     return TRANSLATE_MESSAGES or (TRANSLATE_IMAGES and (path == "v1/messages/count_tokens"
                                                         or has_images(data)))
-
-
-def apply_defaults(chat):
-    """REQUEST_DEFAULTS into a Chat Completions body, where it says nothing."""
-    kwargs = chat.get("chat_template_kwargs") or {}
-    thinking_set = any(k in chat or k in kwargs for k in ("reasoning_effort", "enable_thinking"))
-    for key, value in REQUEST_DEFAULTS.items():
-        if key == "reasoning_effort" and thinking_set:
-            continue
-        chat.setdefault(key, value)
 
 
 def clamp_max_tokens(data):
@@ -542,7 +525,7 @@ def _messages(path, data):
         return _json_response(200, ac.estimate_tokens(data))
 
     model = data.get("model") or "unknown"
-    chat = ac.messages_to_chat(data, MAX_TOKENS_CAP, THINKING_OFF_EFFORT)
+    chat = ac.messages_to_chat(data, MAX_TOKENS_CAP)
     apply_defaults(chat)
     if INLINE_IMAGE_URLS:
         try:
@@ -605,8 +588,6 @@ def proxy(path):
     if isinstance(data, dict):
         normalize_request(data)
         clamp_max_tokens(data)
-        if REQUEST_DEFAULTS and request.method == "POST" and path == "v1/chat/completions":
-            apply_defaults(data)
 
     if request.method == "POST" and path in MODEL_CHECKED_PATHS:
         served = wrong_model(data)
@@ -677,8 +658,6 @@ if __name__ == '__main__':
                  "go to /v1/chat/completions, which the backend's Messages API lacks")
     if MAX_TOKENS_CAP:
         log.info("Token budgets above %d are clamped to it", MAX_TOKENS_CAP)
-    if REQUEST_DEFAULTS:
-        log.info("Chat requests that do not set them get %s", json.dumps(REQUEST_DEFAULTS))
     if INLINE_IMAGE_URLS:
         log.info("Fetching http(s) image URLs and passing them on inline%s",
                  " (public hosts only)" if TOKENS else "")
